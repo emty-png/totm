@@ -134,6 +134,7 @@ Item {
             rowVisible: rowRoot.rowVisible
             rowLocked: rowRoot.rowLocked
             editing: rowRoot.editing
+            rowHovered: rowMouse.containsMouse || leading.hovered
             eyePolicy: () => {
                 if (rowRoot.eyePolicy)
                     rowRoot.eyePolicy(rowRoot.rowUid);
