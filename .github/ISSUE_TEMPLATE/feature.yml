@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose an idea for totm
+labels: [enhancement]
+body:
+  - type: input
+    id: problem
+    attributes:
+      label: Problem
+      placeholder: What can't you do today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      placeholder: What should happen, where in the UI?
+    validations:
+      required: true
+  - type: textarea
+    id: alt
+    attributes:
+      label: Alternatives considered
