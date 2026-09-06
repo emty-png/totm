@@ -12,6 +12,9 @@ set_source_files_properties(
 qt_add_qml_module(totm
     URI Totm
     VERSION 1.0
+    SOURCES
+        backend/library/LibraryStore.h
+        backend/library/LibraryStore.cpp
     QML_FILES
         # Shell
         qml/Main.qml
@@ -82,6 +85,7 @@ qt_add_qml_module(totm
         # Fields
         qml/components/fields/NumberField.qml
         qml/components/fields/HexField.qml
+        qml/components/fields/RenameField.qml
         qml/components/editor/shapes/ShapeItem.qml
         qml/components/editor/SelectionHandles.qml
         # Layers (view + context)
@@ -96,10 +100,18 @@ qt_add_qml_module(totm
         # Views
         qml/views/home/HomeView.qml
         qml/views/home/HomeSideBar.qml
+        qml/views/home/WorkspaceRow.qml
+        qml/views/home/DesignCard.qml
+        qml/views/home/DesignCardPreview.qml
+        qml/views/home/DesignContextMenu.qml
         qml/views/editor/EditorView.qml
 )
 
 target_link_libraries(totm PRIVATE Qt6::Quick)
+
+# Backend headers register QML types by basename (see the generated
+# qmltyperegistrations.cpp), so backend/library/ must be on the include path.
+target_include_directories(totm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/backend/library)
 
 # Cross-platform desktop bundle settings.
 # Linux: plain executable. Windows: no console window. macOS: .app bundle.

@@ -44,13 +44,13 @@ QtObject {
             var kids = [];
             for (var i = 0; i < (snap.children || []).length; i++)
                 kids.push(_instantiateSnapshot(snap.children[i], select));
-            var g = _makeGroupNode(snap.name, kids);
+            var g = doc._makeGroupNode(snap.name, kids);
             g.visible = snap.visible !== false;
             g.expanded = snap.expanded !== false;
             g.selected = !!select;
             return g;
         }
-        var n = _makeShapeNode(snap.type || "rectangle", snap);
+        var n = doc._makeShapeNode(snap.type || "rectangle", snap);
         n.selected = !!select;
         return n;
     }
@@ -181,6 +181,45 @@ QtObject {
         }
         doc.drillPath = path;
         doc.anchorUid = -1;
+        doc._refreshStructural();
+    }
+
+    // Whole-scene snapshot for the on-disk library. Plain data only, so
+    // the C++ store can persist it untouched and previews can read it.
+    function snapshotScene() {
+        var nodes = [];
+        for (var i = 0; i < doc.rootChildren.length; i++)
+            nodes.push(snapshotNode(doc.rootChildren[i]));
+        return {
+            version: 1,
+            sceneWidth: doc.sceneWidth,
+            sceneHeight: doc.sceneHeight,
+            sceneColor: String(doc.sceneColor),
+            nodes: nodes
+        };
+    }
+
+    // Replace the whole tree with a stored scene. Old nodes are
+    // destroyed, drill and selection reset, nothing stays selected.
+    function restoreScene(scene) {
+        var s = scene || {};
+        var old = doc.rootChildren.slice();
+        for (var i = 0; i < old.length; i++)
+            old[i].destroy();
+        doc.rootChildren = [];
+        doc.drillPath = [];
+        doc.anchorUid = -1;
+        if (s.sceneWidth > 0)
+            doc.sceneWidth = s.sceneWidth;
+        if (s.sceneHeight > 0)
+            doc.sceneHeight = s.sceneHeight;
+        if (s.sceneColor !== undefined)
+            doc.sceneColor = s.sceneColor;
+        var nodes = s.nodes || [];
+        var list = [];
+        for (var j = 0; j < nodes.length; j++)
+            list.push(_instantiateSnapshot(nodes[j], false));
+        doc.rootChildren = list;
         doc._refreshStructural();
     }
 }
