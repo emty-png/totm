@@ -101,7 +101,7 @@ QtObject {
     }
 
     function _setBBoxProp(role, value) {
-        var box = _selectionBBox();
+        var box = doc._selectionBBox();
         if (!box)
             return;
         var leaves = doc._selectedLeaves();

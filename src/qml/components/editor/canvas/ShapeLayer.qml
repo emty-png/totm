@@ -40,17 +40,20 @@ Item {
             item.releasePolicy = (wasMoved, mods) => layer.releasePolicy(wasMoved, mods);
             item.doublePolicy = uid => layer.doublePolicy(uid);
             item.shapeVisible = Qt.binding(() => {
-                layer.doc.rev;
+                if (layer.doc)
+                    layer.doc.rev;
                 var n = layer.doc ? layer.doc.findNode(item.uid) : null;
                 return n ? layer.doc.isEffectivelyVisible(n) : true;
             });
             item.shapeLocked = Qt.binding(() => {
-                layer.doc.rev;
+                if (layer.doc)
+                    layer.doc.rev;
                 var m = layer.doc ? layer.doc.findNode(item.uid) : null;
                 return m ? layer.doc.isEffectivelyLocked(m) : false;
             });
             item.selected = Qt.binding(() => {
-                layer.doc.rev;
+                if (layer.doc)
+                    layer.doc.rev;
                 var s = layer.doc ? layer.doc.findNode(item.uid) : null;
                 if (!s)
                     return false;

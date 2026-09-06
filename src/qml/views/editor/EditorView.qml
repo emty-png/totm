@@ -34,4 +34,24 @@ ColumnLayout {
         Layout.fillWidth: true
         open: rightPanel.mode === "animate"
     }
+
+    // Debounced autosave: every mutation restarts the clock, the scene
+    // lands on disk 800ms after the user settles. Tab closes and app
+    // quit save synchronously, so this only covers the idle path.
+    Connections {
+        target: TabStore.documentFor(TabStore.currentIndex)
+        function onRevChanged() {
+            saveTimer.restart();
+        }
+    }
+
+    Timer {
+        id: saveTimer
+
+        interval: 800
+        onTriggered: {
+            if (TabStore.currentIndex > 0)
+                TabStore.saveOpenDesign(TabStore.designIdAt(TabStore.currentIndex));
+        }
+    }
 }

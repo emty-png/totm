@@ -15,6 +15,8 @@ ApplicationWindow {
     flags: Qt.Window | Qt.FramelessWindowHint
     color: AppTheme.background
 
+    onClosing: TabStore.saveAllOpen()
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0

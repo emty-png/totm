@@ -203,6 +203,12 @@ QtObject {
     function deleteSelected() {
         clipboard.deleteSelected();
     }
+    function snapshotScene() {
+        return clipboard.snapshotScene();
+    }
+    function restoreScene(scene) {
+        clipboard.restoreScene(scene);
+    }
 
     // Selection and flags.
     function isSelected(uid) {

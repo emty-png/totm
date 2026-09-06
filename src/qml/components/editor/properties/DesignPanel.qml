@@ -60,6 +60,7 @@ ScrollView {
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 12
+            visible: panel.snapshot.sel.length > 0
         }
     }
 }
