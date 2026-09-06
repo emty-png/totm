@@ -1,0 +1,14 @@
+build/
+build*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.user
+.qt/
+.qmlls.ini
+.DS_Store
+Thumbs.db
+*.o
+*.so
+*.a
+compile_commands.json

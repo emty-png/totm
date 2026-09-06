@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.*"
+          modules: qtquick3d qtshadertools
+          cache: true
+      - name: qmlformat check
+        run: |
+          shopt -s globstar
+          failed=0
+          for f in src/qml/**/*.qml; do
+            if ! qmlformat "$f" | diff -u "$f" - > /dev/null; then
+              echo "needs formatting: $f"
+              failed=1
+            fi
+          done
+          exit $failed
+      - name: qmllint
+        run: |
+          shopt -s globstar
+          qmllint src/qml/**/*.qml
+
+  build:
+    needs: lint
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-14]
+        qt: ["6.8.*", "6.11.*"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ matrix.qt }}
+          cache: true
+      - name: Configure
+        run: cmake --preset ci
+      - name: Build
+        run: cmake --build --preset ci
