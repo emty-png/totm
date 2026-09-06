@@ -10,6 +10,7 @@ RowLayout {
     required property bool rowVisible
     required property bool rowLocked
     required property bool editing
+    required property bool rowHovered
     property var eyePolicy: null
     property var lockPolicy: null
 
@@ -21,9 +22,7 @@ RowLayout {
         Layout.preferredWidth: 22
         Layout.preferredHeight: 22
         Layout.alignment: Qt.AlignVCenter
-        visible: (!toggles.rowVisible || toggles.hovered || toggles.eyeHovered) && !toggles.editing
-
-        property bool eyeHovered: eyeMouse.containsMouse
+        visible: (!toggles.rowVisible || toggles.rowHovered || toggles.hovered) && !toggles.editing
 
         TitleBarIcon {
             anchors.centerIn: parent
@@ -57,7 +56,7 @@ RowLayout {
         Layout.preferredWidth: 22
         Layout.preferredHeight: 22
         Layout.alignment: Qt.AlignVCenter
-        visible: (toggles.rowLocked || toggles.hovered) && !toggles.editing
+        visible: (toggles.rowLocked || toggles.rowHovered || toggles.hovered) && !toggles.editing
 
         TitleBarIcon {
             anchors.centerIn: parent
