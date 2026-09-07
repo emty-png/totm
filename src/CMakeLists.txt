@@ -37,6 +37,7 @@ qt_add_qml_module(totm
         qml/models/document/DocReorder.qml
         qml/models/document/DocBounds.qml
         qml/models/document/DocEdits.qml
+        qml/models/document/DocHistory.qml
         # Canvas + snapping
         qml/components/editor/SnapEngine.qml
         qml/components/editor/snap/SnapTargets.qml

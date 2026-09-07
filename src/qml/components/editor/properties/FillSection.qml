@@ -85,27 +85,34 @@ PanelSection {
     }
 
     // Paint only the missing shapes black; opaque fills keep their color.
+    // Loops wrap in one transaction so each action is one undo entry.
     function addFill() {
+        section.snapshot.beginScrub();
         var leaves = section.snapshot.selLeaves;
         for (var i = 0; i < leaves.length; i++) {
             if (section.isNoFill(leaves[i].fill))
                 section.doc.setShapeProp(leaves[i].uid, "fill", "#000000");
         }
+        section.snapshot.endScrub();
     }
 
     // Clear the selection's fills (selection-scoped, lock-aware).
     function removeFills() {
+        section.snapshot.beginScrub();
         var leaves = section.snapshot.selLeaves;
         for (var i = 0; i < leaves.length; i++)
             section.doc.setShapeProp(leaves[i].uid, "fill", "transparent");
+        section.snapshot.endScrub();
     }
 
     // Clear one distinct fill variant within the selection only.
     function removeVariant(fillValue) {
+        section.snapshot.beginScrub();
         var leaves = section.snapshot.selLeaves;
         for (var i = 0; i < leaves.length; i++) {
             if (String(leaves[i].fill) === String(fillValue))
                 section.doc.setShapeProp(leaves[i].uid, "fill", "transparent");
         }
+        section.snapshot.endScrub();
     }
 }

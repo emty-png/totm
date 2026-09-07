@@ -159,4 +159,15 @@ QtObject {
         if (snapshot.doc)
             snapshot.doc.setPropSelected(role, value);
     }
+
+    // Scrub bounds for panel fields: one undo entry per drag.
+    function beginScrub() {
+        if (snapshot.doc)
+            snapshot.doc.beginTransaction();
+    }
+
+    function endScrub() {
+        if (snapshot.doc)
+            snapshot.doc.endTransaction();
+    }
 }

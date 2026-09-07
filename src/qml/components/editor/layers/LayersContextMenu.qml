@@ -4,10 +4,11 @@ import QtQuick.Effects
 import QtQuick.Layouts
 import Totm
 
-// Layers context menu (sidebar only): Copy / Paste / Duplicate / Group /
-// Ungroup / Arrange (side submenu) / Rename / Delete. Custom popups in
-// the shapes-dropdown style so the theme carries over; text rows like
-// Figma (no icons). Actions run straight against the document.
+// Layers context menu (sidebar only): Undo / Redo / Copy / Paste /
+// Duplicate / Group / Ungroup / Arrange (side submenu) / Rename /
+// Delete. Custom popups in the shapes-dropdown style so the theme
+// carries over; text rows like Figma (no icons). Actions run straight
+// against the document.
 Item {
     id: menu
 
@@ -20,6 +21,8 @@ Item {
     readonly property bool contextValid: menu.computeContextValid()
     readonly property bool canGroup: !!menu.doc && menu.doc.canGroup()
     readonly property bool canUngroup: !!menu.doc && menu.doc.canUngroup()
+    readonly property bool canUndo: !!menu.doc && menu.doc.canUndo
+    readonly property bool canRedo: !!menu.doc && menu.doc.canRedo
 
     function computeHasSelection() {
         var d = menu.doc;
@@ -47,7 +50,7 @@ Item {
     function openFor(uid, px, py) {
         menu.contextUid = uid;
         sub.close();
-        var w = 170, h = 302;
+        var w = 170, h = 370;
         main.x = Math.min(Math.max(0, px), Math.max(0, menu.parent.width - w));
         main.y = Math.min(Math.max(0, py), Math.max(0, menu.parent.height - h));
         main.open();
@@ -121,6 +124,24 @@ Item {
         contentItem: ColumnLayout {
             spacing: 2
 
+            ContextMenuItem {
+                label: qsTr("Undo")
+                hint: qsTr("Ctrl+Z")
+                enabled: menu.canUndo
+                onClicked: {
+                    menu.doc.undo();
+                    menu.closeAll();
+                }
+            }
+            ContextMenuItem {
+                label: qsTr("Redo")
+                hint: qsTr("Ctrl+Y")
+                enabled: menu.canRedo
+                onClicked: {
+                    menu.doc.redo();
+                    menu.closeAll();
+                }
+            }
             ContextMenuItem {
                 label: qsTr("Copy")
                 enabled: menu.hasSelection

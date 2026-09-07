@@ -36,6 +36,10 @@ QtObject {
             }
             canvas.moveAllowed = true;
         }
+        // Coalesce the coming drag into one undo entry. Clicks without
+        // moves end with no rev change and discard the pending shot.
+        if (canvas.moveAllowed && canvas.doc)
+            canvas.doc.beginTransaction();
     }
 
     function shapeDoubleClicked(uid) {
@@ -117,6 +121,9 @@ QtObject {
     function shapeReleased(wasMoved, mods) {
         if (wasMoved && canvas.doc)
             canvas.doc.snapSelection();
+        // Settle first so the pixel snap joins the same undo entry.
+        if (canvas.doc)
+            canvas.doc.endTransaction();
         if (!wasMoved && canvas.clickArmedUid >= 0 && !(mods & (Qt.ShiftModifier | Qt.ControlModifier | Qt.MetaModifier)) && canvas.doc)
             canvas.doc.selectOnly(canvas.clickArmedUid);
         canvas.clickArmedUid = -1;

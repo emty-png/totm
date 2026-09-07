@@ -67,7 +67,7 @@ Item {
             radius: 6
             color: AppTheme.background
             border.width: 1
-            border.color: nameField.activeFocus ? AppTheme.selection : "transparent"
+            border.color: nameField.activeFocus ? AppTheme.selection : AppTheme.fieldBorder
         }
 
         onVisibleChanged: {

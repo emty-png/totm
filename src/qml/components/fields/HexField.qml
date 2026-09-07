@@ -27,7 +27,7 @@ TextField {
         radius: 6
         color: field.activeFocus ? AppTheme.hover : field.hovered ? AppTheme.hover : AppTheme.surface
         border.width: 1
-        border.color: !field.valid ? "#e81123" : field.activeFocus ? AppTheme.border : "transparent"
+        border.color: !field.valid ? "#e81123" : field.activeFocus ? AppTheme.selection : AppTheme.fieldBorder
     }
 
     Component.onCompleted: field.text = field.mixed ? "" : field.value

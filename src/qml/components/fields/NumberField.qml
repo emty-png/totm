@@ -22,6 +22,8 @@ TextField {
     property real scrubStep: 1
 
     signal committed(real newValue)
+    signal scrubStarted
+    signal scrubFinished
 
     implicitHeight: 28
     leftPadding: field.prefixIcon !== "" ? 30 : field.prefix !== "" ? 24 : 8
@@ -42,7 +44,7 @@ TextField {
         radius: 6
         color: field.activeFocus ? AppTheme.hover : field.hovered ? AppTheme.hover : AppTheme.surface
         border.width: 1
-        border.color: field.activeFocus ? AppTheme.border : "transparent"
+        border.color: field.activeFocus ? AppTheme.selection : AppTheme.fieldBorder
 
         Text {
             anchors {
@@ -170,6 +172,8 @@ TextField {
 
     // Scrub handling shared by both adornment zones. Commits live so the
     // canvas follows the drag; a press without drag focuses for typing.
+    // Scrub bounds form one undo entry: started fires before the first
+    // live commit, finished once on release.
     function scrubPress(mouse, area) {
         area.pressX = mouse.x;
         var v = parseFloat(field.text);
@@ -181,8 +185,10 @@ TextField {
         if (!area.pressed)
             return;
         var dx = mouse.x - area.pressX;
-        if (Math.abs(dx) >= 3)
+        if (!area.moved && Math.abs(dx) >= 3) {
             area.moved = true;
+            field.scrubStarted();
+        }
         var step = field.scrubStep;
         if (mouse.modifiers & Qt.ShiftModifier)
             step *= 0.1;
@@ -197,6 +203,8 @@ TextField {
         if (!area.moved) {
             field.forceActiveFocus();
             field.selectAll();
+        } else {
+            field.scrubFinished();
         }
     }
 }
