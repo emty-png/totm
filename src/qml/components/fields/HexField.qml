@@ -57,6 +57,8 @@ TextField {
     }
 
     function commit() {
+        // Enter always finishes editing: blur even when nothing changed.
+        field.focus = false;
         var c = field.normalize(field.text);
         if (c === "") {
             field.text = field.mixed ? "" : field.value;

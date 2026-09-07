@@ -22,12 +22,14 @@
 // models: Repeaters bind modelData off them, which stays reactive
 // through libraryChanged and never hits delegate-scope quirks.
 //
-// Schema (version 1):
+// Schema (version 2):
 //   { version, workspaces: [{id, name, isDefault, createdAt}],
 //     designs: [{id, workspaceId, name, createdAt, updatedAt, scene}] }
-//   scene: { version, sceneWidth, sceneHeight, sceneColor, nodes: [...] }
+//   scene: { version, sceneWidth, sceneHeight, sceneColor, nodes: [...],
+//            anim: { version, duration, nextClipId, clips: [...] } }
 //   nodes reuse the QML snapshotNode shape so QML can restore them
-//   without translation.
+//   without translation. anim holds preset clips as plain data (target
+//   top uid, preset, times, options, easing) for the video renderer.
 
 struct WorkspaceEntry {
     QString id;

@@ -34,7 +34,26 @@ ColumnLayout {
 
     EditorBottomPanel {
         Layout.fillWidth: true
+        doc: TabStore.documentFor(TabStore.currentIndex)
         open: rightPanel.mode === "animate"
+    }
+
+    // Document driving the canvas and panels (null on home).
+    readonly property var playDoc: TabStore.documentFor(TabStore.currentIndex)
+
+    // Playback clock: one 16ms timer for the visible tab. Each document
+    // owns its transport state, so switching tabs parks the old playhead
+    // and picks up the new one with no extra bookkeeping.
+    Timer {
+        id: playTimer
+
+        interval: 16
+        repeat: true
+        running: !!view.playDoc && view.playDoc.anim.playing
+        onTriggered: {
+            if (view.playDoc)
+                view.playDoc.anim.tick();
+        }
     }
 
     // Document undo/redo. Per-tab history; no-op on home or empty stack.
@@ -68,6 +87,24 @@ ColumnLayout {
             if (d)
                 d.redo();
         }
+    }
+
+    // Timeline keyframe delete. Same text-field guard as undo/redo so
+    // typing Delete in a field never eats selected clips.
+    Shortcut {
+        sequences: ["Delete"]
+        enabled: !TabStore.isHomeSelected && rightPanel.mode === "animate" && view.hasSelectedClips()
+        onActivated: {
+            if (view.focusInTextInput())
+                return;
+            if (view.playDoc)
+                view.playDoc.deleteSelectedClips();
+        }
+    }
+
+    function hasSelectedClips() {
+        var d = view.playDoc;
+        return !!d && d.anim.selectedClipIds.length > 0;
     }
 
     // Debounced autosave: every mutation queues its own tab, the queue

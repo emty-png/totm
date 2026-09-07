@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Editor bottom panel. Empty for now.
+// Editor bottom panel: timeline transport plus ruler and lanes.
 // Collapses to zero when closed (design mode), expands with a smooth
 // slide when opened (animate mode). panelHeight (user size) is kept
 // while closed so it reopens at the same size.
@@ -10,9 +10,10 @@ Item {
     id: bottomPanel
 
     property bool open: false
-    property int panelHeight: 160
+    property int panelHeight: 300
     readonly property int minPanelHeight: 80
     readonly property int maxPanelHeight: 400
+    property var doc: null
 
     Layout.preferredHeight: bottomPanel.open ? bottomPanel.panelHeight : 0
     Layout.fillWidth: true
@@ -40,9 +41,18 @@ Item {
         color: AppTheme.border
     }
 
-    // Marquee selection. Placed before the resize handle so the
-    // handle's top strip keeps its presses.
-    DragSelectionBox {}
+    // Timeline content. Fills to the panel top so the divider and the
+    // playhead touch the edge; handle clearance lives inside the view
+    // (transparent spacer) to keep buttons clear of the resize strip.
+    // Hidden below a pixel sliver when collapsed so nothing paints out.
+    // NOTE: no marquee overlay here on purpose. A full-panel mouse
+    // area above the timeline would swallow every transport, ruler
+    // and keyframe press; timeline marquee stays dead by design.
+    TimelineView {
+        anchors.fill: parent
+        visible: bottomPanel.height > 8
+        doc: bottomPanel.doc
+    }
 
     // Resize handle straddling the top edge, like web `.resize-handle-top`.
     // Hidden while collapsed.
@@ -61,7 +71,7 @@ Item {
         hoverEnabled: true
 
         property real startY: 0
-        property real startH: 160
+        property real startH: 300
 
         Rectangle {
             anchors.fill: parent

@@ -69,6 +69,9 @@ QtObject {
     property var history: DocHistory {
         doc: root
     }
+    property var anim: DocAnim {
+        doc: root
+    }
 
     readonly property bool canUndo: root.history.canUndo
     readonly property bool canRedo: root.history.canRedo
@@ -104,6 +107,9 @@ QtObject {
     function beginTransaction() {
         history.begin();
     }
+    function beginPassiveTransaction() {
+        history.beginPassive();
+    }
     function endTransaction() {
         history.end();
     }
@@ -115,6 +121,48 @@ QtObject {
     }
     function clearHistory() {
         history.clear();
+    }
+
+    // Animation. DocAnim checkpoints internally after validating, so
+    // these stay thin pass-throughs (never double-checkpoint here).
+    function applyPreset(presetId, targetUids, t0, duration, mode, options, easing) {
+        return anim.applyPreset(presetId, targetUids, t0, duration, mode, options, easing);
+    }
+    function setClipOptions(id, patch) {
+        return anim.setClipOptions(id, patch);
+    }
+    function retimeClip(id, t0, duration) {
+        return anim.retimeClip(id, t0, duration);
+    }
+    function nudgeClip(id, t0, duration) {
+        return anim.nudgeClip(id, t0, duration);
+    }
+    function setClipEasing(id, easing) {
+        return anim.setClipEasing(id, easing);
+    }
+    function setClipMode(id, mode) {
+        return anim.setClipMode(id, mode);
+    }
+    function deleteClips(ids) {
+        return anim.deleteClips(ids);
+    }
+    function deleteSelectedClips() {
+        return anim.deleteSelectedClips();
+    }
+    function setAnimDuration(v) {
+        return anim.setDuration(v);
+    }
+    function selectClip(id, additive) {
+        anim.selectClip(id, additive);
+    }
+    function clearClipSelection() {
+        anim.clearClipSelection();
+    }
+    function animClip(id) {
+        return anim.clipById(id);
+    }
+    function seekPlayhead(t) {
+        anim.seek(t);
     }
 
     // Tree navigation.
@@ -231,6 +279,7 @@ QtObject {
     function deleteSelected() {
         history.checkpoint();
         clipboard.deleteSelected();
+        anim.pruneTargets();
     }
     function snapshotScene() {
         return clipboard.snapshotScene();
@@ -308,11 +357,14 @@ QtObject {
     }
     function ungroupNode(uid) {
         history.checkpoint();
-        return grouper.ungroupNode(uid);
+        var done = grouper.ungroupNode(uid);
+        anim.pruneTargets();
+        return done;
     }
     function ungroupSelected() {
         history.checkpoint();
         grouper.ungroupSelected();
+        anim.pruneTargets();
     }
 
     // Reorder.

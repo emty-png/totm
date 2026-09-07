@@ -214,17 +214,45 @@ QtObject {
 
     // Whole-scene snapshot for the on-disk library. Plain data only, so
     // the C++ store can persist it untouched and previews can read it.
+    // Animation rides along so designs reopen mid-choreography and the
+    // future backend renderer reads one self-contained document.
+    // While a preview frame is on screen, nodes snapshot from the base
+    // values so saves and undo capture the document, never the frame.
     function snapshotScene() {
         var nodes = [];
-        for (var i = 0; i < doc.rootChildren.length; i++)
-            nodes.push(snapshotNode(doc.rootChildren[i]));
+        var base = doc.anim ? doc.anim.playBase : null;
+        for (var i = 0; i < doc.rootChildren.length; i++) {
+            var snap = snapshotNode(doc.rootChildren[i]);
+            if (base)
+                rebaseSnapshot(snap, base);
+            nodes.push(snap);
+        }
         return {
-            version: 1,
+            version: 2,
             sceneWidth: doc.sceneWidth,
             sceneHeight: doc.sceneHeight,
             sceneColor: String(doc.sceneColor),
-            nodes: nodes
+            nodes: nodes,
+            anim: doc.anim.snapshotData()
         };
+    }
+
+    function rebaseSnapshot(snap, base) {
+        if (snap.kind === "group") {
+            var kids = snap.children || [];
+            for (var i = 0; i < kids.length; i++)
+                rebaseSnapshot(kids[i], base);
+            return;
+        }
+        var b = base[snap.uid];
+        if (!b)
+            return;
+        snap.x = b.x;
+        snap.y = b.y;
+        snap.w = b.w;
+        snap.h = b.h;
+        snap.rotation = b.rotation;
+        snap.opacity = b.opacity;
     }
 
     // Replace the whole tree with a stored scene. Old nodes are
@@ -248,6 +276,7 @@ QtObject {
         for (var j = 0; j < nodes.length; j++)
             list.push(_instantiateSnapshot(nodes[j], false, true));
         doc.rootChildren = list;
+        doc.anim.restoreData(s.anim);
         doc._refreshStructural();
     }
 }
