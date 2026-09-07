@@ -39,6 +39,8 @@ PanelSection {
                 mixed: section.snapshot.commonOf("w").mixed
                 minimum: 1
                 onCommitted: v => section.commitW(v)
+                onScrubStarted: section.snapshot.beginScrub()
+                onScrubFinished: section.snapshot.endScrub()
             }
 
             NumberField {
@@ -50,6 +52,8 @@ PanelSection {
                 mixed: section.snapshot.commonOf("h").mixed
                 minimum: 1
                 onCommitted: v => section.commitH(v)
+                onScrubStarted: section.snapshot.beginScrub()
+                onScrubFinished: section.snapshot.endScrub()
             }
 
             PanelIconButton {
@@ -60,9 +64,13 @@ PanelSection {
         }
     }
 
+    // Aspect-locked commits touch two axes; wrap so each commit stays
+    // one undo entry (nests inside scrub gestures).
     function commitW(v) {
+        section.snapshot.beginScrub();
         if (!section.locked) {
             section.snapshot.setAll("w", v);
+            section.snapshot.endScrub();
             return;
         }
         var cw = section.snapshot.commonOf("w");
@@ -70,6 +78,7 @@ PanelSection {
         if (!cw.mixed && !ch.mixed && cw.value > 0) {
             section.snapshot.setAll("w", v);
             section.snapshot.setAll("h", Math.max(1, ch.value * (v / cw.value)));
+            section.snapshot.endScrub();
             return;
         }
         var box = section.doc ? section.doc.selectionBBox() : null;
@@ -79,11 +88,14 @@ PanelSection {
         } else {
             section.snapshot.setAll("w", v);
         }
+        section.snapshot.endScrub();
     }
 
     function commitH(v) {
+        section.snapshot.beginScrub();
         if (!section.locked) {
             section.snapshot.setAll("h", v);
+            section.snapshot.endScrub();
             return;
         }
         var cw = section.snapshot.commonOf("w");
@@ -91,6 +103,7 @@ PanelSection {
         if (!cw.mixed && !ch.mixed && ch.value > 0) {
             section.snapshot.setAll("h", v);
             section.snapshot.setAll("w", Math.max(1, cw.value * (v / ch.value)));
+            section.snapshot.endScrub();
             return;
         }
         var box = section.doc ? section.doc.selectionBBox() : null;
@@ -100,5 +113,6 @@ PanelSection {
         } else {
             section.snapshot.setAll("h", v);
         }
+        section.snapshot.endScrub();
     }
 }

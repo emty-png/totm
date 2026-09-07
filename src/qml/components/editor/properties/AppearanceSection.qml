@@ -38,6 +38,8 @@ PanelSection {
                 minimum: 0
                 maximum: 100
                 onCommitted: v => section.snapshot.setAll("opacity", v / 100)
+                onScrubStarted: section.snapshot.beginScrub()
+                onScrubFinished: section.snapshot.endScrub()
             }
         }
 
@@ -61,6 +63,8 @@ PanelSection {
                 mixed: section.snapshot.commonOf("radius").mixed
                 minimum: 0
                 onCommitted: v => section.snapshot.setAll("radius", v)
+                onScrubStarted: section.snapshot.beginScrub()
+                onScrubFinished: section.snapshot.endScrub()
             }
         }
     }
@@ -87,6 +91,8 @@ PanelSection {
                 minimum: 3
                 maximum: 12
                 onCommitted: v => section.snapshot.setAll("points", v)
+                onScrubStarted: section.snapshot.beginScrub()
+                onScrubFinished: section.snapshot.endScrub()
             }
 
             Item {

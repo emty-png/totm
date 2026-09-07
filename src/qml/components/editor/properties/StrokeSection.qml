@@ -51,6 +51,8 @@ PanelSection {
             mixed: section.widthCommon.mixed
             minimum: 0
             onCommitted: v => section.snapshot.setAll("strokeWidth", v)
+            onScrubStarted: section.snapshot.beginScrub()
+            onScrubFinished: section.snapshot.endScrub()
         }
     }
 }

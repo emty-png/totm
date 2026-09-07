@@ -6,6 +6,8 @@ import Totm
 // (like web, where the timeline spans under everything).
 // All panels empty for now.
 ColumnLayout {
+    id: view
+
     spacing: 0
 
     RowLayout {
@@ -33,6 +35,39 @@ ColumnLayout {
     EditorBottomPanel {
         Layout.fillWidth: true
         open: rightPanel.mode === "animate"
+    }
+
+    // Document undo/redo. Per-tab history; no-op on home or empty stack.
+    // Skipped while typing in a text field so the field keeps its own
+    // native undo (rename, hex and number fields).
+    function focusInTextInput() {
+        var w = view.Window.window;
+        var f = w ? w.activeFocusItem : null;
+        return !!f && typeof f.text !== "undefined" && typeof f.undo === "function" && typeof f.selectAll === "function";
+    }
+
+    Shortcut {
+        sequences: [StandardKey.Undo]
+        enabled: !TabStore.isHomeSelected
+        onActivated: {
+            if (view.focusInTextInput())
+                return;
+            var d = TabStore.documentFor(TabStore.currentIndex);
+            if (d)
+                d.undo();
+        }
+    }
+
+    Shortcut {
+        sequences: [StandardKey.Redo, "Ctrl+Y"]
+        enabled: !TabStore.isHomeSelected
+        onActivated: {
+            if (view.focusInTextInput())
+                return;
+            var d = TabStore.documentFor(TabStore.currentIndex);
+            if (d)
+                d.redo();
+        }
     }
 
     // Debounced autosave: every mutation queues its own tab, the queue

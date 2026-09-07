@@ -406,6 +406,7 @@ Item {
 
     CanvasToolbar {
         id: toolbar
+        doc: canvas.doc
         anchors {
             horizontalCenter: parent.horizontalCenter
             bottom: parent.bottom

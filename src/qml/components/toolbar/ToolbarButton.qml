@@ -4,6 +4,7 @@ import Totm
 
 // Floating-toolbar button: 36x32, rounded, muted icon.
 // Active state is inverted (foreground fill, background icon), like web.
+// Disabled state rides the standard `enabled` prop, visuals dim to match.
 Rectangle {
     id: toolButton
 
@@ -15,6 +16,7 @@ Rectangle {
     Layout.preferredWidth: 36
     Layout.preferredHeight: 32
     radius: 8
+    opacity: toolButton.enabled ? 1 : 0.4
     border.width: 1
     border.color: toolButton.active ? AppTheme.foreground : "transparent"
     color: toolButton.active ? AppTheme.foreground : mouse.pressed ? AppTheme.pressed : mouse.containsMouse ? AppTheme.hover : "transparent"

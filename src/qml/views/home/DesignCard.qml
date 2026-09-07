@@ -50,7 +50,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: 12
-        color: cardMouse.containsMouse || card.Drag.active ? AppTheme.hover : AppTheme.surface
+        color: cardMouse.pressed ? AppTheme.pressed : cardMouse.containsMouse || card.Drag.active ? AppTheme.hover : AppTheme.surface
         border.width: 1
         border.color: AppTheme.border
 
@@ -185,14 +185,15 @@ Item {
         }
     }
 
-    // Marquee selection outline.
+    // Marquee selection outline. Foreground hairline instead of the
+    // blue selection accent so cards stay in the theme palette.
     Rectangle {
         anchors.fill: parent
         radius: 12
         visible: card.selected
         color: "transparent"
         border.width: 1.5
-        border.color: AppTheme.selection
+        border.color: AppTheme.foreground
     }
 
     MouseArea {

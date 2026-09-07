@@ -31,6 +31,11 @@ QtObject {
     // light theme reads as broken around the white scene).
     property color sceneFrame: isDark ? "#3e3e46" : "#33000000"
 
+    // Input hairline (panel fields and filled panel buttons): full
+    // border strength in dark, darker cream in light to sit warm on
+    // the cream surface instead of a heavy black or a grey wash.
+    property color fieldBorder: isDark ? border : "#c4b478"
+
     // Selection accents (marquee, outlines, layer highlight).
     property color selection: "#0d99ff"
 

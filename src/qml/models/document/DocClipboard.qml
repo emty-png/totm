@@ -12,9 +12,10 @@ QtObject {
                 kids.push(snapshotNode(node.children[i]));
             return {
                 kind: "group",
+                uid: node.uid,
                 name: node.name,
                 visible: node.visible,
-                locked: false,
+                locked: node.locked,
                 expanded: node.expanded,
                 children: kids,
                 selected: node.selected
@@ -22,6 +23,7 @@ QtObject {
         }
         return {
             kind: "shape",
+            uid: node.uid,
             type: node.shapeType,
             name: node.name,
             x: node.x,
@@ -38,23 +40,41 @@ QtObject {
             flipH: node.flipH,
             flipV: node.flipV,
             visible: node.visible,
+            locked: node.locked,
             selected: node.selected
         };
     }
 
-    function _instantiateSnapshot(snap, select) {
+    // reuseUid preserves snapshot uids (full-scene restore/undo).
+    // Clipboard ops (paste/duplicate) leave it false so copies get
+    // fresh uids and never collide with their sources. Old scenes
+    // without uids also fall back to fresh uids.
+    function _instantiateSnapshot(snap, select, reuseUid) {
         if (snap.kind === "group") {
             var kids = [];
             for (var i = 0; i < (snap.children || []).length; i++)
-                kids.push(_instantiateSnapshot(snap.children[i], select));
+                kids.push(_instantiateSnapshot(snap.children[i], select, reuseUid));
             var g = doc._makeGroupNode(snap.name, kids);
+            if (reuseUid && typeof snap.uid === "number" && snap.uid >= 0) {
+                g.uid = snap.uid;
+                if (doc.nextNodeUid <= snap.uid)
+                    doc.nextNodeUid = snap.uid + 1;
+            }
             g.visible = snap.visible !== false;
+            g.locked = snap.locked === true;
             g.expanded = snap.expanded !== false;
             g.selected = !!select;
             return g;
         }
         var n = doc._makeShapeNode(snap.type || "rectangle", snap);
+        if (reuseUid && typeof snap.uid === "number" && snap.uid >= 0) {
+            n.uid = snap.uid;
+            if (doc.nextNodeUid <= snap.uid)
+                doc.nextNodeUid = snap.uid + 1;
+        }
         n.selected = !!select;
+        n.visible = snap.visible !== false;
+        n.locked = snap.locked === true;
         return n;
     }
 
@@ -226,7 +246,7 @@ QtObject {
         var nodes = s.nodes || [];
         var list = [];
         for (var j = 0; j < nodes.length; j++)
-            list.push(_instantiateSnapshot(nodes[j], false));
+            list.push(_instantiateSnapshot(nodes[j], false, true));
         doc.rootChildren = list;
         doc._refreshStructural();
     }

@@ -2,7 +2,8 @@ import QtQuick
 import Totm
 
 // Small panel button: 28x28, radius 6. Filled variant matches inputs
-// (aspect lock); plain variant is icon-only for header + / row -.
+// (surface fill plus hairline, e.g. rotate/flip trio, aspect lock);
+// plain variant is icon-only for header + / row -.
 // Thin glyphs (plus/minus) need strong+16 to stay visible: at 14px muted
 // the bars are sub-pixel hairlines on dark.
 Rectangle {
@@ -20,7 +21,7 @@ Rectangle {
     height: 28
     radius: 6
     border.width: 1
-    border.color: button.active ? AppTheme.foreground : "transparent"
+    border.color: button.active ? AppTheme.foreground : button.filled ? AppTheme.fieldBorder : "transparent"
     color: !button.enabled ? "transparent" : button.active ? AppTheme.foreground : mouse.pressed ? AppTheme.pressed : mouse.containsMouse ? AppTheme.hover : button.filled ? AppTheme.surface : "transparent"
     opacity: button.enabled ? 1 : 0.35
 

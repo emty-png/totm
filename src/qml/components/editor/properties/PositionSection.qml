@@ -45,6 +45,8 @@ PanelSection {
                 value: section.snapshot.commonOf("x").value
                 mixed: section.snapshot.commonOf("x").mixed
                 onCommitted: v => section.snapshot.setAll("x", v)
+                onScrubStarted: section.snapshot.beginScrub()
+                onScrubFinished: section.snapshot.endScrub()
             }
 
             NumberField {
@@ -55,6 +57,8 @@ PanelSection {
                 value: section.snapshot.commonOf("y").value
                 mixed: section.snapshot.commonOf("y").mixed
                 onCommitted: v => section.snapshot.setAll("y", v)
+                onScrubStarted: section.snapshot.beginScrub()
+                onScrubFinished: section.snapshot.endScrub()
             }
         }
     }
@@ -81,6 +85,8 @@ PanelSection {
                 value: section.snapshot.commonOf("rotation").value
                 mixed: section.snapshot.commonOf("rotation").mixed
                 onCommitted: v => section.snapshot.setAll("rotation", v)
+                onScrubStarted: section.snapshot.beginScrub()
+                onScrubFinished: section.snapshot.endScrub()
             }
 
             // Button trio takes the second half, split in thirds.

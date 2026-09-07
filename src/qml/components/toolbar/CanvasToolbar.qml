@@ -3,10 +3,13 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Totm
 
-// Floating canvas toolbar: select, shapes (with subtype dropdown), pen,
-// text, image. Inspired by web EditorToolbar, restyled to our flat theme.
+// Floating canvas toolbar: undo/redo, select, shapes (with subtype
+// dropdown), pen, text, image. Inspired by web EditorToolbar, restyled
+// to our flat theme.
 Rectangle {
     id: toolbar
+
+    property var doc: null
 
     // Whether the shapes menu is open (used by the canvas outside-click
     // catcher below the toolbar).
@@ -53,6 +56,32 @@ Rectangle {
             rightMargin: 8
         }
         spacing: 4
+
+        ToolbarButton {
+            iconKind: "undo"
+            enabled: !!toolbar.doc && toolbar.doc.canUndo
+            onClicked: {
+                if (toolbar.doc)
+                    toolbar.doc.undo();
+            }
+        }
+
+        ToolbarButton {
+            iconKind: "redo"
+            enabled: !!toolbar.doc && toolbar.doc.canRedo
+            onClicked: {
+                if (toolbar.doc)
+                    toolbar.doc.redo();
+            }
+        }
+
+        // Hairline between history and tools.
+        Rectangle {
+            Layout.preferredWidth: 1
+            Layout.preferredHeight: 20
+            Layout.alignment: Qt.AlignVCenter
+            color: AppTheme.border
+        }
 
         ToolbarButton {
             iconKind: "cursor"

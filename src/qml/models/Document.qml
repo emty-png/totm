@@ -66,6 +66,12 @@ QtObject {
     property var edits: DocEdits {
         doc: root
     }
+    property var history: DocHistory {
+        doc: root
+    }
+
+    readonly property bool canUndo: root.history.canUndo
+    readonly property bool canRedo: root.history.canRedo
 
     function touch() {
         root.rev++;
@@ -91,6 +97,24 @@ QtObject {
         root.leafList = tree.allLeaves();
         root.structRev++;
         touch();
+    }
+
+    // History (undo/redo). Checkpoint before mutations; gestures
+    // use begin/end to coalesce into one entry.
+    function beginTransaction() {
+        history.begin();
+    }
+    function endTransaction() {
+        history.end();
+    }
+    function undo() {
+        history.undo();
+    }
+    function redo() {
+        history.redo();
+    }
+    function clearHistory() {
+        history.clear();
     }
 
     // Tree navigation.
@@ -184,6 +208,7 @@ QtObject {
         return factory._makeGroupNode(name, children);
     }
     function addShape(type, x, y, w, h) {
+        history.checkpoint();
         return factory.addShape(type, x, y, w, h);
     }
     function snapshotNode(node) {
@@ -196,18 +221,25 @@ QtObject {
         return clipboard.copySelected();
     }
     function insertCopies(items) {
+        history.checkpoint();
         clipboard.insertCopies(items);
     }
     function duplicateSelected() {
+        history.checkpoint();
         clipboard.duplicateSelected();
     }
     function deleteSelected() {
+        history.checkpoint();
         clipboard.deleteSelected();
     }
     function snapshotScene() {
         return clipboard.snapshotScene();
     }
     function restoreScene(scene) {
+        // Fresh loads clear history; undo/redo restores bypass this
+        // wrapper and call the clipboard directly.
+        if (!history.applying)
+            history.clear();
         clipboard.restoreScene(scene);
     }
 
@@ -237,9 +269,11 @@ QtObject {
         selection.addRange(uid);
     }
     function toggleVisible(uid) {
+        history.checkpoint();
         selection.toggleVisible(uid);
     }
     function toggleLocked(uid) {
+        history.checkpoint();
         selection.toggleLocked(uid);
     }
     function toggleExpanded(uid) {
@@ -254,6 +288,7 @@ QtObject {
         renamer.beginRename(uid);
     }
     function commitRename(uid, name) {
+        history.checkpoint();
         renamer.commitRename(uid, name);
     }
     function cancelRename(uid) {
@@ -268,12 +303,15 @@ QtObject {
         return grouper.canUngroup();
     }
     function groupSelected() {
+        history.checkpoint();
         return grouper.groupSelected();
     }
     function ungroupNode(uid) {
+        history.checkpoint();
         return grouper.ungroupNode(uid);
     }
     function ungroupSelected() {
+        history.checkpoint();
         grouper.ungroupSelected();
     }
 
@@ -282,47 +320,59 @@ QtObject {
         reorderer._reorderInParent(parentUid, order);
     }
     function bringToFront() {
+        history.checkpoint();
         reorderer.bringToFront();
     }
     function sendToBack() {
+        history.checkpoint();
         reorderer.sendToBack();
     }
     function moveForward() {
+        history.checkpoint();
         reorderer.moveForward();
     }
     function moveBackward() {
+        history.checkpoint();
         reorderer.moveBackward();
     }
     function moveWithinParent(parentUid, from, to) {
+        history.checkpoint();
         reorderer.moveWithinParent(parentUid, from, to);
     }
 
     // Geometry and bounds.
     function moveSelected(dx, dy) {
+        history.checkpoint();
         edits.moveSelected(dx, dy);
     }
     function snapSelection() {
         edits.snapSelection();
     }
     function scaleSelection(orig, box0, newBox) {
+        history.checkpoint();
         edits.scaleSelection(orig, box0, newBox);
     }
     function rotateSelected90() {
+        history.checkpoint();
         edits.rotateSelected90();
     }
     function flipSelectedH() {
+        history.checkpoint();
         edits.flipSelectedH();
     }
     function flipSelectedV() {
+        history.checkpoint();
         edits.flipSelectedV();
     }
     function selectedLeafSnapshot() {
         return edits.selectedLeafSnapshot();
     }
     function setShapeProp(uid, role, value) {
+        history.checkpoint();
         edits.setShapeProp(uid, role, value);
     }
     function setPropSelected(role, value) {
+        history.checkpoint();
         edits.setPropSelected(role, value);
     }
     function _selectionBBox() {
@@ -332,6 +382,7 @@ QtObject {
         edits._setBBoxProp(role, value);
     }
     function recolorSelected(oldFill, newFill) {
+        history.checkpoint();
         edits.recolorSelected(oldFill, newFill);
     }
     function rotatedBounds(s) {

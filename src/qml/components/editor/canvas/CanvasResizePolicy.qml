@@ -31,6 +31,9 @@ QtObject {
         };
         canvas.snapXGuides = [];
         canvas.snapYGuides = [];
+        // Coalesce the coming resize into one undo entry.
+        if (d)
+            d.beginTransaction();
         resizeApply(cx, cy, mods, false);
     }
 
@@ -41,6 +44,9 @@ QtObject {
     function resizeReleased() {
         if (canvas.resizeState && canvas.doc)
             canvas.doc.snapSelection();
+        // Settle first so the pixel snap joins the same undo entry.
+        if (canvas.doc)
+            canvas.doc.endTransaction();
         canvas.resizeState = null;
         canvas.measureBox = null;
         canvas.snapXGuides = [];

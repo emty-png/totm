@@ -29,7 +29,7 @@ TextField {
         radius: 6
         color: AppTheme.background
         border.width: 1
-        border.color: field.activeFocus ? AppTheme.selection : "transparent"
+        border.color: field.activeFocus ? AppTheme.selection : AppTheme.fieldBorder
     }
 
     onVisibleChanged: {

@@ -8,7 +8,8 @@ import QtQuick.Shapes
 //     | "apps" | "plus" | "square" | "circle" | "triangle" | "diamond"
 //     | "hexagon" | "pen" | "text" | "image" | "caret" | "cursor"
 //     | "eye" | "eyeOff" | "lock" | "unlock" | "star" | "starFill"
-//     | "contrast" | "corner" | "rotate" | "flipH" | "flipV"
+//     | "contrast" | "corner" | "rotate" | "flipH" | "flipV" | "undo"
+//     | "redo"
 Item {
     id: icon
     width: 16
@@ -266,5 +267,21 @@ Item {
         box: icon.width
         paint: icon.iconColor
         svg: "M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"
+    }
+
+    // Arrow U up-left (undo). Phosphor Icons, regular weight.
+    PhShape {
+        active: icon.kind === "undo"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M232,144a64.07,64.07,0,0,1-64,64H80a8,8,0,0,1,0-16h88a48,48,0,0,0,0-96H51.31l34.35,34.34a8,8,0,0,1-11.32,11.32l-48-48a8,8,0,0,1,0-11.32l48-48A8,8,0,0,1,85.66,45.66L51.31,80H168A64.07,64.07,0,0,1,232,144Z"
+    }
+
+    // Arrow U up-right (redo). Phosphor Icons, regular weight.
+    PhShape {
+        active: icon.kind === "redo"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M170.34,130.34,204.69,96H88a48,48,0,0,0,0,96h88a8,8,0,0,1,0,16H88A64,64,0,0,1,88,80H204.69L170.34,45.66a8,8,0,0,1,11.32-11.32l48,48a8,8,0,0,1,0,11.32l-48,48a8,8,0,0,1-11.32-11.32Z"
     }
 }
