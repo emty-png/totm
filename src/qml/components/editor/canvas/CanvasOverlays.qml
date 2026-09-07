@@ -18,6 +18,12 @@ Item {
     required property rect marqueeRect
     required property var snapXGuides
     required property var snapYGuides
+    // Live measurement state (content coords unless noted).
+    required property var snapXGap
+    required property var snapYGap
+    required property var measureBox
+    required property real cursorX
+    required property real cursorY
 
     Rectangle {
         visible: overlays.draft !== null
@@ -167,6 +173,55 @@ Item {
             height: 1
             width: parent.width
             color: AppTheme.snapGuide
+        }
+    }
+
+    // Size pill at the cursor while resizing or drawing.
+    MeasurePill {
+        id: sizePill
+
+        label: overlays.measureBox ? Math.round(overlays.measureBox.w) + " × " + Math.round(overlays.measureBox.h) : ""
+        shown: overlays.measureBox !== null
+        x: Math.min(Math.max(overlays.cursorX + 14, 4), Math.max(4, parent.width - width - 4))
+        y: Math.min(Math.max(overlays.cursorY + 18, 4), Math.max(4, parent.height - height - 4))
+    }
+
+    // Equal-gap measurement: red span across the gap with its value.
+    Item {
+        visible: overlays.snapXGap !== null
+
+        Rectangle {
+            x: overlays.snapXGap ? Math.round(overlays.offsetX + overlays.snapXGap.x0 * overlays.zoom) : 0
+            y: overlays.snapXGap ? Math.round(overlays.offsetY + overlays.snapXGap.y * overlays.zoom) : 0
+            width: overlays.snapXGap ? Math.max(1, Math.round((overlays.snapXGap.x1 - overlays.snapXGap.x0) * overlays.zoom)) : 0
+            height: 1
+            color: AppTheme.snapGuide
+        }
+
+        MeasurePill {
+            label: overlays.snapXGap ? String(Math.round(overlays.snapXGap.x1 - overlays.snapXGap.x0)) : ""
+            shown: overlays.snapXGap !== null
+            x: overlays.snapXGap ? Math.round(overlays.offsetX + (overlays.snapXGap.x0 + overlays.snapXGap.x1) / 2 * overlays.zoom) - width / 2 : 0
+            y: overlays.snapXGap ? Math.round(overlays.offsetY + overlays.snapXGap.y * overlays.zoom) - height / 2 : 0
+        }
+    }
+
+    Item {
+        visible: overlays.snapYGap !== null
+
+        Rectangle {
+            x: overlays.snapYGap ? Math.round(overlays.offsetX + overlays.snapYGap.x * overlays.zoom) : 0
+            y: overlays.snapYGap ? Math.round(overlays.offsetY + overlays.snapYGap.y0 * overlays.zoom) : 0
+            width: 1
+            height: overlays.snapYGap ? Math.max(1, Math.round((overlays.snapYGap.y1 - overlays.snapYGap.y0) * overlays.zoom)) : 0
+            color: AppTheme.snapGuide
+        }
+
+        MeasurePill {
+            label: overlays.snapYGap ? String(Math.round(overlays.snapYGap.y1 - overlays.snapYGap.y0)) : ""
+            shown: overlays.snapYGap !== null
+            x: overlays.snapYGap ? Math.round(overlays.offsetX + overlays.snapYGap.x * overlays.zoom) - width / 2 : 0
+            y: overlays.snapYGap ? Math.round(overlays.offsetY + (overlays.snapYGap.y0 + overlays.snapYGap.y1) / 2 * overlays.zoom) - height / 2 : 0
         }
     }
 }

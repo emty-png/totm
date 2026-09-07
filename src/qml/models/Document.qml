@@ -172,6 +172,9 @@ QtObject {
     function drillTo(uid) {
         drill.drillTo(uid);
     }
+    function pruneDrillPath() {
+        drill.pruneDrillPath();
+    }
 
     // Creation and clipboard.
     function _makeShapeNode(type, snap) {

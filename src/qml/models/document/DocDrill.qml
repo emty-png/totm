@@ -77,4 +77,20 @@ QtObject {
             doc.touch();
         }
     }
+
+    // Drop path entries whose groups no longer exist (ungroup/delete).
+    // Without this, creates and pastes land in a dead container and leak.
+    function pruneDrillPath() {
+        var path = [];
+        for (var k = 0; k < doc.drillPath.length; k++) {
+            if (doc.findNode(doc.drillPath[k]))
+                path.push(doc.drillPath[k]);
+            else
+                break;
+        }
+        if (path.length !== doc.drillPath.length) {
+            doc.drillPath = path;
+            doc.touch();
+        }
+    }
 }

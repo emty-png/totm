@@ -83,6 +83,9 @@ QtObject {
                     strokeWidth: 0,
                     opacity: 1,
                     radius: 0,
+                    points: 5,
+                    flipH: false,
+                    flipV: false,
                     locked: checkAllLocked()
                 }
             ];

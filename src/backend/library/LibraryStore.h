@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDateTime>
+#include <QLockFile>
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
@@ -64,6 +65,7 @@ public:
     static LibraryStore *create(QQmlEngine *engine, QJSEngine *scriptEngine);
     explicit LibraryStore(QObject *parent = nullptr);
 
+    Q_INVOKABLE void clearError();
     QVariantList workspaceList() const;
     QVariantList designList() const;
     QString defaultWorkspaceId() const;
@@ -97,6 +99,7 @@ private:
     void load();
     bool persist();
     void rebuild();
+    void installFreshDefault();
     void setLastError(const QString &message);
     int findWorkspace(const QString &id) const;
     int findDesign(const QString &id) const;
@@ -108,5 +111,7 @@ private:
     QVariantList m_designList;
     QString m_defaultWorkspaceId;
     QString m_lastError;
+    // Second-instance guard, held for the life of the store.
+    QLockFile m_lock;
     bool m_loaded = false;
 };

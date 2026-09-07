@@ -12,7 +12,13 @@ QtObject {
     }
 
     function bringToFront() {
-        var tops = doc.selectedTops();
+        // Locked tops stay pinned where they are.
+        var tops = [];
+        var every = doc.selectedTops();
+        for (var i = 0; i < every.length; i++) {
+            if (!doc.isEffectivelyLocked(every[i]))
+                tops.push(every[i]);
+        }
         if (tops.length === 0)
             return;
         var byParent = {};
@@ -49,7 +55,13 @@ QtObject {
     }
 
     function sendToBack() {
-        var tops = doc.selectedTops();
+        // Locked tops stay pinned where they are.
+        var tops = [];
+        var every = doc.selectedTops();
+        for (var i = 0; i < every.length; i++) {
+            if (!doc.isEffectivelyLocked(every[i]))
+                tops.push(every[i]);
+        }
         if (tops.length === 0)
             return;
         var byParent = {};
@@ -85,7 +97,13 @@ QtObject {
     }
 
     function moveForward() {
-        var tops = doc.selectedTops();
+        // Locked tops stay pinned; unlocked ones swap around them.
+        var tops = [];
+        var every = doc.selectedTops();
+        for (var i = 0; i < every.length; i++) {
+            if (!doc.isEffectivelyLocked(every[i]))
+                tops.push(every[i]);
+        }
         if (tops.length === 0)
             return;
         var moved = false;
@@ -123,7 +141,13 @@ QtObject {
     }
 
     function moveBackward() {
-        var tops = doc.selectedTops();
+        // Locked tops stay pinned; unlocked ones swap around them.
+        var tops = [];
+        var every = doc.selectedTops();
+        for (var i = 0; i < every.length; i++) {
+            if (!doc.isEffectivelyLocked(every[i]))
+                tops.push(every[i]);
+        }
         if (tops.length === 0)
             return;
         var moved = false;
@@ -163,6 +187,9 @@ QtObject {
     function moveWithinParent(parentUid, from, to) {
         var list = doc._childrenOf(parentUid).slice();
         if (from < 0 || to < 0 || from === to || from >= list.length || to > list.length)
+            return;
+        // Drag-reorder never moves a locked row.
+        if (doc.isEffectivelyLocked(list[from]))
             return;
         var item = list.splice(from, 1)[0];
         var at = to > from ? to - 1 : to;

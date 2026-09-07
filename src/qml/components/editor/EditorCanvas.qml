@@ -29,9 +29,19 @@ Item {
     property var selBox: canvas.doc ? canvas.doc.selectionBBox() : null
 
     property var resizeState: null
+    // Unsnapped move travel for the active drag (base box at press plus
+    // accumulated raw deltas). Snapping reads this, never the live box.
+    property var moveState: null
 
     property var snapXGuides: []
     property var snapYGuides: []
+    // Winning equal-gap segments (content coords) for measurement.
+    property var snapXGap: null
+    property var snapYGap: null
+    // Live size readout (content {w,h}) plus cursor in screen px.
+    property var measureBox: null
+    property real cursorX: 0
+    property real cursorY: 0
 
     property bool altHeld: false
 
@@ -155,6 +165,7 @@ Item {
             drawMouse.startSY = event.y;
             drawMouse.moved = false;
             canvas.draft = null;
+            canvas.measureBox = null;
             canvas.snapXGuides = [];
             canvas.snapYGuides = [];
         }
@@ -187,10 +198,17 @@ Item {
                 w: Math.max(1, x1 - x0),
                 h: Math.max(1, y1 - y0)
             };
+            canvas.cursorX = event.x;
+            canvas.cursorY = event.y;
+            canvas.measureBox = {
+                w: canvas.draft.w,
+                h: canvas.draft.h
+            };
         }
         onReleased: event => {
             if (!canvas.doc) {
                 canvas.draft = null;
+                canvas.measureBox = null;
                 canvas.snapXGuides = [];
                 canvas.snapYGuides = [];
                 return;
@@ -202,6 +220,7 @@ Item {
                 canvas.doc.addShape(d.type, d.x, d.y, d.w, d.h);
             }
             canvas.draft = null;
+            canvas.measureBox = null;
             canvas.snapXGuides = [];
             canvas.snapYGuides = [];
             ToolStore.setActiveTool("select");
@@ -218,6 +237,11 @@ Item {
         marqueeRect: marquee.selection
         snapXGuides: canvas.snapXGuides
         snapYGuides: canvas.snapYGuides
+        snapXGap: canvas.snapXGap
+        snapYGap: canvas.snapYGap
+        measureBox: canvas.measureBox
+        cursorX: canvas.cursorX
+        cursorY: canvas.cursorY
     }
 
     DrillBreadcrumb {

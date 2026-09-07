@@ -31,17 +31,18 @@ QtObject {
         };
         canvas.snapXGuides = [];
         canvas.snapYGuides = [];
-        resizeApply(cx, cy, mods);
+        resizeApply(cx, cy, mods, false);
     }
 
     function resizeMoved(cx, cy, mods) {
-        resizeApply(cx, cy, mods);
+        resizeApply(cx, cy, mods, true);
     }
 
     function resizeReleased() {
         if (canvas.resizeState && canvas.doc)
             canvas.doc.snapSelection();
         canvas.resizeState = null;
+        canvas.measureBox = null;
         canvas.snapXGuides = [];
         canvas.snapYGuides = [];
     }
@@ -60,7 +61,7 @@ QtObject {
         canvas.moveAllowed = false;
     }
 
-    function resizeApply(cx, cy, mods) {
+    function resizeApply(cx, cy, mods, live) {
         var st = canvas.resizeState, d = canvas.doc;
         if (!st || !d)
             return;
@@ -134,5 +135,14 @@ QtObject {
             w: nw,
             h: nh
         });
+        // Size readout follows the live (post-snap) box at the cursor.
+        if (live) {
+            canvas.cursorX = canvas.offsetX + cx * canvas.zoom;
+            canvas.cursorY = canvas.offsetY + cy * canvas.zoom;
+            canvas.measureBox = {
+                w: nw,
+                h: nh
+            };
+        }
     }
 }

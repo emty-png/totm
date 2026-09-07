@@ -35,13 +35,21 @@ QtObject {
             xG = engine.dedup(edge.xGuides.concat(space.xGuides));
         if (dy !== 0 && edge.hasY && space.hasY && Math.abs(edge.dy - space.dy) < 0.5)
             yG = engine.dedup(edge.yGuides.concat(space.yGuides));
+        // Gap labels follow the spacing side whenever its gaps read,
+        // including the tied merge above.
+        var tieX = dx !== 0 && edge.hasX && space.hasX && Math.abs(edge.dx - space.dx) < 0.5;
+        var tieY = dy !== 0 && edge.hasY && space.hasY && Math.abs(edge.dy - space.dy) < 0.5;
+        var xGap = dx === 0 ? null : (!useEdgeX || tieX ? space.xGap : null);
+        var yGap = dy === 0 ? null : (!useEdgeY || tieY ? space.yGap : null);
         return {
             x: box.x + dx,
             y: box.y + dy,
             dx: dx,
             dy: dy,
             xGuides: xG,
-            yGuides: yG
+            yGuides: yG,
+            xGap: xGap,
+            yGap: yGap
         };
     }
 

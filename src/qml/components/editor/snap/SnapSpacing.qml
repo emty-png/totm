@@ -8,6 +8,9 @@ QtObject {
     function spacingMove(box, others, thresh) {
         var bestDx = 0, bestDy = 0, foundX = false, foundY = false;
         var bxG = [], byG = [];
+        // Winning gap segments in content coords (the gap touching the
+        // moving box); the overlay measures and labels these.
+        var bxGap = null, byGap = null;
         var mw = box.w, mh = box.h;
         var mx = box.x, my = box.y;
         var mr = mx + mw, mb = my + mh;
@@ -28,6 +31,11 @@ QtObject {
                             bestDx = dx;
                             foundX = true;
                             bxG = [ar, tx, tx + mw, b.x];
+                            bxGap = {
+                                x0: tx + mw,
+                                x1: b.x,
+                                y: my + mh / 2
+                            };
                         }
                     }
                 }
@@ -42,6 +50,11 @@ QtObject {
                             bestDy = dy;
                             foundY = true;
                             byG = [ab, ty, ty + mh, b.y];
+                            byGap = {
+                                y0: ty + mh,
+                                y1: b.y,
+                                x: mx + mw / 2
+                            };
                         }
                     }
                 }
@@ -63,6 +76,11 @@ QtObject {
                             bestDx = ddx;
                             foundX = true;
                             bxG = [pr, q.x, qr, mx + ddx];
+                            bxGap = {
+                                x0: qr,
+                                x1: mx + ddx,
+                                y: my + mh / 2
+                            };
                         }
                     }
                 }
@@ -78,6 +96,11 @@ QtObject {
                             bestDx = cand;
                             foundX = true;
                             bxG = [mx + cand + mw, p.x, p.x + p.w, q.x];
+                            bxGap = {
+                                x0: mx + cand + mw,
+                                x1: p.x,
+                                y: my + mh / 2
+                            };
                         }
                     }
                 }
@@ -91,6 +114,11 @@ QtObject {
                             bestDy = ddy;
                             foundY = true;
                             byG = [pb, q.y, qb, my + ddy];
+                            byGap = {
+                                y0: qb,
+                                y1: my + ddy,
+                                x: mx + mw / 2
+                            };
                         }
                     }
                 }
@@ -102,6 +130,11 @@ QtObject {
                             bestDy = candY;
                             foundY = true;
                             byG = [my + candY + mh, p.y, p.y + p.h, q.y];
+                            byGap = {
+                                y0: my + candY + mh,
+                                y1: p.y,
+                                x: mx + mw / 2
+                            };
                         }
                     }
                 }
@@ -112,6 +145,8 @@ QtObject {
             dy: foundY ? bestDy : 0,
             xGuides: engine.dedup(bxG),
             yGuides: engine.dedup(byG),
+            xGap: foundX ? bxGap : null,
+            yGap: foundY ? byGap : null,
             hasX: foundX,
             hasY: foundY
         };

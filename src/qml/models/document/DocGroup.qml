@@ -6,20 +6,32 @@ QtObject {
     required property var doc
 
     function canGroup() {
-        return doc.selectedTops().length >= 2;
+        var n = 0;
+        var tops = doc.selectedTops();
+        for (var i = 0; i < tops.length; i++) {
+            if (!doc.isEffectivelyLocked(tops[i]))
+                n++;
+        }
+        return n >= 2;
     }
 
     function canUngroup() {
         var tops = doc.selectedTops();
         for (var i = 0; i < tops.length; i++) {
-            if (tops[i].kind === "group")
+            if (tops[i].kind === "group" && !doc.isEffectivelyLocked(tops[i]))
                 return true;
         }
         return false;
     }
 
     function groupSelected() {
-        var tops = doc.selectedTops();
+        // Locked tops stay out of the new group.
+        var tops = [];
+        var every = doc.selectedTops();
+        for (var i = 0; i < every.length; i++) {
+            if (!doc.isEffectivelyLocked(every[i]))
+                tops.push(every[i]);
+        }
         if (tops.length < 2)
             return -1;
         var parents = {};
@@ -95,7 +107,7 @@ QtObject {
 
     function ungroupNode(uid) {
         var hit = doc._find(uid);
-        if (!hit || hit.node.kind !== "group")
+        if (!hit || hit.node.kind !== "group" || doc.isEffectivelyLocked(hit.node))
             return false;
         var kids = hit.node.children.slice();
         for (var i = 0; i < kids.length; i++)
@@ -109,6 +121,7 @@ QtObject {
         doc._setChildren(hit.parentUid, list);
         doc.anchorUid = kids.length > 0 ? kids[0].uid : -1;
         doc._refreshStructural();
+        doc.pruneDrillPath();
         return true;
     }
 
@@ -116,7 +129,7 @@ QtObject {
         var tops = doc.selectedTops();
         var groups = [];
         for (var i = 0; i < tops.length; i++) {
-            if (tops[i].kind === "group")
+            if (tops[i].kind === "group" && !doc.isEffectivelyLocked(tops[i]))
                 groups.push(tops[i].uid);
         }
         if (groups.length === 0)
@@ -162,5 +175,6 @@ QtObject {
         var cur = doc.selectedTops();
         doc.anchorUid = cur.length > 0 ? cur[0].uid : -1;
         doc._refreshStructural();
+        doc.pruneDrillPath();
     }
 }
