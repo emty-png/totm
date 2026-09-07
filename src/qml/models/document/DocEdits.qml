@@ -70,6 +70,8 @@ QtObject {
             return;
         if (role === "w" || role === "h")
             value = Math.max(1, value);
+        if (role === "points")
+            value = Math.min(12, Math.max(3, Math.round(value)));
         n[role] = value;
         doc.touch();
     }
@@ -94,6 +96,8 @@ QtObject {
             // Groups have no style: skip them (leaves only here anyway).
             if (role === "w" || role === "h")
                 value = Math.max(1, value);
+            if (role === "points")
+                value = Math.min(12, Math.max(3, Math.round(value)));
             if (role in leaves[j])
                 leaves[j][role] = value;
         }
@@ -146,11 +150,45 @@ QtObject {
         doc.touch();
     }
 
-    function recolorFill(oldFill, newFill) {
-        var leaves = doc.allLeaves();
+    // Recolor one fill variant within the selection only. A global
+    // replace-all would repaint same-colored shapes the user never
+    // selected, so this stays scoped like every other panel edit.
+    function recolorSelected(oldFill, newFill) {
+        var leaves = doc._selectedLeaves();
         for (var i = 0; i < leaves.length; i++) {
             if (String(leaves[i].fill) === String(oldFill) && !doc.isEffectivelyLocked(leaves[i]))
                 leaves[i].fill = newFill;
+        }
+        doc.touch();
+    }
+
+    // Quarter turn clockwise per leaf, normalized to [0, 360).
+    function rotateSelected90() {
+        var leaves = doc._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (doc.isEffectivelyLocked(leaves[i]))
+                continue;
+            leaves[i].rotation = (((leaves[i].rotation + 90) % 360) + 360) % 360;
+        }
+        doc.touch();
+    }
+
+    function flipSelectedH() {
+        var leaves = doc._selectedLeaves();
+        for (var j = 0; j < leaves.length; j++) {
+            if (doc.isEffectivelyLocked(leaves[j]))
+                continue;
+            leaves[j].flipH = !leaves[j].flipH;
+        }
+        doc.touch();
+    }
+
+    function flipSelectedV() {
+        var leaves = doc._selectedLeaves();
+        for (var k = 0; k < leaves.length; k++) {
+            if (doc.isEffectivelyLocked(leaves[k]))
+                continue;
+            leaves[k].flipV = !leaves[k].flipV;
         }
         doc.touch();
     }

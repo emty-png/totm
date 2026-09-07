@@ -77,10 +77,8 @@ QtObject {
             return "Ellipse";
         case "triangle":
             return "Triangle";
-        case "diamond":
-            return "Diamond";
-        case "polygon":
-            return "Polygon";
+        case "star":
+            return "Star";
         case "group":
             return "Group";
         default:
@@ -306,6 +304,15 @@ QtObject {
     function scaleSelection(orig, box0, newBox) {
         edits.scaleSelection(orig, box0, newBox);
     }
+    function rotateSelected90() {
+        edits.rotateSelected90();
+    }
+    function flipSelectedH() {
+        edits.flipSelectedH();
+    }
+    function flipSelectedV() {
+        edits.flipSelectedV();
+    }
     function selectedLeafSnapshot() {
         return edits.selectedLeafSnapshot();
     }
@@ -321,8 +328,8 @@ QtObject {
     function _setBBoxProp(role, value) {
         edits._setBBoxProp(role, value);
     }
-    function recolorFill(oldFill, newFill) {
-        edits.recolorFill(oldFill, newFill);
+    function recolorSelected(oldFill, newFill) {
+        edits.recolorSelected(oldFill, newFill);
     }
     function rotatedBounds(s) {
         return bounds.rotatedBounds(s);

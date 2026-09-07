@@ -70,10 +70,8 @@ RowLayout {
                 return "circle";
             case "triangle":
                 return "triangle";
-            case "diamond":
-                return "diamond";
-            case "polygon":
-                return "hexagon";
+            case "star":
+                return "star";
             default:
                 return "square";
             }

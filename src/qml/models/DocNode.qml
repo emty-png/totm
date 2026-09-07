@@ -25,6 +25,12 @@ QtObject {
     property real strokeWidth: 0
     property real opacity: 1
     property real radius: 0
+    // Star tips; only meaningful when shapeType === "star".
+    property int points: 5
+    // Local-space mirror flags: paint mirrors about the shape center,
+    // geometry and bbox stay untouched.
+    property bool flipH: false
+    property bool flipV: false
     // Canvas paint order, assigned by Document.renumberZ (top-first DFS).
     property int zOrder: 0
 

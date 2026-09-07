@@ -20,7 +20,7 @@ ScrollView {
 
     ColumnLayout {
         width: panel.availableWidth
-        spacing: 10
+        spacing: 0
 
         Text {
             Layout.fillWidth: true
@@ -36,7 +36,19 @@ ScrollView {
             color: AppTheme.muted
         }
 
-        GeometrySection {
+        PositionSection {
+            Layout.fillWidth: true
+            snapshot: panel.snapshot
+            doc: panel.doc
+        }
+
+        LayoutSection {
+            Layout.fillWidth: true
+            snapshot: panel.snapshot
+            doc: panel.doc
+        }
+
+        AppearanceSection {
             Layout.fillWidth: true
             snapshot: panel.snapshot
         }
@@ -50,17 +62,6 @@ ScrollView {
         StrokeSection {
             Layout.fillWidth: true
             snapshot: panel.snapshot
-        }
-
-        StyleSection {
-            Layout.fillWidth: true
-            snapshot: panel.snapshot
-        }
-
-        Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 12
-            visible: panel.snapshot.sel.length > 0
         }
     }
 }
