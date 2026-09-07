@@ -53,6 +53,7 @@ TextField {
     }
 
     function settle() {
+        field.focus = false;
         if (field.text === field.editOrig)
             field.cancelled();
         else

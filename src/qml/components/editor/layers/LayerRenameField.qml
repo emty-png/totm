@@ -95,6 +95,7 @@ Item {
     function settleRename() {
         if (!namer.editing)
             return;
+        nameField.focus = false;
         if (nameField.text === namer.editOrig) {
             if (namer.cancelPolicy)
                 namer.cancelPolicy();

@@ -9,7 +9,7 @@ import QtQuick.Shapes
 //     | "hexagon" | "pen" | "text" | "image" | "caret" | "cursor"
 //     | "eye" | "eyeOff" | "lock" | "unlock" | "star" | "starFill"
 //     | "contrast" | "corner" | "rotate" | "flipH" | "flipV" | "undo"
-//     | "redo"
+//     | "redo" | "play" | "pause" | "stop"
 Item {
     id: icon
     width: 16
@@ -283,5 +283,30 @@ Item {
         box: icon.width
         paint: icon.iconColor
         svg: "M170.34,130.34,204.69,96H88a48,48,0,0,0,0,96h88a8,8,0,0,1,0,16H88A64,64,0,0,1,88,80H204.69L170.34,45.66a8,8,0,0,1,11.32-11.32l48,48a8,8,0,0,1,0,11.32l-48,48a8,8,0,0,1-11.32-11.32Z"
+    }
+
+    // Play triangle (transport). Phosphor Icons, regular weight.
+    PhShape {
+        active: icon.kind === "play"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M232.4,114.49,88.32,26.35a16,16,0,0,0-16.2-.3A15.86,15.86,0,0,0,64,39.87V216.13A15.94,15.94,0,0,0,80,232a16.07,16.07,0,0,0,8.36-2.35L232.4,141.51a15.81,15.81,0,0,0,0-27ZM80,215.94V40l143.83,88Z"
+    }
+
+    // Pause bars, solid (outlined pairs turn to hairlines at 16px).
+    // Phosphor-style geometry, regular weight.
+    PhShape {
+        active: icon.kind === "pause"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M64,48a16,16,0,0,1,16-16h16a16,16,0,0,1,16,16V208a16,16,0,0,1-16,16H80a16,16,0,0,1-16-16Z M144,48a16,16,0,0,1,16-16h16a16,16,0,0,1,16,16V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16Z"
+    }
+
+    // Stop square (transport). Phosphor Icons, regular weight.
+    PhShape {
+        active: icon.kind === "stop"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M200,40H56A16,16,0,0,0,40,56V200a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,160H56V56H200V200Z"
     }
 }

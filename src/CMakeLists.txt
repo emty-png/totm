@@ -38,6 +38,9 @@ qt_add_qml_module(totm
         qml/models/document/DocBounds.qml
         qml/models/document/DocEdits.qml
         qml/models/document/DocHistory.qml
+        qml/models/document/AnimSample.qml
+        qml/models/document/DocAnimPresets.qml
+        qml/models/document/DocAnim.qml
         # Canvas + snapping
         qml/components/editor/SnapEngine.qml
         qml/components/editor/snap/SnapTargets.qml
@@ -60,6 +63,16 @@ qt_add_qml_module(totm
         qml/components/editor/layers/LayersReorder.qml
         # Design panel
         qml/components/editor/properties/SelectionSnapshot.qml
+        qml/components/editor/properties/PresetCard.qml
+        qml/components/editor/properties/PresetGallery.qml
+        qml/components/editor/properties/ShapeAnimsPanel.qml
+        qml/components/editor/properties/ClipEditor.qml
+        qml/components/editor/properties/SegOption.qml
+        qml/components/editor/properties/ClipSlideOptions.qml
+        qml/components/editor/properties/ClipSpinOptions.qml
+        qml/components/editor/properties/ClipTimingSection.qml
+        qml/components/editor/properties/BezierCanvas.qml
+        qml/components/editor/properties/GraphEditorPopup.qml
         qml/components/editor/properties/PanelSection.qml
         qml/components/editor/properties/PanelIconButton.qml
         qml/components/editor/properties/PositionSection.qml
@@ -84,6 +97,10 @@ qt_add_qml_module(totm
         qml/components/editor/EditorLeftPanel.qml
         qml/components/editor/EditorRightPanel.qml
         qml/components/editor/EditorModeSwitcher.qml
+        qml/components/editor/AnimateModeSwitcher.qml
+        qml/components/editor/timeline/TimelineView.qml
+        qml/components/editor/timeline/TimelineLane.qml
+        qml/components/editor/timeline/TimelineRuler.qml
         qml/components/editor/EditorBottomPanel.qml
         qml/components/editor/EditorCanvas.qml
         qml/components/editor/properties/DesignPanel.qml

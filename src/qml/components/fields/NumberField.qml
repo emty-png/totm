@@ -158,6 +158,10 @@ TextField {
     }
 
     function commit() {
+        // Enter always finishes editing: blur even when the text parses
+        // back to the current value. (Commit-on-focus-loss re-enters
+        // here already blurred, so this is a no-op for that path.)
+        field.focus = false;
         var v = parseFloat(field.text);
         if (isNaN(v)) {
             field.text = field.mixed ? "" : field.formatValue(field.value);

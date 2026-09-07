@@ -10,7 +10,7 @@
 #include <QUuid>
 
 namespace {
-constexpr int kSchemaVersion = 1;
+constexpr int kSchemaVersion = 2;
 constexpr int kMaxNameLength = 120;
 
 QString nowIso() {
@@ -28,13 +28,16 @@ QString newId() {
 
 QVariantMap entryToScene(const QVariantMap &scene) {
     // Scenes arrive from QML as plain maps; normalize the keys we persist
-    // so older/newer writers stay readable.
+    // so older/newer writers stay readable. Animation rides along as an
+    // opaque map (schema v2): the future video renderer reads the same
+    // document the canvas previews today.
     QVariantMap out;
     out[QStringLiteral("version")] = kSchemaVersion;
     out[QStringLiteral("sceneWidth")] = scene.value(QStringLiteral("sceneWidth"), 1920);
     out[QStringLiteral("sceneHeight")] = scene.value(QStringLiteral("sceneHeight"), 1080);
     out[QStringLiteral("sceneColor")] = scene.value(QStringLiteral("sceneColor"), QStringLiteral("#ffffff"));
     out[QStringLiteral("nodes")] = scene.value(QStringLiteral("nodes"), QVariantList());
+    out[QStringLiteral("anim")] = scene.value(QStringLiteral("anim"), QVariantMap());
     return out;
 }
 } // namespace
