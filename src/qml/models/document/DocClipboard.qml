@@ -116,7 +116,13 @@ QtObject {
     }
 
     function duplicateSelected() {
-        var tops = doc.selectedTops();
+        // Locked tops are left alone; only the unlocked subset copies.
+        var tops = [];
+        var every = doc.selectedTops();
+        for (var i = 0; i < every.length; i++) {
+            if (!doc.isEffectivelyLocked(every[i]))
+                tops.push(every[i]);
+        }
         if (tops.length === 0)
             return;
         // Group tops by parent so each copy lands right after its source.
@@ -154,7 +160,13 @@ QtObject {
     }
 
     function deleteSelected() {
-        var tops = doc.selectedTops();
+        // Locked tops survive deletion like every other edit skips them.
+        var tops = [];
+        var every = doc.selectedTops();
+        for (var i = 0; i < every.length; i++) {
+            if (!doc.isEffectivelyLocked(every[i]))
+                tops.push(every[i]);
+        }
         if (tops.length === 0)
             return;
         var ids = {};
@@ -175,14 +187,7 @@ QtObject {
         };
         doc.rootChildren = prune(doc.rootChildren);
         // Drill path may point into deleted groups: truncate dead tail.
-        var path = [];
-        for (var k = 0; k < doc.drillPath.length; k++) {
-            if (doc.findNode(doc.drillPath[k]))
-                path.push(doc.drillPath[k]);
-            else
-                break;
-        }
-        doc.drillPath = path;
+        doc.pruneDrillPath();
         doc.anchorUid = -1;
         doc._refreshStructural();
     }

@@ -48,6 +48,7 @@ qt_add_qml_module(totm
         qml/components/editor/canvas/CanvasResizePolicy.qml
         qml/components/editor/canvas/ShapeLayer.qml
         qml/components/editor/canvas/CanvasOverlays.qml
+        qml/components/editor/canvas/MeasurePill.qml
         qml/components/editor/canvas/DrillBreadcrumb.qml
         # Layers
         qml/components/editor/layers/LayerHighlight.qml

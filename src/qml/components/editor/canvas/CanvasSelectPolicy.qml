@@ -15,6 +15,8 @@ QtObject {
     function shapePressed(uid, mods) {
         if (!canvas.doc)
             return;
+        // Fresh gesture: drop any stale unsnapped travel.
+        canvas.moveState = null;
         canvas.altHeld = !!(mods & Qt.AltModifier);
         var target = canvas.doc.resolvePress(uid);
         var multi = !!(mods & (Qt.ShiftModifier | Qt.ControlModifier | Qt.MetaModifier));
@@ -65,23 +67,48 @@ QtObject {
         // winning edge/spacing alignment (5 screen px), then move by the
         // adjusted delta. Guides show while dragging; the pixel settle
         // still runs on release. Alt suspends the magnet for free moves.
+        //
+        // Figma-style escape: snapping reads the raw unsnapped travel
+        // (press-time box plus accumulated deltas), never the live box.
+        // Snapping the live box re-pulls every 1px step back to the
+        // target, which wedges the shape until a single event jumps the
+        // whole threshold.
         var adjDx = dx, adjDy = dy;
         var b = canvas.selBox;
-        if (b && !canvas.altHeld) {
-            var want = {
-                x: b.x + dx,
-                y: b.y + dy,
-                w: b.w,
-                h: b.h
-            };
-            var snapped = snap.snapMove(canvas.doc, want, canvas.zoom);
-            adjDx = dx + snapped.dx;
-            adjDy = dy + snapped.dy;
-            canvas.snapXGuides = snapped.xGuides;
-            canvas.snapYGuides = snapped.yGuides;
-        } else {
-            canvas.snapXGuides = [];
-            canvas.snapYGuides = [];
+        if (b) {
+            if (!canvas.moveState) {
+                canvas.moveState = {
+                    base: {
+                        x: b.x,
+                        y: b.y
+                    },
+                    accX: 0,
+                    accY: 0
+                };
+            }
+            var st = canvas.moveState;
+            st.accX += dx;
+            st.accY += dy;
+            if (!canvas.altHeld) {
+                var want = {
+                    x: st.base.x + st.accX,
+                    y: st.base.y + st.accY,
+                    w: b.w,
+                    h: b.h
+                };
+                var snapped = snap.snapMove(canvas.doc, want, canvas.zoom);
+                adjDx = snapped.x - b.x;
+                adjDy = snapped.y - b.y;
+                canvas.snapXGuides = snapped.xGuides;
+                canvas.snapYGuides = snapped.yGuides;
+                canvas.snapXGap = snapped.xGap;
+                canvas.snapYGap = snapped.yGap;
+            } else {
+                canvas.snapXGuides = [];
+                canvas.snapYGuides = [];
+                canvas.snapXGap = null;
+                canvas.snapYGap = null;
+            }
         }
         canvas.doc.moveSelected(adjDx, adjDy);
         canvas.clickArmedUid = -1;
@@ -94,8 +121,11 @@ QtObject {
             canvas.doc.selectOnly(canvas.clickArmedUid);
         canvas.clickArmedUid = -1;
         canvas.moveAllowed = false;
+        canvas.moveState = null;
         canvas.snapXGuides = [];
         canvas.snapYGuides = [];
+        canvas.snapXGap = null;
+        canvas.snapYGap = null;
     }
 
     function computeSelBox() {

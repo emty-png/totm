@@ -47,7 +47,8 @@ LibraryStore *LibraryStore::create(QQmlEngine *engine, QJSEngine *scriptEngine) 
 }
 
 LibraryStore::LibraryStore(QObject *parent)
-    : QObject(parent) {
+    : QObject(parent)
+    , m_lock(libraryDir() + QStringLiteral("/totm.lock")) {
     load();
 }
 
@@ -255,36 +256,50 @@ void LibraryStore::load() {
     m_loaded = true;
 
     QDir().mkpath(libraryDir());
+    // Second-instance guard: held for the life of the store. A running
+    // copy only warns; concurrent writes stay last-writer-wins by design.
+    if (!m_lock.lock()) {
+        setLastError(tr("Another copy of totm seems to be running; saves may overwrite each other."));
+    }
+
     QFile file(libraryPath());
     if (!file.exists()) {
-        WorkspaceEntry fallback;
-        fallback.id = newId();
-        fallback.name = tr("Default");
-        fallback.isDefault = true;
-        fallback.createdAt = nowIso();
-        m_workspaceEntries = {fallback};
-        m_defaultWorkspaceId = fallback.id;
+        installFreshDefault();
         persist();
         rebuild();
         return;
     }
     if (!file.open(QIODevice::ReadOnly)) {
         setLastError(tr("Could not read library: %1").arg(file.errorString()));
+        // Keep memory valid so the UI never runs on broken invariants.
+        installFreshDefault();
+        rebuild();
         return;
     }
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-        // Never strand the user on a corrupt file: archive it and start over.
+    const QJsonObject root = doc.object();
+    // Files we write always carry both arrays: anything else parseable
+    // is foreign and must be archived, never silently adopted as empty.
+    const bool wrongShape = !root.value(QStringLiteral("workspaces")).isArray()
+        || !root.value(QStringLiteral("designs")).isArray();
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject() || wrongShape) {
+        // Never strand the user on a bad file: archive it and start over.
         const QString backup = libraryDir() + QStringLiteral("/library.corrupt.%1.json")
-                                                   .arg(QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-hhmmss")));
+                                                   .arg(QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-hhmmss-zzz")));
         file.close();
-        QFile::rename(libraryPath(), backup);
-        setLastError(tr("Library was corrupt; archived to %1 and reset.").arg(backup));
+        if (QFile::rename(libraryPath(), backup)) {
+            setLastError(tr("Library was corrupt; archived to %1 and reset.").arg(backup));
+        } else {
+            setLastError(tr("Library was corrupt and could not be archived; starting fresh."));
+        }
         m_workspaceEntries.clear();
         m_designEntries.clear();
+        installFreshDefault();
+        persist();
+        rebuild();
+        return;
     } else {
-        const QJsonObject root = doc.object();
         m_workspaceEntries.clear();
         for (const QJsonValue &value : root.value(QStringLiteral("workspaces")).toArray()) {
             const QJsonObject item = value.toObject();
@@ -314,6 +329,7 @@ void LibraryStore::load() {
 
     // Self-heal invariants every load: exactly one Default exists, and no
     // design points at a missing workspace.
+    bool healed = false;
     bool haveDefault = false;
     for (const WorkspaceEntry &entry : m_workspaceEntries) {
         if (entry.isDefault) {
@@ -330,16 +346,24 @@ void LibraryStore::load() {
         fallback.createdAt = nowIso();
         m_workspaceEntries.prepend(fallback);
         m_defaultWorkspaceId = fallback.id;
+        healed = true;
     }
     QHash<QString, bool> known;
     for (const WorkspaceEntry &entry : m_workspaceEntries)
         known.insert(entry.id, true);
     for (DesignEntry &entry : m_designEntries) {
-        if (!known.contains(entry.workspaceId))
+        if (!known.contains(entry.workspaceId)) {
             entry.workspaceId = m_defaultWorkspaceId;
-        if (entry.scene.isEmpty())
+            healed = true;
+        }
+        if (entry.scene.isEmpty()) {
             entry.scene = entryToScene({});
+            healed = true;
+        }
     }
+    // Heals must survive a quit without further edits.
+    if (healed)
+        persist();
     rebuild();
 }
 
@@ -373,18 +397,21 @@ bool LibraryStore::persist() {
     QSaveFile file(libraryPath());
     if (!file.open(QIODevice::WriteOnly)) {
         setLastError(tr("Could not save library: %1").arg(file.errorString()));
+        // Memory already holds the change: rebuild so the view matches
+        // instead of hiding a ghost, and surface the error to retry on.
+        rebuild();
         return false;
     }
     file.write(doc.toJson(QJsonDocument::Indented));
     if (!file.commit()) {
         setLastError(tr("Could not save library: %1").arg(file.errorString()));
+        rebuild();
         return false;
     }
     return true;
 }
 
-void LibraryStore::rebuild() {
-    QHash<QString, int> counts;
+void LibraryStore::rebuild() {    QHash<QString, int> counts;
     for (const DesignEntry &entry : m_designEntries)
         counts[entry.workspaceId] = counts.value(entry.workspaceId, 0) + 1;
     QVariantList workspaces;
@@ -419,6 +446,20 @@ void LibraryStore::setLastError(const QString &message) {
         return;
     m_lastError = message;
     emit lastErrorChanged();
+}
+
+void LibraryStore::clearError() {
+    setLastError(QString());
+}
+
+void LibraryStore::installFreshDefault() {
+    WorkspaceEntry fallback;
+    fallback.id = newId();
+    fallback.name = tr("Default");
+    fallback.isDefault = true;
+    fallback.createdAt = nowIso();
+    m_workspaceEntries = {fallback};
+    m_defaultWorkspaceId = fallback.id;
 }
 
 int LibraryStore::findWorkspace(const QString &id) const {
