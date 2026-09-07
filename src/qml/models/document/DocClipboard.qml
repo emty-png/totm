@@ -34,6 +34,9 @@ QtObject {
             strokeWidth: node.strokeWidth,
             opacity: node.opacity,
             radius: node.radius,
+            points: node.points,
+            flipH: node.flipH,
+            flipV: node.flipV,
             visible: node.visible,
             selected: node.selected
         };

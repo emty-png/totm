@@ -23,10 +23,8 @@ Rectangle {
             return "circle";
         case "triangle":
             return "triangle";
-        case "diamond":
-            return "diamond";
-        case "polygon":
-            return "hexagon";
+        case "star":
+            return "star";
         default:
             return "square";
         }
@@ -195,20 +193,11 @@ Rectangle {
                         }
                     }
                     ToolbarMenuItem {
-                        iconKind: "diamond"
-                        label: qsTr("Diamond")
-                        active: ToolStore.activeShapeType === "diamond"
+                        iconKind: "star"
+                        label: qsTr("Star")
+                        active: ToolStore.activeShapeType === "star"
                         onClicked: {
-                            ToolStore.setActiveShapeType("diamond");
-                            shapesMenu.close();
-                        }
-                    }
-                    ToolbarMenuItem {
-                        iconKind: "hexagon"
-                        label: qsTr("Polygon")
-                        active: ToolStore.activeShapeType === "polygon"
-                        onClicked: {
-                            ToolStore.setActiveShapeType("polygon");
+                            ToolStore.setActiveShapeType("star");
                             shapesMenu.close();
                         }
                     }

@@ -66,6 +66,9 @@ Item {
                     strokeWidth: modelData.strokeWidth || 0
                     shapeOpacity: modelData.opacity !== undefined ? modelData.opacity : 1
                     radius: modelData.radius || 0
+                    points: modelData.points || 5
+                    flipH: modelData.flipH === true
+                    flipV: modelData.flipV === true
                     selected: false
                     shapeVisible: true
                     shapeLocked: false

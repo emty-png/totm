@@ -84,6 +84,9 @@ Item {
             strokeWidth: modelData.strokeWidth
             shapeOpacity: modelData.opacity
             radius: modelData.radius
+            points: modelData.points
+            flipH: modelData.flipH
+            flipV: modelData.flipV
             paintDepth: modelData.zOrder
         }
     }

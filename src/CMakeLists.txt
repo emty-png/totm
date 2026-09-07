@@ -58,10 +58,13 @@ qt_add_qml_module(totm
         qml/components/editor/layers/LayersReorder.qml
         # Design panel
         qml/components/editor/properties/SelectionSnapshot.qml
-        qml/components/editor/properties/GeometrySection.qml
+        qml/components/editor/properties/PanelSection.qml
+        qml/components/editor/properties/PanelIconButton.qml
+        qml/components/editor/properties/PositionSection.qml
+        qml/components/editor/properties/LayoutSection.qml
+        qml/components/editor/properties/AppearanceSection.qml
         qml/components/editor/properties/FillSection.qml
         qml/components/editor/properties/StrokeSection.qml
-        qml/components/editor/properties/StyleSection.qml
         # Titlebar + window
         qml/components/titlebar/TitleBar.qml
         qml/components/titlebar/TitleBarTabBar.qml

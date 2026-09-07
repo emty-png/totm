@@ -51,6 +51,9 @@ QtObject {
                     strokeWidth: s.strokeWidth,
                     opacity: s.opacity,
                     radius: s.radius,
+                    points: s.points,
+                    flipH: s.flipH,
+                    flipV: s.flipV,
                     locked: snapshot.doc.isEffectivelyLocked(s)
                 });
             }
@@ -132,6 +135,18 @@ QtObject {
             return false;
         for (var i = 0; i < snapshot.sel.length; i++) {
             if (snapshot.sel[i].type !== type)
+                return false;
+        }
+        return true;
+    }
+
+    // Corner radius applies to every pointed shape except the ellipse.
+    function supportsRadius() {
+        if (snapshot.sel.length === 0)
+            return false;
+        for (var j = 0; j < snapshot.sel.length; j++) {
+            var t = snapshot.sel[j].type;
+            if (t !== "rectangle" && t !== "triangle" && t !== "star")
                 return false;
         }
         return true;

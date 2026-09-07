@@ -8,6 +8,7 @@ import QtQuick.Shapes
 //     | "apps" | "plus" | "square" | "circle" | "triangle" | "diamond"
 //     | "hexagon" | "pen" | "text" | "image" | "caret" | "cursor"
 //     | "eye" | "eyeOff" | "lock" | "unlock" | "star" | "starFill"
+//     | "contrast" | "corner" | "rotate" | "flipH" | "flipV"
 Item {
     id: icon
     width: 16
@@ -111,6 +112,48 @@ Item {
         box: icon.width
         paint: icon.iconColor
         svg: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Z"
+    }
+
+    // Contrast (half-filled circle for opacity). The disc winds with the
+    // outer ring so the strut stays solid where they touch.
+    PhShape {
+        active: icon.kind === "contrast"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM128,40A88,88,0,0,1,128,216Z"
+    }
+
+    // Corner (square with one rounded bend, for corner radius). Same
+    // 16-unit weight as the maximize ring; the single round corner sets
+    // it apart from the uniform rectangle-tool square.
+    PhShape {
+        active: icon.kind === "corner"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M80,32H208V208H48V64A32,32,0,0,1,80,32ZM64,192H192V48H64Z"
+    }
+
+    // Clockwise arrow (rotate +90). Phosphor Icons, regular weight.
+    PhShape {
+        active: icon.kind === "rotate"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M240,56v48a8,8,0,0,1-8,8H184a8,8,0,0,1,0-16H211.4L184.81,71.64l-.25-.24a80,80,0,1,0-1.67,114.78,8,8,0,0,1,11,11.63A95.44,95.44,0,0,1,128,224h-1.32A96,96,0,1,1,195.75,60L224,85.8V56a8,8,0,0,1,16,0Z"
+    }
+
+    // Mirror triangles (flip horizontal / vertical). Phosphor Icons.
+    PhShape {
+        active: icon.kind === "flipH"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M107.18,24.33a15.86,15.86,0,0,0-17.92,9.45l-.06.14-64,159.93A16,16,0,0,0,40,216h64a16,16,0,0,0,16-16V40A15.85,15.85,0,0,0,107.18,24.33ZM104,200H40l.06-.15L104,40Zm126.77-6.15-64-159.93-.06-.14A16,16,0,0,0,136,40V200a16,16,0,0,0,16,16h64a16,16,0,0,0,14.78-22.15ZM152,200V40l63.93,159.84.06.15Z"
+    }
+
+    PhShape {
+        active: icon.kind === "flipV"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M56,120H216a16,16,0,0,0,6.23-30.74l-.14-.06-159.93-64A16,16,0,0,0,40,40v64A16,16,0,0,0,56,120Zm0-80,.15.06L216,104H56l0-64Zm160,96H56a16,16,0,0,0-16,16v64a16,16,0,0,0,22.15,14.78l159.93-64,.14-.06A16,16,0,0,0,216,136ZM56.15,215.93,56,216V152H216Z"
     }
 
     // Triangle
