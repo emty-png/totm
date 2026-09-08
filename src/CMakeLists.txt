@@ -15,6 +15,8 @@ qt_add_qml_module(totm
     SOURCES
         backend/library/LibraryStore.h
         backend/library/LibraryStore.cpp
+        backend/settings/SettingsStore.h
+        backend/settings/SettingsStore.cpp
     QML_FILES
         # Shell
         qml/Main.qml
@@ -132,8 +134,11 @@ qt_add_qml_module(totm
 target_link_libraries(totm PRIVATE Qt6::Quick)
 
 # Backend headers register QML types by basename (see the generated
-# qmltyperegistrations.cpp), so backend/library/ must be on the include path.
-target_include_directories(totm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/backend/library)
+# qmltyperegistrations.cpp), so each backend dir must be on the include path.
+target_include_directories(totm PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/library
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/settings
+)
 
 # Cross-platform desktop bundle settings.
 # Linux: plain executable. Windows: no console window. macOS: .app bundle.
