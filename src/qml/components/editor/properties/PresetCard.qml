@@ -14,7 +14,11 @@ Item {
     property string presetId: ""
     property string presetName: ""
     property var thumbOptions: null
+    property var applyOptions: null
     property string easingId: "easeOut"
+    // Text mode renders a "Text" glyph thumb instead of the rectangle;
+    // the frame math (position/opacity/scale) is shared.
+    property bool textMode: false
 
     property var driver: null
     property var clickPolicy: null
@@ -61,6 +65,7 @@ Item {
                 clip: true
 
                 ShapeItem {
+                    visible: !card.textMode
                     uid: -1
                     shapeType: "rectangle"
                     sx: card.frame.x !== undefined ? card.frame.x : 12
@@ -82,6 +87,34 @@ Item {
                     shapeLocked: false
                     paintDepth: 0
                     zoom: 1
+                }
+
+                // Text thumb: glyph scales with the frame box (grow and
+                // shrink read as font zoom), positioned and faded like
+                // the rectangle above.
+                Item {
+                    visible: card.textMode
+                    x: card.frame.x !== undefined ? card.frame.x : 12
+                    y: card.frame.y !== undefined ? card.frame.y : 12
+                    width: Math.max(1, card.frame.w !== undefined ? card.frame.w : 56)
+                    height: Math.max(1, card.frame.h !== undefined ? card.frame.h : 56)
+                    rotation: card.frame.rotation !== undefined ? card.frame.rotation : 0
+                    transformOrigin: Item.Center
+                    opacity: card.frame.opacity !== undefined ? card.frame.opacity : 1
+
+                    TextGlyphs {
+                        anchors.fill: parent
+                        text: "Text"
+                        color: AppTheme.foreground
+                        family: "Inter"
+                        weight: 600
+                        size: 22 * (parent.width / 56)
+                        halign: "center"
+                        valign: "middle"
+                        wrap: false
+                        autoLeading: true
+                        leading: 1.2
+                    }
                 }
             }
         }
@@ -105,7 +138,7 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onClicked: {
             if (card.clickPolicy)
-                card.clickPolicy(card.presetId);
+                card.clickPolicy(card.presetId, card.applyOptions);
         }
     }
 

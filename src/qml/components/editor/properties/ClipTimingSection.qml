@@ -13,7 +13,15 @@ ColumnLayout {
 
     property var graphPolicy: null
 
-    readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
+    // clipRev keeps this live through lane drags: nudgeClip mutates
+    // plain clip objects in place (no touch, no array rebuild, so lane
+    // delegates survive), which plain-field bindings would never see.
+    readonly property var clip: {
+        if (!section.doc)
+            return null;
+        section.doc.anim.clipRev;
+        return section.doc.animClip(section.clipId);
+    }
 
     spacing: 8
 

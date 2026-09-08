@@ -13,6 +13,10 @@ ScrollView {
 
     required property var doc
     property bool playing: false
+    // Text mode: Basic/Slide/Scale sections for text selections. Slide
+    // cards share the slide preset with fixed directions (the clip
+    // editor still lets users retarget after applying).
+    property bool textMode: false
 
     // Pick flow: opened from the shape panel, back returns there and a
     // successful apply reports through appliedPolicy (the new clip
@@ -98,7 +102,7 @@ ScrollView {
             visible: !gallery.hasSelection()
             width: parent.width - 32
             x: 16
-            text: qsTr("Select a shape on the canvas to apply a preset.")
+            text: gallery.textMode ? qsTr("Select text on the canvas to apply a preset.") : qsTr("Select a shape on the canvas to apply a preset.")
             font.pixelSize: 12
             wrapMode: Text.WordWrap
             color: AppTheme.muted
@@ -136,9 +140,11 @@ ScrollView {
                             presetId: modelData.id
                             presetName: modelData.name
                             thumbOptions: modelData.options
+                            applyOptions: modelData.apply
+                            textMode: gallery.textMode
                             easingId: modelData.easing
                             driver: gallery
-                            clickPolicy: presetId => gallery.applyPreset(presetId)
+                            clickPolicy: (presetId, apply) => gallery.applyPreset(presetId, apply)
                         }
                     }
                 }
@@ -159,6 +165,22 @@ ScrollView {
     // Category sections with per-card thumbnail options (small travel
     // so slide presets stay inside the tile).
     function sections() {
+        if (gallery.textMode) {
+            return [
+                {
+                    title: qsTr("Basic"),
+                    cards: [gallery.cardFor("appear", qsTr("Appear")), gallery.cardFor("fade", qsTr("Fade"))]
+                },
+                {
+                    title: qsTr("Slide"),
+                    cards: [gallery.textSlideCard(qsTr("Slide ↑"), "up"), gallery.textSlideCard(qsTr("Slide ↓"), "down"), gallery.textSlideCard(qsTr("Slide ←"), "left"), gallery.textSlideCard(qsTr("Slide →"), "right")]
+                },
+                {
+                    title: qsTr("Scale"),
+                    cards: [gallery.cardFor("grow", qsTr("Grow")), gallery.cardFor("shrink", qsTr("Shrink"))]
+                }
+            ];
+        }
         return [
             {
                 title: qsTr("Fade"),
@@ -209,7 +231,26 @@ ScrollView {
         };
     }
 
-    function applyPreset(presetId) {
+    // Directional slide shortcut for the text gallery: thumbnail-only
+    // travel plus the applied direction (distance/fade fall back to the
+    // shared slide defaults, fade stays toggleable in the clip editor).
+    function textSlideCard(name, direction) {
+        return {
+            id: "slide",
+            name: name,
+            options: {
+                direction: direction,
+                distance: 34,
+                fade: true
+            },
+            apply: {
+                direction: direction
+            },
+            easing: "easeOut"
+        };
+    }
+
+    function applyPreset(presetId, apply) {
         var d = gallery.doc;
         if (!d)
             return;
@@ -220,7 +261,7 @@ ScrollView {
         for (var i = 0; i < tops.length; i++)
             uids.push(tops[i].uid);
         var t0 = d.anim.currentTime;
-        var made = d.applyPreset(presetId, uids, t0, 0.8, "in", {}, null);
+        var made = d.applyPreset(presetId, uids, t0, 0.8, "in", apply || {}, null);
         if (made.length > 0) {
             d.anim.currentTime = t0;
             d.anim.play();

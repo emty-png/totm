@@ -11,6 +11,12 @@ QtObject {
     function catalog() {
         return [
             {
+                id: "appear",
+                name: qsTr("Appear"),
+                category: qsTr("Basic"),
+                defaultEasing: "linear"
+            },
+            {
                 id: "fade",
                 name: qsTr("Fade"),
                 category: qsTr("Fade"),
@@ -56,10 +62,12 @@ QtObject {
     }
 
     function presetIds() {
-        return ["fade", "slide", "grow", "shrink", "spin", "twist", "movescale"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale"];
     }
 
     function presetName(presetId) {
+        if (presetId === "appear")
+            return qsTr("Appear");
         if (presetId === "slide")
             return qsTr("Slide");
         if (presetId === "grow")
