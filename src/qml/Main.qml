@@ -15,7 +15,12 @@ ApplicationWindow {
     flags: Qt.Window | Qt.FramelessWindowHint
     color: AppTheme.background
 
-    onClosing: TabStore.saveAllOpen()
+    onClosing: {
+        root.saveWindowNow();
+        TabStore.saveAllOpen();
+    }
+
+    Component.onCompleted: root.restoreWindow()
 
     ColumnLayout {
         anchors.fill: parent
@@ -106,5 +111,39 @@ ApplicationWindow {
 
     WindowResizeHandles {
         window: root
+    }
+
+    // Window state: geometry + maximized persist via SettingsStore
+    // (native QSettings). Restores once on launch; saves debounced on
+    // move/resize/visibility so drags write once, plus synchronously
+    // on close. Maximized saves only the flag — the normal rect is
+    // kept so unmaximize restores the real size (C++ enforces this).
+    function restoreWindow() {
+        var g = SettingsStore.windowGeometry();
+        if (!g.hasGeometry)
+            return;
+        root.x = g.x;
+        root.y = g.y;
+        root.width = g.width;
+        root.height = g.height;
+        if (g.maximized)
+            root.showMaximized();
+    }
+
+    function saveWindowNow() {
+        SettingsStore.saveWindowGeometry(root.x, root.y, root.width, root.height, root.visibility === Window.Maximized);
+    }
+
+    onXChanged: saveWindowTimer.restart()
+    onYChanged: saveWindowTimer.restart()
+    onWidthChanged: saveWindowTimer.restart()
+    onHeightChanged: saveWindowTimer.restart()
+    onVisibilityChanged: saveWindowTimer.restart()
+
+    Timer {
+        id: saveWindowTimer
+
+        interval: 500
+        onTriggered: root.saveWindowNow()
     }
 }
