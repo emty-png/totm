@@ -68,6 +68,7 @@ PanelSection {
     // one undo entry (nests inside scrub gestures).
     function commitW(v) {
         section.snapshot.beginScrub();
+        section.pinTextBox();
         if (!section.locked) {
             section.snapshot.setAll("w", v);
             section.snapshot.endScrub();
@@ -91,8 +92,17 @@ PanelSection {
         section.snapshot.endScrub();
     }
 
+    // Typing a size into an auto-growing text pins it to a fixed box
+    // first (Figma): the typed value then means something. Joins the
+    // running commit, never its own entry.
+    function pinTextBox() {
+        if (section.snapshot.allOfType("text"))
+            section.snapshot.setAll("autoSize", false);
+    }
+
     function commitH(v) {
         section.snapshot.beginScrub();
+        section.pinTextBox();
         if (!section.locked) {
             section.snapshot.setAll("h", v);
             section.snapshot.endScrub();

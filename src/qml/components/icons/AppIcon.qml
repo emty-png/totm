@@ -1,9 +1,8 @@
 import QtQuick
 import QtQuick.Shapes
 
-// Icons: Phosphor Icons (https://phosphoricons.com), regular weight.
-// MIT License, Copyright (c) Phosphor Icons. Fill-based with rounded
-// caps/corners. Paths use the 256x256 Phosphor grid, scaled to fit.
+// Icons: fill-based vector glyphs with rounded caps/corners.
+// Paths use a 256x256 grid, scaled to fit.
 // kind: "minimize" | "maximize" | "restore" | "close" | "sun" | "moon"
 //     | "apps" | "plus" | "square" | "circle" | "triangle" | "diamond"
 //     | "hexagon" | "pen" | "text" | "image" | "caret" | "cursor"
@@ -27,6 +26,9 @@ Item {
         visible: active
         anchors.fill: parent
         antialiasing: true
+        // Curve rendering holds up better than triangulated geometry
+        // for thin detailed paths (notably the text T) at small sizes.
+        preferredRendererType: Shape.CurveRenderer
         transform: Scale {
             xScale: shape.box / 256
             yScale: shape.box / 256
@@ -134,7 +136,7 @@ Item {
         svg: "M80,32H208V208H48V64A32,32,0,0,1,80,32ZM64,192H192V48H64Z"
     }
 
-    // Clockwise arrow (rotate +90). Phosphor Icons, regular weight.
+    // Clockwise arrow (rotate +90).
     PhShape {
         active: icon.kind === "rotate"
         box: icon.width
@@ -142,7 +144,7 @@ Item {
         svg: "M240,56v48a8,8,0,0,1-8,8H184a8,8,0,0,1,0-16H211.4L184.81,71.64l-.25-.24a80,80,0,1,0-1.67,114.78,8,8,0,0,1,11,11.63A95.44,95.44,0,0,1,128,224h-1.32A96,96,0,1,1,195.75,60L224,85.8V56a8,8,0,0,1,16,0Z"
     }
 
-    // Mirror triangles (flip horizontal / vertical). Phosphor Icons.
+    // Mirror triangles (flip horizontal / vertical).
     PhShape {
         active: icon.kind === "flipH"
         box: icon.width
@@ -269,7 +271,7 @@ Item {
         svg: "M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"
     }
 
-    // Arrow U up-left (undo). Phosphor Icons, regular weight.
+    // Arrow U up-left (undo).
     PhShape {
         active: icon.kind === "undo"
         box: icon.width
@@ -277,7 +279,7 @@ Item {
         svg: "M232,144a64.07,64.07,0,0,1-64,64H80a8,8,0,0,1,0-16h88a48,48,0,0,0,0-96H51.31l34.35,34.34a8,8,0,0,1-11.32,11.32l-48-48a8,8,0,0,1,0-11.32l48-48A8,8,0,0,1,85.66,45.66L51.31,80H168A64.07,64.07,0,0,1,232,144Z"
     }
 
-    // Arrow U up-right (redo). Phosphor Icons, regular weight.
+    // Arrow U up-right (redo).
     PhShape {
         active: icon.kind === "redo"
         box: icon.width
@@ -285,7 +287,7 @@ Item {
         svg: "M170.34,130.34,204.69,96H88a48,48,0,0,0,0,96h88a8,8,0,0,1,0,16H88A64,64,0,0,1,88,80H204.69L170.34,45.66a8,8,0,0,1,11.32-11.32l48,48a8,8,0,0,1,0,11.32l-48,48a8,8,0,0,1-11.32-11.32Z"
     }
 
-    // Play triangle (transport). Phosphor Icons, regular weight.
+    // Play triangle (transport).
     PhShape {
         active: icon.kind === "play"
         box: icon.width
@@ -294,7 +296,7 @@ Item {
     }
 
     // Pause bars, solid (outlined pairs turn to hairlines at 16px).
-    // Phosphor-style geometry, regular weight.
+    // Pause bars geometry.
     PhShape {
         active: icon.kind === "pause"
         box: icon.width
@@ -302,7 +304,7 @@ Item {
         svg: "M64,48a16,16,0,0,1,16-16h16a16,16,0,0,1,16,16V208a16,16,0,0,1-16,16H80a16,16,0,0,1-16-16Z M144,48a16,16,0,0,1,16-16h16a16,16,0,0,1,16,16V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16Z"
     }
 
-    // Stop square (transport). Phosphor Icons, regular weight.
+    // Stop square (transport).
     PhShape {
         active: icon.kind === "stop"
         box: icon.width

@@ -37,6 +37,21 @@ Item {
     property bool flipV: false
     // Star tips; clamped 3..12 by the document on edit.
     property int points: 5
+    // Text content/style (meaningful when shapeType === "text").
+    // letterSpacing stores percent of font size; rendering converts.
+    property string textContent: ""
+    property string fontFamily: "Inter"
+    property int fontWeight: 400
+    property real fontSize: 16
+    property bool lineHeightAuto: true
+    property real lineHeight: 1.2
+    property real letterSpacing: 0
+    property string hAlign: "left"
+    property string vAlign: "top"
+    property bool autoSize: true
+    // True while the canvas inline editor owns this text: the static
+    // glyphs hide so they never double-draw under the editor.
+    property bool editing: false
     property bool selected: false
     property bool shapeVisible: true
     property bool shapeLocked: false
@@ -51,6 +66,8 @@ Item {
     property var movePolicy: null
     property var releasePolicy: null
     property var doublePolicy: null
+    // Auto-size writeback for text: the canvas clamps and commits.
+    property var measurePolicy: null
 
     x: shape.sx
     y: shape.sy
@@ -83,7 +100,7 @@ Item {
     // Other types: stroked/filled vector path (round joins, cute).
     Shape {
         anchors.fill: parent
-        visible: shape.shapeType !== "rectangle"
+        visible: shape.shapeType !== "rectangle" && shape.shapeType !== "text"
         antialiasing: true
         opacity: shape.shapeOpacity
         transform: Scale {
@@ -101,6 +118,44 @@ Item {
             PathSvg {
                 path: shape.vectorPath()
             }
+        }
+    }
+
+    // Text: fill paints the glyphs; stroke is a native 1px outline
+    // (Text has no outline-width API, so the width field only toggles
+    // it on/off for text). Fixed boxes wrap, auto-size boxes grow (the
+    // canvas writes measured sizes back).
+    Item {
+        id: textRoot
+
+        anchors.fill: parent
+        visible: shape.shapeType === "text" && !shape.editing
+        opacity: shape.shapeOpacity
+        transform: Scale {
+            xScale: shape.flipH ? -1 : 1
+            yScale: shape.flipV ? -1 : 1
+            origin.x: shape.sw / 2
+            origin.y: shape.sh / 2
+        }
+
+        TextGlyphs {
+            id: glyphs
+
+            anchors.fill: parent
+            text: shape.textContent
+            color: shape.fill
+            style: shape.strokeWidth > 0 ? Text.Outline : Text.Normal
+            styleColor: shape.strokeColor
+            family: shape.fontFamily
+            weight: shape.fontWeight
+            size: shape.fontSize
+            spacingPct: shape.letterSpacing
+            halign: shape.hAlign
+            valign: shape.vAlign
+            wrap: !shape.autoSize
+            autoLeading: shape.lineHeightAuto
+            leading: shape.lineHeight
+            onContentSizeChanged: shape.reportMeasure()
         }
     }
 
@@ -233,6 +288,17 @@ Item {
         default:
             return "";
         }
+    }
+
+    // Auto-size writeback: reports the content text size so the canvas
+    // can grow click-created boxes with content. Fixed boxes and the
+    // inline-editing item stay quiet (the editor measures instead).
+    function reportMeasure() {
+        if (shape.shapeType !== "text" || !shape.autoSize || shape.editing)
+            return;
+        if (!shape.measurePolicy)
+            return;
+        shape.measurePolicy(shape.uid, glyphs.contentWidth, glyphs.contentHeight);
     }
 
     // Press/move/release entry points for the MouseArea above.

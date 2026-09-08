@@ -24,7 +24,7 @@ RowLayout {
         Layout.alignment: Qt.AlignVCenter
         visible: (!toggles.rowVisible || toggles.rowHovered || toggles.hovered) && !toggles.editing
 
-        TitleBarIcon {
+        AppIcon {
             anchors.centerIn: parent
             width: 14
             height: 14
@@ -58,7 +58,7 @@ RowLayout {
         Layout.alignment: Qt.AlignVCenter
         visible: (toggles.rowLocked || toggles.rowHovered || toggles.hovered) && !toggles.editing
 
-        TitleBarIcon {
+        AppIcon {
             anchors.centerIn: parent
             width: 14
             height: 14

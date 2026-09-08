@@ -74,7 +74,7 @@ ApplicationWindow {
                 }
                 width: 32
 
-                TitleBarIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     kind: "close"
                     width: 12

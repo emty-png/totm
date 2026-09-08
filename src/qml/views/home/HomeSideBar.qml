@@ -156,7 +156,7 @@ Item {
                     anchors.rightMargin: 8
                     spacing: 8
 
-                    TitleBarIcon {
+                    AppIcon {
                         Layout.preferredWidth: 14
                         Layout.preferredHeight: 14
                         Layout.alignment: Qt.AlignVCenter

@@ -53,6 +53,11 @@ ScrollView {
             snapshot: panel.snapshot
         }
 
+        TypographySection {
+            Layout.fillWidth: true
+            snapshot: panel.snapshot
+        }
+
         FillSection {
             Layout.fillWidth: true
             snapshot: panel.snapshot

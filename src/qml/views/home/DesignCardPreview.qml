@@ -69,6 +69,16 @@ Item {
                     points: modelData.points || 5
                     flipH: modelData.flipH === true
                     flipV: modelData.flipV === true
+                    textContent: modelData.textContent !== undefined ? modelData.textContent : ""
+                    fontFamily: modelData.fontFamily || "Inter"
+                    fontWeight: modelData.fontWeight || 400
+                    fontSize: modelData.fontSize || 16
+                    lineHeightAuto: modelData.lineHeightAuto !== false
+                    lineHeight: modelData.lineHeight || 1.2
+                    letterSpacing: modelData.letterSpacing || 0
+                    hAlign: modelData.hAlign || "left"
+                    vAlign: modelData.vAlign || "top"
+                    autoSize: modelData.autoSize === true
                     selected: false
                     shapeVisible: true
                     shapeLocked: false

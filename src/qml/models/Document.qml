@@ -88,6 +88,8 @@ QtObject {
             return "Triangle";
         case "star":
             return "Star";
+        case "text":
+            return "Text";
         case "group":
             return "Group";
         default:
@@ -258,6 +260,10 @@ QtObject {
     function addShape(type, x, y, w, h) {
         history.checkpoint();
         return factory.addShape(type, x, y, w, h);
+    }
+    function addText(x, y, w, h, auto) {
+        history.checkpoint();
+        return factory.addText(x, y, w, h, auto);
     }
     function snapshotNode(node) {
         return clipboard.snapshotNode(node);

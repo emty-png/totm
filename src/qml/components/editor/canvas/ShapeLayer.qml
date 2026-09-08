@@ -16,6 +16,10 @@ Item {
     property var movePolicy: null
     property var releasePolicy: null
     property var doublePolicy: null
+    // Uid owning the inline text editor (-1 when closed). The matching
+    // item hides its static glyphs; others are unaffected.
+    property int editingUid: -1
+    property var measurePolicy: null
 
     x: layer.offsetX
     y: layer.offsetY
@@ -39,6 +43,11 @@ Item {
             item.movePolicy = (dx, dy) => layer.movePolicy(dx, dy);
             item.releasePolicy = (wasMoved, mods) => layer.releasePolicy(wasMoved, mods);
             item.doublePolicy = uid => layer.doublePolicy(uid);
+            item.measurePolicy = (uid, w, h) => {
+                if (layer.measurePolicy)
+                    layer.measurePolicy(uid, w, h);
+            };
+            item.editing = Qt.binding(() => layer.editingUid === item.uid);
             item.shapeVisible = Qt.binding(() => {
                 if (layer.doc)
                     layer.doc.rev;
@@ -88,6 +97,16 @@ Item {
             flipH: modelData.flipH
             flipV: modelData.flipV
             paintDepth: modelData.zOrder
+            textContent: modelData.textContent !== undefined ? modelData.textContent : ""
+            fontFamily: modelData.fontFamily || "Inter"
+            fontWeight: modelData.fontWeight || 400
+            fontSize: modelData.fontSize || 16
+            lineHeightAuto: modelData.lineHeightAuto !== false
+            lineHeight: modelData.lineHeight || 1.2
+            letterSpacing: modelData.letterSpacing || 0
+            hAlign: modelData.hAlign || "left"
+            vAlign: modelData.vAlign || "top"
+            autoSize: modelData.autoSize !== false
         }
     }
 }

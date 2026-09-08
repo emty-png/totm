@@ -65,16 +65,6 @@ ScrollView {
             }
         }
 
-        Text {
-            visible: panel.cards.length === 0
-            width: parent.width - 32
-            x: 16
-            text: qsTr("No animations on this selection yet.")
-            font.pixelSize: 12
-            wrapMode: Text.WordWrap
-            color: AppTheme.muted
-        }
-
         Repeater {
             model: panel.cards
 

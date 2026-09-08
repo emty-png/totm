@@ -21,16 +21,7 @@ Rectangle {
 
     // Map the active shape subtype to its toolbar icon.
     function shapeIcon() {
-        switch (ToolStore.activeShapeType) {
-        case "ellipse":
-            return "circle";
-        case "triangle":
-            return "triangle";
-        case "star":
-            return "star";
-        default:
-            return "square";
-        }
+        return ToolStore.shapeIconFor(ToolStore.activeShapeType);
     }
 
     implicitWidth: barRow.implicitWidth + 16
@@ -115,7 +106,7 @@ Rectangle {
                     radius: 6
                     color: chevronMouse.containsMouse || chevronMouse.pressed ? AppTheme.hover : shapesMenu.opened ? AppTheme.hover : "transparent"
 
-                    TitleBarIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         kind: "caret"
                         scale: 0.65

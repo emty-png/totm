@@ -30,7 +30,7 @@ Rectangle {
         }
     }
 
-    TitleBarIcon {
+    AppIcon {
         anchors.centerIn: parent
         kind: button.iconKind
         iconColor: mouse.containsMouse || mouse.pressed ? button.hoverTextColor : button.textColor

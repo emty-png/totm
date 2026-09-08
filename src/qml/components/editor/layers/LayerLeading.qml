@@ -23,7 +23,7 @@ RowLayout {
         Layout.alignment: Qt.AlignVCenter
         visible: leading.isGroup
 
-        TitleBarIcon {
+        AppIcon {
             anchors.centerIn: parent
             width: 12
             height: 12
@@ -58,24 +58,13 @@ RowLayout {
         }
     }
 
-    TitleBarIcon {
-        Layout.preferredWidth: 14
-        Layout.preferredHeight: 14
+    AppIcon {
+        Layout.preferredWidth: 16
+        Layout.preferredHeight: 16
         Layout.alignment: Qt.AlignVCenter
         visible: !leading.isGroup
         opacity: leading.rowVisible ? 1 : 0.45
-        kind: {
-            switch (leading.rowType) {
-            case "ellipse":
-                return "circle";
-            case "triangle":
-                return "triangle";
-            case "star":
-                return "star";
-            default:
-                return "square";
-            }
-        }
+        kind: ToolStore.shapeIconFor(leading.rowType)
         iconColor: leading.selected ? AppTheme.foreground : AppTheme.muted
 
         Behavior on opacity {

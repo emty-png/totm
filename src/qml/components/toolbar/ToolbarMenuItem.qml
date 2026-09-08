@@ -34,7 +34,7 @@ Rectangle {
         }
         spacing: 8
 
-        TitleBarIcon {
+        AppIcon {
             Layout.preferredWidth: 14
             Layout.preferredHeight: 14
             kind: menuItem.iconKind

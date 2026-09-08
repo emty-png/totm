@@ -27,6 +27,21 @@ QtObject {
     property real radius: 0
     // Star tips; only meaningful when shapeType === "star".
     property int points: 5
+    // Text content/style; only meaningful when shapeType === "text".
+    // fill paints the glyphs. lineHeight is a factor (1 = 100%);
+    // lineHeightAuto renders natural spacing. letterSpacing is percent
+    // of font size. autoSize grows the box with content (click-created);
+    // fixed boxes wrap instead (drag-created).
+    property string textContent: ""
+    property string fontFamily: "Inter"
+    property int fontWeight: 400
+    property real fontSize: 16
+    property bool lineHeightAuto: true
+    property real lineHeight: 1.2
+    property real letterSpacing: 0
+    property string hAlign: "left"
+    property string vAlign: "top"
+    property bool autoSize: true
     // Local-space mirror flags: paint mirrors about the shape center,
     // geometry and bbox stay untouched.
     property bool flipH: false

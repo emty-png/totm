@@ -108,7 +108,7 @@ Item {
             Layout.alignment: Qt.AlignVCenter
             visible: !rowRoot.isDefault && (rowRoot.hovered || rowRoot.selected) && !rowRoot.editing
 
-            TitleBarIcon {
+            AppIcon {
                 anchors.centerIn: parent
                 width: 14
                 height: 14
