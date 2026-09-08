@@ -104,15 +104,21 @@ QtObject {
     }
 
     // One clip's contribution for a single leaf. base holds the leaf's
-    // captured values ({x, y, w, h, rotation, opacity}) and is the ONLY
-    // read source: deriving frames from live node values would integrate
-    // each frame's output back in (fade multiplies toward zero, slide
-    // drifts away). e is eased progress, p is raw progress (sway needs
-    // the linear clock). cx/cy is the target's bbox center from base.
+    // captured values ({x, y, w, h, rotation, opacity, fontSize,
+    // shapeType}) and is the ONLY read source: deriving frames from live
+    // node values would integrate each frame's output back in (fade
+    // multiplies toward zero, slide drifts away). e is eased progress,
+    // p is raw progress (appear steps on it, sway needs the linear
+    // clock). cx/cy is the target's bbox center from base.
     function presetOverlay(preset, mode, o, base, cx, cy, e, p) {
         var out = {};
         var inward = mode !== "out";
-        if (preset === "fade") {
+        if (preset === "appear") {
+            // Hard pop on the raw clock (easing-independent): visible
+            // from the first stepped frame in, held till the last frame
+            // out. Base opacity scales it like every other preset.
+            out.opacity = base.opacity * (inward ? (p <= 0 ? 0 : 1) : (p >= 1 ? 0 : 1));
+        } else if (preset === "fade") {
             out.opacity = base.opacity * (inward ? e : 1 - e);
         } else if (preset === "slide" || preset === "movescale") {
             var d = slideVec(o.direction);
@@ -156,6 +162,11 @@ QtObject {
             out.y = gs.y;
             out.w = gs.w;
             out.h = gs.h;
+            // Text scales its glyphs, not just its box: a bigger box
+            // with the same font would only reflow. Glyph width tracks
+            // font size linearly, so the scaled box stays registered.
+            if (base.shapeType === "text" && base.fontSize > 0)
+                out.fontSize = base.fontSize * sc;
         } else if (preset === "spin") {
             var turns = Math.min(10, Math.max(0.25, o.turns || 1));
             var dir = o.direction === "ccw" ? -1 : 1;
@@ -258,6 +269,8 @@ QtObject {
                 n.rotation = ov.rotation;
             if (ov.opacity !== undefined)
                 n.opacity = ov.opacity;
+            if (ov.fontSize !== undefined && n.shapeType === "text")
+                n.fontSize = ov.fontSize;
         }
     }
 }

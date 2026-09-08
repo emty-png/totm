@@ -134,12 +134,15 @@ ScrollView {
     }
 
     // Clips on the selected tops, earliest first. Reads rev (selection)
-    // plus clips so both refresh the list.
+    // plus clips so both refresh the list, plus clipRev so card time
+    // ranges follow lane drags live (right-panel rebuilds are harmless;
+    // the gesture lives in the timeline, not here).
     function collectCards() {
         var d = panel.doc;
         if (!d)
             return [];
         d.rev;
+        d.anim.clipRev;
         var tops = d.selectedTops();
         var ids = {};
         for (var i = 0; i < tops.length; i++)

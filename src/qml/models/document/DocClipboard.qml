@@ -263,6 +263,11 @@ QtObject {
         snap.h = b.h;
         snap.rotation = b.rotation;
         snap.opacity = b.opacity;
+        // Text snapshots carry fontSize (grow/shrink animate it): rebase
+        // it too, but only where the snapshot has one so plain shapes
+        // never gain stray keys in saved scenes.
+        if (snap.fontSize !== undefined && b.fontSize !== undefined)
+            snap.fontSize = b.fontSize;
     }
 
     // Replace the whole tree with a stored scene. Old nodes are

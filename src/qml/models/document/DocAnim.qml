@@ -17,7 +17,10 @@ QtObject {
     property bool playing: false
     property real currentTime: 0
     property var selectedClipIds: []
-
+    // Clip-data revision, bumped by silent in-place nudges (lane drags)
+    // that deliberately skip touch(). Panels read this so values follow
+    // live; lane delegates never bind it, so no model rebuilds mid-drag.
+    property int clipRev: 0
     // Pre-play values keyed by node uid. Non-null while a preview frame
     // is on screen (playing or paused): writes stay silent, saves and
     // undo read through this instead of the live frame.
@@ -149,6 +152,7 @@ QtObject {
             return false;
         c.t0 = nt0;
         c.duration = nd;
+        anim.clipRev++;
         return true;
     }
 
@@ -368,7 +372,9 @@ QtObject {
                 w: n.w,
                 h: n.h,
                 rotation: n.rotation,
-                opacity: n.opacity
+                opacity: n.opacity,
+                fontSize: n.fontSize,
+                shapeType: n.shapeType
             };
         }
         return out;
@@ -391,6 +397,8 @@ QtObject {
             n.h = b.h;
             n.rotation = b.rotation;
             n.opacity = b.opacity;
+            if (b.fontSize !== undefined && n.shapeType === "text")
+                n.fontSize = b.fontSize;
         }
     }
 

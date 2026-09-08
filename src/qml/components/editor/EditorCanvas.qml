@@ -513,6 +513,10 @@ Item {
             canvas.applyMeasuredOn(canvas.doc, uid, w, h);
     }
     function applyMeasuredOn(d, uid, w, h) {
+        // Preview frames never resize boxes: grow/shrink playback would
+        // otherwise checkpoint every tick into undo and autosave.
+        if (d.anim && d.anim.playBase)
+            return;
         var n = d.findNode(uid);
         if (!n || n.shapeType !== "text" || !n.autoSize)
             return;

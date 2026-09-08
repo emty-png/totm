@@ -164,27 +164,27 @@ Item {
             }
 
             // Shape panel: "+ New Animation" plus this selection's clips.
+            // Shared with text: clip cards are preset-agnostic.
             ShapeAnimsPanel {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
-                visible: animateSwitcher.mode === "preset" && !rightPanel.clipSelected() && rightPanel.shapeSelected() && !rightPanel.pickingPreset && !rightPanel.isTextSelection()
+                visible: animateSwitcher.mode === "preset" && !rightPanel.clipSelected() && rightPanel.shapeSelected() && !rightPanel.pickingPreset
                 doc: TabStore.documentFor(TabStore.currentIndex)
                 newPolicy: () => rightPanel.pickingPreset = true
             }
 
-            // Text placeholder until text presets land.
-            Text {
+            // Text preset gallery: Basic/Slide/Scale cards. Mirrors the
+            // shape flow (panel first, gallery while picking).
+            PresetGallery {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
-                visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && rightPanel.isTextSelection() && !rightPanel.clipSelected()
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                wrapMode: Text.WordWrap
-                leftPadding: 16
-                rightPadding: 16
-                text: qsTr("Coming soon...")
-                font.pixelSize: 13
-                color: AppTheme.muted
+                visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && !rightPanel.clipSelected() && rightPanel.isTextSelection() && rightPanel.pickingPreset
+                doc: TabStore.documentFor(TabStore.currentIndex)
+                playing: visible
+                textMode: true
+                showBack: rightPanel.pickingPreset
+                backPolicy: () => rightPanel.pickingPreset = false
+                appliedPolicy: () => rightPanel.pickingPreset = false
             }
 
             ClipEditor {
