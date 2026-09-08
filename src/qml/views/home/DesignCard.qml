@@ -157,7 +157,7 @@ Item {
             border.color: AppTheme.border
         }
 
-        TitleBarIcon {
+        AppIcon {
             anchors.centerIn: parent
             width: 13
             height: 13

@@ -55,7 +55,7 @@ Popup {
                 width: 28
                 height: 28
 
-                TitleBarIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     kind: "caret"
                     rotation: 90
@@ -111,7 +111,7 @@ Popup {
                 color: AppTheme.foreground
             }
 
-            TitleBarIcon {
+            AppIcon {
                 id: caretIcon
 
                 anchors {

@@ -28,7 +28,7 @@ Rectangle {
         }
     }
 
-    TitleBarIcon {
+    AppIcon {
         anchors.centerIn: parent
         kind: toolButton.iconKind
         scale: mouse.pressed ? 0.88 : 1

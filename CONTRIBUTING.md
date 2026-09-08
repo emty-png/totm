@@ -18,6 +18,7 @@ src/
     models/document/     # focused helpers (tree, selection, history, anim, geometry…)
     views/               # home/, editor/ screen compositions
     components/
+      icons/             # AppIcon global glyph set
       titlebar/          # TitleBar, tabs, controls (+ mac traffic lights)
       window/            # frameless resize handles
       toolbar/           # floating canvas toolbar

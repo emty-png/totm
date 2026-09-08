@@ -28,6 +28,16 @@ QtObject {
             points: s.points ?? 5,
             flipH: s.flipH ?? false,
             flipV: s.flipV ?? false,
+            textContent: s.textContent ?? "",
+            fontFamily: s.fontFamily ?? "Inter",
+            fontWeight: s.fontWeight ?? 400,
+            fontSize: s.fontSize ?? 16,
+            lineHeightAuto: s.lineHeightAuto !== false,
+            lineHeight: s.lineHeight ?? 1.2,
+            letterSpacing: s.letterSpacing ?? 0,
+            hAlign: s.hAlign ?? "left",
+            vAlign: s.vAlign ?? "top",
+            autoSize: s.autoSize ?? (type === "text"),
             selected: true,
             visible: s.visible !== false,
             locked: false,
@@ -62,6 +72,28 @@ QtObject {
             y: Math.round(y),
             w: Math.max(1, Math.round(w)),
             h: Math.max(1, Math.round(h))
+        });
+        var list = doc._childrenOf(container).slice();
+        list.unshift(n);
+        doc._setChildren(container, list);
+        doc.anchorUid = n.uid;
+        doc._refreshStructural();
+        return n.uid;
+    }
+
+    // Text creation: click passes autoSize with a measured box, drag
+    // passes a fixed wrapping box. Content starts empty; the canvas
+    // opens the inline editor right after.
+    function addText(x, y, w, h, auto) {
+        var container = doc._activeContainerUid();
+        doc.clearSelection();
+        var n = _makeShapeNode("text", {
+            x: Math.round(x),
+            y: Math.round(y),
+            w: Math.max(1, Math.round(w)),
+            h: Math.max(1, Math.round(h)),
+            fill: "#000000",
+            autoSize: auto
         });
         var list = doc._childrenOf(container).slice();
         list.unshift(n);

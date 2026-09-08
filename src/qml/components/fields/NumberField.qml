@@ -16,7 +16,7 @@ TextField {
     property bool mixed: false
     property string prefix: ""
     property string suffix: ""
-    // Glyph adornment (TitleBarIcon kind) used instead of prefix text.
+    // Glyph adornment (AppIcon kind) used instead of prefix text.
     property string prefixIcon: ""
     // Value change per dragged pixel.
     property real scrubStep: 1
@@ -58,7 +58,7 @@ TextField {
             color: scrubLeft.containsMouse || scrubLeft.pressed ? AppTheme.foreground : AppTheme.muted
         }
 
-        TitleBarIcon {
+        AppIcon {
             anchors {
                 left: parent.left
                 verticalCenter: parent.verticalCenter

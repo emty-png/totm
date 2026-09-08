@@ -65,6 +65,9 @@ qt_add_qml_module(totm
         qml/components/editor/layers/LayersReorder.qml
         # Design panel
         qml/components/editor/properties/SelectionSnapshot.qml
+        qml/components/editor/properties/PanelDropdown.qml
+        qml/components/editor/properties/AlignButton.qml
+        qml/components/editor/properties/TypographySection.qml
         qml/components/editor/properties/ColorSVPad.qml
         qml/components/editor/properties/ColorHueSlider.qml
         qml/components/editor/properties/ColorPickerPopup.qml
@@ -94,8 +97,9 @@ qt_add_qml_module(totm
         qml/components/titlebar/TitleBarButton.qml
         qml/components/titlebar/TitleBarControls.qml
         qml/components/titlebar/TitleBarDragArea.qml
-        qml/components/titlebar/TitleBarIcon.qml
         qml/components/window/WindowResizeHandles.qml
+        # Icons (global glyph set)
+        qml/components/icons/AppIcon.qml
         # Selection
         qml/components/selection/DragSelectionBox.qml
         qml/components/selection/DragSelection.qml
@@ -115,6 +119,7 @@ qt_add_qml_module(totm
         qml/components/fields/HexField.qml
         qml/components/fields/RenameField.qml
         qml/components/editor/shapes/ShapeItem.qml
+        qml/components/editor/shapes/TextGlyphs.qml
         qml/components/editor/SelectionHandles.qml
         # Layers (view + context)
         qml/components/editor/layers/LayersView.qml

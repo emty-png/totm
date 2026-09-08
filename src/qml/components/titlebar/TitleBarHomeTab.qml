@@ -23,7 +23,7 @@ Rectangle {
         }
     }
 
-    TitleBarIcon {
+    AppIcon {
         anchors.centerIn: parent
         kind: "apps"
         iconColor: homeTab.active || mouse.containsMouse || mouse.pressed ? AppTheme.foreground : AppTheme.muted

@@ -60,7 +60,7 @@ ScrollView {
                 Layout.preferredHeight: 32
                 Layout.leftMargin: 4
 
-                TitleBarIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     kind: "caret"
                     rotation: 90

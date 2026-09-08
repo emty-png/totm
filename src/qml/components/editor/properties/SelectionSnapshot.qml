@@ -54,6 +54,16 @@ QtObject {
                     points: s.points,
                     flipH: s.flipH,
                     flipV: s.flipV,
+                    textContent: s.textContent,
+                    fontFamily: s.fontFamily,
+                    fontWeight: s.fontWeight,
+                    fontSize: s.fontSize,
+                    lineHeightAuto: s.lineHeightAuto,
+                    lineHeight: s.lineHeight,
+                    letterSpacing: s.letterSpacing,
+                    hAlign: s.hAlign,
+                    vAlign: s.vAlign,
+                    autoSize: s.autoSize,
                     locked: snapshot.doc.isEffectivelyLocked(s)
                 });
             }

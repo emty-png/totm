@@ -4,7 +4,7 @@ import Totm
 
 // Single stroke per shape; width 0 counts as missing. The header swaps
 // between + (no stroke) and - (has stroke) so shapes can carry no
-// stroke. Shapes only.
+// stroke. On text the stroke outlines the glyphs. Shapes only.
 PanelSection {
     id: section
 
@@ -55,6 +55,10 @@ PanelSection {
 
         NumberField {
             Layout.preferredWidth: 76
+            // Text uses the native 1px outline, so the width value is
+            // meaningless there: the +/- header already toggles it via
+            // 0/1. Hidden for all-text selections, shown otherwise.
+            visible: !section.snapshot.allOfType("text")
             prefix: "S"
             value: section.widthCommon.value
             mixed: section.widthCommon.mixed

@@ -47,6 +47,12 @@ QtObject {
             return;
         var target = canvas.doc.resolvePress(uid);
         var n = canvas.doc.findNode(target);
+        // Text leaves edit inline; groups drill as before. Text nested
+        // in a group still drills (its press resolves to the group).
+        if (n && n.kind === "shape" && n.shapeType === "text") {
+            canvas.beginTextEdit(target);
+            return;
+        }
         if (n && n.kind === "group")
             canvas.doc.drillInto(target);
         else {

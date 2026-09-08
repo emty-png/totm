@@ -32,7 +32,7 @@ Rectangle {
         }
     }
 
-    TitleBarIcon {
+    AppIcon {
         anchors.centerIn: parent
         kind: button.iconKind
         width: button.iconSize

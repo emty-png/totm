@@ -60,6 +60,21 @@ Item {
         return rightPanel.shapeSelected() || rightPanel.clipSelected();
     }
 
+    // Text has no animation presets yet: any text in the selection parks
+    // the animate UI on a coming-soon note instead of the gallery.
+    function isTextSelection() {
+        var d = TabStore.documentFor(TabStore.currentIndex);
+        if (!d)
+            return false;
+        d.rev;
+        var tops = d.selectedTops();
+        for (var i = 0; i < tops.length; i++) {
+            if (tops[i].kind === "shape" && tops[i].shapeType === "text")
+                return true;
+        }
+        return false;
+    }
+
     Layout.preferredWidth: rightPanel.panelWidth
     Layout.fillHeight: true
 
@@ -136,10 +151,11 @@ Item {
 
             // Preset gallery: live thumbnails, click applies to selection.
             // Shown by default, or borrowed by the shape panel picker.
+            // Text selections park on coming-soon (no text presets yet).
             PresetGallery {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
-                visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && !rightPanel.clipSelected() && (!rightPanel.shapeSelected() || rightPanel.pickingPreset)
+                visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && !rightPanel.clipSelected() && (!rightPanel.shapeSelected() || rightPanel.pickingPreset) && !rightPanel.isTextSelection()
                 doc: TabStore.documentFor(TabStore.currentIndex)
                 playing: visible
                 showBack: rightPanel.pickingPreset
@@ -151,9 +167,24 @@ Item {
             ShapeAnimsPanel {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
-                visible: animateSwitcher.mode === "preset" && !rightPanel.clipSelected() && rightPanel.shapeSelected() && !rightPanel.pickingPreset
+                visible: animateSwitcher.mode === "preset" && !rightPanel.clipSelected() && rightPanel.shapeSelected() && !rightPanel.pickingPreset && !rightPanel.isTextSelection()
                 doc: TabStore.documentFor(TabStore.currentIndex)
                 newPolicy: () => rightPanel.pickingPreset = true
+            }
+
+            // Text placeholder until text presets land.
+            Text {
+                width: parent.width
+                height: parent.height - animateSwitcher.height
+                visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && rightPanel.isTextSelection() && !rightPanel.clipSelected()
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                wrapMode: Text.WordWrap
+                leftPadding: 16
+                rightPadding: 16
+                text: qsTr("Coming soon...")
+                font.pixelSize: 13
+                color: AppTheme.muted
             }
 
             ClipEditor {
