@@ -21,6 +21,11 @@ PanelSection {
     onAddClicked: section.addFill()
     onRemoveClicked: section.removeFills()
 
+    // Variant being live-recolored by the picker. Chained string-to-
+    // string so each drag move finds the previous one (recolor matches
+    // on exact strings, scoped to the selection like everything else).
+    property string liveFill: "#000000"
+
     Repeater {
         model: section.opaqueFills()
 
@@ -29,6 +34,8 @@ PanelSection {
             spacing: 8
 
             Rectangle {
+                id: swatch
+
                 Layout.preferredWidth: 28
                 Layout.preferredHeight: 28
                 Layout.alignment: Qt.AlignVCenter
@@ -36,6 +43,13 @@ PanelSection {
                 color: modelData
                 border.width: 1
                 border.color: AppTheme.border
+
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mouse => section.openPicker(modelData, swatch, mouse.x, mouse.y)
+                }
             }
 
             HexField {
@@ -114,5 +128,26 @@ PanelSection {
                 section.doc.setShapeProp(leaves[i].uid, "fill", "transparent");
         }
         section.snapshot.endScrub();
+    }
+
+    // Picker flow: swatch seeds the popup, drags stream through one
+    // scrub transaction, typed hex commits discretely on its own.
+    ColorPickerPopup {
+        id: picker
+
+        onScrubStarted: section.snapshot.beginScrub()
+        onCommitted: c => section.recolorLive(c)
+        onScrubFinished: section.snapshot.endScrub()
+    }
+
+    function openPicker(variant, anchor, ax, ay) {
+        section.liveFill = String(variant);
+        picker.openFor(variant, anchor, ax, ay);
+    }
+
+    function recolorLive(c) {
+        var next = String(c);
+        section.doc.recolorSelected(section.liveFill, next);
+        section.liveFill = next;
     }
 }
