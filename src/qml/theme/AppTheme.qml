@@ -1,12 +1,15 @@
 pragma Singleton
 import QtQuick
+import Totm
 
 // App theme matching web reference (themes.css / themes.ts).
-// dark is the default (defaultThemeId = "dark").
+// Effective value persists via the SettingsStore backend (native
+// QSettings, separate from library.json): first run follows the OS
+// scheme, the first explicit toggle pins an override.
 QtObject {
     id: theme
 
-    property bool isDark: true
+    property bool isDark: SettingsStore.isDark
     property string name: isDark ? "dark" : "white"
 
     // Core palette
@@ -49,6 +52,6 @@ QtObject {
     property color layerSelected: isDark ? "#0e3a5d" : "#c7e0f4"
 
     function toggle() {
-        isDark = !isDark;
+        SettingsStore.toggle();
     }
 }
