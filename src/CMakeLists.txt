@@ -65,6 +65,9 @@ qt_add_qml_module(totm
         qml/components/editor/layers/LayersReorder.qml
         # Design panel
         qml/components/editor/properties/SelectionSnapshot.qml
+        qml/components/editor/properties/ColorSVPad.qml
+        qml/components/editor/properties/ColorHueSlider.qml
+        qml/components/editor/properties/ColorPickerPopup.qml
         qml/components/editor/properties/PresetCard.qml
         qml/components/editor/properties/PresetGallery.qml
         qml/components/editor/properties/ShapeAnimsPanel.qml

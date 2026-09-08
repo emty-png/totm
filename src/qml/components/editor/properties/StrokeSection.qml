@@ -28,6 +28,8 @@ PanelSection {
         spacing: 8
 
         Rectangle {
+            id: swatch
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -35,6 +37,13 @@ PanelSection {
             color: section.snapshot.commonOf("stroke").value
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => picker.openFor(String(section.snapshot.commonOf("stroke").value), swatch, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -54,5 +63,15 @@ PanelSection {
             onScrubStarted: section.snapshot.beginScrub()
             onScrubFinished: section.snapshot.endScrub()
         }
+    }
+
+    // Picker flow mirrors FillSection: drags stream through one scrub
+    // transaction, typed hex commits discretely on its own.
+    ColorPickerPopup {
+        id: picker
+
+        onScrubStarted: section.snapshot.beginScrub()
+        onCommitted: c => section.snapshot.setAll("stroke", c)
+        onScrubFinished: section.snapshot.endScrub()
     }
 }
