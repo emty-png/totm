@@ -84,6 +84,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/StrokeSection.qml
         # Titlebar + window
         qml/components/titlebar/TitleBar.qml
+        qml/components/titlebar/MacTrafficLights.qml
         qml/components/titlebar/TitleBarTabBar.qml
         qml/components/titlebar/TitleBarTab.qml
         qml/components/titlebar/TitleBarHomeTab.qml

@@ -1,6 +1,8 @@
 import QtQuick
 
 // Frameless resize handles (right / bottom / corner).
+// Hidden while maximized/fullscreen: the frame owns the geometry
+// there and startSystemResize would no-op or fight the compositor.
 Item {
     id: handles
 
@@ -8,6 +10,7 @@ Item {
 
     anchors.fill: parent
     z: 100
+    visible: window.visibility !== Window.Maximized && window.visibility !== Window.FullScreen
 
     MouseArea {
         anchors {

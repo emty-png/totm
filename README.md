@@ -26,39 +26,53 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 * Group and manage components
 * Animate with custom and wide range of preset animations, etc.
 
-## Quickstart
+## Install
 
-Requirements: CMake 3.21+, Qt 6.8+ with `Quick` module, a C++17 compiler, Ninja or Make.
+No releases yet, so you gotta build it yourself for now. You need CMake 3.21+, Qt 6.8+ with the `Quick` module, a C++17 compiler and Ninja.
 
-```sh
-cmake -B build
-cmake --build build
-./build/src/totm
-```
-
-Presets (see `CMakePresets.json`):
+### Arch / CachyOS (btw i use cachy)
 
 ```sh
+sudo pacman -S --needed base-devel cmake ninja qt6-base qt6-declarative
 cmake --preset dev
 cmake --build --preset dev
+./build/dev/src/totm
 ```
 
-## Project layout
+### Ubuntu / Debian
 
-```text
-src/
-  main.cpp               # minimal boot, loads Totm/Main
-  qml/
-    Main.qml             # frameless window + TitleBar + view switch
-    theme/               # AppTheme singleton
-    stores/              # TabStore, ToolStore singletons
-    models/document/     # Document facade + focused helpers (tree, selection, geometry…)
-    views/               # home/, editor/ screen compositions
-    components/          # titlebar/, window/, toolbar/, fields/, selection/, editor/
-docs/                    # arch, qml-conventions, canvas-interactions
+Heads up: apt's Qt is too old (6.4, we need 6.8+), so grab Qt 6.8 from the online installer at <https://www.qt.io/download-qt-installer> (tick Qt 6.8 Desktop + CMake + Ninja) or via `pip install aqtinstall`. Then:
+
+```sh
+sudo apt install build-essential ninja-build libgl1 libxkbcommon0 libdbus-1-3
+export CMAKE_PREFIX_PATH=~/Qt/6.8.3/gcc_64
+cmake --preset dev
+cmake --build --preset dev
+./build/dev/src/totm
 ```
 
-QML conventions live in [`docs/qml-conventions.md`](docs/qml-conventions.md). Read it before contributing.
+### macOS (apple silicon)
+
+```sh
+xcode-select --install
+brew install cmake ninja qt@6
+export CMAKE_PREFIX_PATH=$(brew --prefix qt@6)
+cmake --preset dev
+cmake --build --preset dev
+open build/dev/src/totm.app
+```
+
+### Windows
+
+Grab Visual Studio 2022 (or just the Build Tools) with the C++ workload, and Qt 6.8 MSVC 2022 64-bit from the online installer at <https://www.qt.io/download-qt-installer>. Then in `pwsh`:
+
+```ps1
+winget install Kitware.CMake Ninja-build.Ninja-build
+$env:CMAKE_PREFIX_PATH = "C:\Qt\6.8.3\msvc2022_64"
+cmake --preset dev
+cmake --build --preset dev
+.\build\dev\src\totm.exe
+```
 
 ## Contributing
 
