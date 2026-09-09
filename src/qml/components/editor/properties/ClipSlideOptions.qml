@@ -26,25 +26,25 @@ ColumnLayout {
     RowLayout {
         spacing: 8
 
-        SegOption {
+        SegmentedOption {
             label: qsTr("Left")
             active: section.opts.direction === "left" || !section.opts.direction
             onClicked: section.setOption("direction", "left")
         }
 
-        SegOption {
+        SegmentedOption {
             label: qsTr("Right")
             active: section.opts.direction === "right"
             onClicked: section.setOption("direction", "right")
         }
 
-        SegOption {
+        SegmentedOption {
             label: qsTr("Up")
             active: section.opts.direction === "up"
             onClicked: section.setOption("direction", "up")
         }
 
-        SegOption {
+        SegmentedOption {
             label: qsTr("Down")
             active: section.opts.direction === "down"
             onClicked: section.setOption("direction", "down")

@@ -124,7 +124,7 @@ Item {
         contentItem: ColumnLayout {
             spacing: 2
 
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Undo")
                 hint: qsTr("Ctrl+Z")
                 enabled: menu.canUndo
@@ -133,7 +133,7 @@ Item {
                     menu.closeAll();
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Redo")
                 hint: qsTr("Ctrl+Y")
                 enabled: menu.canRedo
@@ -142,7 +142,7 @@ Item {
                     menu.closeAll();
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Copy")
                 enabled: menu.hasSelection
                 onClicked: {
@@ -150,7 +150,7 @@ Item {
                     menu.closeAll();
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Paste")
                 enabled: menu.canPaste
                 onClicked: {
@@ -158,7 +158,7 @@ Item {
                     menu.closeAll();
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Duplicate")
                 enabled: menu.hasSelection
                 onClicked: {
@@ -166,7 +166,7 @@ Item {
                     menu.closeAll();
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Group")
                 enabled: menu.canGroup
                 onClicked: {
@@ -174,7 +174,7 @@ Item {
                     menu.closeAll();
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Ungroup")
                 enabled: menu.canUngroup
                 onClicked: {
@@ -182,7 +182,7 @@ Item {
                     menu.closeAll();
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 id: arrangeItem
                 label: qsTr("Arrange")
                 hint: qsTr("›")
@@ -236,28 +236,28 @@ Item {
                     contentItem: ColumnLayout {
                         spacing: 2
 
-                        ContextMenuItem {
+                        MenuItem {
                             label: qsTr("Bring to the front")
                             onClicked: {
                                 menu.doc.bringToFront();
                                 menu.closeAll();
                             }
                         }
-                        ContextMenuItem {
+                        MenuItem {
                             label: qsTr("Move to the back")
                             onClicked: {
                                 menu.doc.sendToBack();
                                 menu.closeAll();
                             }
                         }
-                        ContextMenuItem {
+                        MenuItem {
                             label: qsTr("Move forward")
                             onClicked: {
                                 menu.doc.moveForward();
                                 menu.closeAll();
                             }
                         }
-                        ContextMenuItem {
+                        MenuItem {
                             label: qsTr("Move backward")
                             onClicked: {
                                 menu.doc.moveBackward();
@@ -267,7 +267,7 @@ Item {
                     }
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Rename")
                 enabled: menu.contextValid
                 onClicked: {
@@ -275,7 +275,7 @@ Item {
                     menu.closeAll();
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Delete")
                 enabled: menu.hasSelection
                 onClicked: {

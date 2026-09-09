@@ -225,7 +225,7 @@ Popup {
             }
         }
 
-        BezierCanvas {
+        EasingGraph {
             width: parent.width
             height: 170
             bezier: [graph.hx1, graph.hy1, graph.hx2, graph.hy2]

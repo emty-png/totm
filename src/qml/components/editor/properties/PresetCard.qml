@@ -2,7 +2,7 @@ import QtQuick
 import Totm
 
 // One preset tile: looping live thumbnail on a gray swatch plus name.
-// The thumbnail samples the real preset math (AnimSample) on a mini
+// The thumbnail samples the real preset math (DocAnimSample) on a mini
 // model, so previews match canvas playback. Play phase streams from the
 // gallery's shared driver; clicks report through clickPolicy.
 // Plain props with defaults (never required): Repeater delegates
@@ -149,7 +149,7 @@ Item {
         return sampler.presetOverlay(card.presetId, "in", card.thumbOptions || {}, card.baseLeaf, 40, 40, e, card.phase);
     }
 
-    AnimSample {
+    DocAnimSample {
         id: sampler
     }
 }

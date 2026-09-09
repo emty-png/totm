@@ -5,7 +5,7 @@ import Totm
 // Home sidebar: workspace list plus pinned starred designs. Starred
 // rows open on click; starring itself happens on the card.
 Item {
-    id: sideBar
+    id: panel
 
     required property string selectedWorkspaceId
     property string editingWorkspaceId: ""
@@ -25,15 +25,15 @@ Item {
             if (all[i].starred)
                 out.push(all[i]);
         }
-        sideBar.starredDesigns = out;
+        panel.starredDesigns = out;
     }
 
-    Component.onCompleted: sideBar.refreshStarred()
+    Component.onCompleted: panel.refreshStarred()
 
     Connections {
         target: LibraryStore
         function onLibraryChanged() {
-            sideBar.refreshStarred();
+            panel.refreshStarred();
         }
     }
 
@@ -68,30 +68,30 @@ Item {
                 workspaceId: modelData.workspaceId
                 workspaceName: modelData.name
                 isDefault: modelData.isDefault
-                selected: modelData.workspaceId === sideBar.selectedWorkspaceId
-                editing: modelData.workspaceId === sideBar.editingWorkspaceId
+                selected: modelData.workspaceId === panel.selectedWorkspaceId
+                editing: modelData.workspaceId === panel.editingWorkspaceId
                 selectPolicy: id => {
-                    if (sideBar.selectPolicy)
-                        sideBar.selectPolicy(id);
+                    if (panel.selectPolicy)
+                        panel.selectPolicy(id);
                 }
                 beginRenamePolicy: id => {
-                    sideBar.editingWorkspaceId = id;
+                    panel.editingWorkspaceId = id;
                 }
                 commitPolicy: (id, text) => {
                     LibraryStore.renameWorkspace(id, text);
-                    sideBar.editingWorkspaceId = "";
+                    panel.editingWorkspaceId = "";
                 }
                 cancelPolicy: () => {
-                    sideBar.editingWorkspaceId = "";
+                    panel.editingWorkspaceId = "";
                 }
                 deletePolicy: id => {
-                    if (id === sideBar.selectedWorkspaceId && sideBar.selectPolicy)
-                        sideBar.selectPolicy(LibraryStore.defaultWorkspaceId);
+                    if (id === panel.selectedWorkspaceId && panel.selectPolicy)
+                        panel.selectPolicy(LibraryStore.defaultWorkspaceId);
                     LibraryStore.deleteWorkspace(id);
                 }
                 movePolicy: (idsJson, wsId) => {
-                    if (sideBar.movePolicy)
-                        sideBar.movePolicy(idsJson, wsId);
+                    if (panel.movePolicy)
+                        panel.movePolicy(idsJson, wsId);
                 }
             }
         }
@@ -102,7 +102,7 @@ Item {
             Layout.rightMargin: 8
             Layout.topMargin: 10
             Layout.bottomMargin: 6
-            visible: sideBar.starredDesigns.length > 0
+            visible: panel.starredDesigns.length > 0
             text: qsTr("Starred")
             font.pixelSize: 13
             font.weight: Font.DemiBold
@@ -113,7 +113,7 @@ Item {
         // their own file cannot see modelData, so the pinned rows live
         // here where the model context attaches.
         Repeater {
-            model: sideBar.starredDesigns
+            model: panel.starredDesigns
 
             Item {
                 Layout.fillWidth: true
@@ -145,8 +145,8 @@ Item {
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton
                     onClicked: {
-                        if (sideBar.openPolicy)
-                            sideBar.openPolicy(modelData.designId);
+                        if (panel.openPolicy)
+                            panel.openPolicy(modelData.designId);
                     }
                 }
 

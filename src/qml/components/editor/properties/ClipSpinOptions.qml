@@ -26,13 +26,13 @@ ColumnLayout {
     RowLayout {
         spacing: 8
 
-        SegOption {
+        SegmentedOption {
             label: qsTr("CW")
             active: section.opts.direction !== "ccw"
             onClicked: section.setOption("direction", "cw")
         }
 
-        SegOption {
+        SegmentedOption {
             label: qsTr("CCW")
             active: section.opts.direction === "ccw"
             onClicked: section.setOption("direction", "ccw")

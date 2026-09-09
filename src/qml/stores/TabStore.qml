@@ -90,6 +90,32 @@ QtObject {
         tabStore.currentIndex = modelIndex;
     }
 
+    // Reorder document tabs (home at index 0 never moves). Selection
+    // follows its document by uid so dragging never deselects.
+    function moveTab(fromModelIndex, toModelIndex) {
+        if (fromModelIndex < 1 || toModelIndex < 1)
+            return;
+        if (fromModelIndex >= tabStore.tabs.count || toModelIndex >= tabStore.tabs.count)
+            return;
+        if (fromModelIndex === toModelIndex)
+            return;
+        var selUid = -1;
+        if (tabStore.currentIndex > 0)
+            selUid = tabStore.tabs.get(tabStore.currentIndex).uid;
+        tabStore.tabs.move(fromModelIndex, toModelIndex, 1);
+        if (selUid < 0) {
+            tabStore.currentIndex = 0;
+            return;
+        }
+        for (var i = 1; i < tabStore.tabs.count; i++) {
+            if (tabStore.tabs.get(i).uid === selUid) {
+                tabStore.currentIndex = i;
+                return;
+            }
+        }
+        tabStore.currentIndex = 0;
+    }
+
     function saveOpenDesign(designId) {
         var modelIndex = tabStore.modelIndexForDesign(designId);
         if (modelIndex < 0)

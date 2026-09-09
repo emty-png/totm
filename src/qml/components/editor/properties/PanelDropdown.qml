@@ -5,7 +5,7 @@ import Totm
 
 // Panel dropdown: field-styled button plus popup menu in graph-editor
 // menu styling. Options are [{id, name}]; picked(id) fires on choice.
-// Sizing mirrors SegOption so the two mix in rows.
+// Sizing mirrors SegmentedOption so the two mix in rows.
 Rectangle {
     id: drop
 

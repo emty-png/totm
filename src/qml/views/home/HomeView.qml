@@ -148,7 +148,7 @@ RowLayout {
         homeView.refreshFiltered();
     }
 
-    HomeSideBar {
+    WorkspacePanel {
         Layout.preferredWidth: 230
         Layout.fillHeight: true
         selectedWorkspaceId: homeView.selectedWorkspaceId
