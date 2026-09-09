@@ -62,6 +62,9 @@ Item {
     property bool shapeLocked: false
     property int paintDepth: 0
     property real zoom: 1
+    // False for non-interactive paint reuse (drag-preview ghost): the
+    // MouseArea below goes blind so canvas gestures pass through.
+    property bool interactive: true
 
     // Selection policy callbacks, assigned by the canvas in onItemAdded
     // (calling item.customSignal() there would fail lint: onItemAdded's
@@ -180,6 +183,7 @@ Item {
     MouseArea {
         id: mouse
         anchors.fill: parent
+        enabled: shape.interactive
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
         cursorShape: shape.shapeLocked ? Qt.ForbiddenCursor : shape.moving ? Qt.ClosedHandCursor : Qt.ArrowCursor

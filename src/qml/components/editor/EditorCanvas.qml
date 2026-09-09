@@ -1,7 +1,7 @@
 import QtQuick
 import Totm
 
-// Infinite canvas. Wheel pans, Ctrl-wheel zooms to cursor, Space-drag pans.
+// Canvas. Wheel pans, Ctrl-wheel zooms to cursor, Space-drag pans.
 // Select-drag marquees, shapes-drag draws, pen clicks/drags vectors,
 // handles resize the selection. Moves, resizes and creations snap
 // within 5 screen px; Alt suspends. Hidden skips input, locked swallows
@@ -345,6 +345,7 @@ Item {
             else
                 canvas.pen.refreshHover(event.x, event.y, event.modifiers);
         }
+        onExited: canvas.pen.exitHover()
         onReleased: {
             canvas.pen.releaseAt();
         }
@@ -371,6 +372,7 @@ Item {
         onPositionChanged: event => {
             canvas.penEdit.moveTo(event.x, event.y, event.modifiers);
         }
+        onExited: canvas.penEdit.hover = null
         onReleased: {
             canvas.penEdit.releaseAt();
         }
@@ -709,12 +711,29 @@ Item {
             }
         }
         onPositionChanged: event => {
-            if (!canvas.panning)
+            if (!canvas.panning) {
+                // Hover forwarding: this catcher sits above the tool areas
+                // and can own hover, so pen previews update here too.
+                // Same enabled gates as penMouse/penEditMouse; both updates
+                // are idempotent when the lower area already handled them.
+                if (ToolStore.activeTool === "pen" && canvas.doc)
+                    canvas.pen.refreshHover(event.x, event.y, event.modifiers);
+                else if (ToolStore.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc)
+                    canvas.penEdit.moveTo(event.x, event.y, event.modifiers);
                 return;
+            }
             canvas.offsetX += event.x - mouse.lastX;
             canvas.offsetY += event.y - mouse.lastY;
             mouse.lastX = event.x;
             mouse.lastY = event.y;
+        }
+        onExited: {
+            // Cursor left the canvas: drop previews the tool areas may
+            // never see an exit for.
+            if (canvas.pen)
+                canvas.pen.exitHover();
+            if (canvas.penEdit)
+                canvas.penEdit.hover = null;
         }
         onReleased: {
             canvas.panning = false;

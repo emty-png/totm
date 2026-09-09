@@ -3,9 +3,10 @@ import QtQuick.Shapes
 import Totm
 
 // Live pen preview: committed parts dimmed, active part bright, rubber
-// to cursor, anchors as squares (smooth as circles) with handle arms.
-// Content-space container so paths land 1:1; dot sizes divide by zoom
-// to stay constant on screen like SelectionHandles.
+// solid to a snapped ghost dot like Figma, anchors as squares (smooth
+// as circles) with handle arms. Content-space container so paths land
+// 1:1; dot sizes divide by zoom to stay constant on screen like
+// SelectionHandles.
 Item {
     id: overlay
 
@@ -57,9 +58,41 @@ Item {
                             closed: false,
                             pts: overlay.tool.active
                         }
-                    ], true) : ""
+                    ], false) : ""
                 }
             }
+        }
+
+        // Rubber: snapped next-segment preview, solid like Figma so the
+        // in-progress path reads as one line; the ghost dot marks what
+        // the next click places. Over the first anchor it draws the
+        // closing segment instead (see tool.closePreview).
+        Shape {
+            antialiasing: true
+            preferredRendererType: Shape.CurveRenderer
+            visible: overlay.tool ? (overlay.tool.previewActive || overlay.tool.closePreview) : false
+
+            ShapePath {
+                fillColor: "transparent"
+                strokeColor: AppTheme.selection
+                strokeWidth: 1.5 / overlay.cz
+                PathSvg {
+                    path: overlay.tool ? overlay.tool.svgFor([], true) : ""
+                }
+            }
+        }
+
+        // Ghost dot at the snapped endpoint: what the next click places.
+        Rectangle {
+            visible: overlay.tool ? overlay.tool.previewActive : false
+            x: (overlay.tool ? overlay.tool.snCX : 0) - width / 2
+            y: (overlay.tool ? overlay.tool.snCY : 0) - height / 2
+            width: overlay.dot
+            height: overlay.dot
+            radius: width / 2
+            color: "#ffffff"
+            border.width: 1.5 / overlay.cz
+            border.color: AppTheme.selection
         }
 
         // Handle arms for smooth active points.
