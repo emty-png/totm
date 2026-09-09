@@ -66,7 +66,10 @@ Item {
                     strokeWidth: modelData.strokeWidth || 0
                     shapeOpacity: modelData.opacity !== undefined ? modelData.opacity : 1
                     radius: modelData.radius || 0
+                    independentCorners: modelData.independentCorners === true
+                    cornerRadii: modelData.cornerRadii || []
                     points: modelData.points || 5
+                    pathData: modelData.pathData || []
                     flipH: modelData.flipH === true
                     flipV: modelData.flipV === true
                     textContent: modelData.textContent !== undefined ? modelData.textContent : ""

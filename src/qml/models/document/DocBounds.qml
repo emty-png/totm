@@ -18,12 +18,26 @@ QtObject {
         };
     }
 
+    // Fresh bbox for pen nodes so stale x/y never clips new points.
+    function penBox(node) {
+        var box = doc.factory.penBBoxFor(node.pathData);
+        return {
+            x: box.x,
+            y: box.y,
+            w: box.w,
+            h: box.h,
+            rotation: node.rotation
+        };
+    }
+
     function bboxOfNode(node) {
         if (!node)
             return null;
         if (node.kind === "shape") {
             if (!doc.isEffectivelyVisible(node))
                 return null;
+            if (node.shapeType === "pen")
+                return rotatedBounds(penBox(node));
             return rotatedBounds(node);
         }
         var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -32,7 +46,9 @@ QtObject {
         for (var i = 0; i < leaves.length; i++) {
             if (!doc.isEffectivelyVisible(leaves[i]))
                 continue;
-            var b = rotatedBounds(leaves[i]);
+            var b = bboxOfNode(leaves[i]);
+            if (!b)
+                continue;
             if (b.x < x0)
                 x0 = b.x;
             if (b.y < y0)
@@ -95,7 +111,9 @@ QtObject {
                 anyVisible = true;
                 if (((leaves[j].rotation % 360) + 360) % 360 !== 0)
                     rotated = true;
-                var b = rotatedBounds(leaves[j]);
+                var b = bboxOfNode(leaves[j]);
+                if (!b)
+                    continue;
                 if (b.x < x0)
                     x0 = b.x;
                 if (b.y < y0)
@@ -142,13 +160,9 @@ QtObject {
                 continue;
             if (doc.isEffectivelyLocked(n))
                 continue;
-            if (n.kind === "shape") {
-                out.push(rotatedBounds(n));
-            } else {
-                var b = bboxOfNode(n);
-                if (b)
-                    out.push(b);
-            }
+            var b = bboxOfNode(n);
+            if (b)
+                out.push(b);
         }
         return out;
     }

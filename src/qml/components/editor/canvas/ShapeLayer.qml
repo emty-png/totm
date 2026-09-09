@@ -93,7 +93,10 @@ Item {
             strokeWidth: modelData.strokeWidth
             shapeOpacity: modelData.opacity
             radius: modelData.radius
+            independentCorners: modelData.independentCorners === true
+            cornerRadii: modelData.cornerRadii || []
             points: modelData.points
+            pathData: modelData.pathData || []
             flipH: modelData.flipH
             flipV: modelData.flipV
             paintDepth: modelData.zOrder

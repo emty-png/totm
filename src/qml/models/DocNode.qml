@@ -25,8 +25,18 @@ QtObject {
     property real strokeWidth: 0
     property real opacity: 1
     property real radius: 0
+    // Independent corners (rectangle/triangle/star). When true the
+    // renderer reads cornerRadii per vertex in paint order; toggling on
+    // prefills from radius, toggling off folds back to corners[0].
+    property bool independentCorners: false
+    property var cornerRadii: []
     // Star tips; only meaningful when shapeType === "star".
     property int points: 5
+    // Pen paths; only meaningful when shapeType === "pen". Absolute
+    // content coords so moves/scales stay in one space with x/y. Each
+    // subpath holds its own closed flag for multi-part vectors.
+    // [{closed: bool, pts: [{x, y, smooth, inX, inY, outX, outY}]}]
+    property var pathData: []
     // Text content/style; only meaningful when shapeType === "text".
     // fill paints the glyphs. lineHeight is a factor (1 = 100%);
     // lineHeightAuto renders natural spacing. letterSpacing is percent

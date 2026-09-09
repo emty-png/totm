@@ -25,7 +25,10 @@ QtObject {
             strokeWidth: s.strokeWidth ?? 0,
             opacity: s.opacity ?? 1,
             radius: s.radius ?? 0,
+            independentCorners: s.independentCorners === true,
+            cornerRadii: factory._copyRadii(s.cornerRadii),
             points: s.points ?? 5,
+            pathData: factory._copyPath(s.pathData),
             flipH: s.flipH ?? false,
             flipV: s.flipV ?? false,
             textContent: s.textContent ?? "",
@@ -46,6 +49,87 @@ QtObject {
             children: []
         });
         return n;
+    }
+
+    // Number-array copy that also accepts C++ sequence values: after a
+    // library round trip Array.isArray is false on them, so copy by
+    // length instead of trusting Array methods.
+    function _copyRadii(src) {
+        var out = [];
+        if (!src || typeof src.length !== "number")
+            return out;
+        for (var i = 0; i < src.length; i++)
+            out.push(Math.max(0, Number(src[i]) || 0));
+        return out;
+    }
+
+    // Deep copy so snapshots never share point objects with live nodes.
+    function _copyPath(pathData) {
+        if (!pathData)
+            return [];
+        var out = [];
+        for (var i = 0; i < pathData.length; i++) {
+            var sub = pathData[i] || {};
+            var pts = [];
+            var src = sub.pts || [];
+            for (var j = 0; j < src.length; j++) {
+                var p = src[j] || {};
+                pts.push({
+                    x: Number(p.x) || 0,
+                    y: Number(p.y) || 0,
+                    smooth: p.smooth === true,
+                    inX: p.inX !== undefined ? Number(p.inX) : (Number(p.x) || 0),
+                    inY: p.inY !== undefined ? Number(p.inY) : (Number(p.y) || 0),
+                    outX: p.outX !== undefined ? Number(p.outX) : (Number(p.x) || 0),
+                    outY: p.outY !== undefined ? Number(p.outY) : (Number(p.y) || 0)
+                });
+            }
+            out.push({
+                closed: sub.closed === true,
+                pts: pts
+            });
+        }
+        return out;
+    }
+
+    // Tight bbox over anchors and handles in absolute content coords.
+    function penBBoxFor(pathData) {
+        var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        var found = false;
+        for (var i = 0; i < (pathData || []).length; i++) {
+            var pts = (pathData[i] || {}).pts || [];
+            for (var j = 0; j < pts.length; j++) {
+                var p = pts[j] || {};
+                var xs = [p.x, p.inX, p.outX];
+                var ys = [p.y, p.inY, p.outY];
+                for (var k = 0; k < 3; k++) {
+                    if (xs[k] === undefined || ys[k] === undefined)
+                        continue;
+                    if (xs[k] < x0)
+                        x0 = xs[k];
+                    if (ys[k] < y0)
+                        y0 = ys[k];
+                    if (xs[k] > x1)
+                        x1 = xs[k];
+                    if (ys[k] > y1)
+                        y1 = ys[k];
+                    found = true;
+                }
+            }
+        }
+        if (!found)
+            return {
+                x: 0,
+                y: 0,
+                w: 1,
+                h: 1
+            };
+        return {
+            x: x0,
+            y: y0,
+            w: Math.max(1, x1 - x0),
+            h: Math.max(1, y1 - y0)
+        };
     }
 
     function _makeGroupNode(name, children) {
@@ -72,6 +156,33 @@ QtObject {
             y: Math.round(y),
             w: Math.max(1, Math.round(w)),
             h: Math.max(1, Math.round(h))
+        });
+        var list = doc._childrenOf(container).slice();
+        list.unshift(n);
+        doc._setChildren(container, list);
+        doc.anchorUid = n.uid;
+        doc._refreshStructural();
+        return n.uid;
+    }
+
+    // Pen creation: absolute multi-subpath data, bbox derived so the
+    // node selects/snaps like any shape. Rejects empty paths.
+    function addPen(pathData) {
+        var clean = factory._copyPath(pathData);
+        var total = 0;
+        for (var i = 0; i < clean.length; i++)
+            total += (clean[i].pts || []).length;
+        if (total === 0)
+            return -1;
+        var box = factory.penBBoxFor(clean);
+        var container = doc._activeContainerUid();
+        doc.clearSelection();
+        var n = _makeShapeNode("pen", {
+            x: box.x,
+            y: box.y,
+            w: box.w,
+            h: box.h,
+            pathData: clean
         });
         var list = doc._childrenOf(container).slice();
         list.unshift(n);

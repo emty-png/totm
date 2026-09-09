@@ -39,6 +39,8 @@ qt_add_qml_module(totm
         qml/models/document/DocReorder.qml
         qml/models/document/DocBounds.qml
         qml/models/document/DocEdits.qml
+        qml/models/document/DocPen.qml
+        qml/models/document/DocCorners.qml
         qml/models/document/DocHistory.qml
         qml/models/document/AnimSample.qml
         qml/models/document/DocAnimPresets.qml
@@ -52,6 +54,10 @@ qt_add_qml_module(totm
         qml/components/editor/canvas/CanvasCamera.qml
         qml/components/editor/canvas/CanvasSelectPolicy.qml
         qml/components/editor/canvas/CanvasResizePolicy.qml
+        qml/components/editor/canvas/PenTool.qml
+        qml/components/editor/canvas/PenOverlay.qml
+        qml/components/editor/canvas/PenEdit.qml
+        qml/components/editor/canvas/PenEditOverlay.qml
         qml/components/editor/canvas/ShapeLayer.qml
         qml/components/editor/canvas/CanvasOverlays.qml
         qml/components/editor/canvas/MeasurePill.qml

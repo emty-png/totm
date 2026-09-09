@@ -7,7 +7,8 @@ import QtQuick.Shapes
 //     | "apps" | "plus" | "square" | "circle" | "triangle" | "diamond"
 //     | "hexagon" | "pen" | "text" | "image" | "caret" | "cursor"
 //     | "eye" | "eyeOff" | "lock" | "unlock" | "star" | "starFill"
-//     | "contrast" | "corner" | "rotate" | "flipH" | "flipV" | "undo"
+//     | "contrast" | "corner" | "cornerTL" | "cornerTR" | "cornerBR"
+//     | "cornerBL" | "rotate" | "flipH" | "flipV" | "undo"
 //     | "redo" | "play" | "pause" | "stop"
 Item {
     id: icon
@@ -134,6 +135,33 @@ Item {
         box: icon.width
         paint: icon.iconColor
         svg: "M80,32H208V208H48V64A32,32,0,0,1,80,32ZM64,192H192V48H64Z"
+    }
+
+    // Per-corner L marks for independent rectangle radii (TL,TR,BR,BL
+    // clockwise). Heavy 32-unit bars read at 14px panel size.
+    PhShape {
+        active: icon.kind === "cornerTL"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M40,40H120V72H72V120H40Z"
+    }
+    PhShape {
+        active: icon.kind === "cornerTR"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M136,40H216V120H184V72H136Z"
+    }
+    PhShape {
+        active: icon.kind === "cornerBR"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M184,136H216V216H136V184H184Z"
+    }
+    PhShape {
+        active: icon.kind === "cornerBL"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M40,136H72V184H120V216H40Z"
     }
 
     // Clockwise arrow (rotate +90).

@@ -36,7 +36,10 @@ QtObject {
             strokeWidth: node.strokeWidth,
             opacity: node.opacity,
             radius: node.radius,
+            independentCorners: node.independentCorners === true,
+            cornerRadii: doc.factory._copyRadii(node.cornerRadii),
             points: node.points,
+            pathData: doc.factory._copyPath(node.pathData),
             flipH: node.flipH,
             flipV: node.flipV,
             textContent: node.textContent,
@@ -263,6 +266,8 @@ QtObject {
         snap.h = b.h;
         snap.rotation = b.rotation;
         snap.opacity = b.opacity;
+        if (snap.pathData !== undefined && b.pathData !== undefined)
+            snap.pathData = doc.factory._copyPath(b.pathData);
         // Text snapshots carry fontSize (grow/shrink animate it): rebase
         // it too, but only where the snapshot has one so plain shapes
         // never gain stray keys in saved scenes.
