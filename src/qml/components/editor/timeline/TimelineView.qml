@@ -94,72 +94,11 @@ Item {
                 height: timeline.topPad
             }
 
-            Item {
+            TimelineTransport {
                 width: parent.width
                 height: timeline.headerHeight
-
-                RowLayout {
-                    anchors {
-                        fill: parent
-                        leftMargin: 12
-                        rightMargin: 12
-                    }
-                    spacing: 8
-
-                    ToolbarButton {
-                        Layout.alignment: Qt.AlignVCenter
-                        iconKind: timeline.doc && timeline.doc.anim.playing ? "pause" : "play"
-                        onClicked: {
-                            if (!timeline.doc)
-                                return;
-                            if (timeline.doc.anim.playing)
-                                timeline.doc.anim.pause();
-                            else
-                                timeline.doc.anim.play();
-                        }
-                    }
-
-                    ToolbarButton {
-                        Layout.alignment: Qt.AlignVCenter
-                        iconKind: "stop"
-                        onClicked: {
-                            if (timeline.doc)
-                                timeline.doc.anim.stop();
-                        }
-                    }
-
-                    NumberField {
-                        Layout.preferredWidth: 76
-                        Layout.alignment: Qt.AlignVCenter
-                        suffix: "s"
-                        scrubStep: 0.1
-                        minimum: 0.5
-                        maximum: 60
-                        value: timeline.doc ? timeline.doc.anim.duration : 4.0
-                        onCommitted: v => {
-                            if (timeline.doc)
-                                timeline.doc.setAnimDuration(v);
-                        }
-                        onScrubStarted: {
-                            if (timeline.doc)
-                                timeline.doc.beginTransaction();
-                        }
-                        onScrubFinished: {
-                            if (timeline.doc)
-                                timeline.doc.endTransaction();
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        bottom: parent.bottom
-                    }
-                    height: 1
-                    color: AppTheme.border
-                }
+                doc: timeline.doc
+                headerHeight: timeline.headerHeight
             }
 
             Repeater {

@@ -15,7 +15,9 @@ RowLayout {
 
     property string selectedWorkspaceId: ""
     property string editingDesignId: ""
-    property var selectedDesignIds: []
+
+    // Card selection state + set ops + marquee hit-testing.
+    property var selection: HomeSelection {}
 
     // Designs of the selected workspace, cached as a stable array:
     // GridView tears down delegates mid-layout if the model array
@@ -34,100 +36,9 @@ RowLayout {
 
     onSelectedWorkspaceIdChanged: homeView.refreshFiltered()
 
-    function isSelected(designId) {
-        return homeView.selectedDesignIds.indexOf(designId) >= 0;
-    }
-
-    function selectOnly(designId) {
-        homeView.selectedDesignIds = designId ? [designId] : [];
-    }
-
-    function toggleSelect(designId) {
-        var ids = homeView.selectedDesignIds.slice();
-        var at = ids.indexOf(designId);
-        if (at >= 0)
-            ids.splice(at, 1);
-        else
-            ids.push(designId);
-        homeView.selectedDesignIds = ids;
-    }
-
-    function clearSelection() {
-        if (homeView.selectedDesignIds.length > 0)
-            homeView.selectedDesignIds = [];
-    }
-
-    // Marquee finished: collect cards whose rect touches the area.
-    // Card delegates carry designId, so no index math is needed.
-    function applyMarquee(area, additive) {
-        var hits = [];
-        var kids = flow.children;
-        for (var i = 0; i < kids.length; i++) {
-            var child = kids[i];
-            if (child.designId === undefined || !child.designId)
-                continue;
-            var p = child.mapToItem(marqueeMouse, 0, 0);
-            var touches = !(p.x > area.x + area.width || p.x + child.width < area.x || p.y > area.y + area.height || p.y + child.height < area.y);
-            if (touches)
-                hits.push(child.designId);
-        }
-        if (!additive) {
-            homeView.selectedDesignIds = hits;
-            return;
-        }
-        var ids = homeView.selectedDesignIds.slice();
-        for (var j = 0; j < hits.length; j++) {
-            if (ids.indexOf(hits[j]) < 0)
-                ids.push(hits[j]);
-        }
-        homeView.selectedDesignIds = ids;
-    }
-
-    // Card under an overlay point, or null. Used to let card
-    // presses fall through the marquee area to the cards.
-    function cardAt(x, y) {
-        var kids = flow.children;
-        for (var i = 0; i < kids.length; i++) {
-            var child = kids[i];
-            if (child.designId === undefined || !child.designId)
-                continue;
-            var p = child.mapToItem(marqueeMouse, 0, 0);
-            if (x >= p.x && x < p.x + child.width && y >= p.y && y < p.y + child.height)
-                return child;
-        }
-        return null;
-    }
-
-    function deleteSelected() {
-        var ids = homeView.selectedDesignIds.slice();
-        if (ids.length === 0)
-            return;
-        for (var i = 0; i < ids.length; i++) {
-            TabStore.closeTabByDesign(ids[i]);
-            LibraryStore.deleteDesign(ids[i]);
-        }
-        homeView.selectedDesignIds = [];
-    }
-
-    function deleteDesignOrSelected(designId) {
-        if (homeView.isSelected(designId) && homeView.selectedDesignIds.length > 1) {
-            homeView.deleteSelected();
-            return homeView.selectedDesignIds.length;
-        }
-        TabStore.closeTabByDesign(designId);
-        LibraryStore.deleteDesign(designId);
-        var ids = homeView.selectedDesignIds.slice();
-        var at = ids.indexOf(designId);
-        if (at >= 0) {
-            ids.splice(at, 1);
-            homeView.selectedDesignIds = ids;
-        }
-        return 1;
-    }
-
     function openCardMenu(item, designId, x, y) {
         var info = LibraryStore.design(designId);
-        var count = homeView.isSelected(designId) ? homeView.selectedDesignIds.length : 1;
+        var count = homeView.selection.isSelected(designId) ? homeView.selection.selectedIds.length : 1;
         var p = item.mapToItem(gridArea, x, y);
         cardMenu.openFor(designId, !!info.starred, count, p.x, p.y);
     }
@@ -135,11 +46,11 @@ RowLayout {
     Keys.onDeletePressed: event => {
         if (homeView.editingDesignId !== "")
             return;
-        homeView.deleteSelected();
+        homeView.selection.deleteSelected();
         event.accepted = true;
     }
     Keys.onEscapePressed: event => {
-        homeView.clearSelection();
+        homeView.selection.clearSelection();
         event.accepted = true;
     }
 
@@ -250,11 +161,11 @@ RowLayout {
                             updatedAt: modelData.updatedAt
                             scene: modelData.scene
                             starred: !!modelData.starred
-                            selected: homeView.isSelected(modelData.designId)
-                            selectedIds: homeView.selectedDesignIds
+                            selected: homeView.selection.isSelected(modelData.designId)
+                            selectedIds: homeView.selection.selectedIds
                             editing: modelData.designId === homeView.editingDesignId
-                            selectOnlyPolicy: id => homeView.selectOnly(id)
-                            togglePolicy: id => homeView.toggleSelect(id)
+                            selectOnlyPolicy: id => homeView.selection.selectOnly(id)
+                            togglePolicy: id => homeView.selection.toggleSelect(id)
                             openPolicy: id => TabStore.openDesign(id)
                             contextPolicy: (item, x, y) => homeView.openCardMenu(item, modelData.designId, x, y)
                             starPolicy: id => LibraryStore.toggleStarred(id)
@@ -289,8 +200,8 @@ RowLayout {
             DragSelection {
                 id: marquee
 
-                onFinished: (area, additive) => homeView.applyMarquee(area, additive)
-                onTapped: homeView.clearSelection()
+                onFinished: (area, additive) => homeView.selection.applyMarquee(flow.children, marqueeMouse, area, additive)
+                onTapped: homeView.selection.clearSelection()
             }
 
             // Empty-area press starts the marquee; presses on cards fall
@@ -301,7 +212,7 @@ RowLayout {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
                 onPressed: mouse => {
-                    if (homeView.cardAt(mouse.x, mouse.y) !== null) {
+                    if (homeView.selection.cardAt(flow.children, marqueeMouse, mouse.x, mouse.y) !== null) {
                         mouse.accepted = false;
                         return;
                     }
@@ -325,7 +236,7 @@ RowLayout {
                 }
                 starPolicy: id => LibraryStore.toggleStarred(id)
                 deletePolicy: id => {
-                    homeView.deleteDesignOrSelected(id);
+                    homeView.selection.deleteDesignOrSelected(id);
                 }
             }
         }
