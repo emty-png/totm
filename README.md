@@ -24,7 +24,7 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 * Design panel with mixed-value handling
 * Dark / light theme, custom frameless titlebar with tabs
 * Group and manage components
-* Animate with custom and wide range of preset animations, etc.
+* Animate with presets plus custom from-to properties (scale, rotate, move, opacity, color, hide/show, resize, corner radius, stroke) and drawable motion paths with full point editing, easing graphs and a timeline.
 
 ## Install
 

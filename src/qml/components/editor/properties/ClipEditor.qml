@@ -4,10 +4,10 @@ import QtQuick.Layouts
 import Totm
 
 // Clip options editor shell: header (back plus preset name), Mode
-// section, per-preset option sections and the timing section. Back
-// routes through backPolicy (shape panel) with a clear-selection
-// fallback. Commits flow through DocAnim (undoable); the graph popup
-// edits easing via the timing section.
+// section (presets only; customs carry explicit from-to), per-preset
+// and per-custom option sections plus the timing section. Back routes
+// through backPolicy (shape panel) with a clear-selection fallback.
+// Path redraw routes through redrawPolicy (canvas draw mode).
 ScrollView {
     id: editor
 
@@ -15,8 +15,10 @@ ScrollView {
     required property int clipId
 
     property var backPolicy: null
+    property var redrawPolicy: null
 
     readonly property var clipData: editor.doc ? editor.doc.animClip(editor.clipId) : null
+    readonly property bool isCustom: !!editor.clipData && !!editor.doc && editor.doc.anim.presets.isCustom(editor.clipData.preset)
 
     contentWidth: availableWidth
     clip: true
@@ -85,6 +87,7 @@ ScrollView {
         PanelSection {
             width: parent.width
             title: qsTr("Mode")
+            visible: !editor.isCustom
 
             RowLayout {
                 spacing: 8
@@ -129,6 +132,59 @@ ScrollView {
             }
         }
 
+        // Custom Transform (scale / rotate / move).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && (editor.clipData.preset === "customScale" || editor.clipData.preset === "customRotate" || editor.clipData.preset === "customMove")
+
+            ClipCustomTransformOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
+        // Custom Style (opacity / color).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && (editor.clipData.preset === "customOpacity" || editor.clipData.preset === "customColor")
+
+            ClipCustomStyleOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
+        // Custom Other (hide / resize / corner / stroke).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && (editor.clipData.preset === "customHide" || editor.clipData.preset === "customResize" || editor.clipData.preset === "customCorner" || editor.clipData.preset === "customStroke")
+
+            ClipCustomOtherOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
+        // Motion path (closed / orient / redraw).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && editor.clipData.preset === "customPath"
+
+            ClipPathOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+                redrawPolicy: () => editor.redrawPath()
+            }
+        }
+
         // Timing and easing.
         PanelSection {
             width: parent.width
@@ -164,5 +220,12 @@ ScrollView {
     function setMode(mode) {
         if (editor.doc)
             editor.doc.setClipMode(editor.clipId, mode);
+    }
+
+    function redrawPath() {
+        if (editor.redrawPolicy)
+            editor.redrawPolicy();
+        else if (editor.doc)
+            editor.doc.clearClipSelection();
     }
 }

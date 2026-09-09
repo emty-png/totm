@@ -54,6 +54,29 @@ Item {
             d.clearClipSelection();
     }
 
+    // Motion-path draw entry from the Custom gallery (new clip).
+    function startPathDraw() {
+        var d = TabStore.documentFor(TabStore.currentIndex);
+        if (!d)
+            return;
+        var tops = d.selectedTops();
+        if (tops.length === 0)
+            return;
+        ToolStore.startPathDraw(tops[0].uid, -1);
+    }
+
+    // Redraw an existing Path clip's points (toggles preserved).
+    function redrawPathClip() {
+        var d = TabStore.documentFor(TabStore.currentIndex);
+        if (!d || d.anim.selectedClipIds.length === 0)
+            return;
+        var id = d.anim.selectedClipIds[d.anim.selectedClipIds.length - 1];
+        var c = d.animClip(id);
+        if (!c)
+            return;
+        ToolStore.startPathDraw(c.targetUid, id);
+    }
+
     // Animate tab needs a shape or a clip to show anything (mirrors the
     // design panel's empty state).
     function hasAnimContext() {
@@ -190,25 +213,21 @@ Item {
             ClipEditor {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
-                visible: animateSwitcher.mode === "preset" && rightPanel.clipSelected()
+                visible: rightPanel.clipSelected()
                 doc: TabStore.documentFor(TabStore.currentIndex)
                 clipId: rightPanel.selectedClipId()
                 backPolicy: () => rightPanel.goShapePanel()
+                redrawPolicy: () => rightPanel.redrawPathClip()
             }
 
-            // Custom keyframes live here; empty for now.
-            Text {
+            // Custom gallery: grouped from-to Add list plus custom clips.
+            // Path rows enter canvas draw mode through drawPolicy.
+            CustomGallery {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
-                visible: animateSwitcher.mode === "custom" && rightPanel.hasAnimContext()
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                wrapMode: Text.WordWrap
-                leftPadding: 16
-                rightPadding: 16
-                text: qsTr("Nothing to see here...")
-                font.pixelSize: 13
-                color: AppTheme.muted
+                visible: animateSwitcher.mode === "custom" && rightPanel.hasAnimContext() && !rightPanel.clipSelected()
+                doc: TabStore.documentFor(TabStore.currentIndex)
+                drawPolicy: () => rightPanel.startPathDraw()
             }
         }
     }

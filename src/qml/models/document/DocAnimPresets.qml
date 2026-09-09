@@ -62,7 +62,14 @@ QtObject {
     }
 
     function presetIds() {
-        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customHide", "customResize", "customCorner", "customStroke", "customPath"];
+    }
+
+    // Custom from-to clips reuse the preset pipeline (timeline, undo,
+    // easing, video-safe plain data). Later clips win per property like
+    // presets, matching Figma Smart Animate merge behavior.
+    function isCustom(presetId) {
+        return String(presetId).slice(0, 6) === "custom";
     }
 
     function presetName(presetId) {
@@ -80,6 +87,26 @@ QtObject {
             return qsTr("Twist");
         if (presetId === "movescale")
             return qsTr("Move & Scale");
+        if (presetId === "customScale")
+            return qsTr("Scale");
+        if (presetId === "customRotate")
+            return qsTr("Rotate");
+        if (presetId === "customMove")
+            return qsTr("Move");
+        if (presetId === "customOpacity")
+            return qsTr("Opacity");
+        if (presetId === "customColor")
+            return qsTr("Color");
+        if (presetId === "customHide")
+            return qsTr("Hide / Show");
+        if (presetId === "customResize")
+            return qsTr("Resize");
+        if (presetId === "customCorner")
+            return qsTr("Corner Radius");
+        if (presetId === "customStroke")
+            return qsTr("Stroke");
+        if (presetId === "customPath")
+            return qsTr("Path");
         return qsTr("Fade");
     }
 
@@ -114,6 +141,61 @@ QtObject {
                 distance: 200,
                 scale: 0
             };
+        if (presetId === "customScale")
+            return {
+                from: 0,
+                to: 1
+            };
+        if (presetId === "customRotate")
+            return {
+                from: 0,
+                to: 90
+            };
+        if (presetId === "customMove")
+            return {
+                fromX: 0,
+                fromY: 0,
+                toX: 200,
+                toY: 0
+            };
+        if (presetId === "customOpacity")
+            return {
+                from: 0,
+                to: 1
+            };
+        if (presetId === "customColor")
+            return {
+                from: "#000000",
+                to: "#ff0000"
+            };
+        if (presetId === "customHide")
+            return {
+                fromVisible: true,
+                toVisible: false
+            };
+        if (presetId === "customResize")
+            return {
+                fromW: 100,
+                fromH: 100,
+                toW: 200,
+                toH: 200
+            };
+        if (presetId === "customCorner")
+            return {
+                from: 0,
+                to: 24
+            };
+        if (presetId === "customStroke")
+            return {
+                from: 0,
+                to: 4
+            };
+        if (presetId === "customPath")
+            return {
+                pts: [],
+                closed: false,
+                orient: false
+            };
         return {};
     }
 
@@ -130,6 +212,35 @@ QtObject {
         if (isNaN(n))
             return fallback;
         return Math.min(hi, Math.max(lo, n));
+    }
+
+    function normalizeHex(v, fallback) {
+        var t = String(v !== undefined ? v : "").trim().toLowerCase();
+        if (t.charAt(0) === "#")
+            t = t.slice(1);
+        if (/^[0-9a-f]{3}$/.test(t))
+            t = t.charAt(0) + t.charAt(0) + t.charAt(1) + t.charAt(1) + t.charAt(2) + t.charAt(2);
+        if (/^[0-9a-f]{6}$/.test(t))
+            return "#" + t;
+        return fallback;
+    }
+
+    function normalizePathPts(raw) {
+        var out = [];
+        var list = raw || [];
+        for (var i = 0; i < list.length; i++) {
+            var p = list[i] || {};
+            out.push({
+                x: clampNum(p.x, 0, -4000, 4000),
+                y: clampNum(p.y, 0, -4000, 4000),
+                smooth: p.smooth === true,
+                inX: clampNum(p.inX !== undefined ? p.inX : p.x, 0, -4000, 4000),
+                inY: clampNum(p.inY !== undefined ? p.inY : p.y, 0, -4000, 4000),
+                outX: clampNum(p.outX !== undefined ? p.outX : p.x, 0, -4000, 4000),
+                outY: clampNum(p.outY !== undefined ? p.outY : p.y, 0, -4000, 4000)
+            });
+        }
+        return out;
     }
 
     // Merges user options over defaults, coercing enums and ranges so
@@ -156,6 +267,61 @@ QtObject {
                 direction: slideDirection(r.direction !== undefined ? r.direction : "left"),
                 distance: clampNum(r.distance !== undefined ? r.distance : 200, 200, 0, 2000),
                 scale: clampNum(r.scale !== undefined ? r.scale : 0, 0, 0, 150)
+            };
+        if (presetId === "customScale")
+            return {
+                from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 10),
+                to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 10)
+            };
+        if (presetId === "customRotate")
+            return {
+                from: clampNum(r.from !== undefined ? r.from : 0, 0, -1440, 1440),
+                to: clampNum(r.to !== undefined ? r.to : 90, 90, -1440, 1440)
+            };
+        if (presetId === "customMove")
+            return {
+                fromX: clampNum(r.fromX !== undefined ? r.fromX : 0, 0, -2000, 2000),
+                fromY: clampNum(r.fromY !== undefined ? r.fromY : 0, 0, -2000, 2000),
+                toX: clampNum(r.toX !== undefined ? r.toX : 200, 200, -2000, 2000),
+                toY: clampNum(r.toY !== undefined ? r.toY : 0, 0, -2000, 2000)
+            };
+        if (presetId === "customOpacity")
+            return {
+                from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 1),
+                to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 1)
+            };
+        if (presetId === "customColor")
+            return {
+                from: normalizeHex(r.from !== undefined ? r.from : "#000000", "#000000"),
+                to: normalizeHex(r.to !== undefined ? r.to : "#ff0000", "#ff0000")
+            };
+        if (presetId === "customHide")
+            return {
+                fromVisible: r.fromVisible === undefined ? true : !!r.fromVisible,
+                toVisible: r.toVisible === undefined ? false : !!r.toVisible
+            };
+        if (presetId === "customResize")
+            return {
+                fromW: clampNum(r.fromW !== undefined ? r.fromW : 100, 100, 1, 4000),
+                fromH: clampNum(r.fromH !== undefined ? r.fromH : 100, 100, 1, 4000),
+                toW: clampNum(r.toW !== undefined ? r.toW : 200, 200, 1, 4000),
+                toH: clampNum(r.toH !== undefined ? r.toH : 200, 200, 1, 4000)
+            };
+        if (presetId === "customCorner")
+            return {
+                from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 500),
+                to: clampNum(r.to !== undefined ? r.to : 24, 24, 0, 500)
+            };
+        if (presetId === "customStroke")
+            return {
+                from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 100),
+                to: clampNum(r.to !== undefined ? r.to : 4, 4, 0, 100)
+            };
+        if (presetId === "customPath")
+            return {
+                pts: normalizePathPts(r.pts),
+                closed: r.closed === true,
+                orient: r.orient === true
             };
         return {};
     }

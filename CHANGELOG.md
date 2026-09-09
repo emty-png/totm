@@ -7,6 +7,8 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ### Added
 
+* Custom animations — the animate tab's Custom mode is real now: grouped Add list (Transform: Scale/Rotate/Move, Style: Opacity/Color, Other: Hide-Show/Resize/Corner Radius/Stroke) creating from-to clips that reuse the whole preset pipeline (timeline lanes, clip editor with per-type from-to fields, easing graph, undo, video-safe plain data). New clips seed From from your live selection so they start jump-free, and overlapping customs resolve later-wins-per-property like Figma.
+* Motion path animation — draw a trajectory on the canvas (pen-like: click points, drag to bend, snapping, Alt frees), the shape follows it by arc length with optional follow-rotation and closed loops. Selected paths preview right on the canvas, and Edit path loads the trajectory for full point surgery (drag anchors/handles, double-click to smooth/sharpen, click an edge to insert, Delete to remove, wipe clean to start over). Enter commits once, Esc bails with nothing lost.
 * Pen tool — vector path drawing (click to add points, drag for symmetric bezier handles, close by clicking first point, double-click/Enter to part, Esc to finish) plus point editing (double-click a pen shape, drag anchors/handles with snapping, click a segment to insert, Delete to remove, double-click anchor to toggle smooth/corner).
 * Text shapes — click for auto-size / drag for fixed box, double-click inline WYSIWYG edit on the canvas in one undo entry, typography section (family, size, weight, letter spacing, h/v align). Icons centralized as `icons/AppIcon.qml`.
 * Figma-style color picker — SV pad + hue slider + hex input with live preview, wired into fill/stroke with undo-coalesced scrubs.
@@ -28,6 +30,7 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ### Fixed
 
+* Typography panel warnings (`Unable to assign [undefined]`) when selecting groups — group snapshots carry geometry only, so `commonOf` now reports missing roles as mixed instead of leaking undefined into number fields.
 * Layer eye/lock toggles show on row hover like a normal app.
 * Corrupt library no longer nukes your stuff, it gets archived and you get a fresh default workspace.
 * Second instance can't silently corrupt the library anymore (lockfile + warning banner).

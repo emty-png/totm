@@ -56,6 +56,8 @@ qt_add_qml_module(totm
         qml/components/editor/canvas/CanvasResizePolicy.qml
         qml/components/editor/canvas/PenTool.qml
         qml/components/editor/canvas/PenOverlay.qml
+        qml/components/editor/canvas/PathTool.qml
+        qml/components/editor/canvas/PathOverlay.qml
         qml/components/editor/canvas/PenEdit.qml
         qml/components/editor/canvas/PenEditOverlay.qml
         qml/components/editor/canvas/ShapeLayer.qml
@@ -79,6 +81,11 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ColorPickerPopup.qml
         qml/components/editor/properties/PresetCard.qml
         qml/components/editor/properties/PresetGallery.qml
+        qml/components/editor/properties/CustomGallery.qml
+        qml/components/editor/properties/ClipCustomTransformOptions.qml
+        qml/components/editor/properties/ClipCustomStyleOptions.qml
+        qml/components/editor/properties/ClipCustomOtherOptions.qml
+        qml/components/editor/properties/ClipPathOptions.qml
         qml/components/editor/properties/ShapeAnimsPanel.qml
         qml/components/editor/properties/ClipEditor.qml
         qml/components/editor/properties/SegOption.qml

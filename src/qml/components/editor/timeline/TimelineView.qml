@@ -331,7 +331,7 @@ Item {
                 x: tracks.contentX + (tracks.width - width) / 2
                 y: timeline.tracksTop + (tracks.height - timeline.tracksTop - height) / 2
                 visible: timeline.lanes.length === 0
-                text: qsTr("Apply a preset from the gallery to begin...")
+                text: qsTr("Apply a preset or custom animation to begin...")
                 font.pixelSize: 13
                 color: AppTheme.muted
             }
