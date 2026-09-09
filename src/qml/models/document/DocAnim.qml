@@ -30,7 +30,7 @@ QtObject {
     property var presets: DocAnimPresets {
         doc: anim.doc
     }
-    property var sampler: AnimSample {}
+    property var sampler: DocAnimSample {}
 
     function clipById(id) {
         for (var i = 0; i < anim.clips.length; i++) {

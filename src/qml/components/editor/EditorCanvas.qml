@@ -5,7 +5,7 @@ import Totm
 // Select-drag marquees, shapes-drag draws, pen clicks/drags vectors,
 // handles resize the selection. Moves, resizes and creations snap
 // within 5 screen px; Alt suspends. Hidden skips input, locked swallows
-// presses. See docs/canvas-interactions.md.
+// presses.
 Item {
     id: canvas
 

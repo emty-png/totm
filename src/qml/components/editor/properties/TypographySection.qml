@@ -144,7 +144,7 @@ PanelSection {
         RowLayout {
             spacing: 8
 
-            SegOption {
+            SegmentedOption {
                 label: qsTr("Auto")
                 active: section.snapshot.commonOf("lineHeightAuto").value === true
                 onClicked: section.commit("lineHeightAuto", !section.isAutoHeight())
@@ -201,25 +201,25 @@ PanelSection {
         RowLayout {
             spacing: 8
 
-            AlignButton {
+            AlignOption {
                 mode: "hLeft"
                 active: section.alignIs("hAlign", "left")
                 onClicked: section.commit("hAlign", "left")
             }
 
-            AlignButton {
+            AlignOption {
                 mode: "hCenter"
                 active: section.alignIs("hAlign", "center")
                 onClicked: section.commit("hAlign", "center")
             }
 
-            AlignButton {
+            AlignOption {
                 mode: "hRight"
                 active: section.alignIs("hAlign", "right")
                 onClicked: section.commit("hAlign", "right")
             }
 
-            AlignButton {
+            AlignOption {
                 mode: "justify"
                 active: section.alignIs("hAlign", "justify")
                 onClicked: section.commit("hAlign", "justify")
@@ -229,19 +229,19 @@ PanelSection {
         RowLayout {
             spacing: 8
 
-            AlignButton {
+            AlignOption {
                 mode: "vTop"
                 active: section.alignIs("vAlign", "top")
                 onClicked: section.commit("vAlign", "top")
             }
 
-            AlignButton {
+            AlignOption {
                 mode: "vMiddle"
                 active: section.alignIs("vAlign", "middle")
                 onClicked: section.commit("vAlign", "middle")
             }
 
-            AlignButton {
+            AlignOption {
                 mode: "vBottom"
                 active: section.alignIs("vAlign", "bottom")
                 onClicked: section.commit("vAlign", "bottom")

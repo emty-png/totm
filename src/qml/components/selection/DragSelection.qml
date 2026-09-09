@@ -2,8 +2,7 @@ import QtQuick
 
 // Marquee selection logic core: no visuals, no input handling.
 // Owns the drag state machine (press/move/release with threshold) and
-// reports the normalized rect. Pair with any MouseArea + rect visual,
-// or use DragSelectionBox for the batteries-included overlay.
+// reports the normalized rect. Pair with any MouseArea + rect visual.
 // (State is flat typed properties — not a holder object — so member
 // access stays statically resolvable.)
 QtObject {

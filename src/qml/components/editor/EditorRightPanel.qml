@@ -188,7 +188,7 @@ Item {
 
             // Shape panel: "+ New Animation" plus this selection's clips.
             // Shared with text: clip cards are preset-agnostic.
-            ShapeAnimsPanel {
+            ShapeAnimationsPanel {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
                 visible: animateSwitcher.mode === "preset" && !rightPanel.clipSelected() && rightPanel.shapeSelected() && !rightPanel.pickingPreset

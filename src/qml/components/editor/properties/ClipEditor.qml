@@ -92,13 +92,13 @@ ScrollView {
             RowLayout {
                 spacing: 8
 
-                SegOption {
+                SegmentedOption {
                     label: qsTr("In")
                     active: !!editor.clipData && editor.clipData.mode === "in"
                     onClicked: editor.setMode("in")
                 }
 
-                SegOption {
+                SegmentedOption {
                     label: qsTr("Out")
                     active: !!editor.clipData && editor.clipData.mode === "out"
                     onClicked: editor.setMode("out")
@@ -190,7 +190,7 @@ ScrollView {
             width: parent.width
             title: qsTr("Animation")
 
-            ClipTimingSection {
+            ClipTimingOptions {
                 Layout.fillWidth: true
                 doc: editor.doc
                 clipId: editor.clipId

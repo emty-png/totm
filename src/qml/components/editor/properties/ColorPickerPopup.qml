@@ -7,7 +7,7 @@ import Totm
 // preview. Swatch-click opens via openFor(color, anchor, x, y); the hex
 // field stays for typing. Drags stream committed() live between
 // scrubStarted and scrubFinished so the caller coalesces one undo entry
-// (same contract as NumberField scrub and BezierCanvas handles).
+// (same contract as NumberField scrub and EasingGraph handles).
 // Opening and closing without touching anything commits nothing.
 // Window-clamped: parented to the window overlay and placed from the
 // click point (below when it fits, above otherwise), so the popup can

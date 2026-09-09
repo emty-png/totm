@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import Totm
 
 // Line-drawn alignment button (no icon font needed): three bars
-// arranged per mode. Styled like SegOption (inverted when active).
+// arranged per mode. Styled like SegmentedOption (inverted when active).
 // Modes: hLeft | hCenter | hRight | justify | vTop | vMiddle | vBottom.
 Rectangle {
     id: btn

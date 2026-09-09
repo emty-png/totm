@@ -42,11 +42,11 @@ qt_add_qml_module(totm
         qml/models/document/DocPen.qml
         qml/models/document/DocCorners.qml
         qml/models/document/DocHistory.qml
-        qml/models/document/AnimSample.qml
+        qml/models/document/DocAnimSample.qml
         qml/models/document/DocAnimPresets.qml
         qml/models/document/DocAnim.qml
         # Canvas + snapping
-        qml/components/editor/SnapEngine.qml
+        qml/components/editor/snap/SnapEngine.qml
         qml/components/editor/snap/SnapTargets.qml
         qml/components/editor/snap/SnapEdge.qml
         qml/components/editor/snap/SnapSpacing.qml
@@ -74,7 +74,7 @@ qt_add_qml_module(totm
         # Design panel
         qml/components/editor/properties/SelectionSnapshot.qml
         qml/components/editor/properties/PanelDropdown.qml
-        qml/components/editor/properties/AlignButton.qml
+        qml/components/editor/properties/AlignOption.qml
         qml/components/editor/properties/TypographySection.qml
         qml/components/editor/properties/ColorSVPad.qml
         qml/components/editor/properties/ColorHueSlider.qml
@@ -86,13 +86,13 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ClipCustomStyleOptions.qml
         qml/components/editor/properties/ClipCustomOtherOptions.qml
         qml/components/editor/properties/ClipPathOptions.qml
-        qml/components/editor/properties/ShapeAnimsPanel.qml
+        qml/components/editor/properties/ShapeAnimationsPanel.qml
         qml/components/editor/properties/ClipEditor.qml
-        qml/components/editor/properties/SegOption.qml
+        qml/components/editor/properties/SegmentedOption.qml
         qml/components/editor/properties/ClipSlideOptions.qml
         qml/components/editor/properties/ClipSpinOptions.qml
-        qml/components/editor/properties/ClipTimingSection.qml
-        qml/components/editor/properties/BezierCanvas.qml
+        qml/components/editor/properties/ClipTimingOptions.qml
+        qml/components/editor/properties/EasingGraph.qml
         qml/components/editor/properties/GraphEditorPopup.qml
         qml/components/editor/properties/PanelSection.qml
         qml/components/editor/properties/PanelIconButton.qml
@@ -114,7 +114,6 @@ qt_add_qml_module(totm
         # Icons (global glyph set)
         qml/components/icons/AppIcon.qml
         # Selection
-        qml/components/selection/DragSelectionBox.qml
         qml/components/selection/DragSelection.qml
         # Editor shell
         qml/components/editor/EditorLeftPanel.qml
@@ -137,19 +136,21 @@ qt_add_qml_module(totm
         # Layers (view + context)
         qml/components/editor/layers/LayersView.qml
         qml/components/editor/layers/LayersRow.qml
-        qml/components/editor/layers/ContextMenuItem.qml
         qml/components/editor/layers/LayersContextMenu.qml
+        # Menu (shared rows)
+        qml/components/menu/MenuItem.qml
+        qml/components/menu/ToolbarMenuItem.qml
         # Toolbar
         qml/components/toolbar/CanvasToolbar.qml
         qml/components/toolbar/ToolbarButton.qml
-        qml/components/toolbar/ToolbarMenuItem.qml
-        # Views
+        # Home feature components (screens live under views/)
+        qml/components/home/WorkspacePanel.qml
+        qml/components/home/WorkspaceRow.qml
+        qml/components/home/DesignCard.qml
+        qml/components/home/DesignCardPreview.qml
+        qml/components/home/DesignContextMenu.qml
+        # Views (screen roots only)
         qml/views/home/HomeView.qml
-        qml/views/home/HomeSideBar.qml
-        qml/views/home/WorkspaceRow.qml
-        qml/views/home/DesignCard.qml
-        qml/views/home/DesignCardPreview.qml
-        qml/views/home/DesignContextMenu.qml
         qml/views/editor/EditorView.qml
 )
 

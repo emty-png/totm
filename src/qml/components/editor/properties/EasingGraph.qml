@@ -172,7 +172,7 @@ Item {
         }
     }
 
-    AnimSample {
+    DocAnimSample {
         id: sampler
     }
 

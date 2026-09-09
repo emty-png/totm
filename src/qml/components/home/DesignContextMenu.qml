@@ -91,7 +91,7 @@ Item {
         contentItem: ColumnLayout {
             spacing: 2
 
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Rename")
                 onClicked: {
                     if (menu.renamePolicy)
@@ -99,7 +99,7 @@ Item {
                     menu.closeAll();
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 label: menu.contextStarred ? qsTr("Unstar") : qsTr("Star")
                 onClicked: {
                     if (menu.starPolicy)
@@ -107,7 +107,7 @@ Item {
                     menu.closeAll();
                 }
             }
-            ContextMenuItem {
+            MenuItem {
                 label: qsTr("Delete")
                 hint: menu.contextCount > 1 ? String(menu.contextCount) : ""
                 onClicked: {
