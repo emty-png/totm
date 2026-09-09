@@ -12,6 +12,9 @@ QtObject {
     required property var canvas
     required property var snap
 
+    // Segment curves (single source shared with the path tool).
+    property var bezier: BezierMath {}
+
     property var session: []
     property var active: []
     property bool dragging: false
@@ -379,15 +382,6 @@ QtObject {
     }
 
     function segSvg(a, b) {
-        var ax = Number(a.x) || 0, ay = Number(a.y) || 0;
-        var bx = Number(b.x) || 0, by = Number(b.y) || 0;
-        var aSmooth = a.smooth === true, bSmooth = b.smooth === true;
-        if (!aSmooth && !bSmooth)
-            return " L " + bx + "," + by;
-        var c1x = aSmooth ? (a.outX !== undefined ? Number(a.outX) : ax) : ax;
-        var c1y = aSmooth ? (a.outY !== undefined ? Number(a.outY) : ay) : ay;
-        var c2x = bSmooth ? (b.inX !== undefined ? Number(b.inX) : bx) : bx;
-        var c2y = bSmooth ? (b.inY !== undefined ? Number(b.inY) : by) : by;
-        return " C " + c1x + "," + c1y + " " + c2x + "," + c2y + " " + bx + "," + by;
+        return tool.bezier.segSvg(a, b);
     }
 }

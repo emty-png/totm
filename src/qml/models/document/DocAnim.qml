@@ -14,18 +14,22 @@ QtObject {
     property var clips: []
     property int nextClipId: 1
 
-    property bool playing: false
-    property real currentTime: 0
     property var selectedClipIds: []
     // Clip-data revision, bumped by silent in-place nudges (lane drags)
     // that deliberately skip touch(). Panels read this so values follow
     // live; lane delegates never bind it, so no model rebuilds mid-drag.
     property int clipRev: 0
-    // Pre-play values keyed by node uid. Non-null while a preview frame
-    // is on screen (playing or paused): writes stay silent, saves and
-    // undo read through this instead of the live frame.
-    property var playBase: null
-    property double lastTick: 0
+
+    // Playback transport owns play state, playhead and pre-play values.
+    // Aliases keep every reader (timeline, galleries, canvas, history)
+    // working unchanged, including direct writes.
+    property var transport: DocTransport {
+        id: transportState
+        doc: anim.doc
+    }
+    property alias playing: transportState.playing
+    property alias currentTime: transportState.currentTime
+    property alias playBase: transportState.playBase
 
     property var presets: DocAnimPresets {
         doc: anim.doc
@@ -297,131 +301,24 @@ QtObject {
         anim.sampler.applySample(doc, map);
     }
 
-    // Transport. play() captures once (resume keeps the old base);
-    // pause() freezes the frame; stop() restores base and marks dirty
-    // so the next autosave flush writes base values, never a frame.
+    // Transport pass-throughs (state + clockwork live in DocTransport).
     function play() {
-        if (anim.playing)
-            return;
-        if (!anim.playBase)
-            anim.playBase = captureBase();
-        anim.lastTick = 0;
-        anim.playing = true;
+        transportState.play();
     }
-
     function pause() {
-        anim.playing = false;
+        transportState.pause();
     }
-
     function stop() {
-        if (!anim.playBase && anim.currentTime === 0) {
-            anim.playing = false;
-            return;
-        }
-        anim.playing = false;
-        restoreBase();
-        anim.currentTime = 0;
-        doc.touch();
+        transportState.stop();
     }
-
-    // One frame step, driven by the editor's 16ms timer. Wall-clock dt
-    // clamped so tab-switch stalls never jump the playhead.
     function tick() {
-        if (!anim.playing)
-            return;
-        var now = Date.now();
-        var dt = anim.lastTick > 0 ? (now - anim.lastTick) / 1000 : 0.016;
-        anim.lastTick = now;
-        dt = Math.min(0.1, Math.max(0, dt));
-        var d = Math.max(0.5, anim.duration);
-        var t = anim.currentTime + dt;
-        if (t >= d)
-            t = t % d;
-        anim.currentTime = t;
-        anim.sampler.applySample(doc, anim.sampler.sampleAnim(doc, t, anim.playBase));
+        transportState.tick();
     }
-
-    // Jump the playhead (ruler click/drag). Captures base on first use
-    // so seeking previews without a transport press; silent like ticks.
     function seek(t) {
-        var d = Math.max(0.5, anim.duration);
-        var nt = Math.min(d, Math.max(0, Number(t) || 0));
-        if (!anim.playBase)
-            anim.playBase = captureBase();
-        anim.currentTime = nt;
-        anim.sampler.applySample(doc, anim.sampler.sampleAnim(doc, nt, anim.playBase));
+        transportState.seek(t);
     }
-
-    // Ends a preview from an edit path (history settles before every
-    // mutation): base returns silently, playhead stays for context.
     function settlePreview() {
-        if (!anim.playBase)
-            return;
-        anim.playing = false;
-        restoreBase();
-    }
-
-    function captureBase() {
-        var out = {};
-        var leaves = doc.tree.allLeaves();
-        for (var i = 0; i < leaves.length; i++) {
-            var n = leaves[i];
-            var entry = {
-                x: n.x,
-                y: n.y,
-                w: n.w,
-                h: n.h,
-                rotation: n.rotation,
-                opacity: n.opacity,
-                fontSize: n.fontSize,
-                shapeType: n.shapeType,
-                fill: String(n.fill),
-                visible: n.visible,
-                radius: n.radius,
-                strokeWidth: n.strokeWidth,
-                independentCorners: n.independentCorners
-            };
-            if (n.shapeType === "pen")
-                entry.pathData = doc.factory._copyPath(n.pathData);
-            if (n.independentCorners)
-                entry.cornerRadii = (n.cornerRadii || []).slice();
-            out[n.uid] = entry;
-        }
-        return out;
-    }
-
-    function restoreBase() {
-        var base = anim.playBase;
-        anim.playBase = null;
-        anim.lastTick = 0;
-        if (!base)
-            return;
-        for (var uid in base) {
-            var n = doc.findNode(Number(uid));
-            if (!n || n.kind !== "shape")
-                continue;
-            var b = base[uid];
-            n.x = b.x;
-            n.y = b.y;
-            n.w = b.w;
-            n.h = b.h;
-            n.rotation = b.rotation;
-            n.opacity = b.opacity;
-            if (b.fill !== undefined)
-                n.fill = b.fill;
-            if (b.visible !== undefined)
-                n.visible = b.visible;
-            if (b.radius !== undefined)
-                n.radius = b.radius;
-            if (b.strokeWidth !== undefined)
-                n.strokeWidth = b.strokeWidth;
-            if (b.fontSize !== undefined && n.shapeType === "text")
-                n.fontSize = b.fontSize;
-            if (b.pathData !== undefined && n.shapeType === "pen")
-                n.pathData = doc.factory._copyPath(b.pathData);
-            if (b.cornerRadii !== undefined && n.independentCorners)
-                n.cornerRadii = b.cornerRadii.slice();
-        }
+        transportState.settlePreview();
     }
 
     // Plain-data snapshot for saves and undo. Clips deep-copy: lane
@@ -482,10 +379,7 @@ QtObject {
 
     function restoreData(d) {
         var s = d || {};
-        anim.playing = false;
-        anim.playBase = null;
-        anim.lastTick = 0;
-        anim.currentTime = 0;
+        transportState.reset();
         anim.selectedClipIds = [];
         var dur = s.duration > 0 ? Math.min(60, s.duration) : 4.0;
         anim.duration = dur;

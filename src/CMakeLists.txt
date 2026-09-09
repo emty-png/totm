@@ -44,6 +44,10 @@ qt_add_qml_module(totm
         qml/models/document/DocHistory.qml
         qml/models/document/DocAnimSample.qml
         qml/models/document/DocAnimPresets.qml
+        qml/models/document/DocCustomDefaults.qml
+        qml/models/document/DocTransport.qml
+        qml/models/document/DocEasing.qml
+        qml/models/document/DocPathSample.qml
         qml/models/document/DocAnim.qml
         # Canvas + snapping
         qml/components/editor/snap/SnapEngine.qml
@@ -51,6 +55,9 @@ qt_add_qml_module(totm
         qml/components/editor/snap/SnapEdge.qml
         qml/components/editor/snap/SnapSpacing.qml
         qml/components/editor/snap/SnapCombinators.qml
+        qml/components/editor/canvas/BezierMath.qml
+        qml/components/editor/canvas/ShapeDrawTool.qml
+        qml/components/editor/canvas/TextEditor.qml
         qml/components/editor/canvas/CanvasCamera.qml
         qml/components/editor/canvas/CanvasSelectPolicy.qml
         qml/components/editor/canvas/CanvasResizePolicy.qml
@@ -123,6 +130,7 @@ qt_add_qml_module(totm
         qml/components/editor/timeline/TimelineView.qml
         qml/components/editor/timeline/TimelineLane.qml
         qml/components/editor/timeline/TimelineRuler.qml
+        qml/components/editor/timeline/TimelineTransport.qml
         qml/components/editor/EditorBottomPanel.qml
         qml/components/editor/EditorCanvas.qml
         qml/components/editor/properties/DesignPanel.qml
@@ -131,6 +139,7 @@ qt_add_qml_module(totm
         qml/components/fields/HexField.qml
         qml/components/fields/RenameField.qml
         qml/components/editor/shapes/ShapeItem.qml
+        qml/components/editor/shapes/ShapeGeometry.qml
         qml/components/editor/shapes/TextGlyphs.qml
         qml/components/editor/SelectionHandles.qml
         # Layers (view + context)
@@ -151,6 +160,7 @@ qt_add_qml_module(totm
         qml/components/home/DesignContextMenu.qml
         # Views (screen roots only)
         qml/views/home/HomeView.qml
+        qml/views/home/HomeSelection.qml
         qml/views/editor/EditorView.qml
 )
 
