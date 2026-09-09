@@ -7,6 +7,10 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ### Added
 
+* Pen tool — vector path drawing (click to add points, drag for symmetric bezier handles, close by clicking first point, double-click/Enter to part, Esc to finish) plus point editing (double-click a pen shape, drag anchors/handles with snapping, click a segment to insert, Delete to remove, double-click anchor to toggle smooth/corner).
+* Text shapes — click for auto-size / drag for fixed box, double-click inline WYSIWYG edit on the canvas in one undo entry, typography section (family, size, weight, letter spacing, h/v align). Icons centralized as `icons/AppIcon.qml`.
+* Figma-style color picker — SV pad + hue slider + hex input with live preview, wired into fill/stroke with undo-coalesced scrubs.
+* Text animation presets + `appear` preset — Basic/Slide/Scale galleries for text with live thumbnails, fontSize-aware slide/movescale so text reflows, no auto-resize during playback.
 * Animation editing, the big one — preset gallery with live thumbnails, per-shape clips, clip editor (timing, easing, slide/spin options), bezier graph editor popup, and a timeline with lanes + ruler + playback transport. Scenes now carry an `anim` blob (library schema v2) that the future video renderer will read.
 * Undo/redo — full per-tab history, drag gestures coalesce into single entries, toolbar buttons + shortcuts. Text fields keep their own native undo so typing never eats your history.
 * Persistent theme — new `SettingsStore` backend (`QSettings`, separate from `library.json`). First run follows your OS, the first toggle pins your choice forever.
@@ -35,4 +39,4 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ## [0.1.0] - 2026-09-06
 
-* Initial prototype: infinite canvas, shapes, layers/groups, snapping, design panel, tabs, theme.
+* Initial prototype: canvas, shapes, layers/groups, snapping, design panel, tabs, theme.

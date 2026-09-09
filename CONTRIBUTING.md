@@ -29,7 +29,7 @@ src/
 
 ## Ground rules
 
-* QML-only for app logic in v1. Heavy math lives in small `QtObject` helpers under `models/document/`, `canvas/`, `snap/`, `layers/`, `properties/design/` — no `.js` libraries, no new C++ unless discussed.
+* QML for UI + app logic in v1. Heavy math lives in small `QtObject` helpers under `models/document/`, `canvas/`, `snap/`, `layers/`, `properties/` — no `.js` libraries. All storing/persistence lives in the C++ backend (`backend/library/`, `backend/settings/`) — no QML-side file IO, no new C++ stores unless discussed.
 * One responsibility per file, aim ≤ 200 lines. `Document.qml` / `EditorCanvas.qml` are thin facades that delegate.
 * Follow Qt6 QML coding conventions: ordered attributes with blank-line groups, `required` props for external data, explicit `id` access, no outer-id leaks into delegates (use policy callbacks wired in `onItemAdded`).
 * Human comments only: explain *why* and contracts (units, invariants). Delete what-the-code-says and lint war stories.
@@ -49,5 +49,6 @@ src/
 ## What not to do
 
 * Don't add hex colors outside `AppTheme` (except `selection`/`snapGuide` accents).
+* Don't persist from QML — all storing goes through the backend (`LibraryStore`, `SettingsStore`).
 * Don't grow `Document.qml` / `EditorCanvas.qml` back into god files — add a helper instead.
 * Don't commit `build/`, `.qt/`, `*.user`.

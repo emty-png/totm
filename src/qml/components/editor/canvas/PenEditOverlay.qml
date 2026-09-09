@@ -4,7 +4,8 @@ import Totm
 
 // Edit-mode points for the pen node under PenEdit. Anchors stay
 // square/circle by smooth flag, selected fill blue, handles only for
-// the selection. Reads doc.rev so drags repaint without new props.
+// the selection, hover rings + edge-insert ghost while idle. Reads
+// doc.rev so drags repaint without new props.
 Item {
     id: overlay
 
@@ -84,6 +85,54 @@ Item {
         return false;
     }
 
+    // Hover affordances while idle (hidden mid-drag so the live geometry
+    // reads clean). Hover carries kind point/handle/edge; positions look
+    // up the node so rings track drags via doc.rev.
+    readonly property bool hoverIdle: overlay.tool && overlay.tool.drag === null && overlay.tool.hover !== null
+    function hoverPoint() {
+        if (overlay.doc)
+            overlay.doc.rev;
+        if (!overlay.hoverIdle || overlay.tool.hover.kind !== "point")
+            return null;
+        var n = overlay.editNode();
+        var h = overlay.tool.hover;
+        var path = n ? (n.pathData || []) : [];
+        if (!path[h.sub] || !path[h.sub].pts[h.idx])
+            return null;
+        var p = path[h.sub].pts[h.idx] || {};
+        return {
+            x: Number(p.x) || 0,
+            y: Number(p.y) || 0,
+            smooth: p.smooth === true,
+            selected: overlay.isSel(h.sub, h.idx)
+        };
+    }
+    function hoverHandle() {
+        if (overlay.doc)
+            overlay.doc.rev;
+        if (!overlay.hoverIdle || overlay.tool.hover.kind !== "handle")
+            return null;
+        var n = overlay.editNode();
+        var h = overlay.tool.hover;
+        var path = n ? (n.pathData || []) : [];
+        if (!path[h.sub] || !path[h.sub].pts[h.idx])
+            return null;
+        var p = path[h.sub].pts[h.idx] || {};
+        if (p.smooth !== true)
+            return null;
+        var hx = h.which === "in" ? (p.inX !== undefined ? Number(p.inX) : Number(p.x)) : (p.outX !== undefined ? Number(p.outX) : Number(p.x));
+        var hy = h.which === "in" ? (p.inY !== undefined ? Number(p.inY) : Number(p.y)) : (p.outY !== undefined ? Number(p.outY) : Number(p.y));
+        return {
+            x: hx || 0,
+            y: hy || 0
+        };
+    }
+    function hoverEdge() {
+        if (!overlay.hoverIdle || overlay.tool.hover.kind !== "edge" || !overlay.tool.hover.pt)
+            return null;
+        return overlay.tool.hover.pt;
+    }
+
     Item {
         x: overlay.offsetX
         y: overlay.offsetY
@@ -153,6 +202,49 @@ Item {
                 border.width: 1.5 / overlay.cz
                 border.color: AppTheme.selection
             }
+        }
+
+        // Point hover ring (skips selected: those already read blue).
+        Rectangle {
+            property var hp: overlay.hoverPoint()
+            visible: hp !== null && hp.selected !== true
+            x: hp ? hp.x - width / 2 : 0
+            y: hp ? hp.y - height / 2 : 0
+            width: overlay.dot + 4 / overlay.cz
+            height: overlay.dot + 4 / overlay.cz
+            radius: hp && hp.smooth ? width / 2 : 2 / overlay.cz
+            color: "transparent"
+            border.width: 1.5 / overlay.cz
+            border.color: AppTheme.selection
+        }
+
+        // Handle hover swell.
+        Rectangle {
+            property var hh: overlay.hoverHandle()
+            visible: hh !== null
+            x: hh ? hh.x - width / 2 : 0
+            y: hh ? hh.y - height / 2 : 0
+            width: overlay.small + 4 / overlay.cz
+            height: overlay.small + 4 / overlay.cz
+            radius: width / 2
+            color: "transparent"
+            border.width: 1.5 / overlay.cz
+            border.color: AppTheme.selection
+        }
+
+        // Edge-insert ghost: what the click would add.
+        Rectangle {
+            property var he: overlay.hoverEdge()
+            visible: he !== null
+            x: he ? he.x - width / 2 : 0
+            y: he ? he.y - height / 2 : 0
+            width: overlay.dot
+            height: overlay.dot
+            radius: width / 2
+            color: "#ffffff"
+            opacity: 0.9
+            border.width: 1.5 / overlay.cz
+            border.color: AppTheme.selection
         }
     }
 }

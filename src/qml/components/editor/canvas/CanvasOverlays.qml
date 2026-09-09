@@ -25,8 +25,16 @@ Item {
     required property real cursorX
     required property real cursorY
 
+    // Draft types whose paint is not their bbox (need the ghost above).
+    function draftIsPointed() {
+        var t = overlays.draft ? overlays.draft.type : "";
+        return t === "ellipse" || t === "triangle" || t === "star";
+    }
+
+    // Bbox wash while dragging rectangles and text boxes (their real
+    // paint is a box too). Pointed shapes get a true-shape ghost below.
     Rectangle {
-        visible: overlays.draft !== null
+        visible: overlays.draft !== null && !overlays.draftIsPointed()
         x: overlays.draft ? overlays.offsetX + overlays.draft.x * overlays.zoom : 0
         y: overlays.draft ? overlays.offsetY + overlays.draft.y * overlays.zoom : 0
         width: overlays.draft ? overlays.draft.w * overlays.zoom : 0
@@ -34,6 +42,31 @@ Item {
         color: "#140d99ff"
         border.width: 1
         border.color: AppTheme.selection
+    }
+
+    // True-shape drag ghost for ellipse/triangle/star: reuses ShapeItem
+    // paint (same vectorPath as the committed shape) in content space so
+    // it lands 1:1 at any zoom. Wash fill + 1px selection stroke like the
+    // bbox draft; blind input so the draw gesture passes through.
+    Item {
+        visible: overlays.draft !== null && overlays.draftIsPointed()
+        x: overlays.offsetX
+        y: overlays.offsetY
+        scale: overlays.zoom
+        transformOrigin: Item.TopLeft
+
+        ShapeItem {
+            shapeType: overlays.draft ? overlays.draft.type : "ellipse"
+            sx: overlays.draft ? overlays.draft.x : 0
+            sy: overlays.draft ? overlays.draft.y : 0
+            sw: overlays.draft ? Math.max(1, overlays.draft.w) : 1
+            sh: overlays.draft ? Math.max(1, overlays.draft.h) : 1
+            fill: "#140d99ff"
+            strokeColor: AppTheme.selection
+            strokeWidth: 1 / (overlays.zoom > 0 ? overlays.zoom : 1)
+            interactive: false
+            zoom: overlays.zoom
+        }
     }
 
     Rectangle {
