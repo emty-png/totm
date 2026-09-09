@@ -2,9 +2,10 @@ import QtQuick
 import Totm
 
 // Infinite canvas. Wheel pans, Ctrl-wheel zooms to cursor, Space-drag pans.
-// Select-drag marquees, shapes-drag draws, handles resize the selection.
-// Moves, resizes and creations snap within 5 screen px; Alt suspends.
-// Hidden skips input, locked swallows presses. See docs/canvas-interactions.md.
+// Select-drag marquees, shapes-drag draws, pen clicks/drags vectors,
+// handles resize the selection. Moves, resizes and creations snap
+// within 5 screen px; Alt suspends. Hidden skips input, locked swallows
+// presses. See docs/canvas-interactions.md.
 Item {
     id: canvas
 
@@ -20,6 +21,10 @@ Item {
     property var shownDoc: null
     onDocChanged: {
         canvas.commitTextEdit();
+        if (canvas.pen)
+            canvas.pen.cancel();
+        if (canvas.penEdit)
+            canvas.penEdit.exit();
         canvas.showDocument(canvas.doc);
     }
 
@@ -72,6 +77,14 @@ Item {
         canvas: canvas
         snap: snapEngine
     }
+    property var pen: PenTool {
+        canvas: canvas
+        snap: snapEngine
+    }
+    property var penEdit: PenEdit {
+        canvas: canvas
+        snap: snapEngine
+    }
 
     focus: true
     clip: true
@@ -95,7 +108,7 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
-        enabled: ToolStore.activeTool !== "shapes"
+        enabled: ToolStore.activeTool !== "shapes" && ToolStore.activeTool !== "pen"
 
         onPressed: event => {
             canvas.commitTextEdit();
@@ -135,7 +148,7 @@ Item {
         zoom: canvas.zoom
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
-        handlesActive: ToolStore.activeTool === "select" && canvas.doc !== null
+        handlesActive: ToolStore.activeTool === "select" && canvas.doc !== null && canvas.penEdit.editUid < 0
         showFrame: canvas.selBox ? (canvas.selBox.count > 1 || canvas.selBox.rotated || canvas.selBox.singleGroup) : false
         pressPolicy: (hid, cx, cy, mods) => canvas.resizePressed(hid, cx, cy, mods)
         movePolicy: (cx, cy, mods) => canvas.resizeMoved(cx, cy, mods)
@@ -310,6 +323,63 @@ Item {
         }
     }
 
+    // Figma-style pen input: click adds corners, drag draws symmetric
+    // curves, first-point click closes. Double-click/Enter parts,
+    // Esc finishes the node. Placed before the pan catcher so Space
+    // still pans above the pen.
+    MouseArea {
+        id: penMouse
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        hoverEnabled: true
+        cursorShape: Qt.CrossCursor
+        enabled: ToolStore.activeTool === "pen" && canvas.doc !== null
+
+        onPressed: event => {
+            canvas.pen.pressAt(event.x, event.y, event.modifiers);
+            event.accepted = true;
+        }
+        onPositionChanged: event => {
+            if (pressed)
+                canvas.pen.moveTo(event.x, event.y, event.modifiers, true);
+            else
+                canvas.pen.refreshHover(event.x, event.y, event.modifiers);
+        }
+        onReleased: {
+            canvas.pen.releaseAt();
+        }
+        onDoubleClicked: event => {
+            canvas.pen.doubleAt();
+            event.accepted = true;
+        }
+    }
+
+    // Point editing input: handles/anchors first, edge click inserts,
+    // empty click exits and falls through to marquee/shapes below.
+    MouseArea {
+        id: penEditMouse
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        hoverEnabled: true
+        cursorShape: Qt.ArrowCursor
+        enabled: ToolStore.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc !== null
+
+        onPressed: event => {
+            var handled = canvas.penEdit.pressAt(event.x, event.y, event.modifiers);
+            event.accepted = handled;
+        }
+        onPositionChanged: event => {
+            canvas.penEdit.moveTo(event.x, event.y, event.modifiers);
+        }
+        onReleased: {
+            canvas.penEdit.releaseAt();
+        }
+        onDoubleClicked: event => {
+            var done = canvas.penEdit.doubleAt(event.x, event.y);
+            event.accepted = done;
+        }
+    }
+
     CanvasOverlays {
         doc: canvas.doc
         draft: canvas.draft
@@ -327,6 +397,23 @@ Item {
         cursorY: canvas.cursorY
     }
 
+    PenOverlay {
+        tool: canvas.pen
+        zoom: canvas.zoom
+        offsetX: canvas.offsetX
+        offsetY: canvas.offsetY
+        penActive: ToolStore.activeTool === "pen" && canvas.doc !== null
+    }
+
+    PenEditOverlay {
+        tool: canvas.penEdit
+        doc: canvas.doc
+        zoom: canvas.zoom
+        offsetX: canvas.offsetX
+        offsetY: canvas.offsetY
+        editActive: ToolStore.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc !== null
+    }
+
     DrillBreadcrumb {
         anchors {
             left: parent.left
@@ -335,6 +422,16 @@ Item {
             topMargin: 12
         }
         doc: canvas.doc
+    }
+
+    // Leaving the pen drops the in-progress sketch so a stale draft
+    // never leaks into the next tool or tab.
+    Connections {
+        target: ToolStore
+        function onActiveToolChanged() {
+            if (ToolStore.activeTool !== "pen" && canvas.pen)
+                canvas.pen.cancel();
+        }
     }
 
     Keys.onPressed: event => {
@@ -346,13 +443,29 @@ Item {
             canvas.snapXGuides = [];
             canvas.snapYGuides = [];
             event.accepted = true;
+        } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && ToolStore.activeTool === "pen") {
+            if (canvas.pen.enterCommit())
+                event.accepted = true;
+        } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && canvas.penEdit.editUid >= 0) {
+            canvas.penEdit.exit();
+            event.accepted = true;
         } else if (event.key === Qt.Key_Escape) {
-            if (canvas.doc && canvas.doc.drillPath.length > 0) {
+            if (canvas.penEdit.editUid >= 0) {
+                canvas.penEdit.exit();
+                event.accepted = true;
+            } else if (ToolStore.activeTool === "pen" && canvas.pen.hasWork) {
+                canvas.pen.escapeFinish();
+                ToolStore.setActiveTool("select");
+                event.accepted = true;
+            } else if (canvas.doc && canvas.doc.drillPath.length > 0) {
                 canvas.doc.drillOut();
                 event.accepted = true;
             } else {
                 toolbar.closeMenu();
             }
+        } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && canvas.penEdit.editUid >= 0) {
+            if (canvas.penEdit.deleteSelected())
+                event.accepted = true;
         }
     }
     Keys.onReleased: event => {

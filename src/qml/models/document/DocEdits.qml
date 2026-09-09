@@ -5,6 +5,33 @@ QtObject {
     id: edits
     required property var doc
 
+    function shiftPath(node, dx, dy) {
+        var src = node.pathData || [];
+        var out = [];
+        for (var i = 0; i < src.length; i++) {
+            var sub = src[i] || {};
+            var pts = [];
+            var arr = sub.pts || [];
+            for (var j = 0; j < arr.length; j++) {
+                var p = arr[j] || {};
+                pts.push({
+                    x: (Number(p.x) || 0) + dx,
+                    y: (Number(p.y) || 0) + dy,
+                    smooth: p.smooth === true,
+                    inX: (p.inX !== undefined ? Number(p.inX) : (Number(p.x) || 0)) + dx,
+                    inY: (p.inY !== undefined ? Number(p.inY) : (Number(p.y) || 0)) + dy,
+                    outX: (p.outX !== undefined ? Number(p.outX) : (Number(p.x) || 0)) + dx,
+                    outY: (p.outY !== undefined ? Number(p.outY) : (Number(p.y) || 0)) + dy
+                });
+            }
+            out.push({
+                closed: sub.closed === true,
+                pts: pts
+            });
+        }
+        return out;
+    }
+
     function moveSelected(dx, dy) {
         var leaves = doc._selectedLeaves();
         for (var i = 0; i < leaves.length; i++) {
@@ -12,6 +39,8 @@ QtObject {
                 continue;
             leaves[i].x += dx;
             leaves[i].y += dy;
+            if (leaves[i].shapeType === "pen")
+                leaves[i].pathData = shiftPath(leaves[i], dx, dy);
         }
         doc.touch();
     }
@@ -21,6 +50,38 @@ QtObject {
         for (var i = 0; i < leaves.length; i++) {
             if (doc.isEffectivelyLocked(leaves[i]))
                 continue;
+            if (leaves[i].shapeType === "pen") {
+                var src = leaves[i].pathData || [];
+                var out = [];
+                for (var a = 0; a < src.length; a++) {
+                    var sub = src[a] || {};
+                    var pts = [];
+                    var arr = sub.pts || [];
+                    for (var j = 0; j < arr.length; j++) {
+                        var p = arr[j] || {};
+                        pts.push({
+                            x: Math.round(Number(p.x) || 0),
+                            y: Math.round(Number(p.y) || 0),
+                            smooth: p.smooth === true,
+                            inX: Math.round(p.inX !== undefined ? Number(p.inX) : (Number(p.x) || 0)),
+                            inY: Math.round(p.inY !== undefined ? Number(p.inY) : (Number(p.y) || 0)),
+                            outX: Math.round(p.outX !== undefined ? Number(p.outX) : (Number(p.x) || 0)),
+                            outY: Math.round(p.outY !== undefined ? Number(p.outY) : (Number(p.y) || 0))
+                        });
+                    }
+                    out.push({
+                        closed: sub.closed === true,
+                        pts: pts
+                    });
+                }
+                leaves[i].pathData = out;
+                var box = doc.factory.penBBoxFor(out);
+                leaves[i].x = box.x;
+                leaves[i].y = box.y;
+                leaves[i].w = box.w;
+                leaves[i].h = box.h;
+                continue;
+            }
             leaves[i].x = Math.round(leaves[i].x);
             leaves[i].y = Math.round(leaves[i].y);
             leaves[i].w = Math.max(1, Math.round(leaves[i].w));
@@ -33,11 +94,49 @@ QtObject {
         if (!box0 || box0.w <= 0 || box0.h <= 0)
             return;
         var sx = newBox.w / box0.w, sy = newBox.h / box0.h;
+        var mapX = v => newBox.x + (v - box0.x) * sx;
+        var mapY = v => newBox.y + (v - box0.y) * sy;
         for (var k = 0; k < orig.length; k++) {
             var o = orig[k];
             var n = doc.findNode(o.uid);
             if (!n || n.kind !== "shape" || doc.isEffectivelyLocked(n))
                 continue;
+            if (n.shapeType === "pen" && o.pathData) {
+                var out = [];
+                for (var i = 0; i < o.pathData.length; i++) {
+                    var sub = o.pathData[i] || {};
+                    var pts = [];
+                    var arr = sub.pts || [];
+                    for (var j = 0; j < arr.length; j++) {
+                        var p = arr[j] || {};
+                        var px = Number(p.x) || 0, py = Number(p.y) || 0;
+                        var ix = p.inX !== undefined ? Number(p.inX) : px;
+                        var iy = p.inY !== undefined ? Number(p.inY) : py;
+                        var ox = p.outX !== undefined ? Number(p.outX) : px;
+                        var oy = p.outY !== undefined ? Number(p.outY) : py;
+                        pts.push({
+                            x: mapX(px),
+                            y: mapY(py),
+                            smooth: p.smooth === true,
+                            inX: mapX(ix),
+                            inY: mapY(iy),
+                            outX: mapX(ox),
+                            outY: mapY(oy)
+                        });
+                    }
+                    out.push({
+                        closed: sub.closed === true,
+                        pts: pts
+                    });
+                }
+                n.pathData = out;
+                var box = doc.factory.penBBoxFor(out);
+                n.x = box.x;
+                n.y = box.y;
+                n.w = box.w;
+                n.h = box.h;
+                continue;
+            }
             var ncx = newBox.x + (o.x + o.w / 2 - box0.x) * sx;
             var ncy = newBox.y + (o.y + o.h / 2 - box0.y) * sy;
             var nw = Math.max(1, o.w * sx);
@@ -53,14 +152,18 @@ QtObject {
     function selectedLeafSnapshot() {
         var leaves = doc._selectedLeaves();
         var out = [];
-        for (var i = 0; i < leaves.length; i++)
-            out.push({
+        for (var i = 0; i < leaves.length; i++) {
+            var entry = {
                 uid: leaves[i].uid,
                 x: leaves[i].x,
                 y: leaves[i].y,
                 w: leaves[i].w,
                 h: leaves[i].h
-            });
+            };
+            if (leaves[i].shapeType === "pen")
+                entry.pathData = doc.factory._copyPath(leaves[i].pathData);
+            out.push(entry);
+        }
         return out;
     }
 
@@ -70,8 +173,17 @@ QtObject {
             return;
         if (role === "w" || role === "h")
             value = Math.max(1, value);
-        if (role === "points")
+        if (role === "points") {
             value = Math.min(12, Math.max(3, Math.round(value)));
+            n[role] = value;
+            doc.corners.adaptStarPoints(n);
+            doc.touch();
+            return;
+        }
+        if (role === "radius") {
+            doc.corners.setUniform(n.uid, value);
+            return;
+        }
         n[role] = value;
         doc.touch();
     }
@@ -96,8 +208,16 @@ QtObject {
             // Groups have no style: skip them (leaves only here anyway).
             if (role === "w" || role === "h")
                 value = Math.max(1, value);
-            if (role === "points")
-                value = Math.min(12, Math.max(3, Math.round(value)));
+            if (role === "points") {
+                var pv = Math.min(12, Math.max(3, Math.round(value)));
+                leaves[j][role] = pv;
+                doc.corners.adaptStarPoints(leaves[j]);
+                continue;
+            }
+            if (role === "radius") {
+                doc.corners.setUniform(leaves[j].uid, value);
+                continue;
+            }
             if (role in leaves[j])
                 leaves[j][role] = value;
         }

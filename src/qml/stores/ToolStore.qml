@@ -32,6 +32,8 @@ QtObject {
             return "star";
         case "text":
             return "text";
+        case "pen":
+            return "pen";
         default:
             return "square";
         }

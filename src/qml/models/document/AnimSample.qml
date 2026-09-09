@@ -251,20 +251,63 @@ QtObject {
 
     // Writes an overlay map with no touch(): playback stays invisible to
     // autosave, undo and selection bindings. Locked leaves hold still.
+    // Pen paths ride their bbox so previews never shear off the points.
     function applySample(doc, map) {
         for (var uid in map) {
             var n = doc.findNode(Number(uid));
             if (!n || doc.isEffectivelyLocked(n))
                 continue;
             var ov = map[uid];
-            if (ov.x !== undefined)
-                n.x = ov.x;
-            if (ov.y !== undefined)
-                n.y = ov.y;
-            if (ov.w !== undefined)
-                n.w = ov.w;
-            if (ov.h !== undefined)
-                n.h = ov.h;
+            if (n.shapeType === "pen" && (ov.x !== undefined || ov.y !== undefined || ov.w !== undefined || ov.h !== undefined)) {
+                var nx = ov.x !== undefined ? ov.x : n.x;
+                var ny = ov.y !== undefined ? ov.y : n.y;
+                var nw = ov.w !== undefined ? Math.max(0.01, ov.w) : n.w;
+                var nh = ov.h !== undefined ? Math.max(0.01, ov.h) : n.h;
+                var sx = n.w > 0 ? nw / n.w : 1;
+                var sy = n.h > 0 ? nh / n.h : 1;
+                var src = n.pathData || [];
+                var out = [];
+                for (var i = 0; i < src.length; i++) {
+                    var sub = src[i] || {};
+                    var pts = [];
+                    var arr = sub.pts || [];
+                    for (var j = 0; j < arr.length; j++) {
+                        var p = arr[j] || {};
+                        var px = Number(p.x) || 0, py = Number(p.y) || 0;
+                        var ix = p.inX !== undefined ? Number(p.inX) : px;
+                        var iy = p.inY !== undefined ? Number(p.inY) : py;
+                        var ox = p.outX !== undefined ? Number(p.outX) : px;
+                        var oy = p.outY !== undefined ? Number(p.outY) : py;
+                        pts.push({
+                            x: nx + (px - n.x) * sx,
+                            y: ny + (py - n.y) * sy,
+                            smooth: p.smooth === true,
+                            inX: nx + (ix - n.x) * sx,
+                            inY: ny + (iy - n.y) * sy,
+                            outX: nx + (ox - n.x) * sx,
+                            outY: ny + (oy - n.y) * sy
+                        });
+                    }
+                    out.push({
+                        closed: sub.closed === true,
+                        pts: pts
+                    });
+                }
+                n.pathData = out;
+                n.x = nx;
+                n.y = ny;
+                n.w = nw;
+                n.h = nh;
+            } else {
+                if (ov.x !== undefined)
+                    n.x = ov.x;
+                if (ov.y !== undefined)
+                    n.y = ov.y;
+                if (ov.w !== undefined)
+                    n.w = ov.w;
+                if (ov.h !== undefined)
+                    n.h = ov.h;
+            }
             if (ov.rotation !== undefined)
                 n.rotation = ov.rotation;
             if (ov.opacity !== undefined)

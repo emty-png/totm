@@ -366,7 +366,7 @@ QtObject {
         var leaves = doc.tree.allLeaves();
         for (var i = 0; i < leaves.length; i++) {
             var n = leaves[i];
-            out[n.uid] = {
+            var entry = {
                 x: n.x,
                 y: n.y,
                 w: n.w,
@@ -376,6 +376,9 @@ QtObject {
                 fontSize: n.fontSize,
                 shapeType: n.shapeType
             };
+            if (n.shapeType === "pen")
+                entry.pathData = doc.factory._copyPath(n.pathData);
+            out[n.uid] = entry;
         }
         return out;
     }
@@ -399,6 +402,8 @@ QtObject {
             n.opacity = b.opacity;
             if (b.fontSize !== undefined && n.shapeType === "text")
                 n.fontSize = b.fontSize;
+            if (b.pathData !== undefined && n.shapeType === "pen")
+                n.pathData = doc.factory._copyPath(b.pathData);
         }
     }
 

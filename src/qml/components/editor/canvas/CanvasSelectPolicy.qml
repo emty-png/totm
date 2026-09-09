@@ -53,6 +53,11 @@ QtObject {
             canvas.beginTextEdit(target);
             return;
         }
+        // Pen shapes open point editing instead of drilling.
+        if (n && n.kind === "shape" && n.shapeType === "pen") {
+            canvas.penEdit.enter(target);
+            return;
+        }
         if (n && n.kind === "group")
             canvas.doc.drillInto(target);
         else {

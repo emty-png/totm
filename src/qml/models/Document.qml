@@ -66,6 +66,12 @@ QtObject {
     property var edits: DocEdits {
         doc: root
     }
+    property var penOps: DocPen {
+        doc: root
+    }
+    property var corners: DocCorners {
+        doc: root
+    }
     property var history: DocHistory {
         doc: root
     }
@@ -90,6 +96,8 @@ QtObject {
             return "Star";
         case "text":
             return "Text";
+        case "pen":
+            return "Path";
         case "group":
             return "Group";
         default:
@@ -264,6 +272,10 @@ QtObject {
     function addText(x, y, w, h, auto) {
         history.checkpoint();
         return factory.addText(x, y, w, h, auto);
+    }
+    function addPen(pathData) {
+        history.checkpoint();
+        return factory.addPen(pathData);
     }
     function snapshotNode(node) {
         return clipboard.snapshotNode(node);
@@ -442,6 +454,59 @@ QtObject {
     function recolorSelected(oldFill, newFill) {
         history.checkpoint();
         edits.recolorSelected(oldFill, newFill);
+    }
+    function penMovePoint(uid, sub, idx, dx, dy) {
+        history.checkpoint();
+        return penOps.movePoint(uid, sub, idx, dx, dy);
+    }
+    function penMoveHandle(uid, sub, idx, which, x, y) {
+        history.checkpoint();
+        return penOps.moveHandle(uid, sub, idx, which, x, y);
+    }
+    function penToggleSmooth(uid, sub, idx) {
+        history.checkpoint();
+        return penOps.toggleSmooth(uid, sub, idx);
+    }
+    function penInsertPoint(uid, sub, at, pt) {
+        history.checkpoint();
+        return penOps.insertPoint(uid, sub, at, pt);
+    }
+    function penDeletePoint(uid, sub, idx) {
+        history.checkpoint();
+        return penOps.deletePoint(uid, sub, idx);
+    }
+    function toggleIndependentCorners(on) {
+        history.checkpoint();
+        var tops = selectedTops();
+        for (var i = 0; i < tops.length; i++) {
+            var leaves = _leavesUnder(tops[i]);
+            for (var j = 0; j < leaves.length; j++) {
+                if (!isEffectivelyLocked(leaves[j]))
+                    corners.toggle(leaves[j].uid, on);
+            }
+        }
+    }
+    function setUniformRadius(value) {
+        history.checkpoint();
+        var tops = selectedTops();
+        for (var i = 0; i < tops.length; i++) {
+            var leaves = _leavesUnder(tops[i]);
+            for (var j = 0; j < leaves.length; j++) {
+                if (!isEffectivelyLocked(leaves[j]))
+                    corners.setUniform(leaves[j].uid, value);
+            }
+        }
+    }
+    function setCornerRadius(index, value) {
+        history.checkpoint();
+        var tops = selectedTops();
+        for (var i = 0; i < tops.length; i++) {
+            var leaves = _leavesUnder(tops[i]);
+            for (var j = 0; j < leaves.length; j++) {
+                if (!isEffectivelyLocked(leaves[j]))
+                    corners.setCorner(leaves[j].uid, index, value);
+            }
+        }
     }
     function rotatedBounds(s) {
         return bounds.rotatedBounds(s);

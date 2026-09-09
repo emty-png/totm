@@ -33,10 +33,15 @@ Item {
     property real strokeWidth: 0
     property real shapeOpacity: 1
     property real radius: 0
+    property bool independentCorners: false
+    property var cornerRadii: []
     property bool flipH: false
     property bool flipV: false
     // Star tips; clamped 3..12 by the document on edit.
     property int points: 5
+    // Pen subpaths in absolute content coords (meaningful for pen).
+    // [{closed, pts: [{x, y, smooth, inX, inY, outX, outY}]}]
+    property var pathData: []
     // Text content/style (meaningful when shapeType === "text").
     // letterSpacing stores percent of font size; rendering converts.
     property string textContent: ""
@@ -83,7 +88,7 @@ Item {
     // root rotation; geometry, outline and hit area keep the bbox.
     Rectangle {
         anchors.fill: parent
-        visible: shape.shapeType === "rectangle"
+        visible: shape.shapeType === "rectangle" && !shape.independentCorners
         color: shape.fill
         radius: shape.radius
         border.width: shape.strokeWidth
@@ -98,9 +103,10 @@ Item {
     }
 
     // Other types: stroked/filled vector path (round joins, cute).
+    // Independent rectangles join them so every corner keeps its own cut.
     Shape {
         anchors.fill: parent
-        visible: shape.shapeType !== "rectangle" && shape.shapeType !== "text"
+        visible: (shape.shapeType !== "rectangle" && shape.shapeType !== "text") || (shape.shapeType === "rectangle" && shape.independentCorners)
         antialiasing: true
         opacity: shape.shapeOpacity
         transform: Scale {
@@ -222,16 +228,67 @@ Item {
         return pts;
     }
 
+    // Per-vertex radius in paint order. Uniform shapes return -1 so
+    // the caller falls back to shape.radius; independent shapes read
+    // cornerRadii (star maps outer tip k to vertex 2k, inner stays 0).
+    function radiusAt(i, tipsOnly) {
+        if (shape.independentCorners !== true)
+            return -1;
+        var arr = shape.cornerRadii || [];
+        if (shape.shapeType === "star") {
+            if (i % 2 === 1)
+                return 0;
+            var tip = i / 2;
+            return tip < arr.length ? Math.max(0, Number(arr[tip]) || 0) : 0;
+        }
+        return i < arr.length ? Math.max(0, Number(arr[i]) || 0) : 0;
+    }
+
+    // Rounded rectangle with a cut per corner (TL,TR,BR,BL clockwise).
+    // Overclaimed edges share proportionally like the polygons below.
+    function rectPath() {
+        var w = shape.sw, h = shape.sh;
+        var src = shape.cornerRadii || [];
+        var r = [];
+        for (var i = 0; i < 4; i++)
+            r.push(Math.max(0, i < src.length ? (Number(src[i]) || 0) : 0));
+        var caps = [Math.min(w / 2, h / 2), Math.min(w / 2, h / 2), Math.min(w / 2, h / 2), Math.min(w / 2, h / 2)];
+        for (var k = 0; k < 4; k++)
+            r[k] = Math.min(r[k], caps[k]);
+        var edges = [[0, 1, w], [1, 2, h], [2, 3, w], [3, 0, h]];
+        for (var e = 0; e < 4; e++) {
+            var a = edges[e][0], b = edges[e][1], len = edges[e][2];
+            var sum = r[a] + r[b];
+            if (len > 0 && sum > len) {
+                r[a] *= len / sum;
+                r[b] *= len / sum;
+            }
+        }
+        var seg = (x1, y1, cx, cy, x2, y2, cut) => {
+            if (cut <= 0)
+                return " L " + x2 + "," + y2;
+            return " L " + x1 + "," + y1 + " Q " + cx + "," + cy + " " + x2 + "," + y2;
+        };
+        var d = "M " + r[0] + ",0 L " + (w - r[1]) + ",0";
+        d += seg(w - r[1], 0, w, 0, w, r[1], r[1]);
+        d += seg(w, h - r[2], w, h, w - r[2], h, r[2]);
+        d += seg(r[3], h, 0, h, 0, h - r[3], r[3]);
+        d += seg(0, r[0], 0, 0, r[0], 0, r[0]);
+        return d + " Z";
+    }
+
     // Closed polygon path with per-vertex rounding. Each cut takes up to
     // the full neighbor edges; where two cuts would overlap an edge they
     // share it proportionally, so roundings meet into blobs instead of
     // folding over. tipsOnly rounds even vertices (star tips).
     function roundedPoly(pts, tipsOnly) {
         var n = pts.length / 2;
-        var r = Math.max(0, shape.radius);
+        var uniform = Math.max(0, shape.radius);
         var cut = [];
         for (var i = 0; i < n; i++) {
-            if (r <= 0 || (tipsOnly && i % 2 === 1)) {
+            var want = shape.radiusAt(i, tipsOnly);
+            var r = want >= 0 ? want : uniform;
+            if (r <= 0 || (tipsOnly && i % 2 === 1 && shape.independentCorners !== true)) {
                 cut.push(0);
                 continue;
             }
@@ -273,6 +330,40 @@ Item {
         return d + " Z";
     }
 
+    // Pen subpath as local SVG. Anchors stay absolute in the model so
+    // moves stay exact; paint subtracts the bbox origin. Smooth sides
+    // emit cubics, corner sides collapse their control onto the anchor.
+    function penPath() {
+        var subs = shape.pathData || [];
+        var ox = shape.sx, oy = shape.sy;
+        var d = "";
+        for (var s = 0; s < subs.length; s++) {
+            var sub = subs[s] || {};
+            var pts = sub.pts || [];
+            if (pts.length === 0)
+                continue;
+            var first = pts[0] || {};
+            d += (d === "" ? "M " : " M ") + ((Number(first.x) || 0) - ox) + "," + ((Number(first.y) || 0) - oy);
+            var seg = (a, b) => {
+                var ax = (Number(a.x) || 0) - ox, ay = (Number(a.y) || 0) - oy;
+                var bx = (Number(b.x) || 0) - ox, by = (Number(b.y) || 0) - oy;
+                var aSmooth = a.smooth === true, bSmooth = b.smooth === true;
+                if (!aSmooth && !bSmooth)
+                    return " L " + bx + "," + by;
+                var c1x = aSmooth ? (a.outX !== undefined ? Number(a.outX) - ox : ax) : ax;
+                var c1y = aSmooth ? (a.outY !== undefined ? Number(a.outY) - oy : ay) : ay;
+                var c2x = bSmooth ? (b.inX !== undefined ? Number(b.inX) - ox : bx) : bx;
+                var c2y = bSmooth ? (b.inY !== undefined ? Number(b.inY) - oy : by) : by;
+                return " C " + c1x + "," + c1y + " " + c2x + "," + c2y + " " + bx + "," + by;
+            };
+            for (var i = 1; i < pts.length; i++)
+                d += seg(pts[i - 1], pts[i]);
+            if (sub.closed === true && pts.length > 1)
+                d += seg(pts[pts.length - 1], pts[0]) + " Z";
+        }
+        return d;
+    }
+
     function vectorPath() {
         var w = shape.sw, h = shape.sh;
         switch (shape.shapeType) {
@@ -281,10 +372,14 @@ Item {
                 var rx = w / 2, ry = h / 2;
                 return "M " + w + "," + h / 2 + " A " + rx + "," + ry + " 0 1,0 0," + h / 2 + " A " + rx + "," + ry + " 0 1,0 " + w + "," + h / 2 + " Z";
             }
+        case "rectangle":
+            return shape.independentCorners ? shape.rectPath() : "";
         case "triangle":
             return shape.roundedPoly(shape.cornerPoints(), false);
         case "star":
             return shape.roundedPoly(shape.cornerPoints(), true);
+        case "pen":
+            return shape.penPath();
         default:
             return "";
         }

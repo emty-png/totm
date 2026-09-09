@@ -185,15 +185,14 @@ Item {
         }
     }
 
-    // Marquee selection outline. Foreground hairline instead of the
-    // blue selection accent so cards stay in the theme palette.
+    // Marquee selection outline matches the context-menu card.
     Rectangle {
         anchors.fill: parent
         radius: 12
         visible: card.selected
         color: "transparent"
-        border.width: 1.5
-        border.color: AppTheme.foreground
+        border.width: 1
+        border.color: AppTheme.fieldBorder
     }
 
     MouseArea {

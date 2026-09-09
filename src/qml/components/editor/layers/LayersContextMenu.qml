@@ -73,7 +73,7 @@ Item {
             radius: 10
             color: AppTheme.surface
             border.width: 1
-            border.color: AppTheme.border
+            border.color: AppTheme.fieldBorder
         }
         MultiEffect {
             source: card
