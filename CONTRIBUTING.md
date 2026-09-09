@@ -32,6 +32,7 @@ src/
 * QML for UI + app logic in v1. Heavy math lives in small `QtObject` helpers under `models/document/`, `canvas/`, `snap/`, `layers/`, `properties/` — no `.js` libraries. All storing/persistence lives in the C++ backend (`backend/library/`, `backend/settings/`) — no QML-side file IO, no new C++ stores unless discussed.
 * One responsibility per file, aim ≤ 200 lines. `Document.qml` / `EditorCanvas.qml` are thin facades that delegate.
 * Follow Qt6 QML coding conventions: ordered attributes with blank-line groups, `required` props for external data, explicit `id` access, no outer-id leaks into delegates (use policy callbacks wired in `onItemAdded`).
+* Custom clips reuse the preset pipeline: new types get `presetIds` + `defaultsFor` + `normalizeOptions` in `DocAnimPresets`, frame math in `AnimSample.presetOverlay` (+ writeback in `applySample`, capture in `DocAnim.captureBase`), and from-to editors under `properties/` grouped like the gallery (Transform/Style/Other/Path).
 * Human comments only: explain *why* and contracts (units, invariants). Delete what-the-code-says and lint war stories.
 
 ## Workflow

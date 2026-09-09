@@ -124,6 +124,14 @@ QtObject {
                 value: 0
             };
         var v = snapshot.sel[0][role];
+        // Group snapshots carry geometry only (no text props): report a
+        // missing role as mixed so numeric bindings never see undefined.
+        // Callers showing these roles are hidden for groups anyway.
+        if (v === undefined)
+            return {
+                mixed: true,
+                value: 0
+            };
         for (var i = 1; i < snapshot.sel.length; i++) {
             if (snapshot.sel[i][role] !== v)
                 return {

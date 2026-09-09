@@ -374,10 +374,17 @@ QtObject {
                 rotation: n.rotation,
                 opacity: n.opacity,
                 fontSize: n.fontSize,
-                shapeType: n.shapeType
+                shapeType: n.shapeType,
+                fill: String(n.fill),
+                visible: n.visible,
+                radius: n.radius,
+                strokeWidth: n.strokeWidth,
+                independentCorners: n.independentCorners
             };
             if (n.shapeType === "pen")
                 entry.pathData = doc.factory._copyPath(n.pathData);
+            if (n.independentCorners)
+                entry.cornerRadii = (n.cornerRadii || []).slice();
             out[n.uid] = entry;
         }
         return out;
@@ -400,10 +407,20 @@ QtObject {
             n.h = b.h;
             n.rotation = b.rotation;
             n.opacity = b.opacity;
+            if (b.fill !== undefined)
+                n.fill = b.fill;
+            if (b.visible !== undefined)
+                n.visible = b.visible;
+            if (b.radius !== undefined)
+                n.radius = b.radius;
+            if (b.strokeWidth !== undefined)
+                n.strokeWidth = b.strokeWidth;
             if (b.fontSize !== undefined && n.shapeType === "text")
                 n.fontSize = b.fontSize;
             if (b.pathData !== undefined && n.shapeType === "pen")
                 n.pathData = doc.factory._copyPath(b.pathData);
+            if (b.cornerRadii !== undefined && n.independentCorners)
+                n.cornerRadii = b.cornerRadii.slice();
         }
     }
 
@@ -440,8 +457,26 @@ QtObject {
     function copyMap(m) {
         var o = {};
         var s = m || {};
-        for (var k in s)
-            o[k] = s[k];
+        for (var k in s) {
+            if (k === "pts" && Array.isArray(s[k])) {
+                var pts = [];
+                for (var i = 0; i < s[k].length; i++) {
+                    var p = s[k][i] || {};
+                    pts.push({
+                        x: p.x,
+                        y: p.y,
+                        smooth: p.smooth === true,
+                        inX: p.inX,
+                        inY: p.inY,
+                        outX: p.outX,
+                        outY: p.outY
+                    });
+                }
+                o[k] = pts;
+            } else {
+                o[k] = s[k];
+            }
+        }
         return o;
     }
 
