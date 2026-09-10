@@ -5,7 +5,6 @@
 #include <QAbstractTextDocumentLayout>
 #include <QCoreApplication>
 #include <QDateTime>
-#include <QDebug>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -291,10 +290,6 @@ protected:
         bool ok = true;
         QString failMsg;
 
-        // Stage timers for the completion summary log.
-        QElapsedTimer totalT;
-        totalT.start();
-        qint64 msSample = 0, msRaster = 0, msWrite = 0;
         // Progress is throttled to ~10Hz; per-frame rebinds add UI churn
         // with no visible gain.
         QElapsedTimer emitT;
@@ -303,7 +298,6 @@ protected:
         // Single reusable frame buffer; per-frame 4K allocs are ~119GB of
         // allocator traffic over a 60fps minute.
         QImage img;
-        QElapsedTimer stageT;
         auto cancelAndOut = [&] {
             proc.kill();
             proc.waitForFinished(5000);
@@ -319,11 +313,8 @@ protected:
             const double t = qMin(duration, double(frame) / m_fps);
 
             // Sampled from AnimSampler; see its header for the QML parity contract.
-            stageT.start();
             const QList<QVariantMap> work = sampleFrame(m_scene, t);
-            msSample += stageT.elapsed();
 
-            stageT.start();
             if (img.size() != QSize(m_outW, m_outH) || img.format() != QImage::Format_RGBA8888)
                 img = QImage(m_outW, m_outH, QImage::Format_RGBA8888);
             img.fill(sceneColor);
@@ -340,9 +331,7 @@ protected:
                 paintLeaf(pt, m, ox, oy, scale);
             }
             pt.end();
-            msRaster += stageT.elapsed();
 
-            stageT.start();
             const char *bits = reinterpret_cast<const char *>(img.constBits());
             qint64 left = frameBytes, off = 0;
             qint64 waitedMs = 0;
@@ -370,7 +359,6 @@ protected:
                     }
                 }
             }
-            msWrite += stageT.elapsed();
             if (!ok)
                 break;
             if (!emittedOnce || emitT.elapsed() >= 100 || frame + 1 == total) {
@@ -407,11 +395,6 @@ protected:
                     : failMsg);
             return;
         }
-        // Completion summary: frames, wall time and stage split for perf work.
-        qInfo().nospace() << "export: " << total << " frames " << m_outW << 'x' << m_outH << " @" << m_fps
-                          << "fps in " << totalT.elapsed() << "ms (sample " << msSample << "ms, raster " << msRaster
-                          << "ms, pipe " << msWrite << "ms, enc-threads " << encThreads << ", " << m_effort << ' '
-                          << m_preset << "/crf" << m_crf << ')';
         emit renderDone(m_tempPath);
     }
 
