@@ -13,7 +13,7 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 * Text shapes — click for auto-size / drag for fixed box, double-click inline WYSIWYG edit on the canvas in one undo entry, typography section (family, size, weight, letter spacing, h/v align). Icons centralized as `icons/AppIcon.qml`.
 * Figma-style color picker — SV pad + hue slider + hex input with live preview, wired into fill/stroke with undo-coalesced scrubs.
 * Text animation presets + `appear` preset — Basic/Slide/Scale galleries for text with live thumbnails, fontSize-aware slide/movescale so text reflows, no auto-resize during playback.
-* Animation editing, the big one — preset gallery with live thumbnails, per-shape clips, clip editor (timing, easing, slide/spin options), bezier graph editor popup, and a timeline with lanes + ruler + playback transport. Scenes now carry an `anim` blob (library schema v2) that the future video renderer will read.
+* Animation editing, the big one — preset gallery with live thumbnails, per-shape clips, clip editor (timing, easing, slide/spin options), bezier graph editor popup, and a timeline with lanes + ruler + playback transport. Scenes now carry an `anim` blob (library schema v2) that the video exporter reads.
 * Undo/redo — full per-tab history, drag gestures coalesce into single entries, toolbar buttons + shortcuts. Text fields keep their own native undo so typing never eats your history.
 * Persistent theme — new `SettingsStore` backend (`QSettings`, separate from `library.json`). First run follows your OS, the first toggle pins your choice forever.
 * Window state manager — remembers size, position and maximized across restarts, clamps to your actual screens so a disconnected monitor never eats the window, resize handles hide while maximized, and mac gets proper traffic lights (red/yellow/green on the left) instead of windows-style controls.
@@ -21,6 +21,8 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 * Properties panel revamp — position / layout / appearance / fill / stroke sections, mixed-value handling when the selection disagrees, scrub-to-adjust number fields, add/remove fills and strokes.
 * Canvas goodies — live measure readout while drawing, equal-gap spacing snaps, per-tab camera memory.
 * Star shape (replaces diamond/polygon, rip).
+* Video export — render any design to mp4 from the canvas export button (top-right): SD/HD/4K at 30/60fps picker, backend `VideoExporter` rasterizes a fresh scene snapshot with a 1:1 port of the animation sampler and pipes frames to system ffmpeg, live progress modal with Cancel, then a Save dialog copies the temp file out. Encoder threads are capped and the worker runs low-priority so the UI stays responsive mid-render.
+* Sampler conformance rig — `tests/samplerconf/` diffs the shared C++ sampler against the real QML helpers across every preset/mode/easing (also runs in CI), so future pipeline work can't silently drift the video.
 
 ### Changed
 
@@ -34,6 +36,8 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 * Layer eye/lock toggles show on row hover like a normal app.
 * Corrupt library no longer nukes your stuff, it gets archived and you get a fresh default workspace.
 * Second instance can't silently corrupt the library anymore (lockfile + warning banner).
+* Custom Color clips threw `TypeError` (a param shadowed the `toHex` helper) which aborted whole-frame sampling — color animations never previewed and one color clip froze all preview motion; renamed, preview animates again.
+* Failed video saves no longer vanish silently — the progress popup reopens showing the backend error.
 
 ### Removed
 

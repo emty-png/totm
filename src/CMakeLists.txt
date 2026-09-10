@@ -17,6 +17,10 @@ qt_add_qml_module(totm
         backend/library/LibraryStore.cpp
         backend/settings/SettingsStore.h
         backend/settings/SettingsStore.cpp
+        backend/video/VideoExporter.h
+        backend/video/VideoExporter.cpp
+        backend/video/AnimSampler.h
+        backend/video/AnimSampler.cpp
     QML_FILES
         # Shell
         qml/Main.qml
@@ -152,6 +156,10 @@ qt_add_qml_module(totm
         # Toolbar
         qml/components/toolbar/CanvasToolbar.qml
         qml/components/toolbar/ToolbarButton.qml
+        # Export (video render)
+        qml/components/editor/export/ExportButton.qml
+        qml/components/editor/export/ExportQualityPopup.qml
+        qml/components/editor/export/ExportProgressPopup.qml
         # Home feature components (screens live under views/)
         qml/components/home/WorkspacePanel.qml
         qml/components/home/WorkspaceRow.qml
@@ -171,6 +179,7 @@ target_link_libraries(totm PRIVATE Qt6::Quick)
 target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/library
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/settings
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/video
 )
 
 # Cross-platform desktop bundle settings.

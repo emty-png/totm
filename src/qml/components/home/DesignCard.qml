@@ -72,12 +72,9 @@ Item {
             Layout.preferredHeight: 104
             radius: 8
             color: AppTheme.canvas
-            border.width: 1
-            border.color: AppTheme.border
 
-            // Border stays on this box while clipping happens a pixel
-            // inside: children paint over their own parent's border,
-            // so clipping here would swallow the outline.
+            // Clipping happens a pixel inside so content never touches
+            // the outline below.
             Item {
                 anchors.fill: parent
                 anchors.margins: 1
@@ -87,6 +84,17 @@ Item {
                     anchors.fill: parent
                     scene: card.scene
                 }
+            }
+
+            // Border overlay on top: children paint over their own
+            // parent's border, so a square scene corner would swallow
+            // the rounded outline if it lived on the base box.
+            Rectangle {
+                anchors.fill: parent
+                radius: 8
+                color: "transparent"
+                border.width: 1
+                border.color: AppTheme.border
             }
         }
 
