@@ -84,9 +84,11 @@ QtObject {
         return "#" + hx(r) + hx(g) + hx(b);
     }
 
-    function lerpColor(fromHex, toHex, t) {
+    // NOTE: the target param is `to`, not `toHex`: it would shadow the
+    // helper below and every customColor frame would throw.
+    function lerpColor(fromHex, to, t) {
         var a = parseHex(fromHex);
-        var b = parseHex(toHex);
+        var b = parseHex(to);
         if (!a || !b)
             return null;
         return toHex(lerp(a.r, b.r, t), lerp(a.g, b.g, t), lerp(a.b, b.b, t));

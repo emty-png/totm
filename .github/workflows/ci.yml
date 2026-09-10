@@ -13,7 +13,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.*"
+          version: "6.11.*"
           modules: qtquick3d qtshadertools
           cache: true
       - name: qmlformat check

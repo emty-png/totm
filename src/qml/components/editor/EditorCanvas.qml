@@ -1,4 +1,6 @@
+import QtCore
 import QtQuick
+import QtQuick.Dialogs
 import Totm
 
 // Canvas. Wheel pans, Ctrl-wheel zooms to cursor, Space-drag pans.
@@ -331,6 +333,25 @@ Item {
             topMargin: 12
         }
         doc: canvas.doc
+    }
+
+    // Video export entry, top-right. Opens the quality picker; the
+    // render itself snapshots fresh so later edits export next time.
+    ExportButton {
+        id: exportButton
+
+        anchors {
+            right: parent.right
+            top: parent.top
+            rightMargin: 12
+            topMargin: 12
+        }
+        doc: canvas.doc
+        active: qualityPopup.opened
+        onClicked: {
+            VideoExporter.clearError();
+            qualityPopup.open();
+        }
     }
 
     // Motion-path draw hint, top-centered while pathDrawing.
@@ -705,5 +726,71 @@ Item {
             bottom: parent.bottom
             bottomMargin: 16
         }
+    }
+
+    // Quality picker: snapshots fresh on Render so edits always export.
+    ExportQualityPopup {
+        id: qualityPopup
+
+        onRenderClicked: (quality, fps, performance) => canvas.startExport(quality, fps, performance)
+    }
+
+    // Live render progress with Cancel. Stays open on failure to show
+    // the backend error; closing an idle popup just dismisses it.
+    ExportProgressPopup {
+        id: progressPopup
+
+        onCancelClicked: {
+            if (VideoExporter.rendering)
+                VideoExporter.cancel();
+            else
+                progressPopup.close();
+        }
+    }
+
+    // Save destination picked after a successful render (temp-then-save
+    // so a dismissed dialog never leaves a stray file behind).
+    FileDialog {
+        id: saveDialog
+
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("MP4 video (*.mp4)")]
+        // Only the folder is preset: pointing currentFile at a
+        // non-existent path warns, the typed name comes back via
+        // selectedFile (saveAs appends .mp4 when missing).
+        currentFolder: StandardPaths.writableLocation(StandardPaths.MoviesLocation)
+        onAccepted: {
+            // A failed copy must not vanish silently: the progress popup
+            // is closed on this path, so reopen it to show lastError.
+            if (!VideoExporter.saveAs(saveDialog.selectedFile))
+                progressPopup.open();
+        }
+    }
+
+    Connections {
+        target: VideoExporter
+        function onSucceeded() {
+            progressPopup.close();
+            saveDialog.open();
+        }
+        function onFailed() {
+            // Progress popup stays open showing lastError with Close.
+        }
+        function onCancelled() {
+            progressPopup.close();
+        }
+    }
+
+    // Snapshot fresh and hand to the backend; the progress modal opens
+    // only when the worker actually accepted the job.
+    function startExport(quality, fps, performance) {
+        if (!canvas.doc)
+            return;
+        qualityPopup.close();
+        var scene = canvas.doc.snapshotScene();
+        VideoExporter.startExport(scene, quality, fps, performance, TabStore.titleAt(TabStore.currentIndex));
+        // Opens in both cases: live bar on success, backend error text
+        // on rejection (e.g. ffmpeg missing, already rendering).
+        progressPopup.open();
     }
 }

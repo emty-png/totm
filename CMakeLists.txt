@@ -11,6 +11,13 @@ qt_standard_project_setup()
 
 add_subdirectory(src)
 
+# Sampler conformance (samplerconf + cppdump + conform.py). Dev-only,
+# never shipped; keeps the C++ video sampler bit-identical to QML.
+option(TOTM_BUILD_TESTS "Build sampler conformance tests" ON)
+if(TOTM_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
+
 install(TARGETS totm
     BUNDLE DESTINATION .
     RUNTIME DESTINATION bin
