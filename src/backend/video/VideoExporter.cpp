@@ -11,12 +11,14 @@
 #include <QFile>
 #include <QFont>
 #include <QImage>
+#include <QImageReader>
 #include <QAtomicInteger>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QSvgRenderer>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextOption>
@@ -336,6 +338,12 @@ protected:
             return;
         }
 
+        if (shapeType == QLatin1String("image")) {
+            paintImage(pt, m, x, y, w, h, scale, stroke, sw);
+            pt.restore();
+            return;
+        }
+
         QPainterPath path;
         if (shapeType == QLatin1String("rectangle") && !m.value(QStringLiteral("independentCorners")).toBool()) {
             const double r = qMax(0.0, num(m, "radius") * scale);
@@ -562,6 +570,66 @@ protected:
             Q_UNUSED(first);
         }
         return d;
+    }
+
+    // Image via stored blob (mirrors ShapeItem stretch). Missing blobs
+    // paint a neutral box so broken imports never vanish silently.
+    static QString exportImagesDir() {
+        QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        if (dir.isEmpty())
+            dir = QDir::homePath() + QStringLiteral("/.totm");
+        if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
+            dir += QStringLiteral("/totm");
+        return dir + QStringLiteral("/images");
+    }
+
+    static QImage loadExportImage(const QString &name, int targetW, int targetH) {
+        if (name.isEmpty() || name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
+            || name.contains(QStringLiteral("..")))
+            return {};
+        const QString path = exportImagesDir() + QStringLiteral("/") + name;
+        if (!QFile::exists(path))
+            return {};
+        if (name.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive)) {
+            QSvgRenderer renderer(path);
+            if (!renderer.isValid())
+                return {};
+            const int w = qMax(1, targetW), h = qMax(1, targetH);
+            QImage img(w, h, QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::transparent);
+            QPainter p(&img);
+            renderer.render(&p, QRectF(0, 0, w, h));
+            return img;
+        }
+        QImageReader reader(path);
+        reader.setAutoTransform(true);
+        return reader.read();
+    }
+
+    static void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h, double s,
+        const QColor &stroke, double sw) {
+        const QString name = str(m, "imageSource", str(m, "image", QString()));
+        const double r = qMin(qMax(0.0, num(m, "radius") * s), qMin(w, h) / 2.0);
+        QPainterPath clip;
+        if (r > 0.01)
+            clip.addRoundedRect(QRectF(x, y, w, h), r, r);
+        else
+            clip.addRect(QRectF(x, y, w, h));
+        const QImage img = loadExportImage(name, qMax(1, qRound(w)), qMax(1, qRound(h)));
+        if (img.isNull()) {
+            pt.fillPath(clip, QColor(QStringLiteral("#d9d9d9")));
+        } else {
+            pt.save();
+            pt.setClipPath(clip, Qt::IntersectClip);
+            pt.drawImage(QRectF(x, y, w, h), img);
+            pt.restore();
+        }
+        if (sw > 0.01) {
+            QPen pen(stroke, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            pt.setPen(pen);
+            pt.setBrush(Qt::NoBrush);
+            pt.drawPath(clip);
+        }
     }
 
     // Text via QTextDocument (mirrors TextGlyphs). Outline uses a 1px

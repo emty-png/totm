@@ -202,6 +202,7 @@ PanelSection {
                     iconKind: "corner"
                     filled: true
                     active: section.cornersExpanded
+                    visible: !section.snapshot.allOfType("image")
                     onClicked: {
                         if (!section.independentActive())
                             section.snapshot.doc.toggleIndependentCorners(true);
@@ -213,7 +214,7 @@ PanelSection {
     }
 
     ColumnLayout {
-        visible: section.cornersExpanded && section.independentActive() && section.cornerType() !== ""
+        visible: section.cornersExpanded && section.independentActive() && section.cornerType() !== "" && !section.snapshot.allOfType("image")
         spacing: 8
 
         GridLayout {

@@ -100,6 +100,7 @@ Item {
             flipH: modelData.flipH
             flipV: modelData.flipV
             paintDepth: modelData.zOrder
+            imageSource: modelData.imageSource ?? ""
             textContent: modelData.textContent !== undefined ? modelData.textContent : ""
             fontFamily: modelData.fontFamily || "Inter"
             fontWeight: modelData.fontWeight || 400

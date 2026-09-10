@@ -56,6 +56,7 @@ QtObject {
                     points: s.points,
                     flipH: s.flipH,
                     flipV: s.flipV,
+                    imageSource: s.imageSource ?? "",
                     textContent: s.textContent,
                     fontFamily: s.fontFamily,
                     fontWeight: s.fontWeight,
@@ -166,12 +167,13 @@ QtObject {
     }
 
     // Corner radius applies to every pointed shape except the ellipse.
+    // Images support uniform radius only (no per-corner UI).
     function supportsRadius() {
         if (snapshot.sel.length === 0)
             return false;
         for (var j = 0; j < snapshot.sel.length; j++) {
             var t = snapshot.sel[j].type;
-            if (t !== "rectangle" && t !== "triangle" && t !== "star")
+            if (t !== "rectangle" && t !== "triangle" && t !== "star" && t !== "image")
                 return false;
         }
         return true;

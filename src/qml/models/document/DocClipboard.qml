@@ -44,6 +44,7 @@ QtObject {
             pathData: doc.factory._copyPath(node.pathData),
             flipH: node.flipH,
             flipV: node.flipV,
+            imageSource: node.imageSource ?? "",
             textContent: node.textContent,
             fontFamily: node.fontFamily,
             fontWeight: node.fontWeight,

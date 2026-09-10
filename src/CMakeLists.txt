@@ -61,6 +61,7 @@ qt_add_qml_module(totm
         qml/components/editor/snap/SnapCombinators.qml
         qml/components/editor/canvas/BezierMath.qml
         qml/components/editor/canvas/ShapeDrawTool.qml
+        qml/components/editor/canvas/ImageTool.qml
         qml/components/editor/canvas/TextEditor.qml
         qml/components/editor/canvas/CanvasCamera.qml
         qml/components/editor/canvas/CanvasSelectPolicy.qml
@@ -110,6 +111,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/PositionSection.qml
         qml/components/editor/properties/LayoutSection.qml
         qml/components/editor/properties/AppearanceSection.qml
+        qml/components/editor/properties/ImageSection.qml
         qml/components/editor/properties/FillSection.qml
         qml/components/editor/properties/StrokeSection.qml
         # Titlebar + window
@@ -172,7 +174,7 @@ qt_add_qml_module(totm
         qml/views/editor/EditorView.qml
 )
 
-target_link_libraries(totm PRIVATE Qt6::Quick)
+target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg)
 
 # Backend headers register QML types by basename (see the generated
 # qmltyperegistrations.cpp), so each backend dir must be on the include path.

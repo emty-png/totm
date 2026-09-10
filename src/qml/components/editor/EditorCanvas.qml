@@ -31,6 +31,8 @@ Item {
             canvas.pathTool.cancel();
         if (ToolState.pathDrawing)
             ToolState.cancelPathDraw();
+        if (canvas.imageTool)
+            canvas.imageTool.clearPending();
         canvas.showDocument(canvas.doc);
     }
 
@@ -89,6 +91,10 @@ Item {
         snap: snapEngine
         textEdit: textEditor
     }
+    property var imageTool: ImageTool {
+        canvas: canvas
+        snap: snapEngine
+    }
 
     focus: true
     clip: true
@@ -112,7 +118,7 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
-        enabled: ToolState.activeTool !== "shapes" && ToolState.activeTool !== "pen" && ToolState.activeTool !== "path"
+        enabled: ToolState.activeTool !== "shapes" && ToolState.activeTool !== "pen" && ToolState.activeTool !== "path" && ToolState.activeTool !== "image"
 
         onPressed: event => {
             canvas.commitTextEdit();
@@ -185,6 +191,28 @@ Item {
         }
         onReleased: {
             canvas.drawTool.releaseAt();
+        }
+    }
+
+    // Image placement drags. Only armed once a blob is pending (picker
+    // accepted); click stamps natural size, drag stretches to the box.
+    MouseArea {
+        id: imageMouse
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        hoverEnabled: true
+        cursorShape: Qt.CrossCursor
+        enabled: ToolState.activeTool === "image" && canvas.doc !== null && canvas.imageTool.hasPending()
+
+        onPressed: event => {
+            canvas.imageTool.pressAt(event.x, event.y, event.modifiers);
+        }
+        onPositionChanged: event => {
+            if (pressed)
+                canvas.imageTool.moveTo(event.x, event.y, event.modifiers, true);
+        }
+        onReleased: {
+            canvas.imageTool.releaseAt();
         }
     }
 
@@ -282,7 +310,7 @@ Item {
 
     CanvasOverlays {
         doc: canvas.doc
-        draft: canvas.drawTool.draft
+        draft: canvas.imageTool.draft ?? canvas.drawTool.draft
         zoom: canvas.zoom
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
@@ -378,14 +406,59 @@ Item {
         }
     }
 
+    // Image placement hint, top-centered while a blob is pending.
+    Rectangle {
+        visible: ToolState.activeTool === "image" && canvas.imageTool.hasPending()
+        anchors {
+            horizontalCenter: parent.horizontalCenter
+            top: parent.top
+            topMargin: 12
+        }
+        width: imageHintText.implicitWidth + 24
+        height: 32
+        radius: 16
+        color: AppTheme.surface
+        border.width: 1
+        border.color: AppTheme.border
+
+        Text {
+            id: imageHintText
+            anchors.centerIn: parent
+            text: qsTr("Click to place, drag for size — Esc cancels")
+            font.pixelSize: 12
+            color: AppTheme.foreground
+        }
+    }
+
+    // Image file picker (picker-then-place). Accepts the chosen file by
+    // importing a copy into the library; cancel without a pending blob
+    // falls back to select so the dead tool never sticks.
+    FileDialog {
+        id: imagePicker
+
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("Images (*.png *.jpg *.jpeg *.webp *.gif *.svg)"), qsTr("PNG (*.png)"), qsTr("JPEG (*.jpg *.jpeg)"), qsTr("WebP (*.webp)"), qsTr("GIF (*.gif)"), qsTr("SVG (*.svg)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
+        onAccepted: canvas.acceptImageFile(selectedFile)
+        onRejected: {
+            if (!canvas.imageTool.hasPending())
+                ToolState.setActiveTool("select");
+        }
+    }
+
     // Leaving the pen drops the in-progress sketch so a stale draft
     // never leaks into the next tool or tab. Entering path redraw seeds
     // the existing trajectory so redraws show what they replace.
+    // Entering image opens the picker; leaving it drops the pending blob.
     Connections {
         target: ToolState
         function onActiveToolChanged() {
             if (ToolState.activeTool !== "pen" && canvas.pen)
                 canvas.pen.cancel();
+            if (ToolState.activeTool !== "image" && canvas.imageTool)
+                canvas.imageTool.clearPending();
+            if (ToolState.activeTool === "image" && canvas.doc && !canvas.imageTool.hasPending())
+                imagePicker.open();
             if (ToolState.activeTool !== "path" && canvas.pathTool) {
                 canvas.pathTool.cancel();
             } else if (ToolState.activeTool === "path" && canvas.pathTool && ToolState.pathClipId >= 0) {
@@ -417,7 +490,10 @@ Item {
             canvas.penEdit.exit();
             event.accepted = true;
         } else if (event.key === Qt.Key_Escape) {
-            if (ToolState.activeTool === "path") {
+            if (ToolState.activeTool === "image") {
+                canvas.cancelImageTool();
+                event.accepted = true;
+            } else if (ToolState.activeTool === "path") {
                 canvas.cancelPathDraw();
                 event.accepted = true;
             } else if (canvas.penEdit.editUid >= 0) {
@@ -585,6 +661,31 @@ Item {
         if (canvas.pathTool)
             canvas.pathTool.cancel();
         ToolState.cancelPathDraw();
+    }
+    // Image picker accept: copy into the library and arm placement at
+    // natural size. Failures fall back to select so the tool never sticks.
+    function acceptImageFile(file) {
+        var name = LibraryStore.importImage(file);
+        if (!name) {
+            canvas.cancelImageTool();
+            return;
+        }
+        var info = LibraryStore.imageInfo(name);
+        var w = Number(info.width) || 400;
+        var h = Number(info.height) || 300;
+        // Oversized rasters stamp clamped so a 4k photo never covers the
+        // scene; drags can still stretch larger.
+        if (w > 800 || h > 800) {
+            var k = Math.min(800 / w, 800 / h);
+            w = Math.max(1, Math.round(w * k));
+            h = Math.max(1, Math.round(h * k));
+        }
+        canvas.imageTool.setPending(name, w, h);
+    }
+    function cancelImageTool() {
+        if (canvas.imageTool)
+            canvas.imageTool.clearPending();
+        ToolState.setActiveTool("select");
     }
     // Text editing pass-throughs (session lives in TextEditor).
     function beginTextEdit(uid) {

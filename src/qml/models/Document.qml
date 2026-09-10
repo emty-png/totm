@@ -98,6 +98,8 @@ QtObject {
             return "Text";
         case "pen":
             return "Path";
+        case "image":
+            return "Image";
         case "group":
             return "Group";
         default:
@@ -276,6 +278,10 @@ QtObject {
     function addPen(pathData) {
         history.checkpoint();
         return factory.addPen(pathData);
+    }
+    function addImage(imageSource, x, y, w, h) {
+        history.checkpoint();
+        return factory.addImage(imageSource, x, y, w, h);
     }
     function snapshotNode(node) {
         return clipboard.snapshotNode(node);
