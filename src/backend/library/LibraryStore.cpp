@@ -41,6 +41,7 @@ QVariantMap entryToScene(const QVariantMap &scene) {
     out[QStringLiteral("sceneColor")] = scene.value(QStringLiteral("sceneColor"), QStringLiteral("#ffffff"));
     out[QStringLiteral("nodes")] = scene.value(QStringLiteral("nodes"), QVariantList());
     out[QStringLiteral("anim")] = scene.value(QStringLiteral("anim"), QVariantMap());
+    out[QStringLiteral("audio")] = scene.value(QStringLiteral("audio"), QVariantMap());
     return out;
 }
 } // namespace
@@ -373,6 +374,84 @@ void LibraryStore::sweepOrphanImages() {
     }
 }
 
+QString LibraryStore::importAudio(const QUrl &source) {
+    QString local = source.isLocalFile() ? source.toLocalFile() : source.toString();
+    if (local.isEmpty()) {
+        setLastError(tr("Pick an audio file first."));
+        return {};
+    }
+    QFileInfo info(local);
+    if (!info.exists() || !info.isFile()) {
+        setLastError(tr("Could not read that audio file."));
+        return {};
+    }
+    const QString suffix = info.suffix().toLower();
+    static const QStringList allowed = {QStringLiteral("mp3"), QStringLiteral("wav"),
+        QStringLiteral("ogg"), QStringLiteral("flac")};
+    if (!allowed.contains(suffix)) {
+        setLastError(tr("That audio type is not supported (mp3, wav, ogg, flac)."));
+        return {};
+    }
+    QDir().mkpath(audioDir());
+    const QString name = newId() + QStringLiteral(".") + suffix;
+    const QString dest = audioDir() + QStringLiteral("/") + name;
+    if (!QFile::copy(local, dest)) {
+        setLastError(tr("Could not import that audio file."));
+        return {};
+    }
+    clearError();
+    return name;
+}
+
+QUrl LibraryStore::audioUrl(const QString &name) const {
+    if (!isSafeAudioName(name))
+        return {};
+    const QString path = audioDir() + QStringLiteral("/") + name;
+    if (!QFile::exists(path))
+        return {};
+    return QUrl::fromLocalFile(path);
+}
+
+bool LibraryStore::hasAudio(const QString &name) const {
+    if (!isSafeAudioName(name))
+        return false;
+    return QFile::exists(audioDir() + QStringLiteral("/") + name);
+}
+
+quint64 LibraryStore::audioDiskUsage() const {
+    quint64 total = 0;
+    const QDir dir(audioDir());
+    for (const QFileInfo &info : dir.entryInfoList(QDir::Files))
+        total += static_cast<quint64>(info.size());
+    return total;
+}
+
+int LibraryStore::audioCount() const {
+    return QDir(audioDir()).entryList(QDir::Files).size();
+}
+
+QSet<QString> LibraryStore::referencedAudio() const {
+    QSet<QString> out;
+    for (const DesignEntry &entry : m_designEntries) {
+        const QVariantMap audio = entry.scene.value(QStringLiteral("audio")).toMap();
+        for (const QVariant &v : audio.value(QStringLiteral("clips")).toList()) {
+            const QString src = v.toMap().value(QStringLiteral("source")).toString();
+            if (!src.isEmpty())
+                out.insert(src);
+        }
+    }
+    return out;
+}
+
+void LibraryStore::sweepOrphanAudio() {
+    const QSet<QString> keep = referencedAudio();
+    const QDir dir(audioDir());
+    for (const QFileInfo &info : dir.entryInfoList(QDir::Files)) {
+        if (!keep.contains(info.fileName()))
+            QFile::remove(info.absoluteFilePath());
+    }
+}
+
 void LibraryStore::load() {
     if (m_loaded)
         return;
@@ -389,6 +468,7 @@ void LibraryStore::load() {
     if (!file.exists()) {
         installFreshDefault();
         sweepOrphanImages();
+        sweepOrphanAudio();
         persist();
         rebuild();
         return;
@@ -398,6 +478,7 @@ void LibraryStore::load() {
         // Invariant: in-memory state stays valid even when disk is not.
         installFreshDefault();
         sweepOrphanImages();
+        sweepOrphanAudio();
         rebuild();
         return;
     }
@@ -422,6 +503,7 @@ void LibraryStore::load() {
         m_designEntries.clear();
         installFreshDefault();
         sweepOrphanImages();
+        sweepOrphanAudio();
         persist();
         rebuild();
         return;
@@ -493,6 +575,7 @@ void LibraryStore::load() {
     if (healed)
         persist();
     sweepOrphanImages();
+    sweepOrphanAudio();
     rebuild();
 }
 
@@ -623,6 +706,18 @@ QString LibraryStore::imagesDir() const {
 
 QString LibraryStore::designsDir() const {
     return libraryDir() + QStringLiteral("/designs");
+}
+
+QString LibraryStore::audioDir() const {
+    return libraryDir() + QStringLiteral("/audio");
+}
+
+bool LibraryStore::isSafeAudioName(const QString &name) const {
+    if (name.isEmpty() || name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
+        || name.contains(QStringLiteral("..")))
+        return false;
+    const int dot = name.lastIndexOf(QLatin1Char('.'));
+    return dot > 0 && dot < name.size() - 1;
 }
 
 bool LibraryStore::writeDesignFile(const QString &id, const QVariantMap &scene) {

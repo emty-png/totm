@@ -5,7 +5,7 @@ import QtQuick.Shapes
 // Paths use a 256x256 grid, scaled to fit.
 // kind: "minimize" | "maximize" | "restore" | "close" | "sun" | "moon"
 //     | "apps" | "plus" | "square" | "circle" | "triangle" | "diamond"
-//     | "hexagon" | "pen" | "text" | "image" | "caret" | "cursor"
+//     | "hexagon" | "pen" | "text" | "image" | "music" | "caret" | "cursor"
 //     | "eye" | "eyeOff" | "lock" | "unlock" | "star" | "starFill"
 //     | "contrast" | "corner" | "cornerTL" | "cornerTR" | "cornerBR"
 //     | "cornerBL" | "rotate" | "flipH" | "flipV" | "undo"
@@ -233,6 +233,14 @@ Item {
         box: icon.width
         paint: icon.iconColor
         svg: "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V158.75l-26.07-26.06a16,16,0,0,0-22.63,0l-20,20-44-44a16,16,0,0,0-22.62,0L40,149.37V56ZM40,172l52-52,80,80H40Zm176,28H194.63l-36-36,20-20L216,181.38V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z"
+    }
+
+    // Music note with plus (audio import)
+    PhShape {
+        active: icon.kind === "music"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M232,48a8,8,0,0,1-8,8H208V72a8,8,0,0,1-16,0V56H176a8,8,0,0,1,0-16h16V24a8,8,0,0,1,16,0V40h16A8,8,0,0,1,232,48Zm-16,64v52a36,36,0,1,1-16-29.92V112a8,8,0,0,1,16,0Zm-16,52a20,20,0,1,0-20,20A20,20,0,0,0,200,164ZM88,110.25V196a36,36,0,1,1-16-29.92V56a8,8,0,0,1,6.06-7.76l56-14a8,8,0,0,1,3.88,15.52L88,62.25v31.5l70.06-17.51a8,8,0,0,1,3.88,15.52ZM72,196a20,20,0,1,0-20,20A20,20,0,0,0,72,196Z"
     }
 
     // Caret down (dropdown trigger)

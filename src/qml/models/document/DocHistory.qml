@@ -37,6 +37,7 @@ QtObject {
             anchor: doc.anchorUid,
             next: doc.nextNodeUid,
             clips: doc.anim ? doc.anim.selectedClipIds.slice() : [],
+            aclips: doc.audio ? doc.audio.selectedAudioIds.slice() : [],
             time: doc.anim ? doc.anim.currentTime : 0
         };
     }
@@ -74,6 +75,20 @@ QtObject {
             }
             doc.anim.selectedClipIds = kept;
             doc.anim.currentTime = Math.min(doc.anim.duration, Math.max(0, Number(entry.time) || 0));
+        }
+        // Audio selection rides along too; dead ids fall away like clips.
+        if (doc.audio) {
+            var aalive = {};
+            var aclips = doc.audio.clips;
+            for (var m = 0; m < aclips.length; m++)
+                aalive[aclips[m].id] = true;
+            var akept = [];
+            var awanted = entry.aclips || [];
+            for (var n = 0; n < awanted.length; n++) {
+                if (aalive[awanted[n]])
+                    akept.push(awanted[n]);
+            }
+            doc.audio.selectedAudioIds = akept;
         }
         doc.anchorUid = entry.anchor ?? -1;
         doc.pruneDrillPath();

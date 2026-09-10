@@ -118,6 +118,15 @@ public:
     Q_INVOKABLE quint64 imagesDiskUsage() const;
     Q_INVOKABLE int imageCount() const;
 
+    // Audio blobs. Same sidecar pattern as images: files copied into
+    // <libraryDir>/audio/, clips store the file name only. Import
+    // allowlist is MP3/WAV/OGG/FLAC; anything else is rejected loudly.
+    Q_INVOKABLE QString importAudio(const QUrl &source);
+    Q_INVOKABLE QUrl audioUrl(const QString &name) const;
+    Q_INVOKABLE bool hasAudio(const QString &name) const;
+    Q_INVOKABLE quint64 audioDiskUsage() const;
+    Q_INVOKABLE int audioCount() const;
+
 signals:
     void libraryChanged();
     void lastErrorChanged();
@@ -155,6 +164,15 @@ private:
     // the app-wide clipboard and per-tab undo can reference blobs no
     // saved scene points at yet, and both are empty at boot.
     void sweepOrphanImages();
+    // Blob names referenced by any in-memory scene's audio clips.
+    QSet<QString> referencedAudio() const;
+    // Delete audio blobs no scene references. Startup only, same
+    // reasoning as the image sweep.
+    void sweepOrphanAudio();
+    // Audio blob directory (<libraryDir>/audio). Created on demand.
+    QString audioDir() const;
+    // Stored file name guard: uuid + safe suffix, no separators.
+    bool isSafeAudioName(const QString &name) const;
     // Image blob directory (<libraryDir>/images). Created on demand.
     QString imagesDir() const;
     // Stored file name guard: uuid + safe suffix, no separators.
