@@ -105,6 +105,21 @@ Item {
         return p && p.mediaStatus >= MediaPlayer.LoadedMedia && p.mediaStatus !== MediaPlayer.EndOfMedia && p.mediaStatus !== MediaPlayer.InvalidMedia;
     }
 
+    // Audible gain for one clip at a poll instant: mute cuts, volume
+    // scales, fades ramp over the audible window (mirrors the exporter
+    // envelope so preview matches the render).
+    function gainAt(c, win, now) {
+        if (!c || c.muted === true)
+            return 0;
+        var v = c.volume === undefined ? 1 : Math.min(1, Math.max(0, Number(c.volume) || 0));
+        var pos = now - win.start;
+        if (c.fadeIn > 0 && pos < c.fadeIn)
+            v *= Math.max(0, pos / c.fadeIn);
+        if (c.fadeOut > 0 && pos > win.len - c.fadeOut)
+            v *= Math.max(0, (win.len - pos) / c.fadeOut);
+        return Math.min(1, Math.max(0, v));
+    }
+
     // One poll pass: start what is due, park what is past, repair what
     // drifted (scrubs land here as large jumps, ticks never reach it).
     function sync() {
@@ -124,6 +139,8 @@ Item {
                     p.pause();
                 continue;
             }
+            if (p.audioOutput)
+                p.audioOutput.volume = preview.gainAt(c, win, now);
             var wantMs = (c.offset + (now - c.t0)) * 1000;
             if (p.playbackState !== MediaPlayer.PlayingState)
                 p.play();

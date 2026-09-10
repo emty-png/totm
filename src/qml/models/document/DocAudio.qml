@@ -46,7 +46,11 @@ QtObject {
             source: String(source),
             t0: start,
             offset: 0,
-            duration: Math.min(fileDuration, room)
+            duration: Math.min(fileDuration, room),
+            volume: 1,
+            fadeIn: 0,
+            fadeOut: 0,
+            muted: false
         };
         var list = audio.clips.slice();
         list.push(clip);
@@ -138,6 +142,114 @@ QtObject {
         }
     }
 
+    // Selected clip objects in lane order. Empty when nothing fits.
+    function selectedList() {
+        var out = [];
+        for (var i = 0; i < audio.clips.length; i++) {
+            if (audio.selectedAudioIds.indexOf(audio.clips[i].id) >= 0)
+                out.push(audio.clips[i]);
+        }
+        return out;
+    }
+
+    // Mixed-value read over the selection for the audio panel (mirrors
+    // SelectionSnapshot.commonOf). Missing roles and empty selections
+    // read as mixed so bindings never see undefined.
+    function commonOf(role) {
+        var sel = audio.selectedList();
+        if (sel.length === 0 || sel[0][role] === undefined)
+            return {
+                mixed: true,
+                value: 0
+            };
+        var v = sel[0][role];
+        for (var i = 1; i < sel.length; i++) {
+            if (sel[i][role] !== v)
+                return {
+                    mixed: true,
+                    value: v
+                };
+        }
+        return {
+            mixed: false,
+            value: v
+        };
+    }
+
+    // Panel write: replaces clips wholesale so undo snapshots stay
+    // immutable. Timing clamps to the composition start and positive
+    // lengths; fades floor at zero (the exporter fits them to the
+    // take). Checkpoints once; scrub gestures coalesce via depth.
+    function setProp(role, value) {
+        var sel = audio.selectedList();
+        if (sel.length === 0)
+            return false;
+        var v = value;
+        if (role === "t0" || role === "duration" || role === "offset" || role === "fadeIn" || role === "fadeOut")
+            v = Math.max(role === "duration" ? 0.05 : 0, Number(value) || 0);
+        else if (role === "volume")
+            v = Math.min(1, Math.max(0, Number(value) || 0));
+        else if (role === "muted")
+            v = value === true;
+        else
+            return false;
+        doc.history.checkpoint();
+        var ids = {};
+        for (var i = 0; i < sel.length; i++)
+            ids[sel[i].id] = true;
+        var list = audio.clips.slice();
+        for (var j = 0; j < list.length; j++) {
+            if (ids[list[j].id]) {
+                var next = Object.assign({}, list[j]);
+                next[role] = v;
+                list[j] = next;
+            }
+        }
+        audio.clips = list;
+        doc.touch();
+        return true;
+    }
+
+    // Mute toggle for the selection: clears when all are muted, else
+    // mutes everything (mirrors multi-row toggle affordances).
+    function toggleMuted() {
+        var sel = audio.selectedList();
+        if (sel.length === 0)
+            return false;
+        var all = true;
+        for (var i = 0; i < sel.length; i++) {
+            if (sel[i].muted !== true)
+                all = false;
+        }
+        return audio.setProp("muted", !all);
+    }
+
+    // Swaps the file under the selected clips, keeping each clip's
+    // timing. Trims to the new file so offset + duration never overrun;
+    // returns the replaced count, or -1 when the file holds nothing.
+    function replaceSource(source, fileDuration) {
+        var sel = audio.selectedList();
+        if (sel.length === 0 || !source || !(fileDuration > 0))
+            return -1;
+        doc.history.checkpoint();
+        var ids = {};
+        for (var i = 0; i < sel.length; i++)
+            ids[sel[i].id] = true;
+        var list = audio.clips.slice();
+        for (var j = 0; j < list.length; j++) {
+            if (ids[list[j].id]) {
+                var next = Object.assign({}, list[j]);
+                next.source = String(source);
+                next.offset = Math.min(Math.max(0, Number(next.offset) || 0), Math.max(0, fileDuration - 0.05));
+                next.duration = Math.min(Math.max(0.05, Number(next.duration) || 0), Math.max(0.05, fileDuration - next.offset));
+                list[j] = next;
+            }
+        }
+        audio.clips = list;
+        doc.touch();
+        return sel.length;
+    }
+
     // Plain-data snapshot for saves and undo. Deep copies: lane drags
     // mutate live clips in place, which must never rewrite a stored
     // before-image.
@@ -150,7 +262,11 @@ QtObject {
                 source: c.source,
                 t0: c.t0,
                 offset: c.offset,
-                duration: c.duration
+                duration: c.duration,
+                volume: c.volume === undefined ? 1 : c.volume,
+                fadeIn: c.fadeIn === undefined ? 0 : c.fadeIn,
+                fadeOut: c.fadeOut === undefined ? 0 : c.fadeOut,
+                muted: c.muted === true
             });
         }
         return {
@@ -182,7 +298,11 @@ QtObject {
                 source: String(r.source),
                 t0: start,
                 offset: Math.max(0, Number(r.offset) || 0),
-                duration: Math.min(Math.max(0.05, Number(r.duration) || 0), dur - start)
+                duration: Math.min(Math.max(0.05, Number(r.duration) || 0), dur - start),
+                volume: r.volume === undefined ? 1 : Math.min(1, Math.max(0, Number(r.volume) || 0)),
+                fadeIn: Math.max(0, Number(r.fadeIn) || 0),
+                fadeOut: Math.max(0, Number(r.fadeOut) || 0),
+                muted: r.muted === true
             });
             if (id >= top)
                 top = id + 1;

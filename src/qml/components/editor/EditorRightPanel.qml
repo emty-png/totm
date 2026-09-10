@@ -37,6 +37,18 @@ Item {
         return d.selectedTops().length > 0;
     }
 
+    // Audio selection drives the audio panel. Clip selection keeps
+    // priority when both are selected (existing editor behavior wins).
+    function audioSelected() {
+        var d = TabState.documentFor(TabState.currentIndex);
+        return !!d && d.audio.selectedAudioIds.length > 0;
+    }
+
+    // Audio panel takes the animate column (switcher hides with it).
+    function audioPanel() {
+        return rightPanel.audioSelected() && !rightPanel.clipSelected();
+    }
+
     function selectedClipId() {
         var d = TabState.documentFor(TabState.currentIndex);
         if (!d || d.anim.selectedClipIds.length === 0)
@@ -76,10 +88,10 @@ Item {
         ToolState.startPathDraw(c.targetUid, id);
     }
 
-    // Animate tab needs a shape or a clip to show anything (mirrors the
-    // design panel's empty state).
+    // Animate tab needs a shape, a clip or audio to show anything
+    // (mirrors the design panel's empty state).
     function hasAnimContext() {
-        return rightPanel.shapeSelected() || rightPanel.clipSelected();
+        return rightPanel.shapeSelected() || rightPanel.clipSelected() || rightPanel.audioSelected();
     }
 
     // Text selections use the text preset gallery variant (Basic/Slide/
@@ -159,8 +171,8 @@ Item {
             AnimateModeSwitcher {
                 id: animateSwitcher
                 width: parent.width
-                height: rightPanel.hasAnimContext() ? 48 : 0
-                visible: rightPanel.hasAnimContext()
+                height: rightPanel.hasAnimContext() && !rightPanel.audioPanel() ? 48 : 0
+                visible: rightPanel.hasAnimContext() && !rightPanel.audioPanel()
             }
 
             // Empty selection: same nothing-here as the design panel.
@@ -184,7 +196,7 @@ Item {
             PresetGallery {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
-                visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && !rightPanel.clipSelected() && (!rightPanel.shapeSelected() || rightPanel.pickingPreset) && !rightPanel.isTextSelection()
+                visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && !rightPanel.clipSelected() && !rightPanel.audioSelected() && (!rightPanel.shapeSelected() || rightPanel.pickingPreset) && !rightPanel.isTextSelection()
                 doc: TabState.documentFor(TabState.currentIndex)
                 playing: visible
                 showBack: rightPanel.pickingPreset
@@ -197,7 +209,7 @@ Item {
             ShapeAnimationsPanel {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
-                visible: animateSwitcher.mode === "preset" && !rightPanel.clipSelected() && rightPanel.shapeSelected() && !rightPanel.pickingPreset
+                visible: animateSwitcher.mode === "preset" && !rightPanel.clipSelected() && !rightPanel.audioSelected() && rightPanel.shapeSelected() && !rightPanel.pickingPreset
                 doc: TabState.documentFor(TabState.currentIndex)
                 newPolicy: () => rightPanel.pickingPreset = true
             }
@@ -206,7 +218,7 @@ Item {
             PresetGallery {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
-                visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && !rightPanel.clipSelected() && rightPanel.isTextSelection() && rightPanel.pickingPreset
+                visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && !rightPanel.clipSelected() && !rightPanel.audioSelected() && rightPanel.isTextSelection() && rightPanel.pickingPreset
                 doc: TabState.documentFor(TabState.currentIndex)
                 playing: visible
                 textMode: true
@@ -225,12 +237,21 @@ Item {
                 redrawPolicy: () => rightPanel.redrawPathClip()
             }
 
+            // Audio properties: timing, volume/mute, fades and source
+            // replace for the selected timeline clips.
+            AudioSection {
+                width: parent.width
+                height: parent.height - animateSwitcher.height
+                visible: rightPanel.audioPanel()
+                doc: TabState.documentFor(TabState.currentIndex)
+            }
+
             // Custom gallery: grouped from-to Add list plus custom clips.
             // Path rows enter canvas draw mode through drawPolicy.
             CustomGallery {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
-                visible: animateSwitcher.mode === "custom" && rightPanel.hasAnimContext() && !rightPanel.clipSelected()
+                visible: animateSwitcher.mode === "custom" && rightPanel.hasAnimContext() && !rightPanel.clipSelected() && !rightPanel.audioSelected()
                 doc: TabState.documentFor(TabState.currentIndex)
                 drawPolicy: () => rightPanel.startPathDraw()
             }

@@ -206,6 +206,21 @@ QtObject {
     function clearAudioSelection() {
         audio.clearSelection();
     }
+    function setAudioProp(role, value) {
+        return audio.setProp(role, value);
+    }
+    function toggleAudioMuted() {
+        return audio.toggleMuted();
+    }
+    function replaceAudioSource(source, fileDuration) {
+        return audio.replaceSource(source, fileDuration);
+    }
+    function audioCommon(role) {
+        return audio.commonOf(role);
+    }
+    function selectedAudioClips() {
+        return audio.selectedList();
+    }
     function audioClip(id) {
         return audio.clipById(id);
     }
