@@ -41,6 +41,11 @@ Item {
     readonly property var lanes: timeline.computeLanes()
     readonly property var audioRows: timeline.computeAudioRows()
     readonly property real audioHeadHeight: 28
+    // Audio section chrome (header rows here and on the tracks side)
+    // only exists once a clip does; the import button floats over the
+    // ruler band so adding the first clip is always at hand.
+    readonly property bool hasAudio: timeline.audioRows.length > 0
+    readonly property real audioTop: timeline.hasAudio ? timeline.audioHeadHeight : 0
 
     // Tracks input overlay, below the content row: lane, diamond and
     // ruler presses land above; empty tracks and wheel fall through here.
@@ -107,109 +112,129 @@ Item {
                 headerHeight: timeline.headerHeight
             }
 
-            Repeater {
-                model: timeline.lanes
+            // Lane labels ride with the tracks (transport stays put).
+            // Non-interactive like tracks: it never claims presses,
+            // contentY just follows the tracks side.
+            Flickable {
+                id: gutterScroll
 
-                Item {
+                Layout.preferredWidth: timeline.gutterWidth
+                Layout.fillHeight: true
+                interactive: false
+                clip: true
+                contentWidth: timeline.gutterWidth
+                contentHeight: timeline.lanes.length * timeline.laneHeight + timeline.audioTop + timeline.audioRows.length * timeline.laneHeight
+                contentY: tracks.contentY
+
+                Column {
                     width: timeline.gutterWidth
-                    height: timeline.laneHeight
 
-                    Text {
-                        anchors {
-                            left: parent.left
-                            right: parent.right
-                            verticalCenter: parent.verticalCenter
-                            leftMargin: 12
-                            rightMargin: 8
+                    Repeater {
+                        model: timeline.lanes
+
+                        Item {
+                            width: timeline.gutterWidth
+                            height: timeline.laneHeight
+
+                            Text {
+                                anchors {
+                                    left: parent.left
+                                    right: parent.right
+                                    verticalCenter: parent.verticalCenter
+                                    leftMargin: 12
+                                    rightMargin: 8
+                                }
+                                text: modelData.name
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                                color: AppTheme.foreground
+                            }
+
+                            Rectangle {
+                                anchors {
+                                    left: parent.left
+                                    right: parent.right
+                                    bottom: parent.bottom
+                                }
+                                height: 1
+                                color: AppTheme.border
+                            }
                         }
-                        text: modelData.name
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                        color: AppTheme.foreground
                     }
 
-                    Rectangle {
-                        anchors {
-                            left: parent.left
-                            right: parent.right
-                            bottom: parent.bottom
+                    // Audio section header: label only now; the import button
+                    // floats top-right over the ruler band (the transport row is
+                    // full, and this keeps it at hand with zero clips too).
+                    Item {
+                        width: parent.width
+                        height: timeline.audioHeadHeight
+                        visible: timeline.hasAudio
+
+                        Text {
+                            anchors {
+                                left: parent.left
+                                verticalCenter: parent.verticalCenter
+                                leftMargin: 12
+                            }
+                            text: qsTr("Audio")
+                            font.pixelSize: 11
+                            color: AppTheme.muted
                         }
-                        height: 1
-                        color: AppTheme.border
-                    }
-                }
-            }
 
-            // Audio section header: label only now; the import button
-            // floats top-right over the ruler band (the transport row is
-            // full, and this keeps it at hand with zero clips too).
-            Item {
-                width: parent.width
-                height: timeline.audioHeadHeight
-
-                Text {
-                    anchors {
-                        left: parent.left
-                        verticalCenter: parent.verticalCenter
-                        leftMargin: 12
-                    }
-                    text: qsTr("Audio")
-                    font.pixelSize: 11
-                    color: AppTheme.muted
-                }
-
-                Rectangle {
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        bottom: parent.bottom
-                    }
-                    height: 1
-                    color: AppTheme.border
-                }
-            }
-
-            Repeater {
-                model: timeline.audioRows
-
-                Item {
-                    width: timeline.gutterWidth
-                    height: timeline.laneHeight
-
-                    AppIcon {
-                        anchors {
-                            left: parent.left
-                            verticalCenter: parent.verticalCenter
-                            leftMargin: 12
+                        Rectangle {
+                            anchors {
+                                left: parent.left
+                                right: parent.right
+                                bottom: parent.bottom
+                            }
+                            height: 1
+                            color: AppTheme.border
                         }
-                        width: 14
-                        height: 14
-                        kind: "music"
-                        iconColor: AppTheme.muted
                     }
 
-                    Text {
-                        anchors {
-                            left: parent.left
-                            right: parent.right
-                            verticalCenter: parent.verticalCenter
-                            leftMargin: 32
-                            rightMargin: 8
-                        }
-                        text: qsTr("Sound %1").arg(modelData.clip.id)
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                        color: AppTheme.foreground
-                    }
+                    Repeater {
+                        model: timeline.audioRows
 
-                    Rectangle {
-                        anchors {
-                            left: parent.left
-                            right: parent.right
-                            bottom: parent.bottom
+                        Item {
+                            width: timeline.gutterWidth
+                            height: timeline.laneHeight
+
+                            AppIcon {
+                                anchors {
+                                    left: parent.left
+                                    verticalCenter: parent.verticalCenter
+                                    leftMargin: 12
+                                }
+                                width: 14
+                                height: 14
+                                kind: "music"
+                                iconColor: AppTheme.muted
+                            }
+
+                            Text {
+                                anchors {
+                                    left: parent.left
+                                    right: parent.right
+                                    verticalCenter: parent.verticalCenter
+                                    leftMargin: 32
+                                    rightMargin: 8
+                                }
+                                text: qsTr("Sound %1").arg(modelData.clip.id)
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                                color: AppTheme.foreground
+                            }
+
+                            Rectangle {
+                                anchors {
+                                    left: parent.left
+                                    right: parent.right
+                                    bottom: parent.bottom
+                                }
+                                height: 1
+                                color: AppTheme.border
+                            }
                         }
-                        height: 1
-                        color: AppTheme.border
                     }
                 }
             }
@@ -231,12 +256,12 @@ Item {
             // press-drag for panning (and every wheel for flicking)
             // before the marquee overlay below sees them, which kills
             // drag-select, click-clear and ctrl+wheel zoom. Navigation
-            // stays programmatic (overlay wheel handler, scrollbar,
+            // stays programmatic (overlay wheel handler, scrollbars,
             // zoomTo) while lanes and ruler keep their own MouseAreas.
             interactive: false
-            flickableDirection: Flickable.HorizontalFlick
+            flickableDirection: Flickable.HorizontalAndVerticalFlick
             contentWidth: Math.max(tracks.width, timeline.tracksWidth())
-            contentHeight: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight + timeline.audioHeadHeight + timeline.audioRows.length * timeline.laneHeight
+            contentHeight: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight + timeline.audioTop + timeline.audioRows.length * timeline.laneHeight
 
             ScrollBar.horizontal: ScrollBar {
                 policy: ScrollBar.AsNeeded
@@ -250,10 +275,23 @@ Item {
                 }
             }
 
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+                contentItem: Rectangle {
+                    implicitWidth: 6
+                    radius: 3
+                    color: AppTheme.border
+                }
+                background: Item {
+                    implicitWidth: 6
+                }
+            }
+
             // Ruler block: ruler bottom-aligned with the sidebar transport,
-            // sharing its hairline.
+            // sharing its hairline. Pinned to the viewport so vertical
+            // scrolling moves lanes under a steady ruler.
             Item {
-                y: timeline.topPad
+                y: timeline.topPad + tracks.contentY
                 width: tracks.contentWidth
                 height: timeline.headerHeight
 
@@ -326,6 +364,7 @@ Item {
                 }
                 y: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight
                 height: timeline.audioHeadHeight
+                visible: timeline.hasAudio
 
                 Rectangle {
                     anchors {
@@ -346,7 +385,7 @@ Item {
                     left: parent.left
                     right: parent.right
                 }
-                y: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight + timeline.audioHeadHeight
+                y: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight + timeline.audioTop
                 height: timeline.audioRows.length * timeline.laneHeight
 
                 Repeater {
@@ -370,12 +409,13 @@ Item {
             }
 
             // Playhead overlay: pill readout on the ruler plus a line down
-            // through every lane. Covers the viewport, not just the content,
-            // so the line always reaches the panel bottom.
+            // through every lane. Pinned to the viewport (not the content)
+            // so the line always reaches the panel bottom while scrolling.
             Item {
                 x: timeline.originX + timeline.playheadX
+                y: tracks.contentY
                 width: 0
-                height: Math.max(tracks.contentHeight, tracks.height)
+                height: tracks.height
 
                 Rectangle {
                     x: -1
@@ -407,7 +447,7 @@ Item {
             // ruler, not the content, so it stays put while scrolled.
             Text {
                 x: tracks.contentX + (tracks.width - width) / 2
-                y: timeline.tracksTop + (tracks.height - timeline.tracksTop - height) / 2
+                y: tracks.contentY + timeline.tracksTop + (tracks.height - timeline.tracksTop - height) / 2
                 visible: timeline.lanes.length === 0 && timeline.audioRows.length === 0
                 text: qsTr("Apply a preset or custom animation to begin...")
                 font.pixelSize: 13
@@ -556,7 +596,7 @@ Item {
         }
         var rows = timeline.audioRows;
         for (var m = 0; m < rows.length; m++) {
-            var ay = timeline.tracksTop + lanes.length * timeline.laneHeight + timeline.audioHeadHeight + m * timeline.laneHeight + timeline.laneHeight / 2;
+            var ay = timeline.tracksTop + lanes.length * timeline.laneHeight + timeline.audioTop + m * timeline.laneHeight + timeline.laneHeight / 2;
             if (ay < area.y || ay > area.y + area.height)
                 continue;
             var clip = rows[m].clip;
@@ -571,6 +611,16 @@ Item {
         // Overlay coordinates already are viewport coordinates.
         if (event.modifiers & Qt.ControlModifier) {
             timeline.zoomAt(event.x, event.angleDelta.y);
+            event.accepted = true;
+            return;
+        }
+        // Shift+wheel scrolls vertically; unshifted wheels pan the tracks
+        // horizontally (Flickables stay non-interactive, so all scrolling
+        // is programmatic and never steals lane presses).
+        if (event.modifiers & Qt.ShiftModifier) {
+            var vy = event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.y;
+            if (vy !== 0)
+                tracks.contentY = timeline.clampY(tracks.contentY - vy);
             event.accepted = true;
             return;
         }
@@ -595,6 +645,10 @@ Item {
 
     function clampX(x) {
         return Math.min(Math.max(0, timeline.tracksWidth() - tracks.width), Math.max(0, x));
+    }
+
+    function clampY(y) {
+        return Math.min(Math.max(0, tracks.contentHeight - tracks.height), Math.max(0, y));
     }
 
     // Audio import: picker hands the user file to the probe, which reads

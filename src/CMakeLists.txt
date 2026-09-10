@@ -112,6 +112,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/PositionSection.qml
         qml/components/editor/properties/LayoutSection.qml
         qml/components/editor/properties/AppearanceSection.qml
+        qml/components/editor/properties/AudioSection.qml
         qml/components/editor/properties/ImageSection.qml
         qml/components/editor/properties/FillSection.qml
         qml/components/editor/properties/StrokeSection.qml

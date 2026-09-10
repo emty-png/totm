@@ -59,11 +59,16 @@ bool resolveQuality(const QString &quality, int &w, int &h, QString &label) {
 
 // Audible audio slice for one timeline clip: source file plus the
 // trimmed read window and its composition delay, all in seconds.
+// Volume is linear 0..1 (muted forces 0); fades ride seconds.
 struct AudioInput {
     QString path;
     double seek = 0.0;
     double take = 0.0;
     double delay = 0.0;
+    double volume = 1.0;
+    double fadeIn = 0.0;
+    double fadeOut = 0.0;
+    bool muted = false;
 };
 
 // Timeline audio resolved against the render duration (same trim rule
@@ -93,23 +98,43 @@ QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
         const double end = qMin(c.value(QStringLiteral("t0"), 0.0).toDouble() + qMax(0.0, c.value(QStringLiteral("duration"), 0.0).toDouble()), duration);
         if (end - start <= 0.02)
             continue;
-        out.append({path, offset, end - start, start});
+        AudioInput in;
+        in.path = path;
+        in.seek = offset;
+        in.take = end - start;
+        in.delay = start;
+        in.muted = c.value(QStringLiteral("muted"), false).toBool();
+        in.volume = in.muted ? 0.0 : qBound(0.0, c.value(QStringLiteral("volume"), 1.0).toDouble(), 1.0);
+        in.fadeIn = qMax(0.0, c.value(QStringLiteral("fadeIn"), 0.0).toDouble());
+        in.fadeOut = qMax(0.0, c.value(QStringLiteral("fadeOut"), 0.0).toDouble());
+        out.append(in);
     }
     return out;
 }
 
-// Filter graph delaying each input to its timeline start and mixing
-// down to one stereo track. normalize=0 keeps bed levels intact;
+// Filter graph shaping each input (volume, fades) then delaying it to
+// its timeline start and mixing down to one stereo track. Fades run
+// before the delay so their times stay clip-relative (0..take); both
+// are fit inside the take. normalize=0 keeps bed levels intact;
 // overlapping clips can clip instead of ducking (no per-clip volume
 // in v1, so there is nothing to preserve headroom for).
 QString audioFilter(const QList<AudioInput> &inputs) {
     QStringList mixed;
     for (int i = 0; i < inputs.size(); ++i) {
-        const int ms = qMax(0, qRound(inputs.at(i).delay * 1000.0));
-        mixed.append(QStringLiteral("[%1:a]aresample=44100,aformat=channel_layouts=stereo,adelay=%2|%2[a%3]")
-                .arg(i + 1)
-                .arg(ms)
-                .arg(i));
+        const AudioInput &in = inputs.at(i);
+        const int ms = qMax(0, qRound(in.delay * 1000.0));
+        QString chain = QStringLiteral("[%1:a]aresample=44100,aformat=channel_layouts=stereo").arg(i + 1);
+        if (in.volume < 0.999)
+            chain += QStringLiteral(",volume=%1").arg(QString::number(in.volume, 'f', 3));
+        const double fi = qMin(qMax(0.0, in.fadeIn), qMax(0.001, in.take));
+        const double fo = qMin(qMax(0.0, in.fadeOut), qMax(0.001, in.take - fi));
+        if (fi > 0.001)
+            chain += QStringLiteral(",afade=t=in:st=0:d=%1").arg(QString::number(fi, 'f', 3));
+        if (fo > 0.001)
+            chain += QStringLiteral(",afade=t=out:st=%1:d=%2")
+                         .arg(QString::number(qMax(0.0, in.take - fo), 'f', 3))
+                         .arg(QString::number(fo, 'f', 3));
+        mixed.append(chain + QStringLiteral(",adelay=%1|%1[a%2]").arg(ms).arg(i));
     }
     QStringList labels;
     for (int i = 0; i < inputs.size(); ++i)
@@ -117,7 +142,7 @@ QString audioFilter(const QList<AudioInput> &inputs) {
     return mixed.join(QStringLiteral(";"))
         + QStringLiteral(";")
         + labels.join(QString())
-        + QStringLiteral("amix=inputs=%1:duration=longest:dropout_transition=0:normalize=0[a]");
+        + QStringLiteral("amix=inputs=%1:duration=longest:dropout_transition=0:normalize=0[a]").arg(inputs.size());
 }
 
 } // namespace
@@ -164,8 +189,8 @@ QString ffmpegMissingMessage() {
 class VideoExporter::RenderThread : public QThread {
     Q_OBJECT
 public:
-    RenderThread(QVariantMap scene, int outW, int outH, int fps, QString preset, int crf, QString tempPath,
-        QObject *parent = nullptr)
+    RenderThread(QVariantMap scene, int outW, int outH, int fps, QString preset, int crf, QString effort,
+        QString tempPath, QObject *parent = nullptr)
         : QThread(parent)
         , m_scene(std::move(scene))
         , m_outW(outW)
@@ -173,6 +198,7 @@ public:
         , m_fps(fps)
         , m_preset(std::move(preset))
         , m_crf(crf)
+        , m_effort(std::move(effort))
         , m_tempPath(std::move(tempPath)) {}
 
     void requestCancel() { m_cancelled.storeRelaxed(1); }
@@ -227,10 +253,12 @@ protected:
         if (audio.isEmpty()) {
             encArgs += {QStringLiteral("-an"), QStringLiteral("-c:v")};
         } else {
+            // No -shortest: audio is trimmed to <= duration, so the mix
+            // never outruns the video. -shortest would truncate the video
+            // to a short effect and close the pipe mid-render (broken pipe).
             encArgs += {QStringLiteral("-filter_complex"), audioFilter(audio), QStringLiteral("-map"),
                 QStringLiteral("0:v"), QStringLiteral("-map"), QStringLiteral("[a]"), QStringLiteral("-c:a"),
-                QStringLiteral("aac"), QStringLiteral("-b:a"), QStringLiteral("160k"), QStringLiteral("-shortest"),
-                QStringLiteral("-c:v")};
+                QStringLiteral("aac"), QStringLiteral("-b:a"), QStringLiteral("160k"), QStringLiteral("-c:v")};
         }
         encArgs += {QStringLiteral("libx264"), QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
             QStringLiteral("-crf"), QString::number(m_crf), QStringLiteral("-preset"), m_preset,
@@ -382,8 +410,8 @@ protected:
         // Completion summary: frames, wall time and stage split for perf work.
         qInfo().nospace() << "export: " << total << " frames " << m_outW << 'x' << m_outH << " @" << m_fps
                           << "fps in " << totalT.elapsed() << "ms (sample " << msSample << "ms, raster " << msRaster
-                          << "ms, pipe " << msWrite << "ms, enc-threads " << encThreads << ", " << m_preset
-                          << "/crf" << m_crf << ')';
+                          << "ms, pipe " << msWrite << "ms, enc-threads " << encThreads << ", " << m_effort << ' '
+                          << m_preset << "/crf" << m_crf << ')';
         emit renderDone(m_tempPath);
     }
 
@@ -774,6 +802,7 @@ protected:
     int m_outW = 1920, m_outH = 1080, m_fps = 30;
     QString m_preset = QStringLiteral("veryfast");
     int m_crf = 18;
+    QString m_effort = QStringLiteral("Normal");
     QString m_tempPath;
     QAtomicInteger<int> m_cancelled{0};
 };
@@ -846,7 +875,6 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
     int crf = 18;
     QString perfLabel;
     resolvePerformance(performance, preset, crf, perfLabel);
-    Q_UNUSED(perfLabel); // Effort is recorded in the completion log, not the UI.
     const QVariantMap anim = scene.value(QStringLiteral("anim")).toMap();
     const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 60.0);
     const int total = qMax(1, qRound(duration * fps));
@@ -877,7 +905,7 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
     setRendering(true);
     emit progressChanged();
 
-    auto *thread = new RenderThread(scene, outW, outH, fps, preset, crf, temp);
+    auto *thread = new RenderThread(scene, outW, outH, fps, preset, crf, perfLabel, temp);
     m_thread = thread;
     connect(thread, &RenderThread::frameProgress, this, [this](int cur, int total) {
         m_currentFrame = cur;
