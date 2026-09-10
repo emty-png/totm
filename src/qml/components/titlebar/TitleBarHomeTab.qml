@@ -26,6 +26,8 @@ Rectangle {
     AppIcon {
         anchors.centerIn: parent
         kind: "apps"
+        width: 20
+        height: 20
         iconColor: homeTab.active || mouse.containsMouse || mouse.pressed ? AppTheme.foreground : AppTheme.muted
 
         Behavior on iconColor {

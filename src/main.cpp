@@ -2,15 +2,19 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 
-// Message filter for known-benign third-party theme noise: KDE Breeze
-// styling of stock FileDialogs and missing desktop icon themes. Scoped to
-// those sources only; Totm QML and backend warnings still reach stderr.
+// Message filter for known-benign third-party noise: KDE Breeze styling
+// of stock FileDialogs, missing desktop icon themes, the QtMultimedia
+// backend banner, and VDPAU probes on machines without NVIDIA drivers
+// (software fallback carries on). Scoped to those sources only; Totm
+// QML and backend warnings still reach stderr.
 void totMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
     const QString file = QString::fromUtf8(context.file ? context.file : "");
     if (file.contains(QStringLiteral("org/kde/breeze"))
         || file.contains(QStringLiteral("Dialogs/quickimpl/qml/SideBar.qml"))
-        || msg.contains(QStringLiteral("kf.iconthemes"))) {
+        || msg.contains(QStringLiteral("kf.iconthemes"))
+        || msg.contains(QStringLiteral("Using Qt multimedia with FFmpeg"))
+        || msg.contains(QStringLiteral("Failed to open VDPAU backend"))) {
         return;
     }
     // Matches the default handler (bare message); aborts on fatal.
