@@ -133,8 +133,12 @@ QString LibraryStore::createDesign(const QString &workspaceId, const QString &na
     entry.updatedAt = entry.createdAt;
     entry.scene = entryToScene({});
     m_designEntries.prepend(entry);
-    if (!persist())
+    // New designs own their scene file from birth, so the index never
+    // points at a design without durable storage.
+    if (!writeDesignFile(entry.id, entry.scene) || !persist()) {
+        m_designEntries.removeAt(findDesign(entry.id));
         return {};
+    }
     rebuild();
     return entry.id;
 }
@@ -159,6 +163,8 @@ bool LibraryStore::deleteDesign(const QString &id) {
     if (at < 0)
         return false;
     m_designEntries.removeAt(at);
+    // Best effort: a leftover file is swept next boot and never blocks.
+    QFile::remove(designsDir() + QStringLiteral("/") + id + QStringLiteral(".json"));
     if (!persist())
         return false;
     rebuild();
@@ -203,6 +209,10 @@ bool LibraryStore::saveScene(const QString &designId, const QVariantMap &scene) 
         return false;
     m_designEntries[at].scene = entryToScene(scene);
     m_designEntries[at].updatedAt = nowIso();
+    // Scene file first: it is the durable copy, the index only carries
+    // the updatedAt stamp and stays small.
+    if (!writeDesignFile(designId, m_designEntries.at(at).scene))
+        return false;
     if (!persist())
         return false;
     rebuild();
@@ -323,6 +333,46 @@ bool LibraryStore::hasImage(const QString &name) const {
     return QFile::exists(imagesDir() + QStringLiteral("/") + name);
 }
 
+quint64 LibraryStore::imagesDiskUsage() const {
+    quint64 total = 0;
+    const QDir dir(imagesDir());
+    for (const QFileInfo &info : dir.entryInfoList(QDir::Files))
+        total += static_cast<quint64>(info.size());
+    return total;
+}
+
+int LibraryStore::imageCount() const {
+    return QDir(imagesDir()).entryList(QDir::Files).size();
+}
+
+QSet<QString> LibraryStore::referencedImages() const {
+    QSet<QString> out;
+    QList<QVariantList> stack;
+    for (const DesignEntry &entry : m_designEntries)
+        stack.append(entry.scene.value(QStringLiteral("nodes")).toList());
+    while (!stack.isEmpty()) {
+        const QVariantList nodes = stack.takeLast();
+        for (const QVariant &v : nodes) {
+            const QVariantMap n = v.toMap();
+            const QString src = n.value(QStringLiteral("imageSource")).toString();
+            if (!src.isEmpty())
+                out.insert(src);
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+                stack.append(n.value(QStringLiteral("children")).toList());
+        }
+    }
+    return out;
+}
+
+void LibraryStore::sweepOrphanImages() {
+    const QSet<QString> keep = referencedImages();
+    const QDir dir(imagesDir());
+    for (const QFileInfo &info : dir.entryInfoList(QDir::Files)) {
+        if (!keep.contains(info.fileName()))
+            QFile::remove(info.absoluteFilePath());
+    }
+}
+
 void LibraryStore::load() {
     if (m_loaded)
         return;
@@ -338,6 +388,7 @@ void LibraryStore::load() {
     QFile file(libraryPath());
     if (!file.exists()) {
         installFreshDefault();
+        sweepOrphanImages();
         persist();
         rebuild();
         return;
@@ -346,6 +397,7 @@ void LibraryStore::load() {
         setLastError(tr("Could not read library: %1").arg(file.errorString()));
         // Invariant: in-memory state stays valid even when disk is not.
         installFreshDefault();
+        sweepOrphanImages();
         rebuild();
         return;
     }
@@ -369,6 +421,7 @@ void LibraryStore::load() {
         m_workspaceEntries.clear();
         m_designEntries.clear();
         installFreshDefault();
+        sweepOrphanImages();
         persist();
         rebuild();
         return;
@@ -394,10 +447,12 @@ void LibraryStore::load() {
             entry.createdAt = item.value(QStringLiteral("createdAt")).toString();
             entry.updatedAt = item.value(QStringLiteral("updatedAt")).toString();
             entry.starred = item.value(QStringLiteral("starred")).toBool();
-            entry.scene = item.value(QStringLiteral("scene")).toObject().toVariantMap();
-            if (!entry.id.isEmpty())
-                m_designEntries.append(entry);
+            if (entry.id.isEmpty())
+                continue;
+            entry.scene = readDesignFile(entry.id);
+            m_designEntries.append(entry);
         }
+        sweepOrphanDesignFiles();
     }
 
     // Invariants restored on every load: exactly one Default workspace
@@ -437,6 +492,7 @@ void LibraryStore::load() {
     // Healed state must persist even without further edits.
     if (healed)
         persist();
+    sweepOrphanImages();
     rebuild();
 }
 
@@ -451,6 +507,8 @@ bool LibraryStore::persist() {
         });
     }
     QJsonArray designs;
+    // Metadata only: scenes live in designs/<id>.json, so the index
+    // stays small no matter how large the library grows.
     for (const DesignEntry &entry : m_designEntries) {
         designs.append(QJsonObject{
             {QStringLiteral("id"), entry.id},
@@ -459,7 +517,6 @@ bool LibraryStore::persist() {
             {QStringLiteral("createdAt"), entry.createdAt},
             {QStringLiteral("updatedAt"), entry.updatedAt},
             {QStringLiteral("starred"), entry.starred},
-            {QStringLiteral("scene"), QJsonObject::fromVariantMap(entry.scene)},
         });
     }
     const QJsonDocument doc(QJsonObject{
@@ -562,6 +619,78 @@ QString LibraryStore::libraryDir() const {
 
 QString LibraryStore::imagesDir() const {
     return libraryDir() + QStringLiteral("/images");
+}
+
+QString LibraryStore::designsDir() const {
+    return libraryDir() + QStringLiteral("/designs");
+}
+
+bool LibraryStore::writeDesignFile(const QString &id, const QVariantMap &scene) {
+    if (id.isEmpty() || id.contains(QLatin1Char('/')) || id.contains(QLatin1Char('\\'))
+        || id.contains(QStringLiteral("..")))
+        return false;
+    QDir().mkpath(designsDir());
+    QSaveFile file(designsDir() + QStringLiteral("/") + id + QStringLiteral(".json"));
+    if (!file.open(QIODevice::WriteOnly)) {
+        setLastError(tr("Could not save design: %1").arg(file.errorString()));
+        return false;
+    }
+    const QJsonDocument doc(QJsonObject{
+        {QStringLiteral("version"), kSchemaVersion},
+        {QStringLiteral("scene"), QJsonObject::fromVariantMap(entryToScene(scene))},
+    });
+    file.write(doc.toJson(QJsonDocument::Indented));
+    if (!file.commit()) {
+        setLastError(tr("Could not save design: %1").arg(file.errorString()));
+        return false;
+    }
+    return true;
+}
+
+QVariantMap LibraryStore::readDesignFile(const QString &id) {
+    if (id.isEmpty() || id.contains(QLatin1Char('/')) || id.contains(QLatin1Char('\\'))
+        || id.contains(QStringLiteral("..")))
+        return entryToScene({});
+    const QString path = designsDir() + QStringLiteral("/") + id + QStringLiteral(".json");
+    QFile file(path);
+    if (!file.exists())
+        return entryToScene({});
+    if (!file.open(QIODevice::ReadOnly)) {
+        setLastError(tr("Could not read design; starting it fresh."));
+        return entryToScene({});
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    const QJsonObject root = doc.object();
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()
+        || !root.value(QStringLiteral("scene")).isObject()) {
+        file.close();
+        const QString backup = designsDir() + QStringLiteral("/") + id + QStringLiteral(".corrupt.")
+            + QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-hhmmss-zzz"))
+            + QStringLiteral(".json");
+        if (QFile::rename(path, backup))
+            setLastError(tr("A design was corrupt; archived and started fresh."));
+        else
+            setLastError(tr("A design was corrupt and could not be archived; started fresh."));
+        return entryToScene({});
+    }
+    return entryToScene(root.value(QStringLiteral("scene")).toObject().toVariantMap());
+}
+
+void LibraryStore::sweepOrphanDesignFiles() {
+    QHash<QString, bool> known;
+    for (const DesignEntry &entry : m_designEntries)
+        known.insert(entry.id, true);
+    const QDir dir(designsDir());
+    for (const QString &file : dir.entryList({QStringLiteral("*.json")}, QDir::Files)) {
+        // Corrupt archives (<id>.corrupt.<ts>.json) never match an id
+        // and are left alone for the user to inspect.
+        if (file.contains(QStringLiteral(".corrupt.")))
+            continue;
+        const QString id = file.left(file.size() - 5);
+        if (!known.contains(id))
+            QFile::remove(dir.filePath(file));
+    }
 }
 
 bool LibraryStore::isSafeImageName(const QString &name) const {

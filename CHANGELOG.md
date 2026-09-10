@@ -25,6 +25,7 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ### Changed
 
+* Library storage — scenes moved out of `library.json` into one file per design (`designs/<id>.json`), so an autosave writes a single scene instead of rewriting the whole library. Unreferenced image blobs are swept at startup, and the store reports blob count + bytes for a future storage UI. A corrupt design file is archived aside with a timestamp and starts fresh instead of blocking the library.
 * Bottom panel now hosts the timeline (taller than before, 300px).
 * Right panel got an animate mode with a preset/custom switcher.
 * `Document.qml` and `EditorCanvas.qml` god files got split into focused helpers under `models/document/`, `canvas/`, `snap/`, `layers/`, `properties/` — cuz they were getting scary.

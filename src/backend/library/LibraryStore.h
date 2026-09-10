@@ -4,6 +4,7 @@
 #include <QLockFile>
 #include <QObject>
 #include <QQmlEngine>
+#include <QSet>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
@@ -15,12 +16,21 @@
 // Ownership: all file IO lives here. QML must not read/write files
 // directly; it calls the Q_INVOKABLE mutators below and binds to the
 // snapshot lists.
-// Storage: single JSON document at <AppData>/totm/library.json.
-//   { version, workspaces: [{id, name, isDefault, createdAt}],
-//     designs: [{id, workspaceId, name, createdAt, updatedAt, starred, scene}] }
+// Storage: index at <AppData>/totm/library.json plus one file per
+//   design at <AppData>/totm/designs/<designId>.json, so an autosave
+//   writes a single scene instead of the whole library.
+//   library.json: { version, workspaces: [{id, name, isDefault,
+//     createdAt}], designs: [{id, workspaceId, name, createdAt,
+//     updatedAt, starred}] } (metadata only, never scenes).
+//   designs/<id>.json: { version, scene }.
 //   scene: { version, sceneWidth, sceneHeight, sceneColor, nodes, anim }
 //   Nodes use the QML snapshot shape so restore needs no translation.
 //   The anim blob is opaque preset data consumed by the video exporter.
+//   In memory each entry keeps its scene mirrored, so snapshots and
+//   previews never touch disk; the files are the durable copy.
+//   Pre-1.0 cutover, no upgrade path: indexes written by older builds
+//   may still carry embedded scenes, which are ignored (those designs
+//   load as fresh defaults and the next index write drops the keys).
 // Threading: main thread only. All mutators are synchronous.
 // Failure model: writes are atomic (QSaveFile). A corrupt file is archived
 //   to library.corrupt.<timestamp>.json and replaced with a fresh Default
@@ -99,10 +109,14 @@ public:
     // importImage copies a local file and returns its stored name ("" on
     // failure). imageUrl resolves a stored name to a file url for Image
     // sources. imageInfo reports {name, width, height} (0 when unknown).
+    // Unreferenced blobs are swept at startup; imagesDiskUsage/imageCount
+    // report the live footprint for a future storage UI.
     Q_INVOKABLE QString importImage(const QUrl &source);
     Q_INVOKABLE QUrl imageUrl(const QString &name) const;
     Q_INVOKABLE QVariantMap imageInfo(const QString &name) const;
     Q_INVOKABLE bool hasImage(const QString &name) const;
+    Q_INVOKABLE quint64 imagesDiskUsage() const;
+    Q_INVOKABLE int imageCount() const;
 
 signals:
     void libraryChanged();
@@ -124,6 +138,23 @@ private:
     // Owning directory for library.json + lock file. Falls back to
     // ~/.totm when the platform location is unavailable.
     QString libraryDir() const;
+    // Per-design scene directory (<libraryDir>/designs). Created on demand.
+    QString designsDir() const;
+    // Atomic write of one design's scene file. False + lastError on failure.
+    bool writeDesignFile(const QString &id, const QVariantMap &scene);
+    // Normalized scene for one design. Missing files yield defaults; a
+    // corrupt file is archived aside and also yields defaults, so one bad
+    // design never blocks the rest of the library.
+    QVariantMap readDesignFile(const QString &id);
+    // Delete design files with no matching index entry (crashed creates,
+    // half-finished deletes). Quiet: best effort, no errors surfaced.
+    void sweepOrphanDesignFiles();
+    // Blob names referenced by any in-memory scene, groups included.
+    QSet<QString> referencedImages() const;
+    // Delete image blobs no scene references. Startup only: mid-session
+    // the app-wide clipboard and per-tab undo can reference blobs no
+    // saved scene points at yet, and both are empty at boot.
+    void sweepOrphanImages();
     // Image blob directory (<libraryDir>/images). Created on demand.
     QString imagesDir() const;
     // Stored file name guard: uuid + safe suffix, no separators.
