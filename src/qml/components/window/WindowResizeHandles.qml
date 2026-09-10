@@ -17,6 +17,7 @@ Item {
             right: parent.right
             top: parent.top
             bottom: parent.bottom
+            // Titlebar height: the drag area above owns presses there.
             topMargin: 45
         }
         width: 5

@@ -29,8 +29,8 @@ Item {
             canvas.penEdit.exit();
         if (canvas.pathTool)
             canvas.pathTool.cancel();
-        if (ToolStore.pathDrawing)
-            ToolStore.cancelPathDraw();
+        if (ToolState.pathDrawing)
+            ToolState.cancelPathDraw();
         canvas.showDocument(canvas.doc);
     }
 
@@ -112,7 +112,7 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
-        enabled: ToolStore.activeTool !== "shapes" && ToolStore.activeTool !== "pen" && ToolStore.activeTool !== "path"
+        enabled: ToolState.activeTool !== "shapes" && ToolState.activeTool !== "pen" && ToolState.activeTool !== "path"
 
         onPressed: event => {
             canvas.commitTextEdit();
@@ -152,7 +152,7 @@ Item {
         zoom: canvas.zoom
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
-        handlesActive: ToolStore.activeTool === "select" && canvas.doc !== null && canvas.penEdit.editUid < 0
+        handlesActive: ToolState.activeTool === "select" && canvas.doc !== null && canvas.penEdit.editUid < 0
         showFrame: canvas.selBox ? (canvas.selBox.count > 1 || canvas.selBox.rotated || canvas.selBox.singleGroup) : false
         pressPolicy: (hid, cx, cy, mods) => canvas.resizePressed(hid, cx, cy, mods)
         movePolicy: (cx, cy, mods) => canvas.resizeMoved(cx, cy, mods)
@@ -174,7 +174,7 @@ Item {
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
         cursorShape: Qt.CrossCursor
-        enabled: (ToolStore.activeTool === "shapes" || ToolStore.activeTool === "text") && canvas.doc !== null
+        enabled: (ToolState.activeTool === "shapes" || ToolState.activeTool === "text") && canvas.doc !== null
 
         onPressed: event => {
             canvas.drawTool.pressAt(event.x, event.y, event.modifiers);
@@ -198,7 +198,7 @@ Item {
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
         cursorShape: Qt.CrossCursor
-        enabled: ToolStore.activeTool === "pen" && canvas.doc !== null
+        enabled: ToolState.activeTool === "pen" && canvas.doc !== null
 
         onPressed: event => {
             canvas.pen.pressAt(event.x, event.y, event.modifiers);
@@ -228,7 +228,7 @@ Item {
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
         cursorShape: Qt.ArrowCursor
-        enabled: ToolStore.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc !== null
+        enabled: ToolState.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc !== null
 
         onPressed: event => {
             var handled = canvas.penEdit.pressAt(event.x, event.y, event.modifiers);
@@ -256,7 +256,7 @@ Item {
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
         cursorShape: Qt.CrossCursor
-        enabled: ToolStore.activeTool === "path" && canvas.doc !== null
+        enabled: ToolState.activeTool === "path" && canvas.doc !== null
 
         onPressed: event => {
             canvas.pathTool.pressAt(event.x, event.y, event.modifiers);
@@ -302,7 +302,7 @@ Item {
         zoom: canvas.zoom
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
-        penActive: ToolStore.activeTool === "pen" && canvas.doc !== null
+        penActive: ToolState.activeTool === "pen" && canvas.doc !== null
     }
 
     PathOverlay {
@@ -310,10 +310,10 @@ Item {
         zoom: canvas.zoom
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
-        pathActive: ToolStore.activeTool === "path" && canvas.doc !== null
+        pathActive: ToolState.activeTool === "path" && canvas.doc !== null
         selectedPts: canvas.selectedPath.pts
         selectedClosed: canvas.selectedPath.closed
-        showSelected: ToolStore.activeTool !== "path" && canvas.selectedPath.pts.length >= 2
+        showSelected: ToolState.activeTool !== "path" && canvas.selectedPath.pts.length >= 2
     }
 
     PenEditOverlay {
@@ -322,7 +322,7 @@ Item {
         zoom: canvas.zoom
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
-        editActive: ToolStore.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc !== null
+        editActive: ToolState.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc !== null
     }
 
     DrillBreadcrumb {
@@ -356,7 +356,7 @@ Item {
 
     // Motion-path draw hint, top-centered while pathDrawing.
     Rectangle {
-        visible: ToolStore.activeTool === "path"
+        visible: ToolState.activeTool === "path"
         anchors {
             horizontalCenter: parent.horizontalCenter
             top: parent.top
@@ -382,14 +382,14 @@ Item {
     // never leaks into the next tool or tab. Entering path redraw seeds
     // the existing trajectory so redraws show what they replace.
     Connections {
-        target: ToolStore
+        target: ToolState
         function onActiveToolChanged() {
-            if (ToolStore.activeTool !== "pen" && canvas.pen)
+            if (ToolState.activeTool !== "pen" && canvas.pen)
                 canvas.pen.cancel();
-            if (ToolStore.activeTool !== "path" && canvas.pathTool) {
+            if (ToolState.activeTool !== "path" && canvas.pathTool) {
                 canvas.pathTool.cancel();
-            } else if (ToolStore.activeTool === "path" && canvas.pathTool && ToolStore.pathClipId >= 0) {
-                var redraw = canvas.doc ? canvas.doc.animClip(ToolStore.pathClipId) : null;
+            } else if (ToolState.activeTool === "path" && canvas.pathTool && ToolState.pathClipId >= 0) {
+                var redraw = canvas.doc ? canvas.doc.animClip(ToolState.pathClipId) : null;
                 if (redraw && redraw.preset === "customPath") {
                     canvas.pathTool.loadAbsolute(canvas.pathAbsolute(redraw));
                     canvas.pathTool.showClosed = !!(redraw.options && redraw.options.closed);
@@ -407,25 +407,25 @@ Item {
             canvas.snapXGuides = [];
             canvas.snapYGuides = [];
             event.accepted = true;
-        } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && ToolStore.activeTool === "pen") {
+        } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && ToolState.activeTool === "pen") {
             if (canvas.pen.enterCommit())
                 event.accepted = true;
-        } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && ToolStore.activeTool === "path") {
+        } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && ToolState.activeTool === "path") {
             if (canvas.commitPathDraw())
                 event.accepted = true;
         } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && canvas.penEdit.editUid >= 0) {
             canvas.penEdit.exit();
             event.accepted = true;
         } else if (event.key === Qt.Key_Escape) {
-            if (ToolStore.activeTool === "path") {
+            if (ToolState.activeTool === "path") {
                 canvas.cancelPathDraw();
                 event.accepted = true;
             } else if (canvas.penEdit.editUid >= 0) {
                 canvas.penEdit.exit();
                 event.accepted = true;
-            } else if (ToolStore.activeTool === "pen" && canvas.pen.hasWork) {
+            } else if (ToolState.activeTool === "pen" && canvas.pen.hasWork) {
                 canvas.pen.escapeFinish();
-                ToolStore.setActiveTool("select");
+                ToolState.setActiveTool("select");
                 event.accepted = true;
             } else if (canvas.doc && canvas.doc.drillPath.length > 0) {
                 canvas.doc.drillOut();
@@ -433,7 +433,7 @@ Item {
             } else {
                 toolbar.closeMenu();
             }
-        } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && ToolStore.activeTool === "path") {
+        } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && ToolState.activeTool === "path") {
             if (canvas.pathTool.deleteSelected())
                 event.accepted = true;
         } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && canvas.penEdit.editUid >= 0) {
@@ -486,7 +486,7 @@ Item {
             pts: [],
             closed: false
         };
-        if (!d || ToolStore.activeTool === "path")
+        if (!d || ToolState.activeTool === "path")
             return empty;
         var ids = d.anim.selectedClipIds;
         if (ids.length === 0)
@@ -546,11 +546,11 @@ Item {
     // playhead (2s, easeOut) or replace a redraw target's points.
     // Empty draws (< 2 points) exit without a clip.
     function commitPathDraw() {
-        if (ToolStore.activeTool !== "path" || !canvas.pathTool)
+        if (ToolState.activeTool !== "path" || !canvas.pathTool)
             return false;
         var pts = canvas.pathTool.relativePts();
-        var targetUid = ToolStore.pathTargetUid;
-        var clipId = ToolStore.pathClipId;
+        var targetUid = ToolState.pathTargetUid;
+        var clipId = ToolState.pathClipId;
         var d = canvas.doc;
         if (pts.length < 2 || !d || !d.findNode(targetUid)) {
             canvas.cancelPathDraw();
@@ -578,13 +578,13 @@ Item {
             }
         }
         canvas.pathTool.cancel();
-        ToolStore.cancelPathDraw();
+        ToolState.cancelPathDraw();
         return true;
     }
     function cancelPathDraw() {
         if (canvas.pathTool)
             canvas.pathTool.cancel();
-        ToolStore.cancelPathDraw();
+        ToolState.cancelPathDraw();
     }
     // Text editing pass-throughs (session lives in TextEditor).
     function beginTextEdit(uid) {
@@ -663,11 +663,11 @@ Item {
                 // and can own hover, so pen previews update here too.
                 // Same enabled gates as penMouse/penEditMouse; both updates
                 // are idempotent when the lower area already handled them.
-                if (ToolStore.activeTool === "pen" && canvas.doc)
+                if (ToolState.activeTool === "pen" && canvas.doc)
                     canvas.pen.refreshHover(event.x, event.y, event.modifiers);
-                else if (ToolStore.activeTool === "path" && canvas.doc)
+                else if (ToolState.activeTool === "path" && canvas.doc)
                     canvas.pathTool.refreshHover(event.x, event.y, event.modifiers);
-                else if (ToolStore.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc)
+                else if (ToolState.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc)
                     canvas.penEdit.moveTo(event.x, event.y, event.modifiers);
                 return;
             }
@@ -788,7 +788,7 @@ Item {
             return;
         qualityPopup.close();
         var scene = canvas.doc.snapshotScene();
-        VideoExporter.startExport(scene, quality, fps, performance, TabStore.titleAt(TabStore.currentIndex));
+        VideoExporter.startExport(scene, quality, fps, performance, TabState.titleAt(TabState.currentIndex));
         // Opens in both cases: live bar on success, backend error text
         // on rejection (e.g. ffmpeg missing, already rendering).
         progressPopup.open();

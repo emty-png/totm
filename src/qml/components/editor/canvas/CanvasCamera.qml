@@ -10,9 +10,7 @@ QtObject {
     }
 
     function zoomAt(mx, my, dy) {
-        // NOTE: sign is flipped vs the web formula: Qt wheel deltas are
-        // positive on scroll-up while browser deltaY is positive on
-        // scroll-down. Scroll-up zooms in (Figma/Chrome/VS Code feel).
+        // Scroll-up zooms in: Qt wheel deltas run positive on scroll-up.
         var next = canvas.clampZoom(canvas.zoom * Math.exp(dy * 0.0018));
         if (next === canvas.zoom)
             return;

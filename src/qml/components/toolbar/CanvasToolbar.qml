@@ -4,8 +4,7 @@ import QtQuick.Layouts
 import Totm
 
 // Floating canvas toolbar: undo/redo, select, shapes (with subtype
-// dropdown), pen, text, image. Inspired by web EditorToolbar, restyled
-// to our flat theme.
+// dropdown), pen, text, image.
 Rectangle {
     id: toolbar
 
@@ -21,7 +20,7 @@ Rectangle {
 
     // Map the active shape subtype to its toolbar icon.
     function shapeIcon() {
-        return ToolStore.shapeIconFor(ToolStore.activeShapeType);
+        return ToolState.shapeIconFor(ToolState.activeShapeType);
     }
 
     implicitWidth: barRow.implicitWidth + 16
@@ -76,8 +75,8 @@ Rectangle {
 
         ToolbarButton {
             iconKind: "cursor"
-            active: ToolStore.activeTool === "select"
-            onClicked: ToolStore.setActiveTool("select")
+            active: ToolState.activeTool === "select"
+            onClicked: ToolState.setActiveTool("select")
         }
 
         // Shapes button + subtype dropdown.
@@ -92,14 +91,14 @@ Rectangle {
 
                 ToolbarButton {
                     iconKind: toolbar.shapeIcon()
-                    active: ToolStore.activeTool === "shapes"
+                    active: ToolState.activeTool === "shapes"
                     onClicked: {
-                        ToolStore.setActiveTool("shapes");
+                        ToolState.setActiveTool("shapes");
                         shapesMenu.close();
                     }
                 }
 
-                // Slim chevron trigger, like web `.toolbar-dropdown-trigger`.
+                // Slim chevron trigger for the subtype menu.
                 Rectangle {
                     Layout.preferredWidth: 18
                     Layout.fillHeight: true
@@ -188,36 +187,36 @@ Rectangle {
                     ToolbarMenuItem {
                         iconKind: "square"
                         label: qsTr("Rectangle")
-                        active: ToolStore.activeShapeType === "rectangle"
+                        active: ToolState.activeShapeType === "rectangle"
                         onClicked: {
-                            ToolStore.setActiveShapeType("rectangle");
+                            ToolState.setActiveShapeType("rectangle");
                             shapesMenu.close();
                         }
                     }
                     ToolbarMenuItem {
                         iconKind: "circle"
                         label: qsTr("Ellipse")
-                        active: ToolStore.activeShapeType === "ellipse"
+                        active: ToolState.activeShapeType === "ellipse"
                         onClicked: {
-                            ToolStore.setActiveShapeType("ellipse");
+                            ToolState.setActiveShapeType("ellipse");
                             shapesMenu.close();
                         }
                     }
                     ToolbarMenuItem {
                         iconKind: "triangle"
                         label: qsTr("Triangle")
-                        active: ToolStore.activeShapeType === "triangle"
+                        active: ToolState.activeShapeType === "triangle"
                         onClicked: {
-                            ToolStore.setActiveShapeType("triangle");
+                            ToolState.setActiveShapeType("triangle");
                             shapesMenu.close();
                         }
                     }
                     ToolbarMenuItem {
                         iconKind: "star"
                         label: qsTr("Star")
-                        active: ToolStore.activeShapeType === "star"
+                        active: ToolState.activeShapeType === "star"
                         onClicked: {
-                            ToolStore.setActiveShapeType("star");
+                            ToolState.setActiveShapeType("star");
                             shapesMenu.close();
                         }
                     }
@@ -227,20 +226,20 @@ Rectangle {
 
         ToolbarButton {
             iconKind: "pen"
-            active: ToolStore.activeTool === "pen"
-            onClicked: ToolStore.setActiveTool("pen")
+            active: ToolState.activeTool === "pen"
+            onClicked: ToolState.setActiveTool("pen")
         }
 
         ToolbarButton {
             iconKind: "text"
-            active: ToolStore.activeTool === "text"
-            onClicked: ToolStore.setActiveTool("text")
+            active: ToolState.activeTool === "text"
+            onClicked: ToolState.setActiveTool("text")
         }
 
         ToolbarButton {
             iconKind: "image"
-            active: ToolStore.activeTool === "image"
-            onClicked: ToolStore.setActiveTool("image")
+            active: ToolState.activeTool === "image"
+            onClicked: ToolState.setActiveTool("image")
         }
     }
 }

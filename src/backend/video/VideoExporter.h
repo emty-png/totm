@@ -7,17 +7,20 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
-// Video export for totm: renders the scene snapshot (the same plain
-// document the canvas previews) to mp4 via a system ffmpeg binary.
+// VideoExporter: scene snapshot to mp4 via a system ffmpeg binary.
 //
-// Flow: QML snapshots fresh on every Export click (doc.snapshotScene,
-// which rebases preview frames), calls startExport(scene, quality, fps,
-// performance).
-// Frames render in a worker thread with QPainter (ports of DocEasing,
-// DocPathSample, DocAnimSample and ShapeGeometry) and stream as raw RGBA
-// to ffmpeg's stdin. Progress streams live; cancel kills the encode and
-// deletes the partial. On success QML opens a native Save dialog and
-// calls saveAs(dest) to copy the temp file out (no QML-side file IO).
+// Ownership: QML snapshots the scene and calls startExport; this class owns
+// the worker thread, the ffmpeg process and the temp file. QML performs no
+// file IO except via saveAs after a native Save dialog.
+// Pipeline: worker thread samples with AnimSampler, rasterizes with
+// QPainter, and streams raw RGBA to ffmpeg stdin. Progress streams via
+// progressChanged; completion via succeeded/failed/cancelled.
+// Threading: startExport/cancel/saveAs run on the main thread. Rendering
+// happens on a low-priority RenderThread; cancel is an atomic flag polled
+// per frame and during pipe/finish waits, so no blocking call exceeds 500ms.
+// Temp lifecycle: render writes totm-export-*.mp4 in the OS temp dir.
+// Cancel/failure deletes the partial; saveAs copies the finished file to
+// the user destination. Orphaned temps are swept at construction.
 class VideoExporter : public QObject {
     Q_OBJECT
     QML_ELEMENT
@@ -44,14 +47,19 @@ public:
     QString tempPath() const;
     QString lastError() const;
 
-    // performance: "slow" | "normal" | "fast" (x264 preset + CRF).
-    // qualityLabel reads "Rendering <design> <quality><fps>" (hd30).
+    // Starts a render. quality: "sd"|"hd"|"4k" (default hd); fps: 30|60
+    // (other values coerce to 30); performance: "slow"|"normal"|"fast".
+    // qualityLabel reads "Rendering <design> <quality><fps>". Returns false
+    // when already rendering, the scene is empty, or ffmpeg is missing.
     Q_INVOKABLE bool startExport(const QVariantMap &scene, const QString &quality, int fps,
         const QString &performance, const QString &designName);
+    // Requests cancellation; the worker deletes the partial and emits cancelled().
     Q_INVOKABLE void cancel();
-    // Copies the finished temp file to the user's chosen destination.
+    // Copies the finished temp file to destination (appends .mp4 when
+    // missing). Returns false when no finished render exists.
     Q_INVOKABLE bool saveAs(const QUrl &destination);
     Q_INVOKABLE void clearError();
+    // Empty when no ffmpeg binary is on PATH.
     Q_INVOKABLE static QString ffmpegPath();
 
 signals:

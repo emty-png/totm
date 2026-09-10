@@ -247,8 +247,8 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         }
     } else if (preset == QLatin1String("grow") || preset == QLatin1String("shrink")) {
         const double end = preset == QLatin1String("grow") ? 0.0 : 1.5;
-        // QML clamps only the box: glyphs ride the raw factor (0 at a
-        // grow-in start), so keep both like the source does.
+        // Parity: QML clamps only the box; glyphs use the raw factor, so
+        // both are preserved here.
         const double raw = inward ? end + (1.0 - end) * e : 1.0 + (end - 1.0) * e;
         const double sc = qMax(0.001, raw);
         out[QStringLiteral("x")] = cx + (bx - cx) * sc;
@@ -272,7 +272,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         out[QStringLiteral("y")] = cy + (by - cy) * sc;
         out[QStringLiteral("w")] = qMax(0.01, bw * sc);
         out[QStringLiteral("h")] = qMax(0.01, bh * sc);
-        // Unlike grow, customScale clamps the glyph factor too.
+        // Parity: customScale clamps the glyph factor, unlike grow/shrink.
         if (shapeType == QLatin1String("text") && num(base, "fontSize") > 0)
             out[QStringLiteral("fontSize")] = num(base, "fontSize") * sc;
     } else if (preset == QLatin1String("customRotate")) {
@@ -358,7 +358,7 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
 }
 
 namespace {
-// uid -> node for target resolution (groups included).
+// uid -> node index for clip target resolution (groups included).
 void indexNodes(const QVariantList &nodes, QMap<int, QVariantMap> &out) {
     for (const QVariant &v : nodes) {
         const QVariantMap n = v.toMap();
@@ -382,7 +382,7 @@ QList<int> leavesUnder(const QVariantMap &node) {
     return out;
 }
 
-// Static effective visibility from the snapshot (ancestors + self).
+// Effective visibility of target through its ancestor chain.
 bool chainVisible(const QVariantList &nodes, int target) {
     for (const QVariant &v : nodes) {
         const QVariantMap n = v.toMap();

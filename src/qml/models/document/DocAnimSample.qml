@@ -7,9 +7,9 @@ import QtQuick
 // preset). applySample() writes overlays with no touch() so playback
 // never dirties the doc, never triggers autosave, never pollutes undo.
 // Easing curves live in DocEasing, motion-path measuring in
-// DocPathSample. Units are frozen for the future backend: times in
-// seconds, angles in degrees, distances in canvas px. The C++ video
-// renderer ports these files 1:1.
+// DocPathSample. Units match the C++ video renderer (AnimSampler), which
+// ports this file: times in seconds, angles in degrees, distances in
+// canvas px.
 QtObject {
     id: sampler
 
@@ -84,8 +84,7 @@ QtObject {
         return "#" + hx(r) + hx(g) + hx(b);
     }
 
-    // NOTE: the target param is `to`, not `toHex`: it would shadow the
-    // helper below and every customColor frame would throw.
+    // Param is `to`, not `toHex`: that name would shadow the helper below.
     function lerpColor(fromHex, to, t) {
         var a = parseHex(fromHex);
         var b = parseHex(to);

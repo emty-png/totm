@@ -27,12 +27,12 @@
 
 namespace {
 
-// Output sizes live here; all animation math lives in AnimSampler so the
-// conformance harness diffs the exact code the renderer runs.
+// Output sizes are resolved here; frame content comes from AnimSampler so
+// export and canvas preview share one sampling path.
 using namespace Anims;
 
-// Output sizes: fixed landscape masters, scene aspect letterboxed on
-// sceneColor so variable scene sizes stay predictable per quality.
+// Fixed landscape masters per quality. Scene aspect is letterboxed on
+// sceneColor to keep output predictable across scene sizes.
 bool resolveQuality(const QString &quality, int &w, int &h, QString &label) {
     const QString q = quality.trimmed().toLower();
     if (q == QLatin1String("sd") || q == QLatin1String("480p")) {
@@ -53,16 +53,13 @@ bool resolveQuality(const QString &quality, int &w, int &h, QString &label) {
     return q == QLatin1String("hd") || q == QLatin1String("1080p") || q == QLatin1String("720p");
 }
 
-// Animation math lives in AnimSampler (shared with the conformance
-// harness); only the quality table stays in this anonymous namespace.
+// Sampling lives in AnimSampler; only the quality table stays here.
 
 } // namespace
 
 namespace {
-// Encode effort: x264 preset + CRF per performance choice. Normal is
-// today's behavior; slow buys smaller/sharper files with a much slower
-// encode, fast buys encode speed with softer files. Unknown falls back
-// to normal. Thread capping (lag protection) is orthogonal, untouched.
+// Maps performance choice to x264 preset + CRF. Unknown values fall back
+// to normal. Thread capping is independent; see run().
 void resolvePerformance(const QString &performance, QString &preset, int &crf, QString &label) {
     const QString p = performance.trimmed().toLower();
     if (p == QLatin1String("slow")) {
@@ -81,7 +78,7 @@ void resolvePerformance(const QString &performance, QString &preset, int &crf, Q
     crf = 18;
     label = QStringLiteral("Normal");
 }
-// Per-OS install hint for a missing encoder binary.
+// User-facing install hint per OS when no ffmpeg binary is on PATH.
 QString ffmpegMissingMessage() {
 #if defined(Q_OS_WIN)
     return QCoreApplication::translate("VideoExporter",
@@ -96,8 +93,8 @@ QString ffmpegMissingMessage() {
 }
 } // namespace
 
-// Worker thread: samples, rasterizes and pipes frames to ffmpeg.
-// Lives entirely in run(); cancel is an atomic flag polled per frame so
+// RenderThread: sample, rasterize and pipe frames to ffmpeg.
+// Runs fully in run(). Cancellation is an atomic flag polled per frame;
 // the main thread never touches the QProcess.
 class VideoExporter::RenderThread : public QThread {
     Q_OBJECT
@@ -130,8 +127,8 @@ protected:
         const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 60.0);
         const int total = qMax(1, qRound(duration * m_fps));
 
-        // Static leaf data from the shared sampler, so the renderer
-        // runs the exact code the conformance harness diffs vs QML.
+        // Ancestor visibility comes from the snapshot so hidden subtrees
+        // are skipped before rasterization.
         const QList<Leaf> leaves = collectLeaves(m_scene);
         QMap<int, int> leafIndex;
         for (int i = 0; i < leaves.size(); ++i) {
@@ -146,9 +143,8 @@ protected:
             return;
         }
 
-        // Encoder threads are capped: libx264's default (auto ~ cores)
-        // saturates weak machines and starves the UI thread, which is
-        // the lag users feel (dead Cancel, stuttering system).
+        // Cap encoder threads: libx264 auto (~cores) starves the UI
+        // thread on weak machines, which stalls Cancel and input.
         const int encThreads = qBound(2, QThread::idealThreadCount() / 2, 6);
         QProcess proc;
         const QStringList encArgs = {QStringLiteral("-y"), QStringLiteral("-f"), QStringLiteral("rawvideo"),
@@ -160,8 +156,8 @@ protected:
             QStringLiteral("-threads"), QString::number(encThreads), QStringLiteral("-movflags"),
             QStringLiteral("+faststart"), m_tempPath};
 #if defined(Q_OS_UNIX)
-        // Nicen the encoder too: our thread priority can't reach a
-        // separate process. Falls back to direct spawn without nice.
+        // Thread priority does not propagate to the encoder process, so
+        // nice it separately. Falls back to a direct spawn without nice.
         if (!QStandardPaths::findExecutable(QStringLiteral("nice")).isEmpty()) {
             proc.setProgram(QStringLiteral("nice"));
             proc.setArguments(QStringList{QStringLiteral("-n"), QStringLiteral("10"), ffmpeg} + encArgs);
@@ -186,17 +182,17 @@ protected:
         bool ok = true;
         QString failMsg;
 
-        // Stage timers for the finish-line summary (Phase-0 baseline).
+        // Stage timers for the completion summary log.
         QElapsedTimer totalT;
         totalT.start();
         qint64 msSample = 0, msRaster = 0, msWrite = 0;
-        // Progress is throttled: a 60fps bar/text rebind every frame is
-        // UI churn with no visual gain over ~10Hz.
+        // Progress is throttled to ~10Hz; per-frame rebinds add UI churn
+        // with no visible gain.
         QElapsedTimer emitT;
         emitT.start();
         bool emittedOnce = false;
-        // One reusable frame buffer: a 4K RGBA alloc per frame is ~119GB
-        // of allocator traffic over a 60fps minute.
+        // Single reusable frame buffer; per-frame 4K allocs are ~119GB of
+        // allocator traffic over a 60fps minute.
         QImage img;
         QElapsedTimer stageT;
         auto cancelAndOut = [&] {
@@ -213,7 +209,7 @@ protected:
             }
             const double t = qMin(duration, double(frame) / m_fps);
 
-            // Shared sampler: the exact code the harness diffs vs QML.
+            // Sampled from AnimSampler; see its header for the QML parity contract.
             stageT.start();
             const QList<QVariantMap> work = sampleFrame(m_scene, t);
             msSample += stageT.elapsed();
@@ -224,7 +220,7 @@ protected:
             img.fill(sceneColor);
             QPainter pt(&img);
             pt.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
-            // Painter order: bottom-first (leafList is top-first).
+            // Leaf list is top-first; paint bottom-first.
             for (int li = work.size() - 1; li >= 0; --li) {
                 const QVariantMap m = work[li];
                 const int uid = m.value(QStringLiteral("uid"), -1).toInt();
@@ -254,8 +250,8 @@ protected:
                 }
                 off += wrote;
                 left -= wrote;
-                // Bounded poll, not one 30s block: cancel stays live
-                // under backpressure instead of wedging for half a minute.
+                // Bounded pipe waits (500ms polls, 30s cap) keep cancel
+                // responsive under ffmpeg backpressure.
                 if (left > 0 && !proc.waitForBytesWritten(500)) {
                     waitedMs += 500;
                     if (waitedMs > 30000) {
@@ -276,7 +272,7 @@ protected:
         }
 
         proc.closeWriteChannel();
-        // Bounded finish wait with live cancel, same as the pipe above.
+        // Bounded finish wait with live cancel, same pattern as the pipe.
         bool finished = false;
         for (int i = 0; i < 60; ++i) {
             if (proc.waitForFinished(500)) {
@@ -302,7 +298,7 @@ protected:
                     : failMsg);
             return;
         }
-        // Baseline line for perf work: frames, wall time and stage split.
+        // Completion summary: frames, wall time and stage split for perf work.
         qInfo().nospace() << "export: " << total << " frames " << m_outW << 'x' << m_outH << " @" << m_fps
                           << "fps in " << totalT.elapsed() << "ms (sample " << msSample << "ms, raster " << msRaster
                           << "ms, pipe " << msWrite << "ms, enc-threads " << encThreads << ", " << m_preset
@@ -354,8 +350,8 @@ protected:
                 pt.restore();
                 return;
             }
-            // QML Rectangle borders paint inside the bounds: inset the
-            // path by half the stroke so the outer edge keeps the box.
+            // Parity: QML Rectangle borders paint inside the bounds, so
+            // inset the path by half the stroke.
             QRectF box(x, y, w, h);
             double r2 = r;
             if (sw > 0.01 && w > sw && h > sw) {
@@ -363,8 +359,8 @@ protected:
                 box.adjust(inset, inset, -inset, -inset);
                 r2 = qMax(0.0, r - inset);
             }
-            // Oversized radii collapse to a capsule in QML; clamp the
-            // same way since addRoundedRect over half-size arcs warps.
+            // Parity: oversized radii collapse to a capsule in QML; clamp
+            // identically since addRoundedRect warps past half-size.
             r2 = qMin(r2, qMin(box.width(), box.height()) / 2.0);
             path.addRoundedRect(box, r2, r2);
         } else if (shapeType == QLatin1String("ellipse")) {
@@ -390,7 +386,7 @@ protected:
         pt.restore();
     }
 
-    // Rounded-rect with per-corner cuts (ShapeGeometry.rectPath port).
+    // Per-corner rounded rect (mirrors ShapeGeometry.rectPath).
     static QPainterPath rectPath(const QVariantMap &m, double x, double y, double w, double h, double s) {
         const QVariantList src = m.value(QStringLiteral("cornerRadii")).toList();
         double r[4] = {0, 0, 0, 0};
@@ -451,7 +447,7 @@ protected:
         return pts;
     }
 
-    // Closed polygon with per-vertex rounding (ShapeGeometry.roundedPoly).
+    // Closed polygon with per-vertex rounding (mirrors ShapeGeometry.roundedPoly).
     static QPainterPath roundedPolyPath(const QVariantMap &m, double x, double y, double w, double h, double s) {
         const QString shapeType = str(m, "type", str(m, "shapeType"));
         const bool tipsOnly = shapeType == QLatin1String("star");
@@ -517,7 +513,7 @@ protected:
         return d;
     }
 
-    // Pen subpaths in absolute content coords (ShapeGeometry.penPath).
+    // Pen subpaths in absolute content coords (mirrors ShapeGeometry.penPath).
     static QPainterPath penPath(const QVariantMap &m, double ox, double oy, double s) {
         QPainterPath d;
         bool first = true;
@@ -568,9 +564,8 @@ protected:
         return d;
     }
 
-    // Text via QTextDocument: fill + wrap + align mirror TextGlyphs.
-    // Outline mirrors the canvas Text.Outline toggle (fill plus a 1px
-    // hairline in content coords); line height mirrors TextGlyphs'
+    // Text via QTextDocument (mirrors TextGlyphs). Outline uses a 1px
+    // content-space hairline; line height follows the
     // natural-unless-overridden rule.
     static void paintText(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h, double s, const QColor &fill) {
         QTextDocument doc;
@@ -621,7 +616,7 @@ protected:
         pt.translate(x, y + dy);
         QAbstractTextDocumentLayout::PaintContext ctx;
         ctx.palette.setColor(QPalette::Text, fill);
-        // Clip fixed boxes like the canvas; auto-size grows freely.
+        // Fixed boxes clip like the canvas; auto-size boxes grow freely.
         if (!autoSize)
             pt.setClipRect(QRectF(0, 0, w, h));
         doc.documentLayout()->draw(&pt, ctx);
@@ -647,16 +642,16 @@ VideoExporter *VideoExporter::create(QQmlEngine *engine, QJSEngine *scriptEngine
 
 VideoExporter::VideoExporter(QObject *parent)
     : QObject(parent) {
-    // Sweep orphaned temps from crashes or quit-without-save runs.
+    // Remove temps orphaned by crashes or quit-without-save runs.
     const QDir tmp = QDir::temp();
     for (const QString &f : tmp.entryList({QStringLiteral("totm-export-*.mp4")}, QDir::Files))
         QFile::remove(tmp.filePath(f));
 }
 
 VideoExporter::~VideoExporter() {
-    // Bounded shutdown: the worker polls cancel every frame and every
-    // 500ms of pipe/finish waiting, so it should join fast. Terminate is
-    // a last resort (ffmpeg then exits on its own once the pipe breaks).
+    // Bounded shutdown: the worker polls cancel every frame and during
+    // pipe/finish waits, so it normally joins fast. Terminate is a last
+    // resort; ffmpeg then exits once the pipe breaks.
     if (m_thread && m_thread->isRunning()) {
         m_thread->requestCancel();
         if (!m_thread->wait(8000))
@@ -697,14 +692,14 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
     int outW = 1920, outH = 1080;
     QString resolvedLabel;
     resolveQuality(quality, outW, outH, resolvedLabel);
-    Q_UNUSED(resolvedLabel); // dimensions matter here; the title uses its own short tag below.
+    Q_UNUSED(resolvedLabel); // Dimensions drive the render; the title uses shortQ below.
     if (fps != 60)
         fps = 30;
     QString preset;
     int crf = 18;
     QString perfLabel;
     resolvePerformance(performance, preset, crf, perfLabel);
-    Q_UNUSED(perfLabel); // effort only surfaces in the console summary line.
+    Q_UNUSED(perfLabel); // Effort is recorded in the completion log, not the UI.
     const QVariantMap anim = scene.value(QStringLiteral("anim")).toMap();
     const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 60.0);
     const int total = qMax(1, qRound(duration * fps));
@@ -721,8 +716,8 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
     QFile::remove(temp);
 
     clearError();
-    // Progress title stays short: "Rendering <design> 4k60". The effort
-    // choice lives only in the console summary line, not the UI.
+    // Progress title format: "Rendering <design> 4k60". Effort is omitted;
+    // see the completion log.
     QString shortQ = quality.trimmed().toLower();
     if (shortQ != QLatin1String("sd") && shortQ != QLatin1String("4k"))
         shortQ = QStringLiteral("hd");
@@ -746,7 +741,7 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
     connect(thread, &RenderThread::renderError, this, [this](const QString &msg) { onWorkerFinished({}, msg, false); });
     connect(thread, &RenderThread::renderCancelled, this, [this]() { onWorkerFinished({}, {}, true); });
     connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    // Low priority: the UI thread must win scheduling while frames cook.
+    // Low priority so the UI thread wins scheduling during renders.
     thread->start(QThread::LowPriority);
     return true;
 }

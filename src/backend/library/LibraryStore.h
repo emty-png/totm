@@ -9,28 +9,24 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
-// On-disk library for totm, part of the future backend layer
-// (video rendering will live beside this under src/).
+// LibraryStore: persistent workspace/design library.
 //
-// Single-file store: <AppData>/totm/library.json holding workspaces plus
-// designs with their scenes embedded. Writes go through QSaveFile so a
-// crash can never leave a half-written library behind; a corrupt file is
-// moved aside to library.corrupt.<timestamp>.json and we start fresh with
-// the indestructible Default workspace.
-//
-// QML reads plain lists (workspaceList/designList) instead of item
-// models: Repeaters bind modelData off them, which stays reactive
-// through libraryChanged and never hits delegate-scope quirks.
-//
-// Schema (version 2):
+// Ownership: all file IO lives here. QML must not read/write files
+// directly; it calls the Q_INVOKABLE mutators below and binds to the
+// snapshot lists.
+// Storage: single JSON document at <AppData>/totm/library.json.
 //   { version, workspaces: [{id, name, isDefault, createdAt}],
-//     designs: [{id, workspaceId, name, createdAt, updatedAt, scene}] }
-//   scene: { version, sceneWidth, sceneHeight, sceneColor, nodes: [...],
-//            anim: { version, duration, nextClipId, clips: [...] } }
-//   nodes reuse the QML snapshotNode shape so QML can restore them
-//   without translation. anim holds preset clips as plain data (target
-//   top uid, preset, times, options, easing) for the video renderer.
-
+//     designs: [{id, workspaceId, name, createdAt, updatedAt, starred, scene}] }
+//   scene: { version, sceneWidth, sceneHeight, sceneColor, nodes, anim }
+//   Nodes use the QML snapshot shape so restore needs no translation.
+//   The anim blob is opaque preset data consumed by the video exporter.
+// Threading: main thread only. All mutators are synchronous.
+// Failure model: writes are atomic (QSaveFile). A corrupt file is archived
+//   to library.corrupt.<timestamp>.json and replaced with a fresh Default
+//   workspace, so startup never blocks on bad disk state. Errors surface
+//   via lastError/lastErrorChanged; mutators return false/{} on failure.
+// Binding model: workspaceList/designList are plain-list snapshots rebuilt
+//   wholesale per change and exposed via libraryChanged for Repeater use.
 struct WorkspaceEntry {
     QString id;
     QString name;
@@ -53,10 +49,9 @@ class LibraryStore : public QObject {
     QML_ELEMENT
     QML_SINGLETON
 
-    // Plain snapshots for Repeaters: [{workspaceId, name, isDefault,
-    // createdAt, designCount}] and [{designId, workspaceId, name,
-    // createdAt, updatedAt, starred, scene}]. Rebuilt wholesale on
-    // every change.
+    // QML snapshots. workspaceList rows: {workspaceId, name, isDefault,
+    // createdAt, designCount}. designList rows: {designId, workspaceId,
+    // name, createdAt, updatedAt, starred, scene}.
     Q_PROPERTY(QVariantList workspaceList READ workspaceList NOTIFY libraryChanged)
     Q_PROPERTY(QVariantList designList READ designList NOTIFY libraryChanged)
     Q_PROPERTY(QString defaultWorkspaceId READ defaultWorkspaceId NOTIFY libraryChanged)
@@ -74,11 +69,16 @@ public:
     QString libraryPath() const;
     QString lastError() const;
 
+    // Workspaces. Names are trimmed to 120 chars with fallback applied.
+    // deleteWorkspace rejects the Default workspace and re-homes its
+    // designs to Default instead of deleting them.
     Q_INVOKABLE QString createWorkspace(const QString &name);
     Q_INVOKABLE bool renameWorkspace(const QString &id, const QString &name);
-    // Refuses the Default workspace. Designs inside move to Default.
     Q_INVOKABLE bool deleteWorkspace(const QString &id);
 
+    // Designs. createDesign falls back to the Default workspace when the
+    // target is unknown. saveScene normalizes keys via entryToScene and
+    // stamps updatedAt. loadScene/design return {} when the id is unknown.
     Q_INVOKABLE QString createDesign(const QString &workspaceId, const QString &name);
     Q_INVOKABLE bool renameDesign(const QString &id, const QString &name);
     Q_INVOKABLE bool deleteDesign(const QString &id);
@@ -98,13 +98,20 @@ signals:
     void lastErrorChanged();
 
 private:
+    // load: read-once at construction; self-heals and rebuilds.
+    // persist: serialize + atomic write; returns false and rebuilds on error.
+    // rebuild: refresh QML snapshots from entries and emit libraryChanged.
+    // installFreshDefault: reset entries to a single Default workspace.
     void load();
     bool persist();
     void rebuild();
     void installFreshDefault();
     void setLastError(const QString &message);
+    // Linear lookup by id; -1 when absent.
     int findWorkspace(const QString &id) const;
     int findDesign(const QString &id) const;
+    // Owning directory for library.json + lock file. Falls back to
+    // ~/.totm when the platform location is unavailable.
     QString libraryDir() const;
 
     QList<WorkspaceEntry> m_workspaceEntries;
@@ -113,7 +120,7 @@ private:
     QVariantList m_designList;
     QString m_defaultWorkspaceId;
     QString m_lastError;
-    // Second-instance guard, held for the life of the store.
+    // Held for the process lifetime; warns on contention, last-writer-wins.
     QLockFile m_lock;
     bool m_loaded = false;
 };

@@ -1,6 +1,7 @@
 import QtQuick
 
-// Combined move, resize, point and create snaps. Picks winners per axis. Operates via `engine` facade.
+// Combined move, resize, point and create snaps. Picks the winner per
+// axis (edge vs spacing). Operates via `engine` facade.
 QtObject {
     id: snapCombinators
     required property var engine

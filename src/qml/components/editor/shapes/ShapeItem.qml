@@ -17,8 +17,8 @@ Item {
     id: shape
 
     // Model-bound props (set explicitly from roles, avoiding Item clashes).
-    // NOTE: no `required` declarations for Repeater-injected names here —
-    // they silently break sibling initializer bindings (verified).
+    // Injected names stay undeclared: `required` breaks sibling
+    // initializer bindings at runtime.
     // Paint follows the sidebar order via depth (renumbered by the
     // document after every reorder); uid order must never drive paint.
     property int uid: -1
@@ -77,7 +77,8 @@ Item {
     // Auto-size writeback for text: the canvas clamps and commits.
     property var measurePolicy: null
 
-    // Vector path builders (pure geometry, shared with the future backend).
+    // Vector path builders (pure geometry, mirrored by the C++ video
+    // renderer).
     readonly property var geometry: ShapeGeometry {}
 
     x: shape.sx
@@ -108,7 +109,7 @@ Item {
         }
     }
 
-    // Other types: stroked/filled vector path (round joins, cute).
+    // Other types: stroked/filled vector path with round joins.
     // Independent rectangles join them so every corner keeps its own cut.
     Shape {
         anchors.fill: parent

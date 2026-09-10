@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Single 46px window-control button with hover + pressed feedback.
-// Matches web CSS: 120ms bg/color transition, close hover #e81123.
+// Single 46px window-control button with hover + pressed feedback
+// (120ms OutCubic on bg and icon).
 Rectangle {
     id: button
 

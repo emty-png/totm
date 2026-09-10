@@ -22,7 +22,6 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 * Canvas goodies — live measure readout while drawing, equal-gap spacing snaps, per-tab camera memory.
 * Star shape (replaces diamond/polygon, rip).
 * Video export — render any design to mp4 from the canvas export button (top-right): SD/HD/4K at 30/60fps picker, backend `VideoExporter` rasterizes a fresh scene snapshot with a 1:1 port of the animation sampler and pipes frames to system ffmpeg, live progress modal with Cancel, then a Save dialog copies the temp file out. Encoder threads are capped and the worker runs low-priority so the UI stays responsive mid-render.
-* Sampler conformance rig — `tests/samplerconf/` diffs the shared C++ sampler against the real QML helpers across every preset/mode/easing (also runs in CI), so future pipeline work can't silently drift the video.
 
 ### Changed
 
@@ -41,6 +40,7 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ### Removed
 
+* Sampler conformance rig (`tests/samplerconf/`) — dropped, export now relies on the shared `AnimSampler` matching the canvas preview.
 * Dead `_isEffectively` helper and flat-list compat shims (`moveRow`, `rowOf`, `snapshotAt`).
 * Diamond and polygon shapes (star took their place).
 

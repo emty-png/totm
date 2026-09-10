@@ -1,10 +1,8 @@
 import QtQuick
 import Totm
 
-// Design / Animate segmented switcher at the top of the right panel.
-// Matches web `.editor-mode-toggle` metrics (8px padding, 28px buttons,
-// inverted active fill), with a springy sliding thumb.
-// Does nothing yet besides holding the selection.
+// Design / Animate segmented switcher at the top of the right panel
+// (8px padding, 28px buttons, inverted active fill, sliding thumb).
 Item {
     id: switcher
 
@@ -111,7 +109,7 @@ Item {
         }
     }
 
-    // Bottom divider, like web `.editor-mode-toggle { border-bottom }`.
+    // Bottom divider.
     Rectangle {
         anchors {
             left: parent.left

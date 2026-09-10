@@ -27,10 +27,9 @@ QString newId() {
 }
 
 QVariantMap entryToScene(const QVariantMap &scene) {
-    // Scenes arrive from QML as plain maps; normalize the keys we persist
-    // so older/newer writers stay readable. Animation rides along as an
-    // opaque map (schema v2): the future video renderer reads the same
-    // document the canvas previews today.
+    // Contract: persist only the keys the loader understands. Extra QML
+    // keys are dropped; missing keys get defaults so older documents stay
+    // readable. The anim map passes through untouched.
     QVariantMap out;
     out[QStringLiteral("version")] = kSchemaVersion;
     out[QStringLiteral("sceneWidth")] = scene.value(QStringLiteral("sceneWidth"), 1920);
@@ -106,8 +105,7 @@ bool LibraryStore::deleteWorkspace(const QString &id) {
     const int at = findWorkspace(id);
     if (at < 0 || m_workspaceEntries.at(at).isDefault)
         return false;
-    // Designs are never destroyed with their workspace; they move home
-    // to Default so a slip of the finger costs nothing.
+    // Invariant: designs are never deleted with their workspace.
     for (DesignEntry &design : m_designEntries) {
         if (design.workspaceId == id) {
             design.workspaceId = m_defaultWorkspaceId;
@@ -259,8 +257,8 @@ void LibraryStore::load() {
     m_loaded = true;
 
     QDir().mkpath(libraryDir());
-    // Second-instance guard: held for the life of the store. A running
-    // copy only warns; concurrent writes stay last-writer-wins by design.
+    // Second-instance guard. Contention only warns; concurrent writers
+    // remain last-writer-wins.
     if (!m_lock.lock()) {
         setLastError(tr("Another copy of totm seems to be running; saves may overwrite each other."));
     }
@@ -274,7 +272,7 @@ void LibraryStore::load() {
     }
     if (!file.open(QIODevice::ReadOnly)) {
         setLastError(tr("Could not read library: %1").arg(file.errorString()));
-        // Keep memory valid so the UI never runs on broken invariants.
+        // Invariant: in-memory state stays valid even when disk is not.
         installFreshDefault();
         rebuild();
         return;
@@ -282,12 +280,12 @@ void LibraryStore::load() {
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
     const QJsonObject root = doc.object();
-    // Files we write always carry both arrays: anything else parseable
-    // is foreign and must be archived, never silently adopted as empty.
+    // Contract: files we write always carry both arrays. Anything else is
+    // treated as foreign and archived, never adopted as empty.
     const bool wrongShape = !root.value(QStringLiteral("workspaces")).isArray()
         || !root.value(QStringLiteral("designs")).isArray();
     if (parseError.error != QJsonParseError::NoError || !doc.isObject() || wrongShape) {
-        // Never strand the user on a bad file: archive it and start over.
+        // Recovery: archive the bad file and start from Default.
         const QString backup = libraryDir() + QStringLiteral("/library.corrupt.%1.json")
                                                    .arg(QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-hhmmss-zzz")));
         file.close();
@@ -330,8 +328,8 @@ void LibraryStore::load() {
         }
     }
 
-    // Self-heal invariants every load: exactly one Default exists, and no
-    // design points at a missing workspace.
+    // Invariants restored on every load: exactly one Default workspace
+    // exists; every design points at a known workspace with a valid scene.
     bool healed = false;
     bool haveDefault = false;
     for (const WorkspaceEntry &entry : m_workspaceEntries) {
@@ -364,7 +362,7 @@ void LibraryStore::load() {
             healed = true;
         }
     }
-    // Heals must survive a quit without further edits.
+    // Healed state must persist even without further edits.
     if (healed)
         persist();
     rebuild();
@@ -400,8 +398,8 @@ bool LibraryStore::persist() {
     QSaveFile file(libraryPath());
     if (!file.open(QIODevice::WriteOnly)) {
         setLastError(tr("Could not save library: %1").arg(file.errorString()));
-        // Memory already holds the change: rebuild so the view matches
-        // instead of hiding a ghost, and surface the error to retry on.
+        // In-memory state already holds the change; rebuild so the view
+        // matches instead of showing stale data.
         rebuild();
         return false;
     }

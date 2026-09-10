@@ -193,7 +193,7 @@ Item {
         }
     }
 
-    // Marquee selection outline matches the context-menu card.
+    // Selected outline (marquee or click).
     Rectangle {
         anchors.fill: parent
         radius: 12

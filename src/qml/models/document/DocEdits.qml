@@ -205,7 +205,7 @@ QtObject {
         for (var j = 0; j < leaves.length; j++) {
             if (doc.isEffectivelyLocked(leaves[j]))
                 continue;
-            // Groups have no style: skip them (leaves only here anyway).
+            // Style roles apply per leaf; the `in` guard skips misses.
             if (role === "w" || role === "h")
                 value = Math.max(1, value);
             if (role === "points") {

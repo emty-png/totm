@@ -1,10 +1,10 @@
 import QtQuick
 
-// Marquee selection logic core: no visuals, no input handling.
-// Owns the drag state machine (press/move/release with threshold) and
-// reports the normalized rect. Pair with any MouseArea + rect visual.
-// (State is flat typed properties — not a holder object — so member
-// access stays statically resolvable.)
+// Marquee selection logic core: no visuals, no input handling. Owns the
+// drag state machine (press/move/release with threshold) and reports the
+// normalized rect. Pair with any MouseArea + rect visual. Releases below
+// threshold emit tapped instead of finished. State stays flat typed
+// properties so member access remains statically resolvable.
 QtObject {
     id: logic
 

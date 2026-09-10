@@ -2,11 +2,11 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Home tab: workspace sidebar on the left, design cards on the right.
-// Cards show a live miniature of the stored scene; click opens,
-// drag onto a sidebar workspace moves. Empty-area drags marquee-select
-// (same DragSelection core as canvas and timeline); Delete removes the
-// card selection, right-click opens the card menu.
+// Home screen: workspace sidebar + design grid for the selection.
+// Cards show a live miniature of the stored scene; click opens, drag onto
+// a sidebar workspace moves. Empty-area drag marquee-selects via the
+// shared DragSelection core; Delete removes the selection, right-click
+// opens the card menu.
 RowLayout {
     id: homeView
 
@@ -16,12 +16,12 @@ RowLayout {
     property string selectedWorkspaceId: ""
     property string editingDesignId: ""
 
-    // Card selection state + set ops + marquee hit-testing.
+    // Card selection state (components/home/HomeSelection). One instance
+    // per HomeView; ids reassign wholesale so card bindings update.
     property var selection: HomeSelection {}
 
-    // Designs of the selected workspace, cached as a stable array:
-    // GridView tears down delegates mid-layout if the model array
-    // identity changes on every read, so refresh wholesale on change.
+    // Designs of the selected workspace. Refreshed wholesale on change so
+    // the model array identity stays stable for delegates (see Flow below).
     property var filteredDesigns: []
 
     function refreshFiltered() {
@@ -71,7 +71,7 @@ RowLayout {
             for (var i = 0; i < ids.length; i++)
                 LibraryStore.moveDesign(ids[i], workspaceId);
         }
-        openPolicy: id => TabStore.openDesign(id)
+        openPolicy: id => TabState.openDesign(id)
     }
 
     function parseIds(idsJson) {
@@ -128,9 +128,8 @@ RowLayout {
             visible: homeView.filteredDesigns.length > 0
             clip: true
 
-            // Flow + Repeater (not GridView): delegates instantiate
-            // synchronously with stable geometry, which the marquee
-            // hit-testing relies on.
+            // Flow + Repeater (not GridView): synchronous delegates with
+            // stable geometry for marquee hit-testing.
             Flickable {
                 id: flick
 
@@ -166,7 +165,7 @@ RowLayout {
                             editing: modelData.designId === homeView.editingDesignId
                             selectOnlyPolicy: id => homeView.selection.selectOnly(id)
                             togglePolicy: id => homeView.selection.toggleSelect(id)
-                            openPolicy: id => TabStore.openDesign(id)
+                            openPolicy: id => TabState.openDesign(id)
                             contextPolicy: (item, x, y) => homeView.openCardMenu(item, modelData.designId, x, y)
                             starPolicy: id => LibraryStore.toggleStarred(id)
                             beginRenamePolicy: id => {
@@ -174,7 +173,7 @@ RowLayout {
                             }
                             commitPolicy: (id, text) => {
                                 LibraryStore.renameDesign(id, text);
-                                TabStore.renameTabByDesign(id, LibraryStore.design(id).name);
+                                TabState.renameTabByDesign(id, LibraryStore.design(id).name);
                                 homeView.editingDesignId = "";
                             }
                             cancelPolicy: () => {
@@ -185,7 +184,6 @@ RowLayout {
                 }
             }
 
-            // Marquee rect visual, above the cards.
             Rectangle {
                 visible: marquee.selecting
                 x: marquee.selection.x
@@ -204,8 +202,8 @@ RowLayout {
                 onTapped: homeView.selection.clearSelection()
             }
 
-            // Empty-area press starts the marquee; presses on cards fall
-            // through (accepted = false) so cards keep clicks and drags.
+            // Presses on cards fall through (accepted = false) so cards
+            // keep clicks and drags; empty-area presses start the marquee.
             MouseArea {
                 id: marqueeMouse
 
@@ -242,8 +240,8 @@ RowLayout {
         }
     }
 
-    // If the selected workspace disappears (deleted elsewhere), fall
-    // back to Default so the grid never points at nothing.
+    // The selected workspace can disappear (deleted elsewhere); fall back
+    // to Default so the grid never points at nothing.
     Connections {
         target: LibraryStore
         function onLibraryChanged() {

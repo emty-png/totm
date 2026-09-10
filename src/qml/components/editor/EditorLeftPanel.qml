@@ -2,9 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Editor left panel: layers list for the active document.
-// Matches web `.editor-sidebar`: 275px, background fill, 1px right
-// border, 6px resize handle on the right edge.
+// Editor left panel: layers list for the active document. 275px,
+// background fill, 1px right border, 6px resize handle on the right.
 Item {
     id: leftPanel
 
@@ -90,7 +89,7 @@ Item {
         contextMenu.openFor(uid, x, y);
     }
 
-    // Resize handle straddling the right edge, like web `.resize-handle`.
+    // Resize handle straddling the right edge.
     MouseArea {
         id: handle
         anchors {

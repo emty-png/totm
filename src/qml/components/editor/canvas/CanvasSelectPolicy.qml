@@ -147,8 +147,8 @@ QtObject {
     }
 
     function computeSelBox() {
-        // Kept for callers during migration; the tree source of truth is
-        // Document.selectionBBox (group-aware).
+        // Pass-through; the source of truth is Document.selectionBBox
+        // (group-aware).
         return canvas.doc ? canvas.doc.selectionBBox() : null;
     }
 

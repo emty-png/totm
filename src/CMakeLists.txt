@@ -4,8 +4,8 @@ qt_add_executable(totm
 
 set_source_files_properties(
     qml/theme/AppTheme.qml
-    qml/stores/TabStore.qml
-    qml/stores/ToolStore.qml
+    qml/stores/TabState.qml
+    qml/stores/ToolState.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -26,8 +26,8 @@ qt_add_qml_module(totm
         qml/Main.qml
         # Theme + stores (singletons)
         qml/theme/AppTheme.qml
-        qml/stores/TabStore.qml
-        qml/stores/ToolStore.qml
+        qml/stores/TabState.qml
+        qml/stores/ToolState.qml
         # Document + helpers
         qml/models/Document.qml
         qml/models/DocNode.qml
@@ -161,6 +161,7 @@ qt_add_qml_module(totm
         qml/components/editor/export/ExportQualityPopup.qml
         qml/components/editor/export/ExportProgressPopup.qml
         # Home feature components (screens live under views/)
+        qml/components/home/HomeSelection.qml
         qml/components/home/WorkspacePanel.qml
         qml/components/home/WorkspaceRow.qml
         qml/components/home/DesignCard.qml
@@ -168,7 +169,6 @@ qt_add_qml_module(totm
         qml/components/home/DesignContextMenu.qml
         # Views (screen roots only)
         qml/views/home/HomeView.qml
-        qml/views/home/HomeSelection.qml
         qml/views/editor/EditorView.qml
 )
 

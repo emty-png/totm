@@ -1,9 +1,9 @@
 import QtQuick
 
 // Motion-path measuring for animation sampling: bezier flattening plus
-// arc-length sampling. Pure over explicit args. Units are frozen for
-// the future backend (distances in canvas px, angles in degrees);
-// the C++ video renderer ports this file 1:1.
+// arc-length sampling. Pure over explicit args. Distances are canvas px,
+// angles degrees, matching the C++ video renderer (AnimSampler), which
+// ports this file.
 QtObject {
     id: path
 

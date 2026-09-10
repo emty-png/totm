@@ -3,8 +3,8 @@ import QtQuick
 // Easing table for animation sampling: named easings plus custom
 // cubic-bezier. Cubics match CSS ease-in/out/in-out; slowDown is
 // bezier(0.22, 1, 0.36, 1). The solver is Newton plus a bisection
-// fallback. Units are frozen for the future backend (progress 0-1);
-// the C++ video renderer ports this file 1:1.
+// fallback. Progress is 0-1, matching the C++ video renderer
+// (AnimSampler), which ports this file.
 QtObject {
     id: easing
 

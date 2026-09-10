@@ -5,14 +5,19 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
-// App settings for totm, separate from the design library.
-// Persists explicit user choices via QSettings (native platform storage:
-// org "tot", app "totm") so they survive restarts. First run follows the
-// OS color scheme; the first explicit toggle pins an override.
+// SettingsStore: app preferences, separate from the design library.
 //
-// Effective theme is derived: followSystem ? systemDark : stored dark.
-// QML keeps binding to isDark, so system changes flow through while
-// following and stop once the user picks.
+// Ownership: all QSettings access lives here. QML binds to the properties
+// below and never touches QSettings directly.
+// Storage: native platform storage (org "tot", app "totm").
+// Theme contract: effective theme is derived as
+//   followSystem ? systemDark : stored dark.
+// QML binds to isDark, so OS changes propagate while following and stop
+// once the user makes an explicit choice.
+// Window contract: stores the last normal (unmaximized) geometry plus a
+// maximized flag. Geometry is validated against current screens on read
+// and write, so a disconnected monitor never restores off-screen.
+// Threading: main thread only.
 class SettingsStore : public QObject {
     Q_OBJECT
     QML_ELEMENT
@@ -21,10 +26,8 @@ class SettingsStore : public QObject {
     Q_PROPERTY(bool isDark READ isDark WRITE setIsDark NOTIFY isDarkChanged)
     Q_PROPERTY(bool followSystem READ followSystem WRITE setFollowSystem NOTIFY followSystemChanged)
     Q_PROPERTY(bool systemDark READ systemDark NOTIFY systemDarkChanged)
-    // Last normal (unmaximized) window geometry plus maximized flag.
-    // QML restores these on launch and saves them debounced; the store
-    // clamps to the current screens so a disconnected monitor never
-    // strands the window off-screen (Wayland may ignore x/y).
+    // Last normal window geometry. QML restores on launch and saves
+    // debounced; Wayland may ignore x/y on restore.
     Q_PROPERTY(int windowX READ windowX NOTIFY windowGeometryChanged)
     Q_PROPERTY(int windowY READ windowY NOTIFY windowGeometryChanged)
     Q_PROPERTY(int windowWidth READ windowWidth NOTIFY windowGeometryChanged)
@@ -37,6 +40,7 @@ public:
     explicit SettingsStore(QObject *parent = nullptr);
 
     bool isDark() const;
+    // Pins an explicit choice: sets followSystem to false.
     void setIsDark(bool dark);
     Q_INVOKABLE void toggle();
 
@@ -52,12 +56,11 @@ public:
     int windowHeight() const;
     bool windowMaximized() const;
     bool hasWindowGeometry() const;
-    // Validated snapshot for one-shot restore ({x,y,width,height,
-    // maximized, hasGeometry}). Geometry is clamped to the available
-    // screens; garbage/missing values fall back to centered 900x640.
+    // One-shot restore snapshot: {x, y, width, height, maximized,
+    // hasGeometry}. Out-of-range values fall back to a centered 900x640.
     Q_INVOKABLE QVariantMap windowGeometry() const;
-    // Saves the normal geometry; maximized only flips the flag so the
-    // restore size is never overwritten by the maximized frame.
+    // Saves the normal geometry. When maximized, only the flag is stored
+    // so restore never inherits the maximized frame.
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height, bool maximized);
 
 signals:
@@ -73,12 +76,12 @@ private:
     void refreshSystemDark();
     void onSystemSchemeChanged();
 
-    // Stored explicit choice (meaningful when not following system).
+    // Explicit user choice; meaningful only when not following the system.
     bool m_isDark = true;
     bool m_followSystem = true;
-    // Last seen OS scheme; Unknown maps to dark to keep the old default.
+    // Last seen OS scheme. Unknown maps to dark (previous default).
     bool m_systemDark = true;
-    // Last normal window geometry; applied on launch when present.
+    // Last normal geometry; applied on launch when present.
     bool m_hasWindowGeometry = false;
     int m_windowX = 0;
     int m_windowY = 0;

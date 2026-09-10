@@ -1,6 +1,7 @@
 import QtQuick
 
-// Paint-order moves within a parent. Operates on the owning Document via `doc`.
+// Paint-order moves within a parent (index 0 paints highest). Locked
+// tops stay pinned. Operates on the owner via `doc`.
 QtObject {
     id: docReorder
     required property var doc

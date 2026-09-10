@@ -36,7 +36,7 @@ Rectangle {
         }
     }
 
-    // Right divider, like web `.titlebar-tab { border-right: ... }`
+    // Right divider.
     Rectangle {
         anchors {
             right: parent.right
