@@ -5,9 +5,10 @@ import Totm
 // at each clip end. Start diamonds and bars move the whole clip, end
 // diamonds stretch its duration (6px snap to playhead, zero and sibling
 // ends); clicks still select, Delete still removes. Empty lane space
-// falls through to the view marquee below for multi-select. Drag state lives here while delegates stay
-// model-bound: the doc clips update silently in place (no rebuild, live
-// canvas preview) and release touches once for a single undo entry.
+// falls through to the view marquee below for multi-select. Drag state
+// lives here while delegates stay model-bound: the doc clips update
+// silently in place (no rebuild, live canvas preview) and release
+// touches once for a single undo entry.
 // Plain props with defaults (never required): Repeater delegates
 // evaluate required bindings before the model context attaches, which
 // breaks modelData reads.

@@ -2,9 +2,7 @@ import QtQuick
 import Totm
 
 // Preset / Custom segmented switcher at the top of the animate panel.
-// Same metrics and motion as EditorModeSwitcher (8px padding, 28px
-// buttons, inverted active fill, springy sliding thumb).
-// Does nothing yet besides holding the selection.
+// Same metrics and motion as EditorModeSwitcher.
 Item {
     id: switcher
 
@@ -111,7 +109,7 @@ Item {
         }
     }
 
-    // Bottom divider, like web `.editor-mode-toggle { border-bottom }`.
+    // Bottom divider.
     Rectangle {
         anchors {
             left: parent.left

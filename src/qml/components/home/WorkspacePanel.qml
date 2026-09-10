@@ -109,9 +109,8 @@ Item {
             color: AppTheme.foreground
         }
 
-        // Inline rows (not a separate component): Repeater delegates in
-        // their own file cannot see modelData, so the pinned rows live
-        // here where the model context attaches.
+        // Inline rows, not a separate component: delegates in their own
+        // file lose the model context, so pinned rows live here.
         Repeater {
             model: panel.starredDesigns
 

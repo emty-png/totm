@@ -1,6 +1,7 @@
 import QtQuick
 
-// Snap target collection. Builds edge lists from unselected boxes and scene. Operates via `engine` facade.
+// Snap target collection: edge lists from unselected boxes plus scene
+// edges/centers. Operates via `engine` facade.
 QtObject {
     id: snapTargets
     required property var engine

@@ -1,6 +1,7 @@
 import QtQuick
 
-// Edge alignment for moving boxes. Races left center right against targets. Operates via `engine` facade.
+// Edge alignment for moving boxes: left/center/right edges against
+// target lists. Operates via `engine` facade.
 QtObject {
     id: snapEdge
     required property var engine

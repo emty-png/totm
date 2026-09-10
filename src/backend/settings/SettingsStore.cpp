@@ -20,10 +20,9 @@ constexpr int kDefaultHeight = 640;
 constexpr int kMinWidth = 480;
 constexpr int kMinHeight = 360;
 
-// Clamps a stored rect to the current screens: size fits the largest
-// screen, position lands on some screen, else centers on primary.
-// Keeps monitor disconnects and stale Wayland/X11 coords from hiding
-// the window.
+// Validates a stored rect against current screens.
+// Contract: size is clamped to [480x360, largest screen]; position must
+// intersect some screen, else the rect is centered on the primary screen.
 QRect validatedRect(int x, int y, int w, int h) {
     const QList<QScreen *> screens = QGuiApplication::screens();
     if (screens.isEmpty())
@@ -58,8 +57,7 @@ SettingsStore::SettingsStore(QObject *parent)
     : QObject(parent) {
     refreshSystemDark();
     load();
-    // Follow the OS while the user has no explicit choice; explicit
-    // toggles set followSystem=false so later OS changes stay ignored.
+    // While following, OS scheme changes flow through isDark.
     auto *hints = QGuiApplication::styleHints();
     if (hints) {
         connect(hints, &QStyleHints::colorSchemeChanged, this, &SettingsStore::onSystemSchemeChanged);
@@ -198,8 +196,8 @@ QVariantMap SettingsStore::windowGeometry() const {
 
 void SettingsStore::saveWindowGeometry(int x, int y, int width, int height, bool maximized) {
     if (maximized) {
-        // Keep the last normal rect; only the flag changes while
-        // maximized so restore never inherits the fullscreen frame.
+        // Contract: the maximized frame must never overwrite the restore
+        // rect; only the flag changes while maximized.
         if (m_windowMaximized == maximized && m_hasWindowGeometry)
             return;
         m_windowMaximized = true;

@@ -2,8 +2,8 @@ import QtQuick
 
 // Preset catalog and clip builders for one Document's animation.
 // Builders capture nothing but explicit params: the sampler derives
-// every frame from clip plus live tree, so clips stay valid when nodes
-// move after being applied. Owned by DocAnim, which assigns clip ids.
+// every frame from clip plus base snapshot, so clips stay valid when
+// nodes move after being applied. Owned by DocAnim, which assigns clip ids.
 QtObject {
     id: presets
     required property var doc

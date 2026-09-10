@@ -324,7 +324,6 @@ Item {
     }
 
     // Pause bars, solid (outlined pairs turn to hairlines at 16px).
-    // Pause bars geometry.
     PhShape {
         active: icon.kind === "pause"
         box: icon.width

@@ -1,6 +1,7 @@
 import QtQuick
 
-// Equal-gap snapping for moving boxes, between and outside cases. Operates via `engine` facade.
+// Equal-gap snapping for moving boxes (between and outside cases).
+// Operates via `engine` facade.
 QtObject {
     id: snapSpacing
     required property var engine

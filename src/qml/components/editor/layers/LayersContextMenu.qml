@@ -17,7 +17,7 @@ Item {
     property int contextUid: -1
 
     readonly property bool hasSelection: menu.computeHasSelection()
-    readonly property bool canPaste: !!menu.doc && TabStore.clipboard.length > 0
+    readonly property bool canPaste: !!menu.doc && TabState.clipboard.length > 0
     readonly property bool contextValid: menu.computeContextValid()
     readonly property bool canGroup: !!menu.doc && menu.doc.canGroup()
     readonly property bool canUngroup: !!menu.doc && menu.doc.canUngroup()
@@ -42,11 +42,11 @@ Item {
 
     function doCopy() {
         if (menu.doc && menu.hasSelection)
-            TabStore.clipboard = menu.doc.copySelected();
+            TabState.clipboard = menu.doc.copySelected();
     }
 
-    // Copy / Paste / Duplicate / Group / Ungroup / Rename / Delete all
-    // land here; Esc and outside presses dismiss via closePolicy.
+    // Opens from a row (uid) or empty area (-1). Esc and outside presses
+    // dismiss via closePolicy.
     function openFor(uid, px, py) {
         menu.contextUid = uid;
         sub.close();
@@ -154,7 +154,7 @@ Item {
                 label: qsTr("Paste")
                 enabled: menu.canPaste
                 onClicked: {
-                    menu.doc.insertCopies(TabStore.clipboard);
+                    menu.doc.insertCopies(TabState.clipboard);
                     menu.closeAll();
                 }
             }

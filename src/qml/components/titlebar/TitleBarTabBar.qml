@@ -6,14 +6,14 @@ import Totm
 // Fixed widths (home 46, docs 184) so the active blend cover in TitleBar
 // can be positioned arithmetically. Doc tabs drag to reorder: the
 // dragged tab follows the cursor while siblings slide open a gap;
-// release commits through TabStore.moveTab.
+// release commits through TabState.moveTab.
 RowLayout {
     id: tabBar
 
     // Active tab geometry for the bottom-border cover (TitleBar draws it).
     // Doc tabs are 4x the 46px home tab = 184px.
-    readonly property bool homeActive: TabStore.currentIndex === 0
-    readonly property real activeX: homeActive ? 0 : 46 + (TabStore.currentIndex - 1) * 184
+    readonly property bool homeActive: TabState.currentIndex === 0
+    readonly property real activeX: homeActive ? 0 : 46 + (TabState.currentIndex - 1) * 184
     readonly property real activeWidth: homeActive ? 46 : 184
 
     // Drag state: source model index, press x in bar coords, last cursor
@@ -29,12 +29,12 @@ RowLayout {
 
     TitleBarHomeTab {
         active: tabBar.homeActive
-        onClicked: TabStore.select(0)
+        onClicked: TabState.select(0)
     }
 
     Repeater {
         id: rows
-        model: TabStore.docCount
+        model: TabState.docCount
         onItemAdded: (index, item) => {
             item.pressPolicy = (sx, sy) => {
                 var p = item.mapToItem(tabBar, sx, sy);
@@ -44,27 +44,26 @@ RowLayout {
             item.releasePolicy = () => tabBar.dragRelease();
         }
         TitleBarTab {
-            // NOTE: plain injected `index` (qmllint suggests a required
-            // declaration, but that silently breaks sibling bindings at
-            // runtime — verified headlessly). Warnings below are advisory.
-            title: TabStore.titleAt(index + 1)
-            active: TabStore.currentIndex === index + 1
-            onClicked: TabStore.select(index + 1)
-            onCloseRequested: TabStore.closeTab(index + 1)
+            // Delegate index stays injected: declaring it required breaks
+            // sibling bindings at runtime.
+            title: TabState.titleAt(index + 1)
+            active: TabState.currentIndex === index + 1
+            onClicked: TabState.select(index + 1)
+            onCloseRequested: TabState.closeTab(index + 1)
         }
     }
 
     // New-tab button, same 46px width as window controls.
     TitleBarButton {
         iconKind: "plus"
-        onClicked: TabStore.addUntitled()
+        onClicked: TabState.addUntitled()
     }
 
     // Doc slot k (0-based) spans [46 + k*184, 46 + (k+1)*184); the home
     // tab is pinned, so results are doc model indices (1-based).
     function slotAt(barX) {
         var k = Math.floor((barX - 46) / 184);
-        return Math.min(TabStore.docCount - 1, Math.max(0, k)) + 1;
+        return Math.min(TabState.docCount - 1, Math.max(0, k)) + 1;
     }
 
     function slotX(modelIndex) {
@@ -88,7 +87,7 @@ RowLayout {
             return;
         tabBar.tabDragging = true;
         tabBar.adoptSlot(barX);
-        for (var i = 0; i < TabStore.docCount; i++) {
+        for (var i = 0; i < TabState.docCount; i++) {
             var item = rows.itemAt(i);
             if (!item)
                 continue;
@@ -118,7 +117,7 @@ RowLayout {
         var cur = tabBar.dropTarget;
         if (cur < 1)
             cur = tabBar.dragFrom;
-        while (cur < TabStore.docCount && barX > tabBar.slotX(cur) + 184 + 24)
+        while (cur < TabState.docCount && barX > tabBar.slotX(cur) + 184 + 24)
             cur++;
         while (cur > 1 && barX < tabBar.slotX(cur) - 24)
             cur--;
@@ -131,7 +130,7 @@ RowLayout {
         if (tabBar.tabDragging && tabBar.dragFrom > 0 && tabBar.dropTarget > 0) {
             dist = tabBar.slotX(tabBar.dragFrom) + (tabBar.lastBarX - tabBar.pressBarX) - tabBar.slotX(tabBar.dropTarget);
             var target = tabBar.dropTarget;
-            TabStore.moveTab(tabBar.dragFrom, target);
+            TabState.moveTab(tabBar.dragFrom, target);
             if (Math.abs(dist) > 1)
                 glideItem = rows.itemAt(target - 1);
         }
@@ -154,7 +153,7 @@ RowLayout {
         tabBar.dragFrom = -1;
         tabBar.tabDragging = false;
         tabBar.dropTarget = -1;
-        for (var i = 0; i < TabStore.docCount; i++) {
+        for (var i = 0; i < TabState.docCount; i++) {
             var item = rows.itemAt(i);
             if (!item)
                 continue;

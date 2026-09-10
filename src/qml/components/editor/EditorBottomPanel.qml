@@ -45,17 +45,16 @@ Item {
     // playhead touch the edge; handle clearance lives inside the view
     // (transparent spacer) to keep buttons clear of the resize strip.
     // Hidden below a pixel sliver when collapsed so nothing paints out.
-    // NOTE: no marquee overlay here on purpose. A full-panel mouse
-    // area above the timeline would swallow every transport, ruler
-    // and keyframe press; timeline marquee stays dead by design.
+    // No marquee overlay here on purpose. A full-panel mouse area above
+    // the timeline would swallow every transport, ruler and keyframe
+    // press; timeline marquee stays dead by design.
     TimelineView {
         anchors.fill: parent
         visible: bottomPanel.height > 8
         doc: bottomPanel.doc
     }
 
-    // Resize handle straddling the top edge, like web `.resize-handle-top`.
-    // Hidden while collapsed.
+    // Resize handle straddling the top edge. Hidden while collapsed.
     MouseArea {
         id: handle
         anchors {

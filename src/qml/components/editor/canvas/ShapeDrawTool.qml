@@ -76,7 +76,7 @@ QtObject {
         var x1 = Math.max(tool.startCX, cx);
         var y1 = Math.max(tool.startCY, cy);
         tool.draft = {
-            type: ToolStore.activeTool === "text" ? "text" : ToolStore.activeShapeType,
+            type: ToolState.activeTool === "text" ? "text" : ToolState.activeShapeType,
             x: x0,
             y: y0,
             w: Math.max(1, x1 - x0),
@@ -97,19 +97,19 @@ QtObject {
             return;
         }
         if (!tool.moved) {
-            if (ToolStore.activeTool === "text")
+            if (ToolState.activeTool === "text")
                 tool.textEdit.createText(Math.round(tool.startCX), Math.round(tool.startCY), 0, 0, true);
             else
-                c.doc.addShape(ToolStore.activeShapeType, Math.round(tool.startCX - 50), Math.round(tool.startCY - 50), 100, 100);
+                c.doc.addShape(ToolState.activeShapeType, Math.round(tool.startCX - 50), Math.round(tool.startCY - 50), 100, 100);
         } else if (tool.draft) {
             var d = tool.draft;
-            if (ToolStore.activeTool === "text")
+            if (ToolState.activeTool === "text")
                 tool.textEdit.createText(d.x, d.y, d.w, d.h, false);
             else
                 c.doc.addShape(d.type, d.x, d.y, d.w, d.h);
         }
         tool.clearPreview();
-        ToolStore.setActiveTool("select");
+        ToolState.setActiveTool("select");
     }
 
     function clearPreview() {

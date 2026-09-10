@@ -6,7 +6,7 @@ import Totm
 // actions. Group selections edit the bbox (scales the subtree); shape
 // selections edit leaves via snapshot.setAll. Rotation row stays
 // shape-only; flips mirror paint, bbox untouched.
-// Alignment intentionally omitted: no align model exists yet.
+// Alignment intentionally omitted: no canvas align model exists yet.
 PanelSection {
     id: section
 

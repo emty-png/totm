@@ -2,9 +2,9 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Floating-toolbar button: 36x32, rounded, muted icon.
-// Active state is inverted (foreground fill, background icon), like web.
-// Disabled state rides the standard `enabled` prop, visuals dim to match.
+// Floating-toolbar button: 36x32, rounded, muted icon. Active state is
+// inverted (foreground fill, background icon). Disabled rides the
+// standard `enabled` prop; visuals dim to match.
 Rectangle {
     id: toolButton
 

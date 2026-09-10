@@ -2,11 +2,10 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Editor right panel. Holds the mode switcher; design shows the
+// Editor right panel: mode switcher on top; design shows the
 // properties panel, animate shows the preset/custom switcher with
-// per-mode content below.
-// Matches web `.editor-right-sidebar`: 280px, background fill, 1px left
-// border, 6px resize handle on the left edge.
+// per-mode content below. 280px, background fill, 1px left border,
+// 6px resize handle on the left edge.
 Item {
     id: rightPanel
 
@@ -26,12 +25,12 @@ Item {
     // selected clip drives the editor; empty selection shows the shape
     // panel (shape selected) or the gallery.
     function clipSelected() {
-        var d = TabStore.documentFor(TabStore.currentIndex);
+        var d = TabState.documentFor(TabState.currentIndex);
         return !!d && d.anim.selectedClipIds.length > 0;
     }
 
     function shapeSelected() {
-        var d = TabStore.documentFor(TabStore.currentIndex);
+        var d = TabState.documentFor(TabState.currentIndex);
         if (!d)
             return false;
         d.rev;
@@ -39,7 +38,7 @@ Item {
     }
 
     function selectedClipId() {
-        var d = TabStore.documentFor(TabStore.currentIndex);
+        var d = TabState.documentFor(TabState.currentIndex);
         if (!d || d.anim.selectedClipIds.length === 0)
             return -1;
         return d.anim.selectedClipIds[d.anim.selectedClipIds.length - 1];
@@ -49,32 +48,32 @@ Item {
     // is still selected, else the gallery.
     function goShapePanel() {
         rightPanel.pickingPreset = false;
-        var d = TabStore.documentFor(TabStore.currentIndex);
+        var d = TabState.documentFor(TabState.currentIndex);
         if (d)
             d.clearClipSelection();
     }
 
     // Motion-path draw entry from the Custom gallery (new clip).
     function startPathDraw() {
-        var d = TabStore.documentFor(TabStore.currentIndex);
+        var d = TabState.documentFor(TabState.currentIndex);
         if (!d)
             return;
         var tops = d.selectedTops();
         if (tops.length === 0)
             return;
-        ToolStore.startPathDraw(tops[0].uid, -1);
+        ToolState.startPathDraw(tops[0].uid, -1);
     }
 
     // Redraw an existing Path clip's points (toggles preserved).
     function redrawPathClip() {
-        var d = TabStore.documentFor(TabStore.currentIndex);
+        var d = TabState.documentFor(TabState.currentIndex);
         if (!d || d.anim.selectedClipIds.length === 0)
             return;
         var id = d.anim.selectedClipIds[d.anim.selectedClipIds.length - 1];
         var c = d.animClip(id);
         if (!c)
             return;
-        ToolStore.startPathDraw(c.targetUid, id);
+        ToolState.startPathDraw(c.targetUid, id);
     }
 
     // Animate tab needs a shape or a clip to show anything (mirrors the
@@ -83,10 +82,10 @@ Item {
         return rightPanel.shapeSelected() || rightPanel.clipSelected();
     }
 
-    // Text has no animation presets yet: any text in the selection parks
-    // the animate UI on a coming-soon note instead of the gallery.
+    // Text selections use the text preset gallery variant (Basic/Slide/
+    // Scale) instead of the shape gallery.
     function isTextSelection() {
-        var d = TabStore.documentFor(TabStore.currentIndex);
+        var d = TabState.documentFor(TabState.currentIndex);
         if (!d)
             return false;
         d.rev;
@@ -140,7 +139,7 @@ Item {
             width: parent.width
             height: parent.height - 48
             visible: modeSwitcher.mode === "design"
-            doc: TabStore.documentFor(TabStore.currentIndex)
+            doc: TabState.documentFor(TabState.currentIndex)
         }
 
         // Animate mode: preset/custom toggle plus per-mode content.
@@ -174,12 +173,12 @@ Item {
 
             // Preset gallery: live thumbnails, click applies to selection.
             // Shown by default, or borrowed by the shape panel picker.
-            // Text selections park on coming-soon (no text presets yet).
+            // Hidden for text selections (separate gallery below).
             PresetGallery {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
                 visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && !rightPanel.clipSelected() && (!rightPanel.shapeSelected() || rightPanel.pickingPreset) && !rightPanel.isTextSelection()
-                doc: TabStore.documentFor(TabStore.currentIndex)
+                doc: TabState.documentFor(TabState.currentIndex)
                 playing: visible
                 showBack: rightPanel.pickingPreset
                 backPolicy: () => rightPanel.pickingPreset = false
@@ -192,17 +191,16 @@ Item {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
                 visible: animateSwitcher.mode === "preset" && !rightPanel.clipSelected() && rightPanel.shapeSelected() && !rightPanel.pickingPreset
-                doc: TabStore.documentFor(TabStore.currentIndex)
+                doc: TabState.documentFor(TabState.currentIndex)
                 newPolicy: () => rightPanel.pickingPreset = true
             }
 
-            // Text preset gallery: Basic/Slide/Scale cards. Mirrors the
-            // shape flow (panel first, gallery while picking).
+            // Text preset gallery: Basic/Slide/Scale cards while picking.
             PresetGallery {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
                 visible: animateSwitcher.mode === "preset" && rightPanel.hasAnimContext() && !rightPanel.clipSelected() && rightPanel.isTextSelection() && rightPanel.pickingPreset
-                doc: TabStore.documentFor(TabStore.currentIndex)
+                doc: TabState.documentFor(TabState.currentIndex)
                 playing: visible
                 textMode: true
                 showBack: rightPanel.pickingPreset
@@ -214,7 +212,7 @@ Item {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
                 visible: rightPanel.clipSelected()
-                doc: TabStore.documentFor(TabStore.currentIndex)
+                doc: TabState.documentFor(TabState.currentIndex)
                 clipId: rightPanel.selectedClipId()
                 backPolicy: () => rightPanel.goShapePanel()
                 redrawPolicy: () => rightPanel.redrawPathClip()
@@ -226,13 +224,13 @@ Item {
                 width: parent.width
                 height: parent.height - animateSwitcher.height
                 visible: animateSwitcher.mode === "custom" && rightPanel.hasAnimContext() && !rightPanel.clipSelected()
-                doc: TabStore.documentFor(TabStore.currentIndex)
+                doc: TabState.documentFor(TabState.currentIndex)
                 drawPolicy: () => rightPanel.startPathDraw()
             }
         }
     }
 
-    // Resize handle straddling the left edge, like web `.resize-handle`.
+    // Resize handle straddling the left edge.
     MouseArea {
         id: handle
         anchors {

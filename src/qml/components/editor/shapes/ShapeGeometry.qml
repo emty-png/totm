@@ -1,8 +1,8 @@
 import QtQuick
 
 // Vector path builders for shape paint. Pure over an explicit shape-like
-// `s` (never stored): the same curves feed canvas paint now and the
-// future backend later. Caller passes its shape item straight through.
+// `s` (never stored): the same curves feed canvas paint and the C++
+// video renderer. Caller passes its shape item straight through.
 QtObject {
     id: geo
 

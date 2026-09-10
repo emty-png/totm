@@ -1,6 +1,8 @@
 import QtQuick
 
-// Snapshots, copy paste, duplicate and delete. Pastes land visible and unlocked. Operates on the owning Document via `doc`.
+// Snapshots, copy/paste, duplicate and delete. Pastes land visible and
+// unlocked with fresh uids; full-scene restore reuses uids. Operates on
+// the owner via `doc`.
 QtObject {
     id: clipboard
     required property var doc
@@ -226,11 +228,10 @@ QtObject {
     }
 
     // Whole-scene snapshot for the on-disk library. Plain data only, so
-    // the C++ store can persist it untouched and previews can read it.
-    // Animation rides along so designs reopen mid-choreography and the
-    // future backend renderer reads one self-contained document.
-    // While a preview frame is on screen, nodes snapshot from the base
-    // values so saves and undo capture the document, never the frame.
+    // the C++ store persists it untouched. Animation rides along in one
+    // self-contained document for the video renderer. While a preview
+    // frame is on screen, nodes snapshot from base values so saves and
+    // undo capture the document, never the frame.
     function snapshotScene() {
         var nodes = [];
         var base = doc.anim ? doc.anim.playBase : null;

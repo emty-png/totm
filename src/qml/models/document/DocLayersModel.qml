@@ -17,6 +17,7 @@ QtObject {
         return doc._allNodes().length;
     }
 
+    // Per-frame rows: touches rev so delegates refresh on any doc change.
     function visibleRows() {
         doc.rev;
         var out = [];
@@ -34,6 +35,8 @@ QtObject {
         return out;
     }
 
+    // Structural rows for the layers Repeater: touches structRev only, so
+    // the list rebuilds on structure, never on geometry moves.
     function visibleRowList() {
         doc.structRev;
         var out = [];

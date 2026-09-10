@@ -83,7 +83,7 @@ Rectangle {
         }
     }
 
-    // Right divider, like web `.titlebar-tab { border-right: ... }`
+    // Right divider.
     Rectangle {
         anchors {
             right: parent.right
@@ -119,8 +119,8 @@ Rectangle {
             if (mouse.moved && docTab.movePolicy)
                 docTab.movePolicy(event.x - mouse.pressX);
         }
-        // Arrow form: a bare block would inject the `mouse` signal
-        // parameter and shadow this MouseArea's own id (deprecated).
+        // Arrow form: a bare block would inject the signal parameter and
+        // shadow this MouseArea's own id.
         onReleased: event => {
             mouse.armed = false;
             if (docTab.releasePolicy)
@@ -138,10 +138,9 @@ Rectangle {
         }
     }
 
-    // Close zone: a real window-control button (same hover language as the
-    // rest of the bar), revealed when active or hovered, like web
-    // `.titlebar-tab:not(.active) .titlebar-tab-close`.
-    // Declared after the tab MouseArea so it stays on top of it.
+    // Close zone: same hover language as the rest of the bar, revealed
+    // when active or hovered. Declared after the tab MouseArea so it
+    // stays on top of it.
     Item {
         anchors {
             right: parent.right

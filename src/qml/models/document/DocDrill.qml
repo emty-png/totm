@@ -1,6 +1,7 @@
 import QtQuick
 
-// Drill path and press resolving inside grouped documents. Operates on the owning Document via `doc`.
+// Drill path plus press resolving inside groups. -1 is the root
+// container. Operates on the owner via `doc`.
 QtObject {
     id: docDrill
     required property var doc

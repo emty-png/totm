@@ -1,11 +1,10 @@
 import QtQuick
 import Totm
 
-// Card selection for one HomeView: selected design ids plus the set ops,
-// library deletes and marquee hit-testing over the card delegates.
-// Hit-testers take the card list and mapping item as arguments (never
-// stored) so delegate rebuilds can never desync them. Ids reassign
-// wholesale so card bindings update.
+// Card selection state for one HomeView: selected design ids plus set
+// ops, library deletes and marquee hit-testing over card delegates.
+// Hit-testers take the card list and mapping item per call (never stored)
+// so delegate rebuilds cannot desync them.
 QtObject {
     id: selection
 
@@ -34,8 +33,8 @@ QtObject {
             selection.selectedIds = [];
     }
 
-    // Marquee finished: collect cards whose rect touches the area.
-    // Card delegates carry designId, so no index math is needed.
+    // Collects cards whose rect touches the marquee area. Matches on the
+    // delegate designId, so no index math is needed.
     function applyMarquee(kids, toItem, area, additive) {
         var hits = [];
         for (var i = 0; i < kids.length; i++) {
@@ -59,8 +58,8 @@ QtObject {
         selection.selectedIds = ids;
     }
 
-    // Card under an overlay point, or null. Used to let card
-    // presses fall through the marquee area to the cards.
+    // Card under an overlay point, or null. Lets card presses fall through
+    // the marquee layer to the cards.
     function cardAt(kids, toItem, x, y) {
         for (var i = 0; i < kids.length; i++) {
             var child = kids[i];
@@ -78,7 +77,7 @@ QtObject {
         if (ids.length === 0)
             return;
         for (var i = 0; i < ids.length; i++) {
-            TabStore.closeTabByDesign(ids[i]);
+            TabState.closeTabByDesign(ids[i]);
             LibraryStore.deleteDesign(ids[i]);
         }
         selection.selectedIds = [];
@@ -89,7 +88,7 @@ QtObject {
             selection.deleteSelected();
             return selection.selectedIds.length;
         }
-        TabStore.closeTabByDesign(designId);
+        TabState.closeTabByDesign(designId);
         LibraryStore.deleteDesign(designId);
         var ids = selection.selectedIds.slice();
         var at = ids.indexOf(designId);

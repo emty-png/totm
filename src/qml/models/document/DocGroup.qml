@@ -1,6 +1,8 @@
 import QtQuick
 
-// Group and ungroup. Operates on the owning Document via `doc`.
+// Group/ungroup over selected tops. Locked nodes are excluded;
+// same-parent groups insert at the source index. Operates on the owner
+// via `doc`.
 QtObject {
     id: docGroup
     required property var doc

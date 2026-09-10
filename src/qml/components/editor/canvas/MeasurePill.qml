@@ -1,7 +1,7 @@
 import QtQuick
 import Totm
 
-// Cute measurement pill: themed surface fill, pop-in/out on show.
+// Measurement pill: themed surface fill, pop-in/out on show.
 Item {
     id: pill
 

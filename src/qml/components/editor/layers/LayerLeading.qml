@@ -64,7 +64,7 @@ RowLayout {
         Layout.alignment: Qt.AlignVCenter
         visible: !leading.isGroup
         opacity: leading.rowVisible ? 1 : 0.45
-        kind: ToolStore.shapeIconFor(leading.rowType)
+        kind: ToolState.shapeIconFor(leading.rowType)
         iconColor: leading.selected ? AppTheme.foreground : AppTheme.muted
 
         Behavior on opacity {

@@ -58,9 +58,8 @@ Item {
             }
         }
 
-        // 1px bottom border (full width; the active-tab cover below hides
-        // the segment under the active tab so it blends into the content,
-        // like web `border-bottom-color: background`).
+        // 1px bottom border. The active-tab cover below hides the segment
+        // under the active tab so it blends into the content.
         Rectangle {
             width: parent.width
             height: 1

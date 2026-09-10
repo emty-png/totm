@@ -2,10 +2,9 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// One context-menu row: text label, optional trailing hint (used for the
-// submenu parent). Figma-style: no icons, hover fill, dimmed when off.
-// Disabled state rides the standard `enabled` prop (inherited by the
-// MouseArea), visuals dim manually to match the theme.
+// One context-menu row: text label plus optional trailing hint. No
+// icons; hover fill, dimmed when disabled. Disabled rides the standard
+// `enabled` prop (inherited by the MouseArea); visuals dim manually.
 Rectangle {
     id: menuItem
 

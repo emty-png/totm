@@ -13,7 +13,7 @@ src/
   qml/
     Main.qml             # frameless window + TitleBar + view switch, restores window state
     theme/               # AppTheme singleton (only hex colors live here)
-    stores/              # TabStore, ToolStore singletons
+    stores/              # TabState, ToolState singletons
     models/              # Document facade + DocNode
     models/document/     # focused helpers (tree, selection, history, anim, geometry…)
     views/               # home/, editor/ screen compositions

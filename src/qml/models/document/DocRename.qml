@@ -1,6 +1,7 @@
 import QtQuick
 
-// Inline rename state. Operates on the owning Document via `doc`.
+// Inline rename state (single renaming node). Blank commits keep the old
+// name. Operates on the owner via `doc`.
 QtObject {
     id: docRename
     required property var doc

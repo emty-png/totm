@@ -17,7 +17,7 @@ ApplicationWindow {
 
     onClosing: {
         root.saveWindowNow();
-        TabStore.saveAllOpen();
+        TabState.saveAllOpen();
     }
 
     Component.onCompleted: root.restoreWindow()
@@ -96,14 +96,14 @@ ApplicationWindow {
 
         // Home tab content
         HomeView {
-            visible: TabStore.isHomeSelected
+            visible: TabState.isHomeSelected
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
 
         // Document tab content
         EditorView {
-            visible: !TabStore.isHomeSelected
+            visible: !TabState.isHomeSelected
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
