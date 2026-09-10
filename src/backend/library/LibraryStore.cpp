@@ -2,11 +2,15 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QImage>
+#include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QUrl>
 #include <QUuid>
 
 namespace {
@@ -251,6 +255,74 @@ bool LibraryStore::isDefaultWorkspace(const QString &id) const {
     return at >= 0 && m_workspaceEntries.at(at).isDefault;
 }
 
+QString LibraryStore::importImage(const QUrl &source) {
+    QString local = source.isLocalFile() ? source.toLocalFile() : source.toString();
+    if (local.isEmpty()) {
+        setLastError(tr("Pick an image file first."));
+        return {};
+    }
+    QFileInfo info(local);
+    if (!info.exists() || !info.isFile()) {
+        setLastError(tr("Could not read that image file."));
+        return {};
+    }
+    QString suffix = info.suffix().toLower();
+    static const QStringList allowed = {QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
+        QStringLiteral("webp"), QStringLiteral("gif"), QStringLiteral("svg")};
+    if (!allowed.contains(suffix))
+        suffix = QStringLiteral("png");
+    QDir().mkpath(imagesDir());
+    const QString name = newId() + QStringLiteral(".") + suffix;
+    const QString dest = imagesDir() + QStringLiteral("/") + name;
+    if (!QFile::copy(local, dest)) {
+        setLastError(tr("Could not import that image."));
+        return {};
+    }
+    clearError();
+    return name;
+}
+
+QUrl LibraryStore::imageUrl(const QString &name) const {
+    if (!isSafeImageName(name))
+        return {};
+    const QString path = imagesDir() + QStringLiteral("/") + name;
+    if (!QFile::exists(path))
+        return {};
+    return QUrl::fromLocalFile(path);
+}
+
+QVariantMap LibraryStore::imageInfo(const QString &name) const {
+    QVariantMap out;
+    out[QStringLiteral("name")] = name;
+    out[QStringLiteral("width")] = 0;
+    out[QStringLiteral("height")] = 0;
+    if (!isSafeImageName(name))
+        return out;
+    const QString path = imagesDir() + QStringLiteral("/") + name;
+    if (!QFile::exists(path))
+        return out;
+    QImageReader reader(path);
+    // SVG reports a valid size via the plugin when it carries width/height;
+    // icon-only SVGs fall back to a neutral box so clicks still stamp.
+    QSize size = reader.size();
+    if (!size.isValid() || size.isEmpty()) {
+        QImage img(path);
+        if (!img.isNull())
+            size = img.size();
+    }
+    if (size.isValid() && !size.isEmpty()) {
+        out[QStringLiteral("width")] = size.width();
+        out[QStringLiteral("height")] = size.height();
+    }
+    return out;
+}
+
+bool LibraryStore::hasImage(const QString &name) const {
+    if (!isSafeImageName(name))
+        return false;
+    return QFile::exists(imagesDir() + QStringLiteral("/") + name);
+}
+
 void LibraryStore::load() {
     if (m_loaded)
         return;
@@ -486,4 +558,17 @@ QString LibraryStore::libraryDir() const {
     if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
         dir += QStringLiteral("/totm");
     return dir;
+}
+
+QString LibraryStore::imagesDir() const {
+    return libraryDir() + QStringLiteral("/images");
+}
+
+bool LibraryStore::isSafeImageName(const QString &name) const {
+    if (name.isEmpty() || name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
+        || name.contains(QStringLiteral("..")))
+        return false;
+    // Stored names are uuid + "." + suffix.
+    const int dot = name.lastIndexOf(QLatin1Char('.'));
+    return dot > 0 && dot < name.size() - 1;
 }

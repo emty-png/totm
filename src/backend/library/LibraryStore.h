@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
@@ -93,6 +94,16 @@ public:
     Q_INVOKABLE QString workspaceName(const QString &id) const;
     Q_INVOKABLE bool isDefaultWorkspace(const QString &id) const;
 
+    // Images. Files are copied into <libraryDir>/images/ and nodes store
+    // the file name only, so designs stay portable offline.
+    // importImage copies a local file and returns its stored name ("" on
+    // failure). imageUrl resolves a stored name to a file url for Image
+    // sources. imageInfo reports {name, width, height} (0 when unknown).
+    Q_INVOKABLE QString importImage(const QUrl &source);
+    Q_INVOKABLE QUrl imageUrl(const QString &name) const;
+    Q_INVOKABLE QVariantMap imageInfo(const QString &name) const;
+    Q_INVOKABLE bool hasImage(const QString &name) const;
+
 signals:
     void libraryChanged();
     void lastErrorChanged();
@@ -113,6 +124,10 @@ private:
     // Owning directory for library.json + lock file. Falls back to
     // ~/.totm when the platform location is unavailable.
     QString libraryDir() const;
+    // Image blob directory (<libraryDir>/images). Created on demand.
+    QString imagesDir() const;
+    // Stored file name guard: uuid + safe suffix, no separators.
+    bool isSafeImageName(const QString &name) const;
 
     QList<WorkspaceEntry> m_workspaceEntries;
     QList<DesignEntry> m_designEntries;

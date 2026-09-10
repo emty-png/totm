@@ -13,7 +13,7 @@ PanelSection {
     required property var doc
 
     title: qsTr("Fill")
-    visible: section.snapshot.sel.length > 0 && !section.snapshot.hasGroup
+    visible: section.snapshot.sel.length > 0 && !section.snapshot.hasGroup && !section.snapshot.allOfType("image")
     enabled: !section.snapshot.allLocked
     compact: section.opaqueFills().length === 0
     showAdd: section.hasNoFill()

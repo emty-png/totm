@@ -58,6 +58,8 @@ QtObject {
             return "text";
         case "pen":
             return "pen";
+        case "image":
+            return "image";
         default:
             return "square";
         }

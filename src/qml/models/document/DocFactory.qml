@@ -31,6 +31,7 @@ QtObject {
             pathData: factory._copyPath(s.pathData),
             flipH: s.flipH ?? false,
             flipV: s.flipV ?? false,
+            imageSource: s.imageSource ?? "",
             textContent: s.textContent ?? "",
             fontFamily: s.fontFamily ?? "Inter",
             fontWeight: s.fontWeight ?? 400,
@@ -205,6 +206,28 @@ QtObject {
             h: Math.max(1, Math.round(h)),
             fill: "#000000",
             autoSize: auto
+        });
+        var list = doc._childrenOf(container).slice();
+        list.unshift(n);
+        doc._setChildren(container, list);
+        doc.anchorUid = n.uid;
+        doc._refreshStructural();
+        return n.uid;
+    }
+
+    // Image creation: stored blob name plus an explicit box (click stamps
+    // natural size, drag stretches to the box). Rejects empty sources.
+    function addImage(imageSource, x, y, w, h) {
+        if (!imageSource)
+            return -1;
+        var container = doc._activeContainerUid();
+        doc.clearSelection();
+        var n = _makeShapeNode("image", {
+            x: Math.round(x),
+            y: Math.round(y),
+            w: Math.max(1, Math.round(w)),
+            h: Math.max(1, Math.round(h)),
+            imageSource: String(imageSource)
         });
         var list = doc._childrenOf(container).slice();
         list.unshift(n);

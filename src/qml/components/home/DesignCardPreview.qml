@@ -72,6 +72,7 @@ Item {
                     pathData: modelData.pathData || []
                     flipH: modelData.flipH === true
                     flipV: modelData.flipV === true
+                    imageSource: modelData.imageSource ?? ""
                     textContent: modelData.textContent !== undefined ? modelData.textContent : ""
                     fontFamily: modelData.fontFamily || "Inter"
                     fontWeight: modelData.fontWeight || 400

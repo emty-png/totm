@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Shapes
 import Totm
 
@@ -54,6 +55,9 @@ Item {
     property string hAlign: "left"
     property string vAlign: "top"
     property bool autoSize: true
+    // Stored blob name under LibraryStore images/ (meaningful when
+    // shapeType === "image"). Stretch fills the box per tool choice.
+    property string imageSource: ""
     // True while the canvas inline editor owns this text: the static
     // glyphs hide so they never double-draw under the editor.
     property bool editing: false
@@ -111,9 +115,10 @@ Item {
 
     // Other types: stroked/filled vector path with round joins.
     // Independent rectangles join them so every corner keeps its own cut.
+    // Images paint separately below, so they never reach the vector path.
     Shape {
         anchors.fill: parent
-        visible: (shape.shapeType !== "rectangle" && shape.shapeType !== "text") || (shape.shapeType === "rectangle" && shape.independentCorners)
+        visible: (shape.shapeType !== "rectangle" && shape.shapeType !== "text" && shape.shapeType !== "image") || (shape.shapeType === "rectangle" && shape.independentCorners)
         antialiasing: true
         opacity: shape.shapeOpacity
         transform: Scale {
@@ -169,6 +174,78 @@ Item {
             autoLeading: shape.lineHeightAuto
             leading: shape.lineHeight
             onContentSizeChanged: shape.reportMeasure()
+        }
+    }
+
+    // Image: stretched blob with uniform radius mask plus an optional
+    // stroke border. Rectangle clip stays rectangular, so rounding goes
+    // through a MultiEffect mask (smooth edges via threshold/spread).
+    // Missing blobs show a neutral tile so broken imports never vanish.
+    Item {
+        id: imageRoot
+
+        anchors.fill: parent
+        visible: shape.shapeType === "image"
+        opacity: shape.shapeOpacity
+        transform: Scale {
+            xScale: shape.flipH ? -1 : 1
+            yScale: shape.flipV ? -1 : 1
+            origin.x: shape.sw / 2
+            origin.y: shape.sh / 2
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Math.max(0, shape.radius)
+            color: AppTheme.surface
+            visible: imageObj.status !== Image.Ready
+        }
+
+        AppIcon {
+            anchors.centerIn: parent
+            kind: "image"
+            iconColor: AppTheme.muted
+            visible: shape.shapeType === "image" && imageObj.status !== Image.Ready
+        }
+
+        Image {
+            id: imageObj
+
+            anchors.fill: parent
+            source: shape.imageSource ? LibraryStore.imageUrl(shape.imageSource) : ""
+            fillMode: Image.Stretch
+            asynchronous: true
+            cache: true
+            smooth: true
+            mipmap: true
+            visible: status === Image.Ready
+            layer.enabled: status === Image.Ready && shape.radius > 0
+            layer.smooth: true
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: maskRect
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
+            }
+        }
+
+        Rectangle {
+            id: maskRect
+
+            anchors.fill: parent
+            radius: Math.max(0, shape.radius)
+            color: "white"
+            visible: false
+            layer.enabled: true
+            layer.smooth: true
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Math.max(0, shape.radius)
+            color: "transparent"
+            border.width: shape.strokeWidth
+            border.color: shape.strokeWidth > 0 ? shape.strokeColor : "transparent"
         }
     }
 

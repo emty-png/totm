@@ -56,6 +56,10 @@ QtObject {
     // geometry and bbox stay untouched.
     property bool flipH: false
     property bool flipV: false
+    // Image blob name under LibraryStore images/ (meaningful when
+    // shapeType === "image"). Empty means missing; canvas shows a
+    // placeholder and export paints a neutral box.
+    property string imageSource: ""
     // Canvas paint order, assigned by Document.renumberZ (top-first DFS).
     property int zOrder: 0
 

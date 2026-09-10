@@ -14,7 +14,7 @@ PanelSection {
     property bool hasStroke: section.widthCommon.mixed || section.widthCommon.value > 0
 
     title: qsTr("Stroke")
-    visible: section.snapshot.sel.length > 0 && !section.snapshot.hasGroup
+    visible: section.snapshot.sel.length > 0 && !section.snapshot.hasGroup && !section.snapshot.allOfType("image")
     enabled: !section.snapshot.allLocked
     compact: !section.hasStroke
     showAdd: !section.hasStroke
