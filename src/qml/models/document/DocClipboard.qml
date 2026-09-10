@@ -248,7 +248,8 @@ QtObject {
             sceneHeight: doc.sceneHeight,
             sceneColor: String(doc.sceneColor),
             nodes: nodes,
-            anim: doc.anim.snapshotData()
+            anim: doc.anim.snapshotData(),
+            audio: doc.audio.snapshotData()
         };
     }
 
@@ -299,6 +300,7 @@ QtObject {
             list.push(_instantiateSnapshot(nodes[j], false, true));
         doc.rootChildren = list;
         doc.anim.restoreData(s.anim);
+        doc.audio.restoreData(s.audio);
         doc._refreshStructural();
     }
 }

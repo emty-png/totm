@@ -78,6 +78,9 @@ QtObject {
     property var anim: DocAnim {
         doc: root
     }
+    property var audio: DocAudio {
+        doc: root
+    }
 
     readonly property bool canUndo: root.history.canUndo
     readonly property bool canRedo: root.history.canRedo
@@ -175,6 +178,36 @@ QtObject {
     }
     function seekPlayhead(t) {
         anim.seek(t);
+    }
+
+    // Audio. DocAudio checkpoints internally after validating, so these
+    // stay thin pass-throughs (never double-checkpoint here).
+    function addAudioClip(source, t0, fileDuration) {
+        return audio.addClip(source, t0, fileDuration);
+    }
+    function moveAudioClip(id, t0) {
+        return audio.moveClip(id, t0);
+    }
+    function nudgeAudioClip(id, t0) {
+        return audio.nudge(id, t0);
+    }
+    function deleteAudioClips(ids) {
+        return audio.deleteClips(ids);
+    }
+    function deleteSelectedAudio() {
+        return audio.deleteSelected();
+    }
+    function selectAudioClip(id, additive) {
+        audio.selectClip(id, additive);
+    }
+    function addAudioSelection(id) {
+        audio.addToSelection(id);
+    }
+    function clearAudioSelection() {
+        audio.clearSelection();
+    }
+    function audioClip(id) {
+        return audio.clipById(id);
     }
 
     // Tree navigation.

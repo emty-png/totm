@@ -53,6 +53,7 @@ qt_add_qml_module(totm
         qml/models/document/DocEasing.qml
         qml/models/document/DocPathSample.qml
         qml/models/document/DocAnim.qml
+        qml/models/document/DocAudio.qml
         # Canvas + snapping
         qml/components/editor/snap/SnapEngine.qml
         qml/components/editor/snap/SnapTargets.qml
@@ -130,12 +131,14 @@ qt_add_qml_module(totm
         qml/components/selection/DragSelection.qml
         # Editor shell
         qml/components/editor/PanelResizeHandle.qml
+        qml/components/editor/AudioPreview.qml
         qml/components/editor/EditorLeftPanel.qml
         qml/components/editor/EditorRightPanel.qml
         qml/components/editor/EditorModeSwitcher.qml
         qml/components/editor/AnimateModeSwitcher.qml
         qml/components/editor/timeline/TimelineView.qml
         qml/components/editor/timeline/TimelineLane.qml
+        qml/components/editor/timeline/TimelineAudioLane.qml
         qml/components/editor/timeline/TimelineRuler.qml
         qml/components/editor/timeline/TimelineTransport.qml
         qml/components/editor/EditorBottomPanel.qml
@@ -175,7 +178,7 @@ qt_add_qml_module(totm
         qml/views/editor/EditorView.qml
 )
 
-target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg)
+target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia)
 
 # Backend headers register QML types by basename (see the generated
 # qmltyperegistrations.cpp), so each backend dir must be on the include path.

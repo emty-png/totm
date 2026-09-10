@@ -42,7 +42,8 @@ ColumnLayout {
 
     // Playback clock: one 16ms timer for the visible tab. Transport state
     // lives per document, so tab switches park and resume with no
-    // bookkeeping here.
+    // bookkeeping here. Audio preview conducts itself off the same
+    // transport clock beside it.
     Timer {
         id: playTimer
 
@@ -53,6 +54,10 @@ ColumnLayout {
             if (view.playDoc)
                 view.playDoc.anim.tick();
         }
+    }
+
+    AudioPreview {
+        doc: view.playDoc
     }
 
     // Undo/redo for the current document. Skipped inside text inputs so
@@ -87,21 +92,30 @@ ColumnLayout {
         }
     }
 
-    // Timeline clip delete. Same text-input guard as undo/redo.
+    // Timeline clip delete. Same text-input guard as undo/redo. Audio
+    // selection deletes alongside animation clips; each side no-ops
+    // quietly when empty so no phantom undo entries appear.
     Shortcut {
         sequences: ["Delete"]
-        enabled: !TabState.isHomeSelected && rightPanel.mode === "animate" && view.hasSelectedClips()
+        enabled: !TabState.isHomeSelected && rightPanel.mode === "animate" && (view.hasSelectedClips() || view.hasSelectedAudio())
         onActivated: {
             if (view.focusInTextInput())
                 return;
-            if (view.playDoc)
+            if (view.hasSelectedClips() && view.playDoc)
                 view.playDoc.deleteSelectedClips();
+            if (view.hasSelectedAudio() && view.playDoc)
+                view.playDoc.deleteSelectedAudio();
         }
     }
 
     function hasSelectedClips() {
         var d = view.playDoc;
         return !!d && d.anim.selectedClipIds.length > 0;
+    }
+
+    function hasSelectedAudio() {
+        var d = view.playDoc;
+        return !!d && d.audio.selectedAudioIds.length > 0;
     }
 
     // Debounced autosave: each mutation queues its tab id; the queue

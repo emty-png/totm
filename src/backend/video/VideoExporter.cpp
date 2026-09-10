@@ -57,6 +57,69 @@ bool resolveQuality(const QString &quality, int &w, int &h, QString &label) {
 
 // Sampling lives in AnimSampler; only the quality table stays here.
 
+// Audible audio slice for one timeline clip: source file plus the
+// trimmed read window and its composition delay, all in seconds.
+struct AudioInput {
+    QString path;
+    double seek = 0.0;
+    double take = 0.0;
+    double delay = 0.0;
+};
+
+// Timeline audio resolved against the render duration (same trim rule
+// as the canvas preview: intersect with [0, duration]). Missing blobs
+// are skipped so one lost file never fails the whole render.
+QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
+    QList<AudioInput> out;
+    const QVariantMap audio = scene.value(QStringLiteral("audio")).toMap();
+    const QVariantList clips = audio.value(QStringLiteral("clips")).toList();
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (dir.isEmpty())
+        dir = QDir::homePath() + QStringLiteral("/.totm");
+    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
+        dir += QStringLiteral("/totm");
+    dir += QStringLiteral("/audio");
+    for (const QVariant &cv : clips) {
+        const QVariantMap c = cv.toMap();
+        const QString name = c.value(QStringLiteral("source")).toString();
+        if (name.isEmpty() || name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
+            || name.contains(QStringLiteral("..")))
+            continue;
+        const QString path = dir + QStringLiteral("/") + name;
+        if (!QFile::exists(path))
+            continue;
+        const double start = qMax(0.0, c.value(QStringLiteral("t0"), 0.0).toDouble());
+        const double offset = qMax(0.0, c.value(QStringLiteral("offset"), 0.0).toDouble());
+        const double end = qMin(c.value(QStringLiteral("t0"), 0.0).toDouble() + qMax(0.0, c.value(QStringLiteral("duration"), 0.0).toDouble()), duration);
+        if (end - start <= 0.02)
+            continue;
+        out.append({path, offset, end - start, start});
+    }
+    return out;
+}
+
+// Filter graph delaying each input to its timeline start and mixing
+// down to one stereo track. normalize=0 keeps bed levels intact;
+// overlapping clips can clip instead of ducking (no per-clip volume
+// in v1, so there is nothing to preserve headroom for).
+QString audioFilter(const QList<AudioInput> &inputs) {
+    QStringList mixed;
+    for (int i = 0; i < inputs.size(); ++i) {
+        const int ms = qMax(0, qRound(inputs.at(i).delay * 1000.0));
+        mixed.append(QStringLiteral("[%1:a]aresample=44100,aformat=channel_layouts=stereo,adelay=%2|%2[a%3]")
+                .arg(i + 1)
+                .arg(ms)
+                .arg(i));
+    }
+    QStringList labels;
+    for (int i = 0; i < inputs.size(); ++i)
+        labels.append(QStringLiteral("[a%1]").arg(i));
+    return mixed.join(QStringLiteral(";"))
+        + QStringLiteral(";")
+        + labels.join(QString())
+        + QStringLiteral("amix=inputs=%1:duration=longest:dropout_transition=0:normalize=0[a]");
+}
+
 } // namespace
 
 namespace {
@@ -148,12 +211,28 @@ protected:
         // Cap encoder threads: libx264 auto (~cores) starves the UI
         // thread on weak machines, which stalls Cancel and input.
         const int encThreads = qBound(2, QThread::idealThreadCount() / 2, 6);
+        // Timeline audio rides as extra inputs, each trimmed to its
+        // audible window and delayed to its start, then mixed down.
+        // No clips keeps the historical video-only path untouched.
+        const QList<AudioInput> audio = collectAudio(m_scene, duration);
         QProcess proc;
-        const QStringList encArgs = {QStringLiteral("-y"), QStringLiteral("-f"), QStringLiteral("rawvideo"),
+        QStringList encArgs = {QStringLiteral("-y"), QStringLiteral("-f"), QStringLiteral("rawvideo"),
             QStringLiteral("-pix_fmt"), QStringLiteral("rgba"), QStringLiteral("-s"),
             QStringLiteral("%1x%2").arg(m_outW).arg(m_outH), QStringLiteral("-r"), QString::number(m_fps),
-            QStringLiteral("-i"), QStringLiteral("-"), QStringLiteral("-an"), QStringLiteral("-c:v"),
-            QStringLiteral("libx264"), QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
+            QStringLiteral("-i"), QStringLiteral("-")};
+        for (const AudioInput &in : audio) {
+            encArgs += {QStringLiteral("-ss"), QString::number(in.seek, 'f', 3), QStringLiteral("-t"),
+                QString::number(in.take, 'f', 3), QStringLiteral("-i"), in.path};
+        }
+        if (audio.isEmpty()) {
+            encArgs += {QStringLiteral("-an"), QStringLiteral("-c:v")};
+        } else {
+            encArgs += {QStringLiteral("-filter_complex"), audioFilter(audio), QStringLiteral("-map"),
+                QStringLiteral("0:v"), QStringLiteral("-map"), QStringLiteral("[a]"), QStringLiteral("-c:a"),
+                QStringLiteral("aac"), QStringLiteral("-b:a"), QStringLiteral("160k"), QStringLiteral("-shortest"),
+                QStringLiteral("-c:v")};
+        }
+        encArgs += {QStringLiteral("libx264"), QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
             QStringLiteral("-crf"), QString::number(m_crf), QStringLiteral("-preset"), m_preset,
             QStringLiteral("-threads"), QString::number(encThreads), QStringLiteral("-movflags"),
             QStringLiteral("+faststart"), m_tempPath};

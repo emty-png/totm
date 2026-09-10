@@ -1,6 +1,9 @@
+import QtCore
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtMultimedia
 import Totm
 
 // Timeline: left sidebar (transport plus one label per animated top)
@@ -36,6 +39,8 @@ Item {
 
     readonly property real playheadX: timeline.doc ? timeline.doc.anim.currentTime * timeline.pxPerSec : 0
     readonly property var lanes: timeline.computeLanes()
+    readonly property var audioRows: timeline.computeAudioRows()
+    readonly property real audioHeadHeight: 28
 
     // Tracks input overlay, below the content row: lane, diamond and
     // ruler presses land above; empty tracks and wheel fall through here.
@@ -67,6 +72,7 @@ Item {
             if (timeline.doc.anim.playing)
                 timeline.doc.anim.pause();
             timeline.doc.clearClipSelection();
+            timeline.doc.clearAudioSelection();
         }
         onWheel: wheel => timeline.handleWheel(wheel)
     }
@@ -133,6 +139,80 @@ Item {
                     }
                 }
             }
+
+            // Audio section header: label only now; the import button
+            // floats top-right over the ruler band (the transport row is
+            // full, and this keeps it at hand with zero clips too).
+            Item {
+                width: parent.width
+                height: timeline.audioHeadHeight
+
+                Text {
+                    anchors {
+                        left: parent.left
+                        verticalCenter: parent.verticalCenter
+                        leftMargin: 12
+                    }
+                    text: qsTr("Audio")
+                    font.pixelSize: 11
+                    color: AppTheme.muted
+                }
+
+                Rectangle {
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        bottom: parent.bottom
+                    }
+                    height: 1
+                    color: AppTheme.border
+                }
+            }
+
+            Repeater {
+                model: timeline.audioRows
+
+                Item {
+                    width: timeline.gutterWidth
+                    height: timeline.laneHeight
+
+                    AppIcon {
+                        anchors {
+                            left: parent.left
+                            verticalCenter: parent.verticalCenter
+                            leftMargin: 12
+                        }
+                        width: 14
+                        height: 14
+                        kind: "music"
+                        iconColor: AppTheme.muted
+                    }
+
+                    Text {
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            verticalCenter: parent.verticalCenter
+                            leftMargin: 32
+                            rightMargin: 8
+                        }
+                        text: qsTr("Sound %1").arg(modelData.clip.id)
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                        color: AppTheme.foreground
+                    }
+
+                    Rectangle {
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            bottom: parent.bottom
+                        }
+                        height: 1
+                        color: AppTheme.border
+                    }
+                }
+            }
         }
 
         Rectangle {
@@ -147,9 +227,16 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            // Never interactive: an interactive Flickable claims every
+            // press-drag for panning (and every wheel for flicking)
+            // before the marquee overlay below sees them, which kills
+            // drag-select, click-clear and ctrl+wheel zoom. Navigation
+            // stays programmatic (overlay wheel handler, scrollbar,
+            // zoomTo) while lanes and ruler keep their own MouseAreas.
+            interactive: false
             flickableDirection: Flickable.HorizontalFlick
             contentWidth: Math.max(tracks.width, timeline.tracksWidth())
-            contentHeight: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight
+            contentHeight: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight + timeline.audioHeadHeight + timeline.audioRows.length * timeline.laneHeight
 
             ScrollBar.horizontal: ScrollBar {
                 policy: ScrollBar.AsNeeded
@@ -230,6 +317,58 @@ Item {
                 }
             }
 
+            // Audio header spacer: pairs with the gutter header so rows
+            // stay aligned across the divider.
+            Item {
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                }
+                y: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight
+                height: timeline.audioHeadHeight
+
+                Rectangle {
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        bottom: parent.bottom
+                    }
+                    height: 1
+                    color: AppTheme.border
+                }
+            }
+
+            // Audio lanes, one row per clip.
+            Column {
+                id: audioColumn
+
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                }
+                y: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight + timeline.audioHeadHeight
+                height: timeline.audioRows.length * timeline.laneHeight
+
+                Repeater {
+                    id: audioRows
+
+                    model: timeline.audioRows
+                    onItemAdded: (index, item) => {
+                        item.clipPolicy = (id, additive) => timeline.onAudioClip(id, additive);
+                    }
+
+                    TimelineAudioLane {
+                        width: tracks.contentWidth
+                        height: timeline.laneHeight
+                        clip: modelData.clip
+                        pxPerSec: timeline.pxPerSec
+                        originX: timeline.originX
+                        selected: modelData.selected
+                        doc: timeline.doc
+                    }
+                }
+            }
+
             // Playhead overlay: pill readout on the ruler plus a line down
             // through every lane. Covers the viewport, not just the content,
             // so the line always reaches the panel bottom.
@@ -269,7 +408,7 @@ Item {
             Text {
                 x: tracks.contentX + (tracks.width - width) / 2
                 y: timeline.tracksTop + (tracks.height - timeline.tracksTop - height) / 2
-                visible: timeline.lanes.length === 0
+                visible: timeline.lanes.length === 0 && timeline.audioRows.length === 0
                 text: qsTr("Apply a preset or custom animation to begin...")
                 font.pixelSize: 13
                 color: AppTheme.muted
@@ -288,6 +427,23 @@ Item {
             }
         }
     } // contentRow
+
+    // Add-sound button floating top-right over the ruler band, mirroring
+    // the canvas export pill: always at hand, never disturbing layout.
+    // ToolbarButton sizes itself for layouts only, so the floating use
+    // pins its own box.
+    ToolbarButton {
+        anchors {
+            top: parent.top
+            right: parent.right
+            topMargin: 8
+            rightMargin: 12
+        }
+        width: 36
+        height: 32
+        iconKind: "music"
+        onClicked: audioPicker.open()
+    }
 
     // One row per clip (not per shape): stacked animations on one
     // target read as separate lanes, grouped by target in
@@ -344,14 +500,43 @@ Item {
             d.selectClip(id, additive);
     }
 
-    // Marquee select: any clip with a diamond inside the rect joins.
-    // Click (no drag) is handled by the overlay; this only multi-picks.
+    function onAudioClip(id, additive) {
+        var d = timeline.doc;
+        if (!d)
+            return;
+        d.selectAudioClip(id, additive);
+    }
+
+    // One row per audio clip, earliest first. Reads rev so adds,
+    // deletes and undos rebuild the rows; delegates bind modelData only.
+    function computeAudioRows() {
+        var d = timeline.doc;
+        if (!d)
+            return [];
+        d.rev;
+        var sel = d.audio.selectedAudioIds;
+        var clips = d.audio.clips.slice().sort((a, b) => a.t0 - b.t0);
+        var out = [];
+        for (var i = 0; i < clips.length; i++) {
+            out.push({
+                clip: clips[i],
+                selected: sel.indexOf(clips[i].id) >= 0
+            });
+        }
+        return out;
+    }
+
+    // Marquee select: any animation diamond inside the rect joins, as
+    // does any audio bar it overlaps. Click (no drag) is handled by the
+    // overlay; this only multi-picks.
     function applyMarquee(area, additive) {
         var d = timeline.doc;
         if (!d)
             return;
-        if (!additive)
+        if (!additive) {
             d.clearClipSelection();
+            d.clearAudioSelection();
+        }
         var lanes = timeline.lanes;
         for (var i = 0; i < lanes.length; i++) {
             var cy = timeline.tracksTop + i * timeline.laneHeight + timeline.laneHeight / 2;
@@ -368,6 +553,17 @@ Item {
                     }
                 }
             }
+        }
+        var rows = timeline.audioRows;
+        for (var m = 0; m < rows.length; m++) {
+            var ay = timeline.tracksTop + lanes.length * timeline.laneHeight + timeline.audioHeadHeight + m * timeline.laneHeight + timeline.laneHeight / 2;
+            if (ay < area.y || ay > area.y + area.height)
+                continue;
+            var clip = rows[m].clip;
+            var x0 = timeline.originX + clip.t0 * timeline.pxPerSec;
+            var x1 = timeline.originX + (clip.t0 + clip.duration) * timeline.pxPerSec;
+            if (x0 <= area.x + area.width && x1 >= area.x)
+                d.addAudioSelection(clip.id);
         }
     }
 
@@ -399,5 +595,67 @@ Item {
 
     function clampX(x) {
         return Math.min(Math.max(0, timeline.tracksWidth() - tracks.width), Math.max(0, x));
+    }
+
+    // Audio import: picker hands the user file to the probe, which reads
+    // the duration before anything is copied. Only probed files get
+    // imported and placed at the playhead; failures abort with nothing
+    // stored (stray blobs, if any, sweep next boot).
+    FileDialog {
+        id: audioPicker
+
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("Audio (*.mp3 *.wav *.ogg *.flac)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.MusicLocation)
+        onAccepted: timeline.probeAudio(selectedFile)
+    }
+
+    // Duration probe: no audio output, so demuxing reports the length
+    // with no audible side effects and no device needed. The probe keeps
+    // its last file loaded: clearing the source mid-demux tears down
+    // the backend pipeline under in-flight events (segfault), so each
+    // import simply overwrites it and failures just disarm.
+    MediaPlayer {
+        id: audioProbe
+
+        property url probeSource
+        property bool armed: false
+
+        onDurationChanged: {
+            if (audioProbe.armed && duration > 0)
+                timeline.commitAudioProbe();
+        }
+        onErrorOccurred: {
+            audioProbe.armed = false;
+        }
+    }
+
+    Timer {
+        id: probeTimeout
+
+        interval: 5000
+        onTriggered: audioProbe.armed = false
+    }
+
+    function probeAudio(file) {
+        if (!timeline.doc)
+            return;
+        audioProbe.probeSource = file;
+        audioProbe.armed = true;
+        audioProbe.source = file;
+        probeTimeout.restart();
+    }
+
+    function commitAudioProbe() {
+        audioProbe.armed = false;
+        probeTimeout.stop();
+        var file = audioProbe.probeSource;
+        var secs = audioProbe.duration / 1000;
+        if (!timeline.doc || secs <= 0)
+            return;
+        var name = LibraryStore.importAudio(file);
+        if (!name)
+            return;
+        timeline.doc.addAudioClip(name, timeline.doc.anim.currentTime, secs);
     }
 }

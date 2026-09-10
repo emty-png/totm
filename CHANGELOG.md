@@ -22,6 +22,7 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 * Canvas goodies — live measure readout while drawing, equal-gap spacing snaps, per-tab camera memory.
 * Star shape (replaces diamond/polygon, rip).
 * Video export — render any design to mp4 from the canvas export button (top-right): SD/HD/4K at 30/60fps picker, backend `VideoExporter` rasterizes a fresh scene snapshot with a 1:1 port of the animation sampler and pipes frames to system ffmpeg, live progress modal with Cancel, then a Save dialog copies the temp file out. Encoder threads are capped and the worker runs low-priority so the UI stays responsive mid-render.
+* Timeline audio — import MP3/WAV/OGG/FLAC onto dedicated lane rows (one row per clip, free overlap), click to select, drag to move with snapping, Delete removes. Live preview through QtMultimedia players conducted by the transport clock, and exports mix every audible clip (delay + mix, AAC). Clips longer than the composition trim at its end.
 
 ### Changed
 

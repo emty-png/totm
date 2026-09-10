@@ -232,6 +232,11 @@ Item {
             consider(list[i].t0);
             consider(list[i].t0 + list[i].duration);
         }
+        var auds = lane.doc.audio.clips;
+        for (var j = 0; j < auds.length; j++) {
+            consider(auds[j].t0);
+            consider(auds[j].t0 + auds[j].duration);
+        }
         return Math.round(best * 100) / 100;
     }
 
