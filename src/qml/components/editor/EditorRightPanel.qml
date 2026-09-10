@@ -5,7 +5,7 @@ import Totm
 // Editor right panel: mode switcher on top; design shows the
 // properties panel, animate shows the preset/custom switcher with
 // per-mode content below. 280px, background fill, 1px left border,
-// 6px resize handle on the left edge.
+// shared resize strip on the left edge.
 Item {
     id: rightPanel
 
@@ -99,6 +99,13 @@ Item {
 
     Layout.preferredWidth: rightPanel.panelWidth
     Layout.fillHeight: true
+
+    Behavior on Layout.preferredWidth {
+        NumberAnimation {
+            duration: 250
+            easing.type: Easing.OutCubic
+        }
+    }
 
     // Bare-chrome clicks steal focus (settles any open field editor),
     // like the left panel deselect area. Declared first so panels,
@@ -230,46 +237,14 @@ Item {
         }
     }
 
-    // Resize handle straddling the left edge.
-    MouseArea {
-        id: handle
-        anchors {
-            left: parent.left
-            top: parent.top
-            bottom: parent.bottom
-            leftMargin: -3
-        }
-        width: 6
-        cursorShape: Qt.SplitHCursor
-        acceptedButtons: Qt.LeftButton
-        hoverEnabled: true
-
-        property real startX: 0
-        property real startW: 280
-
-        Rectangle {
-            anchors.fill: parent
-            color: handle.containsMouse || handle.pressed ? AppTheme.border : "transparent"
-
-            Behavior on color {
-                ColorAnimation {
-                    duration: 120
-                    easing.type: Easing.OutCubic
-                }
-            }
-        }
-
-        onPressed: mouse => {
-            // Window-stable coordinates: the handle moves with the panel,
-            // so measuring in handle space would feed back and judder.
-            handle.startX = handle.mapToGlobal(mouse.x, mouse.y).x;
-            handle.startW = rightPanel.panelWidth;
-        }
-        onPositionChanged: mouse => {
-            if (!handle.pressed)
-                return;
-            var globalX = handle.mapToGlobal(mouse.x, mouse.y).x;
-            rightPanel.panelWidth = Math.min(rightPanel.maxPanelWidth, Math.max(rightPanel.minPanelWidth, handle.startW - (globalX - handle.startX)));
+    // Resize strip on the left edge, shared with every panel.
+    PanelResizeHandle {
+        edge: "left"
+        minimum: rightPanel.minPanelWidth
+        maximum: rightPanel.maxPanelWidth
+        size: rightPanel.panelWidth
+        onResized: v => {
+            rightPanel.panelWidth = v;
         }
     }
 }
