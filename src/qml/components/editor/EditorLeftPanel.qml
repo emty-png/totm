@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import Totm
 
 // Editor left panel: layers list for the active document. 275px,
-// background fill, 1px right border, 6px resize handle on the right.
+// background fill, 1px right border, shared resize strip on the right.
 Item {
     id: leftPanel
 
@@ -15,6 +15,13 @@ Item {
 
     Layout.preferredWidth: leftPanel.panelWidth
     Layout.fillHeight: true
+
+    Behavior on Layout.preferredWidth {
+        NumberAnimation {
+            duration: 250
+            easing.type: Easing.OutCubic
+        }
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -89,46 +96,14 @@ Item {
         contextMenu.openFor(uid, x, y);
     }
 
-    // Resize handle straddling the right edge.
-    MouseArea {
-        id: handle
-        anchors {
-            right: parent.right
-            top: parent.top
-            bottom: parent.bottom
-            rightMargin: -3
-        }
-        width: 6
-        cursorShape: Qt.SplitHCursor
-        acceptedButtons: Qt.LeftButton
-        hoverEnabled: true
-
-        property real startX: 0
-        property real startW: 275
-
-        Rectangle {
-            anchors.fill: parent
-            color: handle.containsMouse || handle.pressed ? AppTheme.border : "transparent"
-
-            Behavior on color {
-                ColorAnimation {
-                    duration: 120
-                    easing.type: Easing.OutCubic
-                }
-            }
-        }
-
-        onPressed: mouse => {
-            // Window-stable coordinates: the handle moves with the panel,
-            // so measuring in handle space would feed back and judder.
-            handle.startX = handle.mapToGlobal(mouse.x, mouse.y).x;
-            handle.startW = leftPanel.panelWidth;
-        }
-        onPositionChanged: mouse => {
-            if (!handle.pressed)
-                return;
-            var globalX = handle.mapToGlobal(mouse.x, mouse.y).x;
-            leftPanel.panelWidth = Math.min(leftPanel.maxPanelWidth, Math.max(leftPanel.minPanelWidth, handle.startW + globalX - handle.startX));
+    // Resize strip on the right edge, shared with every panel.
+    PanelResizeHandle {
+        edge: "right"
+        minimum: leftPanel.minPanelWidth
+        maximum: leftPanel.maxPanelWidth
+        size: leftPanel.panelWidth
+        onResized: v => {
+            leftPanel.panelWidth = v;
         }
     }
 }

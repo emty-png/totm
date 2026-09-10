@@ -129,6 +129,7 @@ qt_add_qml_module(totm
         # Selection
         qml/components/selection/DragSelection.qml
         # Editor shell
+        qml/components/editor/PanelResizeHandle.qml
         qml/components/editor/EditorLeftPanel.qml
         qml/components/editor/EditorRightPanel.qml
         qml/components/editor/EditorModeSwitcher.qml
