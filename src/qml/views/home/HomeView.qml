@@ -34,7 +34,13 @@ RowLayout {
         homeView.filteredDesigns = out;
     }
 
-    onSelectedWorkspaceIdChanged: homeView.refreshFiltered()
+    onSelectedWorkspaceIdChanged: {
+        // The grid rebuilds for the new workspace, which would strand
+        // any open editor in a dead delegate: drop edits on switch.
+        homeView.editingDesignId = "";
+        workspacePanel.editingWorkspaceId = "";
+        homeView.refreshFiltered();
+    }
 
     function openCardMenu(item, designId, x, y) {
         var info = LibraryStore.design(designId);
@@ -44,12 +50,14 @@ RowLayout {
     }
 
     Keys.onDeletePressed: event => {
-        if (homeView.editingDesignId !== "")
+        if (homeView.editingDesignId !== "" || workspacePanel.editingWorkspaceId !== "")
             return;
         homeView.selection.deleteSelected();
         event.accepted = true;
     }
     Keys.onEscapePressed: event => {
+        if (homeView.editingDesignId !== "" || workspacePanel.editingWorkspaceId !== "")
+            return;
         homeView.selection.clearSelection();
         event.accepted = true;
     }
@@ -60,6 +68,8 @@ RowLayout {
     }
 
     WorkspacePanel {
+        id: workspacePanel
+
         Layout.preferredWidth: 230
         Layout.fillHeight: true
         selectedWorkspaceId: homeView.selectedWorkspaceId
@@ -172,12 +182,21 @@ RowLayout {
                                 homeView.editingDesignId = id;
                             }
                             commitPolicy: (id, text) => {
+                                // Stale settles (e.g. the previous card's
+                                // focus-loss commit landing after a fast
+                                // re-target) never clobber the live edit.
+                                if (homeView.editingDesignId !== id)
+                                    return;
                                 LibraryStore.renameDesign(id, text);
                                 TabState.renameTabByDesign(id, LibraryStore.design(id).name);
                                 homeView.editingDesignId = "";
+                                homeView.refreshFiltered();
                             }
-                            cancelPolicy: () => {
+                            cancelPolicy: id => {
+                                if (homeView.editingDesignId !== id)
+                                    return;
                                 homeView.editingDesignId = "";
+                                homeView.refreshFiltered();
                             }
                         }
                     }
@@ -247,7 +266,10 @@ RowLayout {
         function onLibraryChanged() {
             if (LibraryStore.workspaceName(homeView.selectedWorkspaceId) === "")
                 homeView.selectedWorkspaceId = LibraryStore.defaultWorkspaceId;
-            homeView.refreshFiltered();
+            // Rebuilding the grid mid-edit destroys the open editor and
+            // eats typed text; commits/cancels refresh explicitly after.
+            if (homeView.editingDesignId === "" && workspacePanel.editingWorkspaceId === "")
+                homeView.refreshFiltered();
         }
     }
 }

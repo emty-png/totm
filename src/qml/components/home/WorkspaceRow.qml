@@ -98,7 +98,7 @@ Item {
             }
             onCancelled: {
                 if (rowRoot.cancelPolicy)
-                    rowRoot.cancelPolicy();
+                    rowRoot.cancelPolicy(rowRoot.workspaceId);
             }
         }
 

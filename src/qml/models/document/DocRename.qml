@@ -21,8 +21,15 @@ QtObject {
         if (!n)
             return;
         var t = String(name).trim();
-        if (t !== "")
-            n.name = t;
+        // Blank and identical commits change nothing: skip the history
+        // entry so undo never stops on a no-op rename.
+        if (t === "" || t === n.name) {
+            n.renaming = false;
+            doc.touch();
+            return;
+        }
+        doc.history.checkpoint();
+        n.name = t;
         n.renaming = false;
         doc.touch();
     }
