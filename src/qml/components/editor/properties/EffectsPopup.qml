@@ -13,6 +13,11 @@ Popup {
 
     signal outerShadowClicked
     signal innerShadowClicked
+    signal layerBlurClicked
+    signal backgroundBlurClicked
+    signal outerGlowClicked
+    signal innerGlowClicked
+    signal grainClicked
 
     width: 220
     padding: 6
@@ -70,6 +75,51 @@ Popup {
             onChosen: {
                 popup.close();
                 popup.innerShadowClicked();
+            }
+        }
+
+        EffectRow {
+            label: qsTr("Layer Blur")
+            iconKind: "contrast"
+            onChosen: {
+                popup.close();
+                popup.layerBlurClicked();
+            }
+        }
+
+        EffectRow {
+            label: qsTr("Background Blur")
+            iconKind: "apps"
+            onChosen: {
+                popup.close();
+                popup.backgroundBlurClicked();
+            }
+        }
+
+        EffectRow {
+            label: qsTr("Outer Glow")
+            iconKind: "sun"
+            onChosen: {
+                popup.close();
+                popup.outerGlowClicked();
+            }
+        }
+
+        EffectRow {
+            label: qsTr("Inner Glow")
+            iconKind: "moon"
+            onChosen: {
+                popup.close();
+                popup.innerGlowClicked();
+            }
+        }
+
+        EffectRow {
+            label: qsTr("Grain")
+            iconKind: "contrast"
+            onChosen: {
+                popup.close();
+                popup.grainClicked();
             }
         }
     }

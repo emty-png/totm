@@ -2,7 +2,9 @@
 
 #include "EffectSpec.h"
 
+#include <QDataStream>
 #include <QImage>
+#include <QIODevice>
 #include <QLinearGradient>
 #include <QPainterPathStroker>
 #include <QtMath>
@@ -46,6 +48,70 @@ Shadow Shadow::fromMap(const QVariantMap &m)
     sh.blur = qMax(0.0, m.value(QStringLiteral("blur"), 8.0).toDouble());
     sh.spread = qMax(0.0, m.value(QStringLiteral("spread"), 0.0).toDouble());
     return sh;
+}
+
+QList<Shadow> Shadow::listFrom(const QVariantList &l)
+{
+    QList<Shadow> out;
+    for (const QVariant &v : l) {
+        const Shadow sh = Shadow::fromMap(v.toMap());
+        if (sh.enabled)
+            out.append(sh);
+    }
+    return out;
+}
+
+Blur Blur::fromMap(const QVariantMap &m)
+{
+    Blur b;
+    b.enabled = m.value(QStringLiteral("enabled")).toBool();
+    b.radius = qMax(0.0, m.value(QStringLiteral("radius"), 0.0).toDouble());
+    b.opacity = qBound(0.0, m.value(QStringLiteral("opacity"), 1.0).toDouble(), 1.0);
+    return b;
+}
+
+Glow Glow::fromMap(const QVariantMap &m)
+{
+    Glow g;
+    g.enabled = m.value(QStringLiteral("enabled")).toBool();
+    g.inner = m.value(QStringLiteral("inner")).toBool();
+    g.color = colorFrom(m.value(QStringLiteral("color")), g.color);
+    g.blur = qMax(0.0, m.value(QStringLiteral("blur"), 16.0).toDouble());
+    g.spread = qMax(0.0, m.value(QStringLiteral("spread"), 0.0).toDouble());
+    return g;
+}
+
+QList<Glow> Glow::listFrom(const QVariantList &l)
+{
+    QList<Glow> out;
+    for (const QVariant &v : l) {
+        const Glow g = Glow::fromMap(v.toMap());
+        if (g.enabled)
+            out.append(g);
+    }
+    return out;
+}
+
+Grain Grain::fromMap(const QVariantMap &m)
+{
+    Grain g;
+    g.enabled = m.value(QStringLiteral("enabled")).toBool();
+    g.amount = qBound(0.0, m.value(QStringLiteral("amount"), 0.5).toDouble(), 1.0);
+    g.size = qBound(1.0, m.value(QStringLiteral("size"), 2.0).toDouble(), 10.0);
+    return g;
+}
+
+uint32_t grainSeed(int uid, int frameNo)
+{
+    return uint32_t(uid) * 73856093u ^ uint32_t(frameNo) * 19349663u;
+}
+
+uint32_t grainHash(uint32_t cx, uint32_t cy, uint32_t seed)
+{
+    uint32_t h = cx * 374761393u + cy * 668265263u + seed;
+    h = (h ^ (h >> 13u)) * 1274126177u;
+    h ^= h >> 16u;
+    return h;
 }
 
 namespace {
@@ -239,7 +305,7 @@ QBrush paintBrush(const QRectF &box, const QString &type, const QVariantMap &gra
 
 // Fast separable box blur (3 passes ~= gaussian) on premultiplied data.
 // Radius is in device px; kept small by the pad cap.
-void blurImage(QImage &img, double radius)
+void blurImageImpl(QImage &img, double radius)
 {
     const int r = qBound(0, qRound(radius), 64);
     if (r < 1 || img.isNull())
@@ -301,14 +367,220 @@ void blurImage(QImage &img, double radius)
     }
 }
 
+// Geometry fingerprint for blurred-mask caching. Covers exactly the
+// silhouette raster inputs (kind, size, corner/star rounding, stroke
+// width for the plain-rect inset, pen anchors relative to the node
+// origin so pure moves keep the key stable). Fill/stroke colors,
+// offsets and tints never enter: they apply after the blur, so
+// color/offset-only edits reuse the cached raster bit-for-bit.
+QByteArray geometryKey(const QString &kind, double w, double h, const PathOpts &opts, double radius,
+    double strokeWidth)
+{
+    QByteArray bytes;
+    QDataStream ds(&bytes, QIODevice::WriteOnly);
+    ds.setVersion(QDataStream::Qt_6_0);
+    ds << kind << w << h << radius << strokeWidth << opts.independentCorners << opts.points;
+    ds << opts.cornerRadii.size();
+    for (const QVariant &v : opts.cornerRadii)
+        ds << v.toDouble();
+    const bool pen = kind == QLatin1String("pen");
+    ds << pen;
+    if (pen) {
+        // Mirror penPath coercions (missing/non-numeric falls back), so
+        // key equality implies raster equality. Anchors go relative.
+        const auto numRel = [&](const QVariantMap &p, const char *k, double origin, double fallbackAbs) {
+            bool ok = false;
+            const double v = p.value(QString::fromLatin1(k)).toDouble(&ok);
+            ds << (ok ? v - origin : fallbackAbs - origin);
+        };
+        ds << opts.ox << opts.oy;
+        const QVariantList subs = opts.pathData;
+        ds << subs.size();
+        for (const QVariant &sv : subs) {
+            const QVariantMap sub = sv.toMap();
+            ds << sub.value(QStringLiteral("closed")).toBool();
+            const QVariantList raw = sub.value(QStringLiteral("pts")).toList();
+            ds << raw.size();
+            for (const QVariant &pv : raw) {
+                const QVariantMap p = pv.toMap();
+                bool okx = false, oky = false;
+                const double px = p.value(QStringLiteral("x")).toDouble(&okx);
+                const double py = p.value(QStringLiteral("y")).toDouble(&oky);
+                const double ax = okx ? px : 0.0, ay = oky ? py : 0.0;
+                ds << (ax - opts.ox) << (ay - opts.oy);
+                ds << p.value(QStringLiteral("smooth")).toBool();
+                numRel(p, "inX", opts.ox, ax);
+                numRel(p, "inY", opts.oy, ay);
+                numRel(p, "outX", opts.ox, ax);
+                numRel(p, "outY", opts.oy, ay);
+            }
+        }
+    }
+    return bytes;
+}
+
+QByteArray outerKey(const QByteArray &geom, double spread, double blur, double s)
+{
+    QByteArray key;
+    QDataStream ds(&key, QIODevice::WriteOnly);
+    ds.setVersion(QDataStream::Qt_6_0);
+    ds << quint8('O') << spread << blur << s << geom;
+    return key;
+}
+
+QByteArray innerKey(const QByteArray &geom, double spread, double blur, double ox, double oy, double s)
+{
+    QByteArray key;
+    QDataStream ds(&key, QIODevice::WriteOnly);
+    ds.setVersion(QDataStream::Qt_6_0);
+    ds << quint8('I') << spread << blur << ox << oy << s << geom;
+    return key;
+}
+
+// Blurred black silhouette for outer halos, shared by shadows and
+// glows (same raster; tint and offset apply per entry after). Null
+// cache recomputes inline, so export matches preview by construction.
+QImage outerMask(const QPainterPath &path, const QByteArray &geom, double spread, double blur, double s,
+    QCache<QByteArray, QImage> *cache, QRectF *areaOut)
+{
+    QPainterPath silhouette = path;
+    if (spread * s > 0.01) {
+        QPainterPathStroker stroker;
+        stroker.setWidth(spread * 2.0 * s);
+        stroker.setCapStyle(Qt::RoundCap);
+        stroker.setJoinStyle(Qt::RoundJoin);
+        silhouette = stroker.createStroke(path).united(path);
+    }
+    const double m = blur * s * 2.0 + 1.0;
+    QRectF area = silhouette.boundingRect();
+    area.adjust(-m, -m, m, m);
+    if (areaOut)
+        *areaOut = area;
+    const QByteArray key = outerKey(geom, spread, blur, s);
+    if (cache) {
+        if (QImage *hit = cache->object(key))
+            return *hit;
+    }
+    const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
+    QImage mask(size, QImage::Format_ARGB32_Premultiplied);
+    mask.fill(0);
+    {
+        QPainter mp(&mask);
+        mp.setRenderHint(QPainter::Antialiasing, true);
+        mp.translate(-area.topLeft());
+        mp.fillPath(silhouette, Qt::black);
+    }
+    blurImageImpl(mask, blur * s);
+    if (cache && !mask.isNull())
+        cache->insert(key, new QImage(mask), qMax(1, int(mask.sizeInBytes())));
+    return mask;
+}
+
+// Blurred shifted eroded silhouette for inner bands. The tinted-shape
+// composite stays per paint (cheap); only the blur is memoized.
+QImage innerCutter(const QPainterPath &path, const QByteArray &geom, double spread, double blur, double ox,
+    double oy, double s, QCache<QByteArray, QImage> *cache, QRectF *areaOut)
+{
+    QPainterPath eroded = path;
+    if (spread * s > 0.01) {
+        QPainterPathStroker stroker;
+        stroker.setWidth(spread * 2.0 * s);
+        stroker.setCapStyle(Qt::RoundCap);
+        stroker.setJoinStyle(Qt::RoundJoin);
+        eroded = path.subtracted(stroker.createStroke(path));
+    }
+    const double m = blur * s * 2.0 + 1.0 + qHypot(ox * s, oy * s);
+    QRectF area = path.boundingRect();
+    area.adjust(-m, -m, m, m);
+    if (areaOut)
+        *areaOut = area;
+    const QByteArray key = innerKey(geom, spread, blur, ox, oy, s);
+    if (cache) {
+        if (QImage *hit = cache->object(key))
+            return *hit;
+    }
+    const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
+    QImage cutter(size, QImage::Format_ARGB32_Premultiplied);
+    cutter.fill(0);
+    {
+        QPainter mp(&cutter);
+        mp.setRenderHint(QPainter::Antialiasing, true);
+        mp.translate(-area.topLeft() + QPointF(ox * s, oy * s));
+        mp.fillPath(eroded, Qt::black);
+    }
+    blurImageImpl(cutter, blur * s);
+    if (cache && !cutter.isNull())
+        cache->insert(key, new QImage(cutter), qMax(1, int(cutter.sizeInBytes())));
+    return cutter;
+}
+
 } // namespace
 
 namespace {
-// Forward: shared tail defined below paintLeaf.
+// Forward: shared tails defined below paintLeaf.
 void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
     const QRectF &box, const PathOpts &opts, const Style &st, const Shadow &sh, double s, double sw,
     double r, bool plainRect);
-void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double s);
+void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double s,
+    const QByteArray &geom, QCache<QByteArray, QImage> *cache);
+// Glow tail (centered halo, no offset term).
+void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const Style &st,
+    const Glow &glow, double s, double sw);
+void paintGlowInner(QPainter *pt, const QPainterPath &path, const Glow &glow, double s,
+    const QByteArray &geom, QCache<QByteArray, QImage> *cache);
+
+// Vector outline in device coords plus the fill box the brushes span.
+// Shared by the shadow/blur and glow leaves so geometry never drifts.
+struct Outline {
+    QPainterPath path;
+    QRectF fillBox;
+    double r = 0.0;
+    double sw = 0.0;
+    bool plainRect = false;
+};
+Outline outlineFor(const QString &kind, const QRectF &box, const PathOpts &opts, const Style &st, double s)
+{
+    Outline o;
+    o.sw = qMax(0.0, st.strokeWidth) * s;
+    // Plain rects inset the stroke inside the bounds (QML Rectangle
+    // parity); vector paths straddle it (ShapePath parity).
+    o.plainRect = kind == QLatin1String("rectangle") && !opts.independentCorners;
+    o.fillBox = box;
+    o.r = qMax(0.0, st.radius) * s;
+    if (o.plainRect) {
+        if (o.sw > 0.01 && box.width() > o.sw && box.height() > o.sw) {
+            const double inset = o.sw / 2.0;
+            o.fillBox.adjust(inset, inset, -inset, -inset);
+            o.r = qMax(0.0, o.r - inset);
+        }
+        o.r = qMin(o.r, qMin(o.fillBox.width(), o.fillBox.height()) / 2.0);
+        if (o.r <= 0.01)
+            o.path.addRect(o.fillBox);
+        else
+            o.path.addRoundedRect(o.fillBox, o.r, o.r);
+        return o;
+    }
+    if (kind == QLatin1String("ellipse")) {
+        o.path.addEllipse(box);
+    } else if (kind == QLatin1String("rectangle")) {
+        double rr[4] = {0, 0, 0, 0};
+        const double cap = qMin(box.width(), box.height()) / 2.0;
+        for (int i = 0; i < 4; ++i)
+            rr[i] = qMin(i < opts.cornerRadii.size() ? qMax(0.0, opts.cornerRadii.at(i).toDouble()) * s : 0.0, cap);
+        o.path = rectPath(box, rr);
+    } else if (kind == QLatin1String("triangle") || kind == QLatin1String("star")) {
+        const double uniform = qMax(0.0, st.radius) * s;
+        QVariantList scaled;
+        for (const QVariant &v : opts.cornerRadii)
+            scaled << v.toDouble() * s;
+        o.path = roundedPoly(kind, box, opts.points, uniform, opts.independentCorners, scaled);
+    } else if (kind == QLatin1String("pen")) {
+        o.path = penPath(opts.pathData, box.x() - opts.ox * s, box.y() - opts.oy * s, s);
+    } else {
+        o.path.addRect(box);
+    }
+    return o;
+}
 } // namespace
 
 double shadowPad(const Shadow &sh, double strokeWidth)
@@ -319,55 +591,196 @@ double shadowPad(const Shadow &sh, double strokeWidth)
     return qMin(256.0, qMax(0.0, pad));
 }
 
+double blurPad(const Blur &b)
+{
+    if (!b.enabled)
+        return 0.0;
+    return qMin(256.0, qMax(0.0, b.radius * 2.0));
+}
+
+double shadowsPad(const QList<Shadow> &shadows, double strokeWidth)
+{
+    double pad = 0.0;
+    for (const Shadow &sh : shadows) {
+        if (!sh.enabled || sh.inner)
+            continue;
+        pad = qMax(pad, shadowPad(sh, strokeWidth));
+    }
+    return pad;
+}
+
+double glowsPad(const QList<Glow> &glows)
+{
+    double pad = 0.0;
+    for (const Glow &g : glows) {
+        if (!g.enabled || g.inner)
+            continue;
+        pad = qMax(pad, glowPad(g));
+    }
+    return pad;
+}
+
+double effectPad(const Shadow &sh, const Blur &b, double strokeWidth)
+{
+    return qMin(256.0, qMax(shadowPad(sh, strokeWidth), blurPad(b)));
+}
+
+double effectPad(const Shadow &sh, const Blur &b, const Glow &g, double strokeWidth)
+{
+    return qMin(256.0, qMax(effectPad(sh, b, strokeWidth), glowPad(g)));
+}
+
+double effectPad(const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &b,
+    double strokeWidth)
+{
+    return qMin(256.0, qMax(shadowsPad(shadows, strokeWidth), qMax(glowsPad(glows), blurPad(b))));
+}
+
+void blurImage(QImage &img, double radius)
+{
+    blurImageImpl(img, radius);
+}
+
+void mixBlurred(QImage &sharp, const QImage &blurred, double opacity)
+{
+    const double k = qBound(0.0, opacity, 1.0);
+    if (k <= 0.0 || sharp.isNull() || blurred.isNull())
+        return;
+    if (k >= 1.0) {
+        sharp = blurred.copy();
+        return;
+    }
+    if (sharp.size() != blurred.size())
+        return;
+    const int w = sharp.width(), h = sharp.height();
+    for (int y = 0; y < h; ++y) {
+        QRgb *d = reinterpret_cast<QRgb *>(sharp.scanLine(y));
+        const QRgb *b = reinterpret_cast<const QRgb *>(blurred.constScanLine(y));
+        for (int x = 0; x < w; ++x) {
+            const int sa = qAlpha(d[x]), ba = qAlpha(b[x]);
+            const int a = qRound(sa + (ba - sa) * k);
+            const int r = qRound(qRed(d[x]) + (qRed(b[x]) - qRed(d[x])) * k);
+            const int g = qRound(qGreen(d[x]) + (qGreen(b[x]) - qGreen(d[x])) * k);
+            const int bl = qRound(qBlue(d[x]) + (qBlue(b[x]) - qBlue(d[x])) * k);
+            d[x] = qRgba(r, g, bl, a);
+        }
+    }
+}
+
+QImage grainDots(const QSize &px, double cellD, uint32_t seed, double amount)
+{
+    QImage out(qMax(1, px.width()), qMax(1, px.height()), QImage::Format_ARGB32_Premultiplied);
+    out.fill(0);
+    const double cell = qMax(1.0, cellD);
+    const double k = qBound(0.0, amount, 1.0);
+    if (k <= 0.001)
+        return out;
+    const uint32_t salt = seed ^ 974634211u;
+    for (int y = 0; y < out.height(); ++y) {
+        QRgb *row = reinterpret_cast<QRgb *>(out.scanLine(y));
+        const uint32_t cy = uint32_t(double(y) / cell);
+        for (int x = 0; x < out.width(); ++x) {
+            const uint32_t cx = uint32_t(double(x) / cell);
+            const uint32_t h1 = grainHash(cx, cy, seed);
+            const uint32_t h2 = grainHash(cx, cy, salt);
+            // 65535 is odd so pick never lands exactly on 0.5: the GLSL
+            // twin compares the same float ratio with the same outcome.
+            const bool white = (h1 & 0xffffu) >= 32768u;
+            const double b = double(h2 & 0xffffu) / 65535.0;
+            const int v = qRound(k * (0.25 + 0.75 * b) * 255.0);
+            if (v > 0)
+                row[x] = white ? qRgba(v, v, v, v) : qRgba(0, 0, 0, v);
+        }
+    }
+    return out;
+}
+
+QPainterPath outlinePath(const QString &kind, const QRectF &box, const PathOpts &opts, const Style &st,
+    double scale)
+{
+    return outlineFor(kind, box, opts, st, scale > 0 ? scale : 1.0).path;
+}
+
+void paintGrainPath(QPainter *pt, const QPainterPath &clip, double strokeWidth, const QRectF &dotBox,
+    const Grain &gr, int uid, int frameNo, double scale)
+{
+    if (!pt || !gr.enabled || gr.amount <= 0.001 || dotBox.width() <= 0 || dotBox.height() <= 0)
+        return;
+    const double s = scale > 0 ? scale : 1.0;
+    QPainterPath area = clip;
+    // Stroke straddles the path (non-plain shapes): union it in so the
+    // outer hairline grains like the fill. Mirrors the preview mask,
+    // which strokes its silhouette the same way.
+    if (strokeWidth * s > 0.01) {
+        QPainterPathStroker stroker;
+        stroker.setWidth(qMax(0.0, strokeWidth) * s);
+        stroker.setCapStyle(Qt::RoundCap);
+        stroker.setJoinStyle(Qt::RoundJoin);
+        area = stroker.createStroke(clip).united(clip);
+    }
+    QImage dots = grainDots(QSize(qMax(1, qRound(dotBox.width())), qMax(1, qRound(dotBox.height()))),
+        qMax(1.0, gr.size * s), grainSeed(uid, frameNo), gr.amount);
+    pt->save();
+    pt->setClipPath(area, Qt::IntersectClip);
+    pt->drawImage(dotBox.topLeft(), dots);
+    pt->restore();
+}
+
+void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathOpts &opts,
+    const Style &st, const Shadow &sh, const Blur &layerBlur, double scale)
+{
+    if (!pt || box.width() <= 0 || box.height() <= 0)
+        return;
+    // Layer blur (single-effect: shadow stays off): render sharp
+    // offscreen, blur a copy, mix by opacity, then composite. Margin
+    // keeps the blur from clipping; pad from effectPad covers it.
+    if (layerBlur.enabled && layerBlur.radius > 0.01) {
+        const double s = scale > 0 ? scale : 1.0;
+        const double rad = qMax(0.0, layerBlur.radius) * s;
+        const double margin = qMin(256.0, rad * 2.0) + 1.0;
+        const QSize tsz(qMax(1, qRound(box.width() + margin * 2.0)), qMax(1, qRound(box.height() + margin * 2.0)));
+        QImage sharp(tsz, QImage::Format_ARGB32_Premultiplied);
+        sharp.fill(0);
+        {
+            QPainter tp(&sharp);
+            tp.setRenderHint(QPainter::Antialiasing, true);
+            tp.translate(-box.topLeft() + QPointF(margin, margin));
+            Shadow off;
+            paintLeaf(&tp, kind, box, opts, st, off, scale);
+        }
+        QImage blurred = sharp.copy();
+        blurImageImpl(blurred, rad);
+        mixBlurred(sharp, blurred, layerBlur.opacity);
+        pt->drawImage(box.topLeft() - QPointF(margin, margin), sharp);
+        return;
+    }
+    const double s = scale > 0 ? scale : 1.0;
+    const Outline o = outlineFor(kind, box, opts, st, s);
+    paintPathShadow(pt, o.path, o.fillBox, kind, box, opts, st, sh, s, o.sw, o.r, o.plainRect);
+}
+
 void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathOpts &opts,
     const Style &st, const Shadow &sh, double scale)
+{
+    Blur off;
+    paintLeaf(pt, kind, box, opts, st, sh, off, scale);
+}
+
+double glowPad(const Glow &g)
+{
+    if (!g.enabled)
+        return 0.0;
+    return qMin(256.0, qMax(0.0, g.spread + g.blur * 2.0));
+}
+
+void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathOpts &opts,
+    const Style &st, const Glow &glow, double scale)
 {
     if (!pt || box.width() <= 0 || box.height() <= 0)
         return;
     const double s = scale > 0 ? scale : 1.0;
-    const double sw = qMax(0.0, st.strokeWidth) * s;
-
-    // Outline in device coords. Plain rects inset the stroke inside the
-    // bounds (QML Rectangle parity); vector paths straddle it (ShapePath
-    // parity, like the video renderer).
-    const bool plainRect = kind == QLatin1String("rectangle") && !opts.independentCorners;
-    QRectF fillBox = box;
-    double r = qMax(0.0, st.radius) * s;
-    QPainterPath path;
-    if (plainRect) {
-        if (sw > 0.01 && box.width() > sw && box.height() > sw) {
-            const double inset = sw / 2.0;
-            fillBox.adjust(inset, inset, -inset, -inset);
-            r = qMax(0.0, r - inset);
-        }
-        r = qMin(r, qMin(fillBox.width(), fillBox.height()) / 2.0);
-        if (r <= 0.01)
-            path.addRect(fillBox);
-        else
-            path.addRoundedRect(fillBox, r, r);
-        paintPathShadow(pt, path, fillBox, kind, box, opts, st, sh, s, sw, r, plainRect);
-        return;
-    }
-    if (kind == QLatin1String("ellipse")) {
-        path.addEllipse(box);
-    } else if (kind == QLatin1String("rectangle")) {
-        double rr[4] = {0, 0, 0, 0};
-        const double cap = qMin(box.width(), box.height()) / 2.0;
-        for (int i = 0; i < 4; ++i)
-            rr[i] = qMin(i < opts.cornerRadii.size() ? qMax(0.0, opts.cornerRadii.at(i).toDouble()) * s : 0.0, cap);
-        path = rectPath(box, rr);
-    } else if (kind == QLatin1String("triangle") || kind == QLatin1String("star")) {
-        const double uniform = qMax(0.0, st.radius) * s;
-        QVariantList scaled;
-        for (const QVariant &v : opts.cornerRadii)
-            scaled << v.toDouble() * s;
-        path = roundedPoly(kind, box, opts.points, uniform, opts.independentCorners, scaled);
-    } else if (kind == QLatin1String("pen")) {
-        path = penPath(opts.pathData, box.x() - opts.ox * s, box.y() - opts.oy * s, s);
-    } else {
-        path.addRect(box);
-    }
-    paintPathShadow(pt, path, box, kind, box, opts, st, sh, s, sw, r, plainRect);
+    const Outline o = outlineFor(kind, box, opts, st, s);
+    paintPathGlow(pt, o.path, o.fillBox, st, glow, s, o.sw);
 }
 
 namespace {
@@ -404,7 +817,7 @@ void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillB
             mp.translate(-area.topLeft());
             mp.fillPath(silhouette, Qt::black);
         }
-        blurImage(mask, sh.blur * s);
+        blurImageImpl(mask, sh.blur * s);
         {
             QPainter mp(&mask);
             mp.setCompositionMode(QPainter::CompositionMode_SourceIn);
@@ -414,7 +827,7 @@ void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillB
     }
     pt->fillPath(path, paintBrush(fillBox, st.fillType, st.fillGradient, st.fill));
     if (sh.enabled && sh.inner)
-        paintInner(pt, path, sh, s);
+        paintInner(pt, path, sh, s, QByteArray(), nullptr);
     if (sw > 0.01) {
         const QBrush sb = paintBrush(fillBox, st.strokeType, st.strokeGradient, st.stroke);
         pt->setPen(QPen(sb, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
@@ -428,30 +841,12 @@ void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillB
 // +Y offset darkens the top inside edge). Spread erodes the erased copy
 // so the band thickens toward the center. Open paths use their fill
 // silhouette, which can read oddly (accepted v1 behavior).
-void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double s)
+void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double s,
+    const QByteArray &geom, QCache<QByteArray, QImage> *cache)
 {
-    QPainterPath eroded = path;
-    if (sh.spread * s > 0.01) {
-        QPainterPathStroker stroker;
-        stroker.setWidth(sh.spread * 2.0 * s);
-        stroker.setCapStyle(Qt::RoundCap);
-        stroker.setJoinStyle(Qt::RoundJoin);
-        eroded = path.subtracted(stroker.createStroke(path));
-    }
-    const double m = sh.blur * s * 2.0 + 1.0 + qHypot(sh.x * s, sh.y * s);
-    QRectF area = path.boundingRect();
-    area.adjust(-m, -m, m, m);
+    QRectF area;
+    const QImage cutter = innerCutter(path, geom, sh.spread, sh.blur, sh.x, sh.y, s, cache, &area);
     const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
-    // Blurred shifted silhouette: the eraser.
-    QImage cutter(size, QImage::Format_ARGB32_Premultiplied);
-    cutter.fill(0);
-    {
-        QPainter mp(&cutter);
-        mp.setRenderHint(QPainter::Antialiasing, true);
-        mp.translate(-area.topLeft() + QPointF(sh.x * s, sh.y * s));
-        mp.fillPath(eroded, Qt::black);
-    }
-    blurImage(cutter, sh.blur * s);
     // Tinted shape minus the blurred copy: the edge band. The cutter is
     // area-sized with content baked at mask coords, so the shape
     // translate must come off before drawing it (drawImage honors the
@@ -471,6 +866,164 @@ void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double
     pt->drawImage(area.topLeft(), mask);
 }
 
+// Shared tail for glow leaves: centered halo (outer under the shape,
+// inner above the fill like Figma), then the stroke on top. Spread
+// dilates the silhouette before blur; with zero blur and spread the
+// halo hugs the edge exactly.
+void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const Style &st,
+    const Glow &glow, double s, double sw)
+{
+    if (glow.enabled && !glow.inner) {
+        QPainterPath silhouette = path;
+        if (glow.spread * s > 0.01) {
+            QPainterPathStroker stroker;
+            stroker.setWidth(glow.spread * 2.0 * s);
+            stroker.setCapStyle(Qt::RoundCap);
+            stroker.setJoinStyle(Qt::RoundJoin);
+            silhouette = stroker.createStroke(path).united(path);
+        }
+        const double m = glow.blur * s * 2.0 + 1.0;
+        QRectF area = silhouette.boundingRect();
+        area.adjust(-m, -m, m, m);
+        const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
+        QImage mask(size, QImage::Format_ARGB32_Premultiplied);
+        mask.fill(0);
+        {
+            QPainter mp(&mask);
+            mp.setRenderHint(QPainter::Antialiasing, true);
+            mp.translate(-area.topLeft());
+            mp.fillPath(silhouette, Qt::black);
+        }
+        blurImageImpl(mask, glow.blur * s);
+        {
+            QPainter mp(&mask);
+            mp.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            mp.fillRect(mask.rect(), glow.color);
+        }
+        pt->drawImage(area.topLeft(), mask);
+    }
+    pt->fillPath(path, paintBrush(fillBox, st.fillType, st.fillGradient, st.fill));
+    if (glow.enabled && glow.inner)
+        paintGlowInner(pt, path, glow, s, QByteArray(), nullptr);
+    if (sw > 0.01) {
+        const QBrush sb = paintBrush(fillBox, st.strokeType, st.strokeGradient, st.stroke);
+        pt->setPen(QPen(sb, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        pt->setBrush(Qt::NoBrush);
+        pt->drawPath(path);
+    }
+}
+
+// Inner glow: same edge-band construction as the inner shadow but
+// centered (no offset), so the halo reads evenly on all inside edges.
+void paintGlowInner(QPainter *pt, const QPainterPath &path, const Glow &glow, double s,
+    const QByteArray &geom, QCache<QByteArray, QImage> *cache)
+{
+    QRectF area;
+    const QImage cutter = innerCutter(path, geom, glow.spread, glow.blur, 0.0, 0.0, s, cache, &area);
+    const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
+    QImage mask(size, QImage::Format_ARGB32_Premultiplied);
+    mask.fill(0);
+    {
+        QPainter mp(&mask);
+        mp.setRenderHint(QPainter::Antialiasing, true);
+        mp.translate(-area.topLeft());
+        mp.fillPath(path, glow.color);
+        mp.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+        mp.resetTransform();
+        mp.drawImage(0, 0, cutter);
+    }
+    pt->drawImage(area.topLeft(), mask);
+}
+
+void paintOuterShadow(QPainter *pt, const QPainterPath &path, const Shadow &sh, double s,
+    const QByteArray &geom, QCache<QByteArray, QImage> *cache)
+{
+    if (!sh.enabled || sh.inner)
+        return;
+    QRectF area;
+    QImage mask = outerMask(path, geom, sh.spread, sh.blur, s, cache, &area);
+    {
+        QPainter mp(&mask);
+        mp.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        mp.fillRect(mask.rect(), sh.color);
+    }
+    pt->drawImage(area.topLeft() + QPointF(sh.x * s, sh.y * s), mask);
+}
+
+void paintOuterGlow(QPainter *pt, const QPainterPath &path, const Glow &glow, double s,
+    const QByteArray &geom, QCache<QByteArray, QImage> *cache)
+{
+    if (!glow.enabled || glow.inner)
+        return;
+    QRectF area;
+    QImage mask = outerMask(path, geom, glow.spread, glow.blur, s, cache, &area);
+    {
+        QPainter mp(&mask);
+        mp.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        mp.fillRect(mask.rect(), glow.color);
+    }
+    pt->drawImage(area.topLeft(), mask);
+}
+
 } // namespace
+
+// Stacked leaf: outer shadows -> outer glows -> fill -> inner shadows
+// -> inner glows -> stroke, then layer-blur mixes the whole stack.
+// Lists paint index 0 topmost, so outers iterate last-to-first and
+// inners do the same (0 paints last, closest to the top).
+void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathOpts &opts,
+    const Style &st, const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur,
+    double scale, QCache<QByteArray, QImage> *maskCache)
+{
+    if (!pt || box.width() <= 0 || box.height() <= 0)
+        return;
+    if (layerBlur.enabled && layerBlur.radius > 0.01) {
+        const double s = scale > 0 ? scale : 1.0;
+        const double rad = qMax(0.0, layerBlur.radius) * s;
+        const double margin = qMin(256.0, rad * 2.0) + 1.0;
+        const QSize tsz(qMax(1, qRound(box.width() + margin * 2.0)), qMax(1, qRound(box.height() + margin * 2.0)));
+        QImage sharp(tsz, QImage::Format_ARGB32_Premultiplied);
+        sharp.fill(0);
+        {
+            QPainter tp(&sharp);
+            tp.setRenderHint(QPainter::Antialiasing, true);
+            tp.translate(-box.topLeft() + QPointF(margin, margin));
+            Blur off;
+            paintLeaf(&tp, kind, box, opts, st, shadows, glows, off, scale, maskCache);
+        }
+        QImage blurred = sharp.copy();
+        blurImageImpl(blurred, rad);
+        mixBlurred(sharp, blurred, layerBlur.opacity);
+        pt->drawImage(box.topLeft() - QPointF(margin, margin), sharp);
+        return;
+    }
+    const double s = scale > 0 ? scale : 1.0;
+    const Outline o = outlineFor(kind, box, opts, st, s);
+    // Silhouette fingerprint: blurred masks memoize on this while tints
+    // and offsets stay per paint, so stacked siblings and offset/color
+    // edits reuse the raster bit-for-bit.
+    const QByteArray geom = geometryKey(kind, box.width(), box.height(), opts, st.radius, st.strokeWidth);
+    for (int i = shadows.size() - 1; i >= 0; --i)
+        paintOuterShadow(pt, o.path, shadows.at(i), s, geom, maskCache);
+    for (int i = glows.size() - 1; i >= 0; --i)
+        paintOuterGlow(pt, o.path, glows.at(i), s, geom, maskCache);
+    pt->fillPath(o.path, paintBrush(o.fillBox, st.fillType, st.fillGradient, st.fill));
+    for (int i = shadows.size() - 1; i >= 0; --i) {
+        const Shadow &sh = shadows.at(i);
+        if (sh.enabled && sh.inner)
+            paintInner(pt, o.path, sh, s, geom, maskCache);
+    }
+    for (int i = glows.size() - 1; i >= 0; --i) {
+        const Glow &g = glows.at(i);
+        if (g.enabled && g.inner)
+            paintGlowInner(pt, o.path, g, s, geom, maskCache);
+    }
+    if (o.sw > 0.01) {
+        const QBrush sb = paintBrush(o.fillBox, st.strokeType, st.strokeGradient, st.stroke);
+        pt->setPen(QPen(sb, o.sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        pt->setBrush(Qt::NoBrush);
+        pt->drawPath(o.path);
+    }
+}
 
 } // namespace Effects

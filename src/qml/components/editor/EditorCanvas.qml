@@ -139,12 +139,32 @@ Item {
         }
     }
 
+    // Backdrop duplicate without frosted panels: live source for
+    // background-blur sampling (no recursion, same transform). Always
+    // rendered below the main layer with identical pixels, so sampling
+    // can never observe an empty source; blurred shapes hide here so
+    // each frosted panel samples only the content behind it.
     ShapeLayer {
+        id: backdropLayer
+
+        doc: canvas.doc
+        zoom: canvas.zoom
+        offsetX: canvas.offsetX
+        offsetY: canvas.offsetY
+        editingUid: -1
+        hideBlurShapes: true
+        enabled: false
+    }
+
+    ShapeLayer {
+        id: mainLayer
+
         doc: canvas.doc
         zoom: canvas.zoom
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
         editingUid: textEditor.editingUid
+        backdropItem: backdropLayer
         activatePolicy: () => canvas.forceActiveFocus()
         pressPolicy: (uid, mods) => canvas.shapePressed(uid, mods)
         movePolicy: (dx, dy) => canvas.shapeMoved(dx, dy)

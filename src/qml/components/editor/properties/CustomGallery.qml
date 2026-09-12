@@ -285,6 +285,26 @@ ScrollView {
                         id: "customShadow",
                         name: qsTr("Shadow"),
                         icon: "square"
+                    },
+                    {
+                        id: "customLayerBlur",
+                        name: qsTr("Layer Blur"),
+                        icon: "contrast"
+                    },
+                    {
+                        id: "customBackgroundBlur",
+                        name: qsTr("Background Blur"),
+                        icon: "apps"
+                    },
+                    {
+                        id: "customGlow",
+                        name: qsTr("Glow"),
+                        icon: "sun"
+                    },
+                    {
+                        id: "customGrain",
+                        name: qsTr("Grain"),
+                        icon: "contrast"
                     }
                 ]
             },

@@ -55,17 +55,30 @@ QtObject {
         })
     property real strokeWidth: 0
     property real opacity: 1
-    // Single shadow, outer or inner (color alpha carries opacity).
-    // Spread dilates the silhouette before blur; preview and export
-    // share the meaning.
-    property var shadow: ({
+    // Stacked effects: shadows and glows are lists (index 0 paints
+    // topmost, like layers), blurs and grain are singletons. Render
+    // order is fixed: backgroundBlur (backdrop) -> outer shadows ->
+    // outer glows -> fill -> inner shadows -> inner glows -> stroke ->
+    // layerBlur (whole stack) -> grain on top.
+    property var shadows: []
+    property var glows: []
+    property var layerBlur: ({
             enabled: false,
-            inner: false,
-            color: "#80000000",
-            x: 0,
-            y: 4,
-            blur: 8,
-            spread: 0
+            radius: 8,
+            opacity: 1
+        })
+    property var backgroundBlur: ({
+            enabled: false,
+            radius: 16,
+            opacity: 0.7
+        })
+    // Animated film grain. Dots derive from (cell, seed) with
+    // seed = uid * 73856093 ^ frame * 19349663; preview and export
+    // share the formula, so the shimmer matches exactly.
+    property var grain: ({
+            enabled: false,
+            amount: 0.5,
+            size: 2
         })
     property real radius: 0
     // Independent corners (rectangle/triangle/star). When true the

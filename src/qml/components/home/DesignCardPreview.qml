@@ -68,7 +68,11 @@ Item {
                     strokeType: modelData.strokeType || "solid"
                     strokeGradient: modelData.strokeGradient
                     strokeWidth: modelData.strokeWidth || 0
-                    shadow: modelData.shadow
+                    shadows: modelData.shadows ?? (modelData.shadow ? [modelData.shadow] : [])
+                    glows: modelData.glows ?? (modelData.glow ? [modelData.glow] : [])
+                    layerBlur: modelData.layerBlur
+                    backgroundBlur: modelData.backgroundBlur
+                    grain: modelData.grain
                     shapeOpacity: modelData.opacity !== undefined ? modelData.opacity : 1
                     radius: modelData.radius || 0
                     independentCorners: modelData.independentCorners === true

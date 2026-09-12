@@ -62,7 +62,7 @@ QtObject {
     }
 
     function presetIds() {
-        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customShadow", "customPath"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
     }
 
     // Custom from-to clips reuse the preset pipeline (timeline, undo,
@@ -109,6 +109,14 @@ QtObject {
             return qsTr("Stroke");
         if (presetId === "customShadow")
             return qsTr("Shadow");
+        if (presetId === "customLayerBlur")
+            return qsTr("Layer Blur");
+        if (presetId === "customBackgroundBlur")
+            return qsTr("Background Blur");
+        if (presetId === "customGlow")
+            return qsTr("Glow");
+        if (presetId === "customGrain")
+            return qsTr("Grain");
         if (presetId === "customPath")
             return qsTr("Path");
         return qsTr("Fade");
@@ -217,6 +225,38 @@ QtObject {
                 toSpread: 0,
                 fromInner: false,
                 toInner: false
+            };
+        if (presetId === "customLayerBlur")
+            return {
+                fromRadius: 0,
+                toRadius: 12,
+                fromOpacity: 1,
+                toOpacity: 1
+            };
+        if (presetId === "customBackgroundBlur")
+            return {
+                fromRadius: 0,
+                toRadius: 16,
+                fromOpacity: 0.7,
+                toOpacity: 0.7
+            };
+        if (presetId === "customGlow")
+            return {
+                fromColor: "#cc00ffff",
+                toColor: "#cc00ffff",
+                fromBlur: 16,
+                toBlur: 28,
+                fromSpread: 4,
+                toSpread: 4,
+                fromInner: false,
+                toInner: false
+            };
+        if (presetId === "customGrain")
+            return {
+                fromAmount: 0,
+                toAmount: 0.5,
+                fromSize: 2,
+                toSize: 2
             };
         if (presetId === "customPath")
             return {
@@ -381,6 +421,38 @@ QtObject {
                 toSpread: clampNum(r.toSpread !== undefined ? r.toSpread : 0, 0, 0, 50),
                 fromInner: r.fromInner === undefined ? false : !!r.fromInner,
                 toInner: r.toInner === undefined ? false : !!r.toInner
+            };
+        if (presetId === "customLayerBlur")
+            return {
+                fromRadius: clampNum(r.fromRadius !== undefined ? r.fromRadius : 0, 0, 0, 100),
+                toRadius: clampNum(r.toRadius !== undefined ? r.toRadius : 12, 12, 0, 100),
+                fromOpacity: clampNum(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1, 0, 1),
+                toOpacity: clampNum(r.toOpacity !== undefined ? r.toOpacity : 1, 1, 0, 1)
+            };
+        if (presetId === "customBackgroundBlur")
+            return {
+                fromRadius: clampNum(r.fromRadius !== undefined ? r.fromRadius : 0, 0, 0, 100),
+                toRadius: clampNum(r.toRadius !== undefined ? r.toRadius : 16, 16, 0, 100),
+                fromOpacity: clampNum(r.fromOpacity !== undefined ? r.fromOpacity : 0.7, 0.7, 0, 1),
+                toOpacity: clampNum(r.toOpacity !== undefined ? r.toOpacity : 0.7, 0.7, 0, 1)
+            };
+        if (presetId === "customGlow")
+            return {
+                fromColor: normalizeHexA(r.fromColor !== undefined ? r.fromColor : "#cc00ffff", "#cc00ffff"),
+                toColor: normalizeHexA(r.toColor !== undefined ? r.toColor : "#cc00ffff", "#cc00ffff"),
+                fromBlur: clampNum(r.fromBlur !== undefined ? r.fromBlur : 16, 16, 0, 100),
+                toBlur: clampNum(r.toBlur !== undefined ? r.toBlur : 28, 28, 0, 100),
+                fromSpread: clampNum(r.fromSpread !== undefined ? r.fromSpread : 4, 4, 0, 50),
+                toSpread: clampNum(r.toSpread !== undefined ? r.toSpread : 4, 4, 0, 50),
+                fromInner: r.fromInner === undefined ? false : !!r.fromInner,
+                toInner: r.toInner === undefined ? false : !!r.toInner
+            };
+        if (presetId === "customGrain")
+            return {
+                fromAmount: clampNum(r.fromAmount !== undefined ? r.fromAmount : 0, 0, 0, 1),
+                toAmount: clampNum(r.toAmount !== undefined ? r.toAmount : 0.5, 0.5, 0, 1),
+                fromSize: clampNum(r.fromSize !== undefined ? r.fromSize : 2, 2, 1, 10),
+                toSize: clampNum(r.toSize !== undefined ? r.toSize : 2, 2, 1, 10)
             };
         if (presetId === "customPath")
             return {

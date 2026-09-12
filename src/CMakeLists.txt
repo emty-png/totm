@@ -100,6 +100,10 @@ qt_add_qml_module(totm
         qml/components/editor/properties/GradientEditor.qml
         qml/components/editor/properties/EffectsSection.qml
         qml/components/editor/properties/EffectsPopup.qml
+        qml/components/editor/properties/EffectBlurFields.qml
+        qml/components/editor/properties/EffectGlowFields.qml
+        qml/components/editor/properties/EffectShadowCard.qml
+        qml/components/editor/properties/EffectGlowCard.qml
         qml/components/editor/properties/PresetCard.qml
         qml/components/editor/properties/PresetGallery.qml
         qml/components/editor/properties/CustomGallery.qml
@@ -107,6 +111,9 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ClipCustomStyleOptions.qml
         qml/components/editor/properties/ClipCustomGradientOptions.qml
         qml/components/editor/properties/ClipCustomShadowOptions.qml
+        qml/components/editor/properties/ClipCustomBlurOptions.qml
+        qml/components/editor/properties/ClipCustomGlowOptions.qml
+        qml/components/editor/properties/ClipCustomGrainOptions.qml
         qml/components/editor/properties/ClipCustomOtherOptions.qml
         qml/components/editor/properties/ClipPathOptions.qml
         qml/components/editor/properties/ShapeAnimationsPanel.qml
@@ -161,6 +168,7 @@ qt_add_qml_module(totm
         qml/components/fields/RenameField.qml
         qml/components/editor/shapes/ShapeItem.qml
         qml/components/editor/shapes/ShapeGeometry.qml
+        qml/components/editor/shapes/GrainOverlay.qml
         qml/components/editor/shapes/TextGlyphs.qml
         qml/components/editor/SelectionHandles.qml
         # Layers (view + context)
@@ -187,6 +195,15 @@ qt_add_qml_module(totm
         # Views (screen roots only)
         qml/views/home/HomeView.qml
         qml/views/editor/EditorView.qml
+)
+
+# Grain shaders precompiled with qsb (Qt6 ShaderEffect takes .qsb URLs,
+# never inline source). Lands beside GrainOverlay.qml in the module.
+qt_add_shaders(totm "totm_grain_shaders"
+    PREFIX "/Totm"
+    FILES
+        qml/components/editor/shapes/grain.vert
+        qml/components/editor/shapes/grain.frag
 )
 
 target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia)

@@ -197,6 +197,46 @@ ScrollView {
             }
         }
 
+        // Custom Blurs (radius + opacity from-to, layer vs background).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && (editor.clipData.preset === "customLayerBlur" || editor.clipData.preset === "customBackgroundBlur")
+
+            ClipCustomBlurOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+                blurKind: !!editor.clipData && editor.clipData.preset === "customBackgroundBlur" ? "backgroundBlur" : "layerBlur"
+            }
+        }
+
+        // Custom Glow (color / blur / spread from-to plus inner toggle).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && editor.clipData.preset === "customGlow"
+
+            ClipCustomGlowOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
+        // Custom Grain (amount + size from-to; seed follows the clock).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && editor.clipData.preset === "customGrain"
+
+            ClipCustomGrainOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
         // Motion path (closed / orient / redraw).
         PanelSection {
             width: parent.width

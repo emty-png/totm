@@ -2,74 +2,254 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Outer shadow effect (single per shape in v1). Vector shapes only:
-// text glyphs and images keep native rendering and never see this
-// section. + opens the effect picker; the rows edit color, offsets,
-// blur and spread live with scrub-coalesced undo.
+// Stacked effects: shadows and glows list (index 0 paints topmost),
+// blurs and grain are singletons. Fixed render order: backgroundBlur
+// (backdrop) -> outer shadows -> outer glows -> fill -> inner shadows
+// -> inner glows -> stroke -> layerBlur (whole stack) -> grain on top.
+// + opens the picker any time; each card edits live with scrub-
+// coalesced undo. Groups never see this section.
 PanelSection {
     id: section
 
     required property var snapshot
 
     title: qsTr("Effects")
-    visible: section.snapshot.sel.length > 0 && !section.snapshot.hasGroup && section.vectorOnly()
+    visible: section.snapshot.sel.length > 0 && !section.snapshot.hasGroup && section.effectable()
     enabled: !section.snapshot.allLocked
-    compact: !section.shadowOn()
-    showAdd: !section.shadowOn()
-    showRemove: section.shadowOn()
+    compact: !section.hasAnyEffect()
+    showAdd: true
+    showRemove: section.hasAnyEffect()
     onAddClicked: picker.openAt(section)
-    onRemoveClicked: section.setEnabled(false)
+    onRemoveClicked: section.clearAllEffects()
 
-    property var shadowCommon: section.collectShadow()
-    // Outer shadow and glow share the painter; inner flips the flag.
-    // Mixed inner/outer reads as outer until unified.
-    property bool shadowInner: section.shadowCommon.value.inner === true
+    property int shadowCount: section.maxShadows()
+    property int glowCount: section.maxGlows()
+    property var layerCommon: section.collectBlur("layerBlur", 8, 1)
+    property var backgroundCommon: section.collectBlur("backgroundBlur", 16, 0.7)
+    property var grainCommon: section.collectGrain()
+    property int pickerShadowIndex: -1
+    property int pickerGlowIndex: -1
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
+    Repeater {
+        model: section.shadowCount
 
-        SegmentedOption {
-            label: qsTr("Outer")
-            active: !section.shadowInner
-            onClicked: section.setInner(false)
+        onItemAdded: (at, item) => {
+            item.section = section;
+            item.entryIndex = at;
         }
 
-        SegmentedOption {
-            label: qsTr("Inner")
-            active: section.shadowInner
-            onClicked: section.setInner(true)
+        EffectShadowCard {
+            Layout.fillWidth: true
         }
     }
 
-    function vectorOnly() {
+    Repeater {
+        model: section.glowCount
+
+        onItemAdded: (at, item) => {
+            item.section = section;
+            item.entryIndex = at;
+        }
+
+        EffectGlowCard {
+            Layout.fillWidth: true
+        }
+    }
+
+    ColumnLayout {
+        visible: section.layerCommon.value.enabled === true
+        Layout.fillWidth: true
+        spacing: 8
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Layer Blur")
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: AppTheme.foreground
+                elide: Text.ElideRight
+            }
+
+            PanelIconButton {
+                iconKind: "close"
+                filled: false
+                iconSize: 12
+                onClicked: section.removeBlur("layerBlur")
+            }
+        }
+
+        EffectBlurFields {
+            Layout.fillWidth: true
+            radiusValue: section.layerCommon.value.radius
+            radiusMixed: section.layerCommon.mixedRadius
+            opacityValue: section.layerCommon.value.opacity
+            opacityMixed: section.layerCommon.mixedOpacity
+            onRadiusCommitted: v => section.patchBlur("layerBlur", "radius", v)
+            onOpacityCommitted: v => section.patchBlur("layerBlur", "opacity", v)
+            onScrubStarted: section.snapshot.beginScrub()
+            onScrubFinished: section.snapshot.endScrub()
+        }
+    }
+
+    ColumnLayout {
+        visible: section.backgroundCommon.value.enabled === true
+        Layout.fillWidth: true
+        spacing: 8
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Background Blur")
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: AppTheme.foreground
+                elide: Text.ElideRight
+            }
+
+            PanelIconButton {
+                iconKind: "close"
+                filled: false
+                iconSize: 12
+                onClicked: section.removeBlur("backgroundBlur")
+            }
+        }
+
+        EffectBlurFields {
+            Layout.fillWidth: true
+            radiusValue: section.backgroundCommon.value.radius
+            radiusMixed: section.backgroundCommon.mixedRadius
+            opacityValue: section.backgroundCommon.value.opacity
+            opacityMixed: section.backgroundCommon.mixedOpacity
+            onRadiusCommitted: v => section.patchBlur("backgroundBlur", "radius", v)
+            onOpacityCommitted: v => section.patchBlur("backgroundBlur", "opacity", v)
+            onScrubStarted: section.snapshot.beginScrub()
+            onScrubFinished: section.snapshot.endScrub()
+        }
+    }
+
+    ColumnLayout {
+        visible: section.grainCommon.value.enabled === true
+        Layout.fillWidth: true
+        spacing: 8
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Grain")
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: AppTheme.foreground
+                elide: Text.ElideRight
+            }
+
+            PanelIconButton {
+                iconKind: "close"
+                filled: false
+                iconSize: 12
+                onClicked: section.removeGrain()
+            }
+        }
+
+        EffectBlurFields {
+            Layout.fillWidth: true
+            sizePrefix: "S"
+            sizeMaximum: 10
+            radiusValue: section.grainCommon.value.size
+            radiusMixed: section.grainCommon.mixedSize
+            opacityValue: section.grainCommon.value.amount
+            opacityMixed: section.grainCommon.mixedAmount
+            onRadiusCommitted: v => section.patchGrain("size", v)
+            onOpacityCommitted: v => section.patchGrain("amount", v)
+            onScrubStarted: section.snapshot.beginScrub()
+            onScrubFinished: section.snapshot.endScrub()
+        }
+    }
+
+    // Every shape kind including text; groups excluded by visible.
+    function effectable() {
         var leaves = section.snapshot.selLeaves;
         if (leaves.length === 0)
             return false;
         for (var i = 0; i < leaves.length; i++) {
             var t = leaves[i].type;
-            if (t !== "rectangle" && t !== "ellipse" && t !== "triangle" && t !== "star" && t !== "pen")
+            if (t !== "rectangle" && t !== "ellipse" && t !== "triangle" && t !== "star" && t !== "pen" && t !== "image" && t !== "text")
                 return false;
         }
         return true;
     }
 
-    function shadowOn() {
+    function hasText() {
         var leaves = section.snapshot.selLeaves;
-        if (leaves.length === 0)
-            return false;
         for (var i = 0; i < leaves.length; i++) {
-            if (!leaves[i].shadow || leaves[i].shadow.enabled !== true)
-                return false;
+            if (leaves[i].type === "text")
+                return true;
         }
-        return true;
+        return false;
     }
 
-    // Common shadow with per-key mixed flags (maps never === by ref).
-    function collectShadow() {
+    function hasAnyEffect() {
+        var leaves = section.snapshot.selLeaves;
+        for (var i = 0; i < leaves.length; i++) {
+            var l = leaves[i];
+            var sh = l.shadows || [];
+            for (var a = 0; a < sh.length; a++) {
+                if (sh[a] && sh[a].enabled !== false)
+                    return true;
+            }
+            var gl = l.glows || [];
+            for (var b = 0; b < gl.length; b++) {
+                if (gl[b] && gl[b].enabled !== false)
+                    return true;
+            }
+            if (l.layerBlur && l.layerBlur.enabled === true)
+                return true;
+            if (l.backgroundBlur && l.backgroundBlur.enabled === true)
+                return true;
+            if (l.grain && l.grain.enabled === true)
+                return true;
+        }
+        return false;
+    }
+
+    function maxShadows() {
+        var leaves = section.snapshot.selLeaves;
+        var m = 0;
+        for (var i = 0; i < leaves.length; i++) {
+            var n = (leaves[i].shadows || []).length;
+            if (n > m)
+                m = n;
+        }
+        return m;
+    }
+
+    function maxGlows() {
+        var leaves = section.snapshot.selLeaves;
+        var m = 0;
+        for (var i = 0; i < leaves.length; i++) {
+            var n = (leaves[i].glows || []).length;
+            if (n > m)
+                m = n;
+        }
+        return m;
+    }
+
+    // Per-index common shadow (maps never === by ref). Leaves missing
+    // the index are skipped: edits apply where the entry exists, adds
+    // and removes apply to every leaf.
+    function collectShadowAt(at) {
         var leaves = section.snapshot.selLeaves;
         var base = {
-            enabled: false,
+            enabled: true,
             inner: false,
             color: "#80000000",
             x: 0,
@@ -77,7 +257,15 @@ PanelSection {
             blur: 8,
             spread: 0
         };
-        if (leaves.length === 0)
+        var first = null;
+        for (var i = 0; i < leaves.length; i++) {
+            var list = leaves[i].shadows || [];
+            if (at < list.length) {
+                first = list[at];
+                break;
+            }
+        }
+        if (!first)
             return {
                 value: base,
                 mixedColor: true,
@@ -87,26 +275,29 @@ PanelSection {
                 mixedSpread: true,
                 mixedInner: true
             };
-        var first = leaves[0].shadow ?? base;
-        var mc = false, mx = false, my = false, mb = false, ms = false, mi = false;
-        for (var i = 1; i < leaves.length; i++) {
-            var s = leaves[i].shadow ?? base;
-            if (String(s.color) !== String(first.color))
+        var mc = false, mx = false, my = false, mb = false, ms = false, mi = false, me = false;
+        for (var j = 0; j < leaves.length; j++) {
+            var cur = (leaves[j].shadows || [])[at];
+            if (!cur)
+                continue;
+            if (String(cur.color) !== String(first.color))
                 mc = true;
-            if (Number(s.x) !== Number(first.x))
+            if (Number(cur.x) !== Number(first.x))
                 mx = true;
-            if (Number(s.y) !== Number(first.y))
+            if (Number(cur.y) !== Number(first.y))
                 my = true;
-            if (Number(s.blur) !== Number(first.blur))
+            if (Number(cur.blur) !== Number(first.blur))
                 mb = true;
-            if (Number(s.spread) !== Number(first.spread))
+            if (Number(cur.spread) !== Number(first.spread))
                 ms = true;
-            if ((s.inner === true) !== (first.inner === true))
+            if ((cur.inner === true) !== (first.inner === true))
                 mi = true;
+            if ((cur.enabled !== false) !== (first.enabled !== false))
+                me = true;
         }
         return {
             value: {
-                enabled: first.enabled === true,
+                enabled: first.enabled !== false,
                 inner: first.inner === true,
                 color: String(first.color ?? "#80000000"),
                 x: Number(first.x) || 0,
@@ -119,121 +310,136 @@ PanelSection {
             mixedY: my,
             mixedBlur: mb,
             mixedSpread: ms,
-            mixedInner: mi
+            mixedInner: mi,
+            mixedEnabled: me
         };
     }
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
-
-        Rectangle {
-            id: swatch
-
-            Layout.preferredWidth: 28
-            Layout.preferredHeight: 28
-            Layout.alignment: Qt.AlignVCenter
-            radius: 6
-            color: section.shadowCommon.value.color
-            border.width: 1
-            border.color: AppTheme.border
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                cursorShape: Qt.PointingHandCursor
-                onClicked: mouse => colorPicker.openFor(String(section.shadowCommon.value.color), swatch, mouse.x, mouse.y)
+    function collectGlowAt(at) {
+        var leaves = section.snapshot.selLeaves;
+        var base = {
+            enabled: true,
+            inner: false,
+            color: "#cc00ffff",
+            blur: 16,
+            spread: 4
+        };
+        var first = null;
+        for (var i = 0; i < leaves.length; i++) {
+            var list = leaves[i].glows || [];
+            if (at < list.length) {
+                first = list[at];
+                break;
             }
         }
-
-        HexField {
-            Layout.fillWidth: true
-            value: section.hexOf(section.shadowCommon.value.color)
-            mixed: section.shadowCommon.mixedColor
-            onCommitted: c => section.patchShadow("color", section.withAlpha(c, section.alphaOf(section.shadowCommon.value.color)))
+        if (!first)
+            return {
+                value: base,
+                mixedColor: true,
+                mixedBlur: true,
+                mixedSpread: true,
+                mixedInner: true
+            };
+        var mc = false, mb = false, ms = false, mi = false, me = false;
+        for (var j = 0; j < leaves.length; j++) {
+            var cur = (leaves[j].glows || [])[at];
+            if (!cur)
+                continue;
+            if (String(cur.color) !== String(first.color))
+                mc = true;
+            if (Number(cur.blur) !== Number(first.blur))
+                mb = true;
+            if (Number(cur.spread) !== Number(first.spread))
+                ms = true;
+            if ((cur.inner === true) !== (first.inner === true))
+                mi = true;
+            if ((cur.enabled !== false) !== (first.enabled !== false))
+                me = true;
         }
-
-        NumberField {
-            Layout.preferredWidth: 76
-            suffix: "%"
-            minimum: 0
-            maximum: 100
-            value: section.alphaOf(section.shadowCommon.value.color)
-            mixed: section.shadowCommon.mixedColor
-            onCommitted: v => section.patchShadow("color", section.withAlpha(section.hexOf(section.shadowCommon.value.color), v))
-            onScrubStarted: section.snapshot.beginScrub()
-            onScrubFinished: section.snapshot.endScrub()
-        }
+        return {
+            value: {
+                enabled: first.enabled !== false,
+                inner: first.inner === true,
+                color: String(first.color ?? "#cc00ffff"),
+                blur: first.blur !== undefined ? Math.max(0, Number(first.blur) || 0) : 16,
+                spread: first.spread !== undefined ? Math.max(0, Number(first.spread) || 0) : 4
+            },
+            mixedColor: mc,
+            mixedBlur: mb,
+            mixedSpread: ms,
+            mixedInner: mi,
+            mixedEnabled: me
+        };
     }
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
-
-        NumberField {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.preferredWidth: 0
-            prefix: "X"
-            suffix: qsTr("px")
-            minimum: -500
-            maximum: 500
-            value: section.shadowCommon.value.x
-            mixed: section.shadowCommon.mixedX
-            onCommitted: v => section.patchShadow("x", v)
-            onScrubStarted: section.snapshot.beginScrub()
-            onScrubFinished: section.snapshot.endScrub()
+    // Common blur with mixed flags (radius px, opacity 0..1).
+    function collectBlur(role, defRadius, defOpacity) {
+        var leaves = section.snapshot.selLeaves;
+        var base = {
+            enabled: false,
+            radius: defRadius,
+            opacity: defOpacity
+        };
+        if (leaves.length === 0) {
+            return {
+                value: base,
+                mixedRadius: true,
+                mixedOpacity: true
+            };
         }
-
-        NumberField {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.preferredWidth: 0
-            prefix: "Y"
-            suffix: qsTr("px")
-            minimum: -500
-            maximum: 500
-            value: section.shadowCommon.value.y
-            mixed: section.shadowCommon.mixedY
-            onCommitted: v => section.patchShadow("y", v)
-            onScrubStarted: section.snapshot.beginScrub()
-            onScrubFinished: section.snapshot.endScrub()
+        var first = leaves[0][role] ?? base;
+        var mr = false, mo = false;
+        for (var i = 1; i < leaves.length; i++) {
+            var s = leaves[i][role] ?? base;
+            if (Number(s.radius) !== Number(first.radius))
+                mr = true;
+            if (Number(s.opacity) !== Number(first.opacity))
+                mo = true;
         }
+        return {
+            value: {
+                enabled: first.enabled === true,
+                radius: first.radius !== undefined ? Math.max(0, Number(first.radius) || 0) : defRadius,
+                opacity: first.opacity !== undefined ? Math.min(1, Math.max(0, Number(first.opacity))) : defOpacity
+            },
+            mixedRadius: mr,
+            mixedOpacity: mo
+        };
     }
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
-
-        NumberField {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.preferredWidth: 0
-            prefix: "B"
-            suffix: qsTr("px")
-            minimum: 0
-            maximum: 100
-            value: section.shadowCommon.value.blur
-            mixed: section.shadowCommon.mixedBlur
-            onCommitted: v => section.patchShadow("blur", v)
-            onScrubStarted: section.snapshot.beginScrub()
-            onScrubFinished: section.snapshot.endScrub()
+    // Common grain with mixed flags (amount 0..1, size px).
+    function collectGrain() {
+        var leaves = section.snapshot.selLeaves;
+        var base = {
+            enabled: false,
+            amount: 0.5,
+            size: 2
+        };
+        if (leaves.length === 0) {
+            return {
+                value: base,
+                mixedAmount: true,
+                mixedSize: true
+            };
         }
-
-        NumberField {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.preferredWidth: 0
-            prefix: "S"
-            suffix: qsTr("px")
-            minimum: 0
-            maximum: 50
-            value: section.shadowCommon.value.spread
-            mixed: section.shadowCommon.mixedSpread
-            onCommitted: v => section.patchShadow("spread", v)
-            onScrubStarted: section.snapshot.beginScrub()
-            onScrubFinished: section.snapshot.endScrub()
+        var first = leaves[0].grain ?? base;
+        var ma = false, mz = false;
+        for (var i = 1; i < leaves.length; i++) {
+            var s = leaves[i].grain ?? base;
+            if (Number(s.amount) !== Number(first.amount))
+                ma = true;
+            if (Number(s.size) !== Number(first.size))
+                mz = true;
         }
+        return {
+            value: {
+                enabled: first.enabled === true,
+                amount: first.amount !== undefined ? Math.min(1, Math.max(0, Number(first.amount))) : 0.5,
+                size: first.size !== undefined ? Math.min(10, Math.max(1, Number(first.size) || 0)) : 2
+            },
+            mixedAmount: ma,
+            mixedSize: mz
+        };
     }
 
     // Shadow color picker: solid only. The pad edits opaque rgb; the
@@ -242,57 +448,430 @@ PanelSection {
         id: colorPicker
 
         onScrubStarted: section.snapshot.beginScrub()
-        onCommitted: c => section.patchShadow("color", section.withAlpha(String(c), section.alphaOf(section.shadowCommon.value.color)))
+        onCommitted: c => {
+            if (section.pickerShadowIndex >= 0)
+                section.patchShadowAt(section.pickerShadowIndex, "color", section.withAlpha(String(c), section.alphaOf(section.collectShadowAt(section.pickerShadowIndex).value.color)));
+        }
+        onScrubFinished: section.snapshot.endScrub()
+    }
+
+    // Glow color picker: solid only, alpha owned by the % field like
+    // the shadow rows, so picks keep current opacity.
+    ColorPickerPopup {
+        id: glowPicker
+
+        onScrubStarted: section.snapshot.beginScrub()
+        onCommitted: c => {
+            if (section.pickerGlowIndex >= 0)
+                section.patchGlowAt(section.pickerGlowIndex, "color", section.withAlpha(String(c), section.alphaOf(section.collectGlowAt(section.pickerGlowIndex).value.color)));
+        }
         onScrubFinished: section.snapshot.endScrub()
     }
 
     EffectsPopup {
         id: picker
 
-        onOuterShadowClicked: section.enableAs(false)
-        onInnerShadowClicked: section.enableAs(true)
+        onOuterShadowClicked: section.addShadow(false)
+        onInnerShadowClicked: section.addShadow(true)
+        onLayerBlurClicked: section.enableBlur("layerBlur")
+        onBackgroundBlurClicked: section.enableBlur("backgroundBlur")
+        onOuterGlowClicked: section.addGlow(false)
+        onInnerGlowClicked: section.addGlow(true)
+        onGrainClicked: section.enableGrain()
     }
 
-    function baseShadow() {
-        var v = section.shadowCommon.value;
-        return {
-            enabled: v.enabled,
-            inner: v.inner === true,
-            color: String(v.color),
-            x: Number(v.x) || 0,
-            y: Number(v.y) || 0,
-            blur: Math.max(0, Number(v.blur) || 0),
-            spread: Math.max(0, Number(v.spread) || 0)
-        };
+    function openShadowPickerAt(at, color, anchor, mx, my) {
+        section.pickerShadowIndex = at;
+        colorPicker.openFor(color, anchor, mx, my);
     }
 
-    function setEnabled(on) {
-        var next = section.baseShadow();
-        next.enabled = on === true;
-        section.snapshot.setAll("shadow", next);
+    function openGlowPickerAt(at, color, anchor, mx, my) {
+        section.pickerGlowIndex = at;
+        glowPicker.openFor(color, anchor, mx, my);
     }
 
-    // Popup entries enable with their own shape: outer keeps current
-    // params, inner flips the flag.
-    function enableAs(inner) {
-        var next = section.baseShadow();
-        next.enabled = true;
-        next.inner = inner === true;
-        section.snapshot.setAll("shadow", next);
+    // Picker entries stack: shadows/glows always append, singles
+    // enable in place. Inner glow on text falls back to outer (inner
+    // has no glyph path); the card switch blocks it up front, this
+    // guards pastes and mixed picks.
+    function setEffect(type, inner) {
+        if (type === "shadow")
+            section.addShadow(inner);
+        else if (type === "glow")
+            section.addGlow(inner);
+        else if (type === "layerBlur" || type === "backgroundBlur")
+            section.enableBlur(type);
+        else if (type === "grain")
+            section.enableGrain();
+        else
+            section.clearAllEffects();
     }
 
-    function setInner(on) {
-        var next = section.baseShadow();
-        next.enabled = true;
-        next.inner = on === true;
-        section.snapshot.setAll("shadow", next);
+    function addShadow(inner) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            var next = (leaves[i].shadows || []).slice();
+            next.push(d.factory.defaultShadow(inner));
+            leaves[i].shadows = next;
+        }
+        d.touch();
     }
 
-    function patchShadow(role, value) {
-        var next = section.baseShadow();
-        next.enabled = true;
-        next[role] = value;
-        section.snapshot.setAll("shadow", next);
+    function addGlow(inner) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            var n = leaves[i];
+            if (d.isEffectivelyLocked(n))
+                continue;
+            var next = (n.glows || []).slice();
+            // Fresh map per leaf (never share one object across nodes).
+            // Inner has no glyph path: text in a mixed pick stays outer.
+            var wantInner = inner === true && n.shapeType !== "text";
+            var entry = d.factory.defaultGlow(wantInner);
+            next.push(entry);
+            n.glows = next;
+        }
+        d.touch();
+    }
+
+    function enableBlur(role) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            var cur = leaves[i][role] ?? {};
+            var defRadius = role === "backgroundBlur" ? 16 : 8;
+            var defOpacity = role === "backgroundBlur" ? 0.7 : 1;
+            leaves[i][role] = {
+                enabled: true,
+                radius: cur.radius !== undefined ? Math.max(0, Number(cur.radius) || 0) : defRadius,
+                opacity: cur.opacity !== undefined ? Math.min(1, Math.max(0, Number(cur.opacity))) : defOpacity
+            };
+        }
+        d.touch();
+    }
+
+    function enableGrain() {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            var cur = leaves[i].grain ?? {};
+            leaves[i].grain = {
+                enabled: true,
+                amount: cur.amount !== undefined ? Math.min(1, Math.max(0, Number(cur.amount))) : 0.5,
+                size: cur.size !== undefined ? Math.min(10, Math.max(1, Number(cur.size) || 0)) : 2
+            };
+        }
+        d.touch();
+    }
+
+    // Disables every branch and drops stacked entries.
+    function clearAllEffects() {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            leaves[i].shadows = [];
+            leaves[i].glows = [];
+            if (leaves[i].layerBlur)
+                leaves[i].layerBlur.enabled = false;
+            if (leaves[i].backgroundBlur)
+                leaves[i].backgroundBlur.enabled = false;
+            if (leaves[i].grain)
+                leaves[i].grain.enabled = false;
+        }
+        d.touch();
+    }
+
+    function toggleShadowAt(at) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        var common = section.collectShadowAt(at);
+        var nextOn = !(common.value.enabled !== false);
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            var list = (leaves[i].shadows || []).slice();
+            if (at >= list.length)
+                continue;
+            var entry = Object.assign({}, list[at]);
+            entry.enabled = nextOn;
+            list[at] = entry;
+            leaves[i].shadows = list;
+        }
+        d.touch();
+    }
+
+    function toggleGlowAt(at) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        var common = section.collectGlowAt(at);
+        var nextOn = !(common.value.enabled !== false);
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            var list = (leaves[i].glows || []).slice();
+            if (at >= list.length)
+                continue;
+            var entry = Object.assign({}, list[at]);
+            entry.enabled = nextOn;
+            list[at] = entry;
+            leaves[i].glows = list;
+        }
+        d.touch();
+    }
+
+    function removeShadowAt(at) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            var list = (leaves[i].shadows || []).slice();
+            if (at >= list.length)
+                continue;
+            list.splice(at, 1);
+            leaves[i].shadows = list;
+        }
+        d.touch();
+    }
+
+    function removeGlowAt(at) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            var list = (leaves[i].glows || []).slice();
+            if (at >= list.length)
+                continue;
+            list.splice(at, 1);
+            leaves[i].glows = list;
+        }
+        d.touch();
+    }
+
+    function moveShadowAt(at, delta) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        var to = at + delta;
+        if (to < 0)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            var list = (leaves[i].shadows || []).slice();
+            if (at >= list.length || to >= list.length)
+                continue;
+            var tmp = list[at];
+            list[at] = list[to];
+            list[to] = tmp;
+            leaves[i].shadows = list;
+        }
+        d.touch();
+    }
+
+    function moveGlowAt(at, delta) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        var to = at + delta;
+        if (to < 0)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            var list = (leaves[i].glows || []).slice();
+            if (at >= list.length || to >= list.length)
+                continue;
+            var tmp = list[at];
+            list[at] = list[to];
+            list[to] = tmp;
+            leaves[i].glows = list;
+        }
+        d.touch();
+    }
+
+    function setShadowInnerAt(at, on) {
+        section.patchShadowAt(at, "inner", on === true);
+    }
+
+    function setGlowInnerAt(at, on) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            var n = leaves[i];
+            if (d.isEffectivelyLocked(n))
+                continue;
+            var list = (n.glows || []).slice();
+            if (at >= list.length)
+                continue;
+            var entry = Object.assign({}, list[at]);
+            entry.enabled = true;
+            entry.inner = on === true && n.shapeType !== "text";
+            list[at] = entry;
+            n.glows = list;
+        }
+        d.touch();
+    }
+
+    function patchShadowAt(at, role, value) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            var list = (leaves[i].shadows || []).slice();
+            if (at >= list.length)
+                continue;
+            var entry = Object.assign({}, list[at]);
+            entry.enabled = true;
+            entry[role] = role === "blur" || role === "spread" ? Math.max(0, Number(value) || 0) : value;
+            list[at] = entry;
+            leaves[i].shadows = list;
+        }
+        d.touch();
+    }
+
+    function patchGlowAt(at, role, value) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var j = 0; j < leaves.length; j++) {
+            if (d.isEffectivelyLocked(leaves[j]))
+                continue;
+            var list = (leaves[j].glows || []).slice();
+            if (at >= list.length)
+                continue;
+            var entry = Object.assign({}, list[at]);
+            entry.enabled = true;
+            entry[role] = role === "blur" || role === "spread" ? Math.max(0, Number(value) || 0) : value;
+            list[at] = entry;
+            leaves[j].glows = list;
+        }
+        d.touch();
+    }
+
+    function patchBlur(role, key, value) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var j = 0; j < leaves.length; j++) {
+            if (d.isEffectivelyLocked(leaves[j]))
+                continue;
+            var cur = leaves[j][role] ?? {};
+            var defRadius = role === "backgroundBlur" ? 16 : 8;
+            var defOpacity = role === "backgroundBlur" ? 0.7 : 1;
+            var next = {
+                enabled: true,
+                radius: cur.radius !== undefined ? Math.max(0, Number(cur.radius) || 0) : defRadius,
+                opacity: cur.opacity !== undefined ? Math.min(1, Math.max(0, Number(cur.opacity))) : defOpacity
+            };
+            next[key] = key === "radius" ? Math.max(0, Number(value) || 0) : Math.min(1, Math.max(0, Number(value)));
+            leaves[j][role] = next;
+        }
+        d.touch();
+    }
+
+    function removeBlur(role) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            if (leaves[i][role])
+                leaves[i][role].enabled = false;
+        }
+        d.touch();
+    }
+
+    function patchGrain(key, value) {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var j = 0; j < leaves.length; j++) {
+            if (d.isEffectivelyLocked(leaves[j]))
+                continue;
+            var cur = leaves[j].grain ?? {};
+            var next = {
+                enabled: true,
+                amount: cur.amount !== undefined ? Math.min(1, Math.max(0, Number(cur.amount))) : 0.5,
+                size: cur.size !== undefined ? Math.min(10, Math.max(1, Number(cur.size) || 0)) : 2
+            };
+            next[key] = key === "size" ? Math.min(10, Math.max(1, Number(value) || 0)) : Math.min(1, Math.max(0, Number(value)));
+            leaves[j].grain = next;
+        }
+        d.touch();
+    }
+
+    function removeGrain() {
+        var d = section.snapshot.doc;
+        if (!d)
+            return;
+        d.history.checkpoint();
+        var leaves = d._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            if (leaves[i].grain)
+                leaves[i].grain.enabled = false;
+        }
+        d.touch();
     }
 
     // Shadow color carries alpha (#aarrggbb) but HexField and the pad

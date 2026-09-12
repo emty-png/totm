@@ -109,7 +109,11 @@ QtObject {
                 fill: String(n.fill),
                 fillType: n.fillType ?? "solid",
                 fillGradient: doc.factory._copyGradient(n.fillGradient),
-                shadow: doc.factory._copyShadow(n.shadow),
+                shadows: doc.factory._copyShadows(n.shadows),
+                glows: doc.factory._copyGlows(n.glows),
+                layerBlur: doc.factory._copyBlur(n.layerBlur, 8, 1),
+                backgroundBlur: doc.factory._copyBlur(n.backgroundBlur, 16, 0.7),
+                grain: doc.factory._copyGrain(n.grain),
                 visible: n.visible,
                 radius: n.radius,
                 strokeWidth: n.strokeWidth,
@@ -148,8 +152,16 @@ QtObject {
                 n.fillType = b.fillType;
             if (b.fillGradient !== undefined)
                 n.fillGradient = doc.factory._copyGradient(b.fillGradient);
-            if (b.shadow !== undefined)
-                n.shadow = doc.factory._copyShadow(b.shadow);
+            if (b.shadows !== undefined)
+                n.shadows = doc.factory._copyShadows(b.shadows);
+            if (b.glows !== undefined)
+                n.glows = doc.factory._copyGlows(b.glows);
+            if (b.layerBlur !== undefined)
+                n.layerBlur = doc.factory._copyBlur(b.layerBlur, 8, 1);
+            if (b.backgroundBlur !== undefined)
+                n.backgroundBlur = doc.factory._copyBlur(b.backgroundBlur, 16, 0.7);
+            if (b.grain !== undefined)
+                n.grain = doc.factory._copyGrain(b.grain);
             if (b.visible !== undefined)
                 n.visible = b.visible;
             if (b.radius !== undefined)

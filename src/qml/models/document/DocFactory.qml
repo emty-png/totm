@@ -27,7 +27,11 @@ QtObject {
             strokeType: s.strokeType ?? "solid",
             strokeGradient: factory._copyGradient(s.strokeGradient),
             strokeWidth: s.strokeWidth ?? 0,
-            shadow: factory._copyShadow(s.shadow),
+            shadows: factory._copyShadows(s.shadows ?? s.shadow),
+            glows: factory._copyGlows(s.glows ?? s.glow),
+            layerBlur: factory._copyBlur(s.layerBlur, 8, 1),
+            backgroundBlur: factory._copyBlur(s.backgroundBlur, 16, 0.7),
+            grain: factory._copyGrain(s.grain),
             opacity: s.opacity ?? 1,
             radius: s.radius ?? 0,
             independentCorners: s.independentCorners === true,
@@ -107,16 +111,92 @@ QtObject {
         };
     }
 
-    function _copyShadow(src) {
+    function _copyShadowEntry(src) {
         var d = src ?? {};
         return {
-            enabled: d.enabled === true,
+            enabled: d.enabled !== false,
             inner: d.inner === true,
             color: String(d.color ?? "#80000000"),
             x: d.x !== undefined ? (Number(d.x) || 0) : 0,
             y: d.y !== undefined ? (Number(d.y) || 0) : 4,
             blur: d.blur !== undefined ? Math.max(0, Number(d.blur) || 0) : 8,
             spread: d.spread !== undefined ? Math.max(0, Number(d.spread) || 0) : 0
+        };
+    }
+
+    // Shadows stack: arrays copy per entry. A legacy single map wraps
+    // into one entry so old scenes never crash (no migration: params
+    // carry over, effectType is ignored).
+    function _copyShadows(src) {
+        if (!src)
+            return [];
+        if (typeof src.length !== "number")
+            return [factory._copyShadowEntry(src)];
+        var out = [];
+        for (var i = 0; i < src.length; i++)
+            out.push(factory._copyShadowEntry(src[i]));
+        return out;
+    }
+
+    function _copyBlur(src, defRadius, defOpacity) {
+        var d = src ?? {};
+        return {
+            enabled: d.enabled === true,
+            radius: d.radius !== undefined ? Math.max(0, Number(d.radius) || 0) : defRadius,
+            opacity: d.opacity !== undefined ? Math.min(1, Math.max(0, Number(d.opacity))) : defOpacity
+        };
+    }
+
+    function _copyGlowEntry(src) {
+        var d = src ?? {};
+        return {
+            enabled: d.enabled !== false,
+            inner: d.inner === true,
+            color: String(d.color ?? "#cc00ffff"),
+            blur: d.blur !== undefined ? Math.max(0, Number(d.blur) || 0) : 16,
+            spread: d.spread !== undefined ? Math.max(0, Number(d.spread) || 0) : 4
+        };
+    }
+
+    function _copyGlows(src) {
+        if (!src)
+            return [];
+        if (typeof src.length !== "number")
+            return [factory._copyGlowEntry(src)];
+        var out = [];
+        for (var i = 0; i < src.length; i++)
+            out.push(factory._copyGlowEntry(src[i]));
+        return out;
+    }
+
+    function _copyGrain(src) {
+        var d = src ?? {};
+        return {
+            enabled: d.enabled === true,
+            amount: d.amount !== undefined ? Math.min(1, Math.max(0, Number(d.amount))) : 0.5,
+            size: d.size !== undefined ? Math.min(10, Math.max(1, Number(d.size) || 0)) : 2
+        };
+    }
+
+    function defaultShadow(inner) {
+        return {
+            enabled: true,
+            inner: inner === true,
+            color: "#80000000",
+            x: 0,
+            y: 4,
+            blur: 8,
+            spread: 0
+        };
+    }
+
+    function defaultGlow(inner) {
+        return {
+            enabled: true,
+            inner: inner === true,
+            color: "#cc00ffff",
+            blur: 16,
+            spread: 4
         };
     }
 
