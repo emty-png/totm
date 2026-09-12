@@ -10,6 +10,8 @@ src/
   backend/
     library/             # LibraryStore (library.json, QSaveFile, lockfile)
     settings/            # SettingsStore (theme + window state, QSettings)
+    effects/             # EffectItem + EffectPainter (shared canvas/export rasterizer)
+    video/               # VideoExporter + AnimSampler (ffmpeg pipe, 1:1 with preview)
   qml/
     Main.qml             # frameless window + TitleBar + view switch, restores window state
     theme/               # AppTheme singleton (only hex colors live here)
@@ -23,8 +25,10 @@ src/
       window/            # frameless resize handles
       toolbar/           # floating canvas toolbar
       fields/            # NumberField, HexField, RenameField
+      menu/              # shared context-menu rows
+      home/              # workspace sidebar, design cards + previews
       selection/         # marquee selection
-      editor/            # canvas/, snap/, layers/, properties/, shapes/, timeline/
+      editor/            # canvas/, snap/, layers/, properties/, shapes/, timeline/, export/
 ```
 
 ## Ground rules

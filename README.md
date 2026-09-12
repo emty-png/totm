@@ -18,13 +18,16 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 
 ## Features
 
-* Shapes: rectangle, ellipse, triangle, star with fill / stroke / opacity / radius
+* Shapes: rectangle, ellipse, triangle, star, pen paths, text and images — with solid / linear-gradient fill, stroke, opacity, radius + independent corners, flip
+* Effects: stackable outer / inner shadows and glows, layer + background blur, animated film grain (canvas and video export share one painter, so they match)
+* Home library: workspaces, starring, drag-move between workspaces, live card previews, inline rename
 * Layers: groups, drill-in, reorder, rename, eye / lock, context menu (copy / paste / duplicate / group / arrange / delete)
 * Smart snapping: edges, centers, scene, equal gaps (Alt suspends)
-* Design panel with mixed-value handling
-* Dark / light theme, custom frameless titlebar with tabs
-* Group and manage components
+* Design panel with mixed-value handling, typography controls and a Figma-style color picker
+* Dark / light theme, custom frameless titlebar with draggable tabs (titles follow design names)
 * Animate with presets plus custom from-to properties (scale, rotate, move, opacity, color, hide/show, resize, corner radius, stroke) and drawable motion paths with full point editing, easing graphs and a timeline.
+* Audio: import MP3 / WAV / OGG / FLAC onto timeline lanes with live preview, mixed into the export
+* Video export: SD / HD / 4K at 30 / 60fps mp4 through system ffmpeg, with progress + cancel
 
 ## Install
 

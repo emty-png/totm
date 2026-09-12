@@ -7,6 +7,11 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ### Added
 
+* Card previews + rename hardening — home thumbnails reuse the canvas `ShapeItem` through one shared mapping (real uids, paint-depth order, hidden-branch pruning, fixed-box wrapping, frosted-glass backdrop sampling), so they match the canvas for every tool and effect; blank designs show an "Empty canvas" placeholder. Renaming got sturdier too: double-click renames in place (single-click open waits out the double-click interval), Enter commits exactly once, fast re-targets can't clobber the live edit, and grid rebuilds no longer eat typed text.
+* Draggable tabs — doc tabs drag to reorder with a live gap preview, selection follows the dragged tab.
+* Audio properties — design-panel section for the audio selection (per-clip controls with mixed-value handling and undo-coalesced scrubs) plus timeline lane scrolling.
+* Image tool — picker-then-place (click stamps natural size, drag stretches), PNG/JPG/WEBP/GIF/SVG blobs under `LibraryStore`, replaceable from the Image section, radius + stroke + glow aware, with a neutral placeholder when the blob goes missing.
+* Effects engine — linear-gradient fill/stroke, stackable outer/inner shadows and glows in a fixed Figma-style render order, layer blur, frosted-glass background blur, and animated film grain. One CPU painter serves canvas preview and video export so they match by construction; text paints the full stack (shadows, glows, gradient fill, outline ring, layer blur, glyph-confined grain) through a shared glyph path.
 * Custom animations — the animate tab's Custom mode is real now: grouped Add list (Transform: Scale/Rotate/Move, Style: Opacity/Color, Other: Hide-Show/Resize/Corner Radius/Stroke) creating from-to clips that reuse the whole preset pipeline (timeline lanes, clip editor with per-type from-to fields, easing graph, undo, video-safe plain data). New clips seed From from your live selection so they start jump-free, and overlapping customs resolve later-wins-per-property like Figma.
 * Motion path animation — draw a trajectory on the canvas (pen-like: click points, drag to bend, snapping, Alt frees), the shape follows it by arc length with optional follow-rotation and closed loops. Selected paths preview right on the canvas, and Edit path loads the trajectory for full point surgery (drag anchors/handles, double-click to smooth/sharpen, click an edge to insert, Delete to remove, wipe clean to start over). Enter commits once, Esc bails with nothing lost.
 * Pen tool — vector path drawing (click to add points, drag for symmetric bezier handles, close by clicking first point, double-click/Enter to part, Esc to finish) plus point editing (double-click a pen shape, drag anchors/handles with snapping, click a segment to insert, Delete to remove, double-click anchor to toggle smooth/corner).
@@ -33,6 +38,7 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ### Fixed
 
+* Double-clicking a design card opened it before renaming — single-click open now waits out the double-click interval, and layer renames no longer write no-op undo entries on blank or identical commits.
 * Typography panel warnings (`Unable to assign [undefined]`) when selecting groups — group snapshots carry geometry only, so `commonOf` now reports missing roles as mixed instead of leaking undefined into number fields.
 * Layer eye/lock toggles show on row hover like a normal app.
 * Corrupt library no longer nukes your stuff, it gets archived and you get a fresh default workspace.
