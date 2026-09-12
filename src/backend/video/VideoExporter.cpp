@@ -436,9 +436,10 @@ protected:
         pt.translate(-cx, -cy);
 
         if (shapeType == QLatin1String("text")) {
-            // Inner has no glyph path: text renders every glow outer
-            // (same rule as the canvas preview, so both sides agree).
-            paintText(pt, m, x, y, w, h, scale, fill, glows,
+            // Glyph stack through the shared painter: real inner bands,
+            // gradient fill, outline ring and whole-stack layer blur,
+            // identical to the canvas preview by construction.
+            paintText(pt, m, x, y, w, h, scale, fill, shadows, glows, layerBlur,
                 useGrain ? grain : Effects::Grain(), uid, frameNo);
             pt.restore();
             return;
@@ -658,86 +659,41 @@ protected:
         pt.drawImage(area.topLeft(), mask);
     }
 
-    // Text via QTextDocument (mirrors TextGlyphs). Outline uses a 1px
-    // content-space hairline; line height follows the
-    // natural-unless-overridden rule. Outer glow renders the glyphs in
-    // the glow color behind the fill; the inner flag is ignored for text
-    // (no glyph path), matching the canvas preview rule.
+    // Text through the shared glyph-stack painter (mirrors the canvas
+    // EffectItem branch): outer/inner shadows and glows, gradient fill,
+    // outline ring, whole-stack layer blur. Grain stays glyph-confined
+    // like the preview overlay.
     static void paintText(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h, double s,
-        const QColor &fill, const QList<Effects::Glow> &glows = QList<Effects::Glow>(),
-        const Effects::Grain &grain = Effects::Grain(), int uid = -1, int frameNo = 0) {
-        // Every enabled glow renders outer (no glyph path for inner),
-        // bottom-first so index 0 paints topmost like the preview.
-        for (int i = glows.size() - 1; i >= 0; --i) {
-            const Effects::Glow &g = glows.at(i);
-            if (g.enabled)
-                paintTextGlow(pt, m, x, y, w, h, s, g);
-        }
-        QTextDocument doc;
-        doc.setPlainText(str(m, "textContent"));
-        const double px = qMax(1.0, num(m, "fontSize", 16.0) * s);
-        QFont font(str(m, "fontFamily", QStringLiteral("Inter")));
-        font.setPixelSize(qRound(px));
-        font.setWeight(QFont::Weight(qBound(100, m.value(QStringLiteral("fontWeight"), 400).toInt(), 900)));
-        const double spacingPct = num(m, "letterSpacing");
-        if (!qFuzzyIsNull(spacingPct))
-            font.setLetterSpacing(QFont::AbsoluteSpacing, num(m, "fontSize", 16.0) * s * spacingPct / 100.0);
-        doc.setDefaultFont(font);
-        QTextCursor cur(&doc);
-        cur.select(QTextCursor::Document);
-        QTextCharFormat fmt;
-        fmt.setForeground(fill);
-        if (num(m, "strokeWidth") > 0.0)
-            fmt.setTextOutline(QPen(QColor(str(m, "stroke", QStringLiteral("#000000"))), qMax(0.5, s)));
-        cur.mergeCharFormat(fmt);
-        if (!m.value(QStringLiteral("lineHeightAuto"), true).toBool()) {
-            QTextBlockFormat bf;
-            bf.setLineHeight(qMax(0.5, num(m, "lineHeight", 1.2) * px), QTextBlockFormat::FixedHeight);
-            cur.mergeBlockFormat(bf);
-        }
-        QTextOption opt;
-        const QString ha = str(m, "hAlign", QStringLiteral("left"));
-        opt.setAlignment(ha == QLatin1String("center") ? Qt::AlignHCenter
-            : ha == QLatin1String("right")             ? Qt::AlignRight
-            : ha == QLatin1String("justify")           ? Qt::AlignJustify
-                                                      : Qt::AlignLeft);
-        opt.setWrapMode(m.value(QStringLiteral("autoSize"), true).toBool() ? QTextOption::NoWrap : QTextOption::WordWrap);
-        doc.setDefaultTextOption(opt);
-        const bool autoSize = m.value(QStringLiteral("autoSize"), true).toBool();
-        if (!autoSize)
-            doc.setTextWidth(w);
-        QTextOption::WrapMode unused = opt.wrapMode();
-        Q_UNUSED(unused);
-        QSizeF ds = doc.size();
-        double dy = 0.0;
-        if (!autoSize) {
-            const QString va = str(m, "vAlign", QStringLiteral("top"));
-            if (va == QLatin1String("middle"))
-                dy = qMax(0.0, (h - ds.height()) / 2.0);
-            else if (va == QLatin1String("bottom"))
-                dy = qMax(0.0, h - ds.height());
-        }
-        pt.save();
-        pt.translate(x, y + dy);
-        QAbstractTextDocumentLayout::PaintContext ctx;
-        ctx.palette.setColor(QPalette::Text, fill);
-        // Fixed boxes clip like the canvas; auto-size boxes grow freely.
-        if (!autoSize)
-            pt.setClipRect(QRectF(0, 0, w, h));
-        doc.documentLayout()->draw(&pt, ctx);
-        pt.restore();
+        const QColor &fill, const QList<Effects::Shadow> &shadows = QList<Effects::Shadow>(),
+        const QList<Effects::Glow> &glows = QList<Effects::Glow>(),
+        const Effects::Blur &layerBlur = Effects::Blur(), const Effects::Grain &grain = Effects::Grain(),
+        int uid = -1, int frameNo = 0) {
+        QVariantMap tm;
+        tm[QStringLiteral("content")] = str(m, "textContent");
+        tm[QStringLiteral("family")] = str(m, "fontFamily", QStringLiteral("Inter"));
+        tm[QStringLiteral("weight")] = m.value(QStringLiteral("fontWeight"), 400).toInt();
+        tm[QStringLiteral("size")] = num(m, "fontSize", 16.0);
+        tm[QStringLiteral("spacing")] = num(m, "letterSpacing");
+        tm[QStringLiteral("halign")] = str(m, "hAlign", QStringLiteral("left"));
+        tm[QStringLiteral("valign")] = str(m, "vAlign", QStringLiteral("top"));
+        tm[QStringLiteral("autoSize")] = m.value(QStringLiteral("autoSize"), true).toBool();
+        tm[QStringLiteral("lineAuto")] = m.value(QStringLiteral("lineHeightAuto"), true).toBool();
+        tm[QStringLiteral("leading")] = num(m, "lineHeight", 1.2);
+        tm[QStringLiteral("boxW")] = num(m, "w");
+        tm[QStringLiteral("boxH")] = num(m, "h");
+        tm[QStringLiteral("outlinePx")] = num(m, "strokeWidth") > 0.0 ? 1.0 : 0.0;
+        const Effects::TextOpts text = Effects::TextOpts::fromMap(tm);
+        Effects::Style st;
+        st.fill = fill;
+        st.fillType = str(m, "fillType", QStringLiteral("solid"));
+        st.fillGradient = m.value(QStringLiteral("fillGradient")).toMap();
+        st.stroke = QColor(str(m, "stroke", QStringLiteral("#000000")));
+        st.strokeWidth = num(m, "strokeWidth") > 0.0 ? 1.0 : 0.0;
+        Effects::paintTextLeaf(&pt, QRectF(x, y, w, h), text, st, shadows, glows, layerBlur, s, nullptr);
         // Grain confined to the glyphs: ghost the coverage, keep dots
         // where the ghost is opaque (preview masks its tile the same way).
         if (grain.enabled && grain.amount > 0.001) {
-            QImage ghost(qMax(1, qRound(w)), qMax(1, qRound(h)), QImage::Format_ARGB32_Premultiplied);
-            ghost.fill(0);
-            {
-                QVariantMap gm = m;
-                gm[QStringLiteral("strokeWidth")] = 0.0;
-                QPainter gp(&ghost);
-                gp.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
-                paintText(gp, gm, 0, 0, w, h, s, Qt::white);
-            }
+            const QImage ghost = Effects::textGhost(text, w, h, s, false);
             QImage dots = Effects::grainDots(ghost.size(), qMax(1.0, grain.size * s),
                 Effects::grainSeed(uid, frameNo), grain.amount);
             {
@@ -747,42 +703,6 @@ protected:
             }
             pt.drawImage(QRectF(x, y, w, h), dots);
         }
-    }
-
-    // Outer text glow: ghost the glyphs in the glow color (spread widens
-    // the pen, like the vector dilate), blur, and lay behind the fill.
-    // The ghost reuses paintText with a zeroed outline so the halo
-    // follows the glyph shape, never the stroke.
-    static void paintTextGlow(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h,
-        double s, const Effects::Glow &glow) {
-        const double spread = glow.spread * s;
-        const double margin = qMin(256.0, spread + glow.blur * s * 2.0) + 1.0;
-        QImage ghost(qMax(1, qRound(w + margin * 2.0)), qMax(1, qRound(h + margin * 2.0)),
-            QImage::Format_ARGB32_Premultiplied);
-        ghost.fill(0);
-        {
-            QVariantMap gm = m;
-            gm[QStringLiteral("strokeWidth")] = 0.0;
-            QPainter gp(&ghost);
-            gp.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
-            gp.translate(margin, margin);
-            paintText(gp, gm, 0, 0, w, h, s, glow.color);
-        }
-        if (spread > 0.01) {
-            // Cheap dilate: stamp the ghost around itself so the halo
-            // starts outside the glyphs (8 taps approximate a disc).
-            QImage grown(ghost.size(), QImage::Format_ARGB32_Premultiplied);
-            grown.fill(0);
-            QPainter gp(&grown);
-            for (int oy = -1; oy <= 1; ++oy) {
-                for (int ox = -1; ox <= 1; ++ox)
-                    gp.drawImage(QPointF(ox * spread, oy * spread), ghost);
-            }
-            gp.end();
-            ghost = grown;
-        }
-        Effects::blurImage(ghost, glow.blur * s);
-        pt.drawImage(QRectF(x - margin, y - margin, ghost.width(), ghost.height()), ghost);
     }
 
     QVariantMap m_scene;

@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Shapes
 
 // Icons: fill-based vector glyphs with rounded caps/corners.
-// Paths use a 256x256 grid, scaled to fit.
+// Paths use a 256x256 grid, scaled to fit (Phosphor fill set, MIT).
 // kind: "minimize" | "maximize" | "restore" | "close" | "sun" | "moon"
 //     | "apps" | "plus" | "square" | "circle" | "triangle" | "diamond"
 //     | "hexagon" | "pen" | "text" | "image" | "music" | "caret" | "cursor"
@@ -10,6 +10,8 @@ import QtQuick.Shapes
 //     | "contrast" | "corner" | "cornerTL" | "cornerTR" | "cornerBR"
 //     | "cornerBL" | "rotate" | "flipH" | "flipV" | "undo"
 //     | "redo" | "play" | "pause" | "stop" | "export"
+//     | "shadeOuter" | "shadeInner" | "blur" | "backdrop"
+//     | "sparkle" | "glowInner" | "grain"
 Item {
     id: icon
     width: 16
@@ -353,5 +355,61 @@ Item {
         box: icon.width
         paint: icon.iconColor
         svg: "M224,152v56a16,16,0,0,1-16,16H48a16,16,0,0,1-16-16V152a8,8,0,0,1,16,0v56H208V152a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,132.69V40a8,8,0,0,0-16,0v92.69L93.66,106.34a8,8,0,0,0-11.32,11.32Z"
+    }
+
+    // Effects picker set. Outer shadow: shade pooling below the shape.
+    PhShape {
+        active: icon.kind === "shadeOuter"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M200,40H56A16,16,0,0,0,40,56V200a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,16v72H56V56Z"
+    }
+
+    // Inner shadow: corners closing in on the shape.
+    PhShape {
+        active: icon.kind === "shadeInner"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M152,96V48a8,8,0,0,1,13.66-5.66l48,48A8,8,0,0,1,208,104H160A8,8,0,0,1,152,96ZM96,152H48a8,8,0,0,0-5.66,13.66l48,48A8,8,0,0,0,104,208V160A8,8,0,0,0,96,152ZM99.06,40.61a8,8,0,0,0-8.72,1.73l-48,48A8,8,0,0,0,48,104H96a8,8,0,0,0,8-8V48A8,8,0,0,0,99.06,40.61ZM208,152H160a8,8,0,0,0-8,8v48a8,8,0,0,0,13.66,5.66l48-48A8,8,0,0,0,208,152Z"
+    }
+
+    // Layer blur: camera aperture.
+    PhShape {
+        active: icon.kind === "blur"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M232,128A104,104,0,0,0,54.46,54.46,104,104,0,0,0,128,232h.09A104,104,0,0,0,232,128ZM49.18,88.92l51.21,9.35L46.65,161.53A88.39,88.39,0,0,1,49.18,88.92Zm160.17,5.54a88.41,88.41,0,0,1-2.53,72.62l-51.21-9.35Zm-8.08-15.2L167.55,119,139.63,40.78a87.38,87.38,0,0,1,50.6,25A88.74,88.74,0,0,1,201.27,79.26ZM122.43,40.19l17.51,49L58.3,74.32a89.28,89.28,0,0,1,7.47-8.55A87.37,87.37,0,0,1,122.43,40.19ZM54.73,176.74,88.45,137l27.92,78.18a88,88,0,0,1-61.64-38.48Zm78.84,39.06-17.51-49L139.14,171h0l58.52,10.69a87.5,87.5,0,0,1-64.13,34.12Z"
+    }
+
+    // Background blur: stacked panes (the backdrop behind).
+    PhShape {
+        active: icon.kind === "backdrop"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M12,111l112,64a8,8,0,0,0,7.94,0l112-64a8,8,0,0,0,0-13.9l-112-64a8,8,0,0,0-7.94,0l-112,64A8,8,0,0,0,12,111Z M236,137.05,128,198.79,20,137.05A8,8,0,1,0,12,151l112,64a8,8,0,0,0,7.94,0l112-64a8,8,0,1,0-7.94-13.9Z"
+    }
+
+    // Outer glow: four-point sparkle.
+    PhShape {
+        active: icon.kind === "sparkle"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M208,144a15.78,15.78,0,0,1-10.42,14.94L146,178l-19,51.62a15.92,15.92,0,0,1-29.88,0L78,178l-51.62-19a15.92,15.92,0,0,1,0-29.88L78,110l19-51.62a15.92,15.92,0,0,1,29.88,0L146,110l51.62,19A15.78,15.78,0,0,1,208,144ZM152,48h16V64a8,8,0,0,0,16,0V48h16a8,8,0,0,0,0-16H184V16a8,8,0,0,0-16,0V32H152a8,8,0,0,0,0,16Zm88,32h-8V72a8,8,0,0,0-16,0v8h-8a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0V96h8a8,8,0,0,0,0-16Z"
+    }
+
+    // Inner glow: dimmed sun (softer light within).
+    PhShape {
+        active: icon.kind === "glowInner"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M120,40V32a8,8,0,0,1,16,0v8a8,8,0,0,1-16,0Zm8,24a64,64,0,1,0,64,64A64.07,64.07,0,0,0,128,64ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-8-8A8,8,0,0,0,50.34,61.66Zm0,116.68-8,8a8,8,0,0,0,11.32,11.32l8-8a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l8-8a8,8,0,0,0-11.32-11.32l-8,8A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l8,8a8,8,0,0,0,11.32-11.32ZM40,120H32a8,8,0,0,0,0,16h8a8,8,0,0,0,0-16Zm88,88a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-8A8,8,0,0,0,128,208Zm96-88h-8a8,8,0,0,0,0,16h8a8,8,0,0,0,0-16Z"
+    }
+
+    // Grain: asterisk speck.
+    PhShape {
+        active: icon.kind === "grain"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm59.43,129.07a8,8,0,0,1-4,14.93,7.92,7.92,0,0,1-4-1.07L136,141.86V192a8,8,0,0,1-16,0V141.86L76.57,166.93A8,8,0,0,1,65.65,164a8,8,0,0,1,2.92-10.93L112,128,68.57,102.93a8,8,0,0,1,8-13.86L120,114.14V64a8,8,0,0,1,16,0v50.14l43.43-25.07a8,8,0,0,1,8,13.86L144,128Z"
     }
 }

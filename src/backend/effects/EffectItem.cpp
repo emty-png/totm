@@ -34,6 +34,14 @@ void EffectItem::paint(QPainter *painter)
     const QList<Effects::Shadow> sh = Effects::Shadow::listFrom(m_shadows);
     const Effects::Blur lb = Effects::Blur::fromMap(m_layerBlur);
     const QList<Effects::Glow> gl = Effects::Glow::listFrom(m_glows);
+    // Effected text paints the glyph stack (same code export calls, so
+    // preview matches video); plain text stays on the GPU QML branch.
+    if (m_shapeType == QStringLiteral("text")) {
+        const Effects::TextOpts text = Effects::TextOpts::fromMap(m_textStyle);
+        Effects::paintTextLeaf(painter, QRectF(m_pad, m_pad, m_boxW, m_boxH), text, st, sh, gl, lb,
+            1.0, &m_masks);
+        return;
+    }
     // Stacked: outer shadows -> outer glows -> fill -> inners -> stroke,
     // then layer-blur mixes the whole stack. Blurred rasters memoize in
     // m_masks (same pixels, skipped recompute); export passes null.
@@ -357,6 +365,21 @@ void EffectItem::setGlows(const QVariantList &v)
     emit glowChanged();
     updatePad();
     // Pad-equal changes (recoloring at fixed blur) must still repaint.
+    update();
+}
+
+QVariantMap EffectItem::textStyle() const
+{
+    return m_textStyle;
+}
+
+void EffectItem::setTextStyle(const QVariantMap &v)
+{
+    m_textStyle = v;
+    // Layout inputs feed the cached glyph rasters, so any change drops
+    // them; color-only edits never reach this map.
+    m_masks.clear();
+    emit textChanged();
     update();
 }
 

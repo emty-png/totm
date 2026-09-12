@@ -19,6 +19,10 @@ Popup {
     signal innerGlowClicked
     signal grainClicked
 
+    // True while the selection holds text: background blur samples no
+    // backdrop for glyphs, so its row goes inert instead of no-op.
+    property bool textSelected: false
+
     width: 220
     padding: 6
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -62,7 +66,7 @@ Popup {
 
         EffectRow {
             label: qsTr("Outer Shadow")
-            iconKind: "square"
+            iconKind: "shadeOuter"
             onChosen: {
                 popup.close();
                 popup.outerShadowClicked();
@@ -71,7 +75,7 @@ Popup {
 
         EffectRow {
             label: qsTr("Inner Shadow")
-            iconKind: "moon"
+            iconKind: "shadeInner"
             onChosen: {
                 popup.close();
                 popup.innerShadowClicked();
@@ -80,7 +84,7 @@ Popup {
 
         EffectRow {
             label: qsTr("Layer Blur")
-            iconKind: "contrast"
+            iconKind: "blur"
             onChosen: {
                 popup.close();
                 popup.layerBlurClicked();
@@ -89,7 +93,8 @@ Popup {
 
         EffectRow {
             label: qsTr("Background Blur")
-            iconKind: "apps"
+            iconKind: "backdrop"
+            rowEnabled: !popup.textSelected
             onChosen: {
                 popup.close();
                 popup.backgroundBlurClicked();
@@ -98,7 +103,7 @@ Popup {
 
         EffectRow {
             label: qsTr("Outer Glow")
-            iconKind: "sun"
+            iconKind: "sparkle"
             onChosen: {
                 popup.close();
                 popup.outerGlowClicked();
@@ -107,7 +112,7 @@ Popup {
 
         EffectRow {
             label: qsTr("Inner Glow")
-            iconKind: "moon"
+            iconKind: "glowInner"
             onChosen: {
                 popup.close();
                 popup.innerGlowClicked();
@@ -116,7 +121,7 @@ Popup {
 
         EffectRow {
             label: qsTr("Grain")
-            iconKind: "contrast"
+            iconKind: "grain"
             onChosen: {
                 popup.close();
                 popup.grainClicked();
@@ -130,13 +135,15 @@ Popup {
 
         required property string label
         required property string iconKind
+        property bool rowEnabled: true
 
         signal chosen
 
         Layout.fillWidth: true
         Layout.preferredHeight: 34
         radius: 6
-        color: rowMouse.containsMouse || rowMouse.pressed ? AppTheme.hover : "transparent"
+        opacity: row.rowEnabled ? 1 : 0.35
+        color: row.rowEnabled && (rowMouse.containsMouse || rowMouse.pressed) ? AppTheme.hover : "transparent"
 
         Behavior on color {
             ColorAnimation {
@@ -177,8 +184,11 @@ Popup {
             anchors.fill: parent
             hoverEnabled: true
             acceptedButtons: Qt.LeftButton
-            cursorShape: Qt.PointingHandCursor
-            onClicked: row.chosen()
+            cursorShape: row.rowEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: {
+                if (row.rowEnabled)
+                    row.chosen();
+            }
         }
     }
 

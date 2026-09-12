@@ -45,6 +45,7 @@ class EffectItem : public QQuickPaintedItem {
     Q_PROPERTY(QVariantMap layerBlur READ layerBlur WRITE setLayerBlur NOTIFY blurChanged)
     Q_PROPERTY(QVariantMap backgroundBlur READ backgroundBlur WRITE setBackgroundBlur NOTIFY blurChanged)
     Q_PROPERTY(QVariantList glows READ glows WRITE setGlows NOTIFY glowChanged)
+    Q_PROPERTY(QVariantMap textStyle READ textStyle WRITE setTextStyle NOTIFY textChanged)
     Q_PROPERTY(double pad READ pad NOTIFY padChanged)
 
 public:
@@ -94,6 +95,8 @@ public:
     void setBackgroundBlur(const QVariantMap &v);
     QVariantList glows() const;
     void setGlows(const QVariantList &v);
+    QVariantMap textStyle() const;
+    void setTextStyle(const QVariantMap &v);
     double pad() const;
 
 signals:
@@ -103,6 +106,7 @@ signals:
     void shadowChanged();
     void blurChanged();
     void glowChanged();
+    void textChanged();
     void padChanged();
 
 private:
@@ -129,6 +133,7 @@ private:
     QVariantMap m_layerBlur;
     QVariantMap m_backgroundBlur;
     QVariantList m_glows;
+    QVariantMap m_textStyle;
     double m_pad = 0.0;
     QCache<QByteArray, QImage> m_masks{16 * 1024 * 1024};
 };

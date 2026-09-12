@@ -112,14 +112,15 @@ Item {
     readonly property bool hasLayerBlur: shape.layerBlur !== null && shape.layerBlur !== undefined && shape.layerBlur.enabled === true && Number(shape.layerBlur.radius) > 0
     readonly property bool hasBackgroundBlur: shape.backgroundBlur !== null && shape.backgroundBlur !== undefined && shape.backgroundBlur.enabled === true && Number(shape.backgroundBlur.radius) > 0 && shape.shapeType !== "text"
     readonly property var enabledGlows: (shape.glows || []).filter(g => g && g.enabled !== false)
-    // Inner has no glyph path: text renders every glow outer (same
-    // rule as the video exporter, so preview matches export).
-    readonly property var outerGlows: shape.shapeType === "text" ? shape.enabledGlows : shape.enabledGlows.filter(g => g.inner !== true)
-    readonly property var innerGlows: shape.shapeType === "text" ? [] : shape.enabledGlows.filter(g => g.inner === true)
+    readonly property var outerGlows: shape.enabledGlows.filter(g => g.inner !== true)
+    readonly property var innerGlows: shape.enabledGlows.filter(g => g.inner === true)
     readonly property bool hasGlow: shape.enabledGlows.length > 0
     readonly property bool hasGrain: shape.grain !== null && shape.grain !== undefined && shape.grain.enabled === true && Number((shape.grain ?? {}).amount || 0) > 0
-    readonly property bool textGlowOuter: shape.hasGlow && shape.shapeType === "text"
     readonly property bool useEffectPaint: shape.isVectorPaint && (shape.fillType === "linear" || shape.strokeType === "linear" || shape.hasShadow || shape.hasLayerBlur || shape.hasGlow)
+    // Effected text paints the glyph stack on the CPU (same code export
+    // calls); plain text stays on the fast GPU glyphs. Grain rides its
+    // own overlay either way; background blur stays off for text.
+    readonly property bool useTextEffectPaint: shape.shapeType === "text" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur)
 
     x: shape.sx
     y: shape.sy
@@ -345,11 +346,10 @@ Item {
         }
     }
 
-    // Text: fill paints the glyphs; stroke is a native 1px outline
-    // (Text has no outline-width API, so the width field only toggles
-    // it on/off for text). Each glow rides a zero-offset GPU shadow
-    // (glyph-shaped halo like export's ghost pass); inner stays outer
-    // for text everywhere, so there is no silent fallback to chase.
+    // Text: plain glyphs paint on the GPU (fill plus a native 1px
+    // outline toggle); effected glyphs paint the full CPU stack
+    // (outer/inner shadows and glows, gradient fill, outline ring,
+    // whole-stack layer blur) through the shared painter export calls.
     Item {
         id: textRoot
 
@@ -363,62 +363,62 @@ Item {
             origin.y: shape.sh / 2
         }
 
-        // Stacked outer glows behind the fill, bottom-first so index 0
-        // paints topmost (closest to the glyphs).
-        Repeater {
-            model: shape.textGlowOuter ? shape.outerGlows.slice().reverse() : []
+        EffectItem {
+            id: effectText
 
-            Item {
-                anchors.fill: parent
-                layer.enabled: true
-                layer.smooth: true
-                layer.effect: MultiEffect {
-                    shadowEnabled: true
-                    shadowColor: String((modelData ?? {}).color ?? "#cc00ffff")
-                    shadowOpacity: 1
-                    shadowBlur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) * shape.zoom / 64))
-                    shadowHorizontalOffset: 0
-                    shadowVerticalOffset: 0
-                    blurMax: 64
-                }
-
-                // Spread dilates glyphs like the exporter's stamp pass.
-                TextGlyphs {
-                    anchors.fill: parent
-                    visible: Number((modelData ?? {}).spread || 0) > 0
-                    text: shape.textContent
-                    color: String((modelData ?? {}).color ?? "#cc00ffff")
-                    family: shape.fontFamily
-                    weight: shape.fontWeight
-                    size: shape.fontSize
-                    spacingPct: shape.letterSpacing
-                    halign: shape.hAlign
-                    valign: shape.vAlign
-                    wrap: !shape.autoSize
-                    autoLeading: shape.lineHeightAuto
-                    leading: shape.lineHeight
-                    transform: Scale {
-                        xScale: (shape.sw + 2 * Number((modelData ?? {}).spread || 0)) / Math.max(1, shape.sw)
-                        yScale: (shape.sh + 2 * Number((modelData ?? {}).spread || 0)) / Math.max(1, shape.sh)
-                        origin.x: shape.sw / 2
-                        origin.y: shape.sh / 2
-                    }
-                }
-
-                TextGlyphs {
-                    anchors.fill: parent
-                    text: shape.textContent
-                    color: String((modelData ?? {}).color ?? "#cc00ffff")
-                    family: shape.fontFamily
-                    weight: shape.fontWeight
-                    size: shape.fontSize
-                    spacingPct: shape.letterSpacing
-                    halign: shape.hAlign
-                    valign: shape.vAlign
-                    wrap: !shape.autoSize
-                    autoLeading: shape.lineHeightAuto
-                    leading: shape.lineHeight
-                }
+            x: -effectText.pad
+            y: -effectText.pad
+            width: shape.sw + effectText.pad * 2
+            height: shape.sh + effectText.pad * 2
+            visible: shape.useTextEffectPaint
+            opacity: 1
+            shapeType: "text"
+            boxW: shape.sw
+            boxH: shape.sh
+            fill: shape.fill
+            fillType: shape.fillType
+            fillGradient: shape.fillGradient ?? ({
+                    "angle": 90,
+                    "stops": [
+                        {
+                            "color": "#000000",
+                            "pos": 0
+                        },
+                        {
+                            "color": "#ffffff",
+                            "pos": 1
+                        }
+                    ]
+                })
+            stroke: shape.strokeColor
+            strokeWidth: shape.strokeWidth > 0 ? 1 : 0
+            shadows: shape.shadows ?? []
+            glows: shape.glows ?? []
+            layerBlur: shape.layerBlur ?? ({
+                    "enabled": false,
+                    "radius": 0,
+                    "opacity": 1
+                })
+            textStyle: ({
+                    "content": shape.textContent,
+                    "family": shape.fontFamily,
+                    "weight": shape.fontWeight,
+                    "size": shape.fontSize,
+                    "spacing": shape.letterSpacing,
+                    "halign": shape.hAlign,
+                    "valign": shape.vAlign,
+                    "autoSize": shape.autoSize,
+                    "lineAuto": shape.lineHeightAuto,
+                    "leading": shape.lineHeight,
+                    "boxW": shape.sw,
+                    "boxH": shape.sh,
+                    "outlinePx": shape.strokeWidth > 0 ? 1 : 0
+                })
+            transform: Scale {
+                xScale: shape.flipH ? -1 : 1
+                yScale: shape.flipV ? -1 : 1
+                origin.x: effectText.pad + shape.sw / 2
+                origin.y: effectText.pad + shape.sh / 2
             }
         }
 
@@ -426,6 +426,7 @@ Item {
             id: glyphs
 
             anchors.fill: parent
+            visible: !shape.useTextEffectPaint
             text: shape.textContent
             color: shape.fill
             style: shape.strokeWidth > 0 ? Text.Outline : Text.Normal
