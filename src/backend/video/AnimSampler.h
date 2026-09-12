@@ -41,8 +41,12 @@ PathSample samplePath(const QVariantList &pts, bool closed, double e);
 
 // Color. parseHex accepts #rgb/#rrggbb (case-insensitive). lerpColor
 // interpolates in sRGB and returns {} when either endpoint is invalid.
+// parseHexA/lerpColorA additionally accept #aarrggbb and interpolate
+// alpha, returning #aarrggbb only when the result is translucent.
 bool parseHex(const QString &hex, int &r, int &g, int &b);
 QString lerpColor(const QString &from, const QString &to, double t);
+bool parseHexA(const QString &hex, int &a, int &r, int &g, int &b);
+QString lerpColorA(const QString &from, const QString &to, double t);
 
 // Single-clip overlay for one leaf (mirrors DocAnimSample.presetOverlay).
 // base: captureBase row for the leaf. cx/cy: target bounds center in scene

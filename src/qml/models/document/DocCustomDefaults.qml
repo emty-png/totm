@@ -24,6 +24,44 @@ QtObject {
                 to: "#ff0000"
             };
         }
+        if (presetId === "customGradient" && leaf) {
+            var fg = leaf.fillGradient ?? {};
+            var fstops = fg.stops ?? [];
+            var fc1 = fstops.length > 0 ? String(fstops[0].color) : String(leaf.fill || "#000000");
+            var fc2 = fstops.length > 1 ? String(fstops[1].color) : "#ffffff";
+            var fang = Number(fg.angle);
+            if (isNaN(fang))
+                fang = 90;
+            return {
+                fromC1: fc1,
+                toC1: fc1,
+                fromC2: fc2,
+                toC2: "#ff0000",
+                fromAngle: Math.round(fang * 100) / 100,
+                toAngle: Math.round(fang * 100) / 100
+            };
+        }
+        if (presetId === "customShadow" && leaf) {
+            var sh = leaf.shadow ?? {};
+            var fx = Number(sh.x) || 0;
+            var fy = sh.y !== undefined ? (Number(sh.y) || 0) : 4;
+            var fb = sh.blur !== undefined ? Math.max(0, Number(sh.blur) || 0) : 8;
+            var fs = sh.spread !== undefined ? Math.max(0, Number(sh.spread) || 0) : 0;
+            return {
+                fromColor: String(sh.color || "#80000000"),
+                toColor: String(sh.color || "#80000000"),
+                fromX: Math.round(fx * 100) / 100,
+                toX: Math.round(fx * 100) / 100,
+                fromY: Math.round(fy * 100) / 100,
+                toY: Math.round(Math.min(500, fy + 8) * 100) / 100,
+                fromBlur: Math.round(fb * 100) / 100,
+                toBlur: Math.round(Math.min(100, fb + 8) * 100) / 100,
+                fromSpread: Math.round(fs * 100) / 100,
+                toSpread: Math.round(fs * 100) / 100,
+                fromInner: sh.inner === true,
+                toInner: sh.inner === true
+            };
+        }
         if (presetId === "customResize" && leaf) {
             var fw = Math.max(1, Math.round(Number(leaf.w) || 100));
             var fh = Math.max(1, Math.round(Number(leaf.h) || 100));

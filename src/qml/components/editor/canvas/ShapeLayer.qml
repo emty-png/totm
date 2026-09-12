@@ -89,8 +89,13 @@ Item {
             sh: modelData.h
             shapeRotation: modelData.rotation
             fill: modelData.fill
+            fillType: modelData.fillType ?? "solid"
+            fillGradient: modelData.fillGradient
             strokeColor: modelData.stroke
+            strokeType: modelData.strokeType ?? "solid"
+            strokeGradient: modelData.strokeGradient
             strokeWidth: modelData.strokeWidth
+            shadow: modelData.shadow
             shapeOpacity: modelData.opacity
             radius: modelData.radius
             independentCorners: modelData.independentCorners === true

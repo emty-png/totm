@@ -197,6 +197,50 @@ QString lerpColor(const QString &from, const QString &to, double t) {
     return QLatin1Char('#') + hx(ar + (br - ar) * k) + hx(ag + (bg - ag) * k) + hx(ab + (bb - ab) * k);
 }
 
+bool parseHexA(const QString &hex, int &a, int &r, int &g, int &b)
+{
+    QString t = hex.trimmed().toLower();
+    if (t.startsWith(QLatin1Char('#')))
+        t = t.mid(1);
+    if (t.size() == 3)
+        t = QString() + t[0] + t[0] + t[1] + t[1] + t[2] + t[2];
+    bool ok = false;
+    if (t.size() == 8) {
+        a = t.mid(0, 2).toInt(&ok, 16);
+        if (!ok)
+            return false;
+        t = t.mid(2);
+    } else if (t.size() == 6) {
+        a = 255;
+    } else {
+        return false;
+    }
+    r = t.mid(0, 2).toInt(&ok, 16);
+    if (!ok)
+        return false;
+    g = t.mid(2, 2).toInt(&ok, 16);
+    if (!ok)
+        return false;
+    b = t.mid(4, 2).toInt(&ok, 16);
+    return ok;
+}
+
+QString lerpColorA(const QString &from, const QString &to, double t)
+{
+    int aa, ar, ag, ab, ba, br, bg, bb;
+    if (!parseHexA(from, aa, ar, ag, ab) || !parseHexA(to, ba, br, bg, bb))
+        return {};
+    const auto hx = [](double v) {
+        return QString::number(qBound(0, qRound(v), 255), 16).rightJustified(2, QLatin1Char('0'));
+    };
+    const double k = qBound(0.0, t, 1.0);
+    const int a = qBound(0, qRound(aa + (ba - aa) * k), 255);
+    QString out = QStringLiteral("#");
+    if (a < 255)
+        out += hx(a);
+    return out + hx(ar + (br - ar) * k) + hx(ag + (bg - ag) * k) + hx(ab + (bb - ab) * k);
+}
+
 namespace {
 QPointF slideVec(const QString &direction) {
     if (direction == QLatin1String("right"))
@@ -302,6 +346,44 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         out[QStringLiteral("radius")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
     } else if (preset == QLatin1String("customStroke")) {
         out[QStringLiteral("strokeWidth")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+    } else if (preset == QLatin1String("customGradient")) {
+        // Fill gradient from-to: stop colors lerp in sRGB, angle lerps
+        // linearly. Mirrors DocAnimSample (which also flips fillType).
+        const QString c1 = lerpColor(str(o, "fromC1", QStringLiteral("#000000")),
+            str(o, "toC1", QStringLiteral("#000000")), e);
+        const QString c2 = lerpColor(str(o, "fromC2", QStringLiteral("#ffffff")),
+            str(o, "toC2", QStringLiteral("#ffffff")), e);
+        if (!c1.isEmpty() && !c2.isEmpty()) {
+            const double ang = num(o, "fromAngle") + (num(o, "toAngle") - num(o, "fromAngle")) * e;
+            QVariantMap grad;
+            grad[QStringLiteral("angle")] = ang;
+            QVariantList stops;
+            QVariantMap s1;
+            s1[QStringLiteral("color")] = c1;
+            s1[QStringLiteral("pos")] = 0.0;
+            QVariantMap s2;
+            s2[QStringLiteral("color")] = c2;
+            s2[QStringLiteral("pos")] = 1.0;
+            stops << s1 << s2;
+            grad[QStringLiteral("stops")] = stops;
+            out[QStringLiteral("fillGradient")] = grad;
+            out[QStringLiteral("fillType")] = QStringLiteral("linear");
+        }
+    } else if (preset == QLatin1String("customShadow")) {
+        const QString c = lerpColorA(str(o, "fromColor", QStringLiteral("#000000")),
+            str(o, "toColor", QStringLiteral("#000000")), e);
+        if (!c.isEmpty()) {
+            QVariantMap sh;
+            sh[QStringLiteral("enabled")] = true;
+            // Stepped like customHide (mirrors DocAnimSample).
+            sh[QStringLiteral("inner")] = e < 0.5 ? o.value(QStringLiteral("fromInner")).toBool() : o.value(QStringLiteral("toInner")).toBool();
+            sh[QStringLiteral("color")] = c;
+            sh[QStringLiteral("x")] = num(o, "fromX") + (num(o, "toX") - num(o, "fromX")) * e;
+            sh[QStringLiteral("y")] = num(o, "fromY") + (num(o, "toY") - num(o, "fromY")) * e;
+            sh[QStringLiteral("blur")] = qMax(0.0, num(o, "fromBlur") + (num(o, "toBlur") - num(o, "fromBlur")) * e);
+            sh[QStringLiteral("spread")] = qMax(0.0, num(o, "fromSpread") + (num(o, "toSpread") - num(o, "fromSpread")) * e);
+            out[QStringLiteral("shadow")] = sh;
+        }
     } else if (preset == QLatin1String("customPath")) {
         const PathSample s = samplePath(o.value(QStringLiteral("pts")).toList(), o.value(QStringLiteral("closed")).toBool(), e);
         if (s.valid) {
@@ -349,6 +431,9 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
         b[QStringLiteral("fontSize")] = num(m, "fontSize", 16.0);
         b[QStringLiteral("shapeType")] = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
         b[QStringLiteral("fill")] = str(m, "fill", QStringLiteral("#d9d9d9"));
+        b[QStringLiteral("fillType")] = str(m, "fillType", QStringLiteral("solid"));
+        b[QStringLiteral("fillGradient")] = m.value(QStringLiteral("fillGradient")).toMap();
+        b[QStringLiteral("shadow")] = m.value(QStringLiteral("shadow")).toMap();
         b[QStringLiteral("visible")] = m.value(QStringLiteral("visible"), true).toBool();
         b[QStringLiteral("radius")] = num(m, "radius");
         b[QStringLiteral("strokeWidth")] = num(m, "strokeWidth");
@@ -527,6 +612,7 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
             }
         }
         for (const QString &k : {QStringLiteral("rotation"), QStringLiteral("opacity"), QStringLiteral("fill"),
+                 QStringLiteral("fillType"), QStringLiteral("fillGradient"), QStringLiteral("shadow"),
                  QStringLiteral("visible"), QStringLiteral("radius"), QStringLiteral("strokeWidth")}) {
             if (ov.contains(k))
                 m[k] = ov.value(k);

@@ -34,8 +34,13 @@ QtObject {
             h: node.h,
             rotation: node.rotation,
             fill: String(node.fill),
+            fillType: node.fillType ?? "solid",
+            fillGradient: doc.factory._copyGradient(node.fillGradient),
             stroke: String(node.stroke),
+            strokeType: node.strokeType ?? "solid",
+            strokeGradient: doc.factory._copyGradient(node.strokeGradient),
             strokeWidth: node.strokeWidth,
+            shadow: doc.factory._copyShadow(node.shadow),
             opacity: node.opacity,
             radius: node.radius,
             independentCorners: node.independentCorners === true,
@@ -276,6 +281,18 @@ QtObject {
         // never gain stray keys in saved scenes.
         if (snap.fontSize !== undefined && b.fontSize !== undefined)
             snap.fontSize = b.fontSize;
+        // Gradient/shadow animate in custom clips: rebase from base when
+        // present so saves capture the document, never the frame.
+        if (snap.fillType !== undefined && b.fillType !== undefined)
+            snap.fillType = b.fillType;
+        if (snap.fillGradient !== undefined && b.fillGradient !== undefined)
+            snap.fillGradient = doc.factory._copyGradient(b.fillGradient);
+        if (snap.strokeType !== undefined && b.strokeType !== undefined)
+            snap.strokeType = b.strokeType;
+        if (snap.strokeGradient !== undefined && b.strokeGradient !== undefined)
+            snap.strokeGradient = doc.factory._copyGradient(b.strokeGradient);
+        if (snap.shadow !== undefined && b.shadow !== undefined)
+            snap.shadow = doc.factory._copyShadow(b.shadow);
     }
 
     // Replace the whole tree with a stored scene. Old nodes are

@@ -107,6 +107,9 @@ QtObject {
                 fontSize: n.fontSize,
                 shapeType: n.shapeType,
                 fill: String(n.fill),
+                fillType: n.fillType ?? "solid",
+                fillGradient: doc.factory._copyGradient(n.fillGradient),
+                shadow: doc.factory._copyShadow(n.shadow),
                 visible: n.visible,
                 radius: n.radius,
                 strokeWidth: n.strokeWidth,
@@ -141,6 +144,12 @@ QtObject {
             n.opacity = b.opacity;
             if (b.fill !== undefined)
                 n.fill = b.fill;
+            if (b.fillType !== undefined)
+                n.fillType = b.fillType;
+            if (b.fillGradient !== undefined)
+                n.fillGradient = doc.factory._copyGradient(b.fillGradient);
+            if (b.shadow !== undefined)
+                n.shadow = doc.factory._copyShadow(b.shadow);
             if (b.visible !== undefined)
                 n.visible = b.visible;
             if (b.radius !== undefined)

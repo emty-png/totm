@@ -30,8 +30,13 @@ Item {
     property real sh: 10
     property real shapeRotation: 0
     property color fill: "#d9d9d9"
+    property string fillType: "solid"
+    property var fillGradient: null
     property color strokeColor: "#000000"
+    property string strokeType: "solid"
+    property var strokeGradient: null
     property real strokeWidth: 0
+    property var shadow: null
     property real shapeOpacity: 1
     property real radius: 0
     property bool independentCorners: false
@@ -85,6 +90,14 @@ Item {
     // renderer).
     readonly property var geometry: ShapeGeometry {}
 
+    // CPU paint path for effects the stock items cannot express
+    // (ShapePath has fillGradient only, Rectangle borders stay solid,
+    // MultiEffect has no spread). Vector shapes only; text and images
+    // keep their native branches and ignore gradient/shadow data.
+    readonly property bool isVectorPaint: shape.shapeType === "rectangle" || shape.shapeType === "ellipse" || shape.shapeType === "triangle" || shape.shapeType === "star" || shape.shapeType === "pen"
+    readonly property bool hasShadow: shape.shadow !== null && shape.shadow !== undefined && shape.shadow.enabled === true
+    readonly property bool useEffectPaint: shape.isVectorPaint && (shape.fillType === "linear" || shape.strokeType === "linear" || shape.hasShadow)
+
     x: shape.sx
     y: shape.sy
     width: shape.sw
@@ -99,7 +112,7 @@ Item {
     // root rotation; geometry, outline and hit area keep the bbox.
     Rectangle {
         anchors.fill: parent
-        visible: shape.shapeType === "rectangle" && !shape.independentCorners
+        visible: shape.shapeType === "rectangle" && !shape.independentCorners && !shape.useEffectPaint
         color: shape.fill
         radius: shape.radius
         border.width: shape.strokeWidth
@@ -113,12 +126,75 @@ Item {
         }
     }
 
+    // Effected vectors via the shared CPU painter (same code export
+    // will call, so preview matches video). The item pads itself by
+    // shadow spread/blur/offset so nothing clips; the shape paints at
+    // (pad,pad). Flip mirrors about the shape center like above.
+    EffectItem {
+        id: effectPaint
+
+        x: -effectPaint.pad
+        y: -effectPaint.pad
+        width: shape.sw + effectPaint.pad * 2
+        height: shape.sh + effectPaint.pad * 2
+        visible: shape.useEffectPaint
+        opacity: shape.shapeOpacity
+        shapeType: shape.shapeType
+        boxW: shape.sw
+        boxH: shape.sh
+        radius: shape.radius
+        independentCorners: shape.independentCorners
+        cornerRadii: shape.cornerRadii
+        points: shape.points
+        pathData: shape.pathData
+        nodeX: shape.sx
+        nodeY: shape.sy
+        fill: shape.fill
+        fillType: shape.fillType
+        fillGradient: shape.fillGradient ?? ({
+                "angle": 90,
+                "stops": [
+                    {
+                        "color": "#000000",
+                        "pos": 0
+                    },
+                    {
+                        "color": "#ffffff",
+                        "pos": 1
+                    }
+                ]
+            })
+        stroke: shape.strokeColor
+        strokeType: shape.strokeType
+        strokeGradient: shape.strokeGradient ?? ({
+                "angle": 90,
+                "stops": [
+                    {
+                        "color": "#000000",
+                        "pos": 0
+                    },
+                    {
+                        "color": "#ffffff",
+                        "pos": 1
+                    }
+                ]
+            })
+        strokeWidth: shape.strokeWidth
+        shadow: shape.shadow
+        transform: Scale {
+            xScale: shape.flipH ? -1 : 1
+            yScale: shape.flipV ? -1 : 1
+            origin.x: effectPaint.pad + shape.sw / 2
+            origin.y: effectPaint.pad + shape.sh / 2
+        }
+    }
+
     // Other types: stroked/filled vector path with round joins.
     // Independent rectangles join them so every corner keeps its own cut.
     // Images paint separately below, so they never reach the vector path.
     Shape {
         anchors.fill: parent
-        visible: (shape.shapeType !== "rectangle" && shape.shapeType !== "text" && shape.shapeType !== "image") || (shape.shapeType === "rectangle" && shape.independentCorners)
+        visible: ((shape.shapeType !== "rectangle" && shape.shapeType !== "text" && shape.shapeType !== "image") || (shape.shapeType === "rectangle" && shape.independentCorners)) && !shape.useEffectPaint
         antialiasing: true
         opacity: shape.shapeOpacity
         transform: Scale {
