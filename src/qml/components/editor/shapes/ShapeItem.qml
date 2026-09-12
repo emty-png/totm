@@ -36,7 +36,18 @@ Item {
     property string strokeType: "solid"
     property var strokeGradient: null
     property real strokeWidth: 0
-    property var shadow: null
+    property var shadows: []
+    property var layerBlur: null
+    property var backgroundBlur: null
+    property var glows: []
+    property var grain: null
+    property var backdropItem: null
+    // Frame number for animated grain (floor(seconds * 60), shared with
+    // the exporter so the shimmer matches; static while paused).
+    property int grainFrame: 0
+    // True inside the hidden backdrop duplicate: blurred shapes hide
+    // so frosted panels sample only content behind them.
+    property bool isBackdropCapture: false
     property real shapeOpacity: 1
     property real radius: 0
     property bool independentCorners: false
@@ -92,11 +103,23 @@ Item {
 
     // CPU paint path for effects the stock items cannot express
     // (ShapePath has fillGradient only, Rectangle borders stay solid,
-    // MultiEffect has no spread). Vector shapes only; text and images
-    // keep their native branches and ignore gradient/shadow data.
+    // MultiEffect has no spread). Vectors stack shadows and glows here;
+    // text and images stack glows in their native branches (shadows
+    // stay vector-only, like export).
     readonly property bool isVectorPaint: shape.shapeType === "rectangle" || shape.shapeType === "ellipse" || shape.shapeType === "triangle" || shape.shapeType === "star" || shape.shapeType === "pen"
-    readonly property bool hasShadow: shape.shadow !== null && shape.shadow !== undefined && shape.shadow.enabled === true
-    readonly property bool useEffectPaint: shape.isVectorPaint && (shape.fillType === "linear" || shape.strokeType === "linear" || shape.hasShadow)
+    readonly property var enabledShadows: (shape.shadows || []).filter(s => s && s.enabled !== false)
+    readonly property bool hasShadow: shape.enabledShadows.length > 0
+    readonly property bool hasLayerBlur: shape.layerBlur !== null && shape.layerBlur !== undefined && shape.layerBlur.enabled === true && Number(shape.layerBlur.radius) > 0
+    readonly property bool hasBackgroundBlur: shape.backgroundBlur !== null && shape.backgroundBlur !== undefined && shape.backgroundBlur.enabled === true && Number(shape.backgroundBlur.radius) > 0 && shape.shapeType !== "text"
+    readonly property var enabledGlows: (shape.glows || []).filter(g => g && g.enabled !== false)
+    // Inner has no glyph path: text renders every glow outer (same
+    // rule as the video exporter, so preview matches export).
+    readonly property var outerGlows: shape.shapeType === "text" ? shape.enabledGlows : shape.enabledGlows.filter(g => g.inner !== true)
+    readonly property var innerGlows: shape.shapeType === "text" ? [] : shape.enabledGlows.filter(g => g.inner === true)
+    readonly property bool hasGlow: shape.enabledGlows.length > 0
+    readonly property bool hasGrain: shape.grain !== null && shape.grain !== undefined && shape.grain.enabled === true && Number((shape.grain ?? {}).amount || 0) > 0
+    readonly property bool textGlowOuter: shape.hasGlow && shape.shapeType === "text"
+    readonly property bool useEffectPaint: shape.isVectorPaint && (shape.fillType === "linear" || shape.strokeType === "linear" || shape.hasShadow || shape.hasLayerBlur || shape.hasGlow)
 
     x: shape.sx
     y: shape.sy
@@ -105,7 +128,7 @@ Item {
     z: shape.paintDepth
     rotation: shape.shapeRotation
     transformOrigin: Item.Center
-    visible: shape.shapeVisible
+    visible: shape.shapeVisible && !(shape.isBackdropCapture && shape.hasBackgroundBlur)
 
     // Rectangle: native item (radius + stroke border built in).
     // Flip mirrors paint about the center in local space, under the
@@ -147,8 +170,11 @@ Item {
         cornerRadii: shape.cornerRadii
         points: shape.points
         pathData: shape.pathData
-        nodeX: shape.sx
-        nodeY: shape.sy
+        // Node origin feeds pen paths only (absolute coords resolve
+        // against it); other kinds ignore it in paint, so moves skip
+        // the CPU repaint entirely and ride the parent transform.
+        nodeX: shape.shapeType === "pen" ? shape.sx : 0
+        nodeY: shape.shapeType === "pen" ? shape.sy : 0
         fill: shape.fill
         fillType: shape.fillType
         fillGradient: shape.fillGradient ?? ({
@@ -180,12 +206,116 @@ Item {
                 ]
             })
         strokeWidth: shape.strokeWidth
-        shadow: shape.shadow
+        shadows: shape.shadows ?? []
+        glows: shape.glows ?? []
+        layerBlur: shape.layerBlur ?? ({
+                "enabled": false,
+                "radius": 0,
+                "opacity": 1
+            })
+        backgroundBlur: shape.backgroundBlur ?? ({
+                "enabled": false,
+                "radius": 0,
+                "opacity": 0.7
+            })
         transform: Scale {
             xScale: shape.flipH ? -1 : 1
             yScale: shape.flipV ? -1 : 1
             origin.x: effectPaint.pad + shape.sw / 2
             origin.y: effectPaint.pad + shape.sh / 2
+        }
+    }
+
+    // Background blur (frosted glass): a scene-sized rig samples the
+    // backdrop sibling layer directly and blurs it, clipped to this
+    // shape's bbox; a silhouette mask applies only where corners or
+    // curves actually cut (plain sharp rects need none). The live scene
+    // underneath supplies the sharp half of the opacity mix, so one
+    // tile suffices. Export repeats the same values on the CPU. Only
+    // visible with a translucent fill over content behind the shape.
+    Item {
+        id: backdropRoot
+
+        anchors.fill: parent
+        z: -1
+        visible: shape.hasBackgroundBlur && shape.backdropItem !== null && !shape.isBackdropCapture
+        clip: true
+        // Leaf opacity applies to the fill above, never the backdrop
+        // (matches the exporter, which resets opacity for the tile).
+        opacity: 1
+
+        readonly property real sceneW: shape.backdropItem && shape.backdropItem.doc ? Number(shape.backdropItem.doc.sceneWidth) || 1920 : 1920
+        readonly property real sceneH: shape.backdropItem && shape.backdropItem.doc ? Number(shape.backdropItem.doc.sceneHeight) || 1080 : 1080
+        readonly property bool plainRect: shape.shapeType === "rectangle" && !shape.independentCorners
+        readonly property bool needsMask: !((backdropRoot.plainRect || shape.shapeType === "image") && !(Number(shape.radius) > 0))
+
+        // Scene-sized rig, offset so scene coords register under the shape.
+        Item {
+            id: blurRig
+
+            x: -shape.sx
+            y: -shape.sy
+            width: backdropRoot.sceneW
+            height: backdropRoot.sceneH
+
+            MultiEffect {
+                anchors.fill: parent
+                source: shape.backdropItem
+                autoPaddingEnabled: false
+                blurEnabled: true
+                blurMax: 64
+                blur: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).radius || 0) * shape.zoom / 64))
+                opacity: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).opacity ?? 0.7)))
+                maskEnabled: backdropRoot.needsMask
+                maskSource: rigMask
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
+            }
+
+            // White silhouette at the shape position (mask space is the
+            // rig). Mirrors the fill flip so asymmetric paths register.
+            Item {
+                id: rigMask
+
+                anchors.fill: parent
+                visible: false
+                layer.enabled: true
+                layer.smooth: true
+
+                Item {
+                    x: shape.sx
+                    y: shape.sy
+                    width: Math.max(1, shape.sw)
+                    height: Math.max(1, shape.sh)
+
+                    transform: Scale {
+                        xScale: shape.flipH ? -1 : 1
+                        yScale: shape.flipV ? -1 : 1
+                        origin.x: shape.sw / 2
+                        origin.y: shape.sh / 2
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: backdropRoot.plainRect || shape.shapeType === "image"
+                        radius: shape.shapeType === "image" ? Math.max(0, shape.radius) : Math.min(shape.radius, Math.min(shape.sw, shape.sh) / 2)
+                        color: "white"
+                    }
+
+                    Shape {
+                        anchors.fill: parent
+                        visible: !(backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "text")
+                        antialiasing: true
+                        ShapePath {
+                            fillColor: "white"
+                            strokeColor: "transparent"
+                            PathSvg {
+                                path: shape.geometry.vectorPath(shape)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -217,8 +347,9 @@ Item {
 
     // Text: fill paints the glyphs; stroke is a native 1px outline
     // (Text has no outline-width API, so the width field only toggles
-    // it on/off for text). Fixed boxes wrap, auto-size boxes grow (the
-    // canvas writes measured sizes back).
+    // it on/off for text). Each glow rides a zero-offset GPU shadow
+    // (glyph-shaped halo like export's ghost pass); inner stays outer
+    // for text everywhere, so there is no silent fallback to chase.
     Item {
         id: textRoot
 
@@ -230,6 +361,65 @@ Item {
             yScale: shape.flipV ? -1 : 1
             origin.x: shape.sw / 2
             origin.y: shape.sh / 2
+        }
+
+        // Stacked outer glows behind the fill, bottom-first so index 0
+        // paints topmost (closest to the glyphs).
+        Repeater {
+            model: shape.textGlowOuter ? shape.outerGlows.slice().reverse() : []
+
+            Item {
+                anchors.fill: parent
+                layer.enabled: true
+                layer.smooth: true
+                layer.effect: MultiEffect {
+                    shadowEnabled: true
+                    shadowColor: String((modelData ?? {}).color ?? "#cc00ffff")
+                    shadowOpacity: 1
+                    shadowBlur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) * shape.zoom / 64))
+                    shadowHorizontalOffset: 0
+                    shadowVerticalOffset: 0
+                    blurMax: 64
+                }
+
+                // Spread dilates glyphs like the exporter's stamp pass.
+                TextGlyphs {
+                    anchors.fill: parent
+                    visible: Number((modelData ?? {}).spread || 0) > 0
+                    text: shape.textContent
+                    color: String((modelData ?? {}).color ?? "#cc00ffff")
+                    family: shape.fontFamily
+                    weight: shape.fontWeight
+                    size: shape.fontSize
+                    spacingPct: shape.letterSpacing
+                    halign: shape.hAlign
+                    valign: shape.vAlign
+                    wrap: !shape.autoSize
+                    autoLeading: shape.lineHeightAuto
+                    leading: shape.lineHeight
+                    transform: Scale {
+                        xScale: (shape.sw + 2 * Number((modelData ?? {}).spread || 0)) / Math.max(1, shape.sw)
+                        yScale: (shape.sh + 2 * Number((modelData ?? {}).spread || 0)) / Math.max(1, shape.sh)
+                        origin.x: shape.sw / 2
+                        origin.y: shape.sh / 2
+                    }
+                }
+
+                TextGlyphs {
+                    anchors.fill: parent
+                    text: shape.textContent
+                    color: String((modelData ?? {}).color ?? "#cc00ffff")
+                    family: shape.fontFamily
+                    weight: shape.fontWeight
+                    size: shape.fontSize
+                    spacingPct: shape.letterSpacing
+                    halign: shape.hAlign
+                    valign: shape.vAlign
+                    wrap: !shape.autoSize
+                    autoLeading: shape.lineHeightAuto
+                    leading: shape.lineHeight
+                }
+            }
         }
 
         TextGlyphs {
@@ -250,6 +440,40 @@ Item {
             autoLeading: shape.lineHeightAuto
             leading: shape.lineHeight
             onContentSizeChanged: shape.reportMeasure()
+        }
+    }
+
+    // Film grain confined to the glyphs: a white ghost copy masks the
+    // tile (no outline, like the export ghost). Hidden while editing.
+    GrainOverlay {
+        anchors.fill: parent
+        visible: shape.hasGrain && shape.shapeType === "text" && !shape.editing
+        opacity: shape.shapeOpacity
+        uid: shape.uid
+        frameNo: shape.grainFrame
+        amount: Number((shape.grain ?? {}).amount ?? 0.5)
+        grainSize: Number((shape.grain ?? {}).size ?? 2)
+        maskKind: "custom"
+        transform: Scale {
+            xScale: shape.flipH ? -1 : 1
+            yScale: shape.flipV ? -1 : 1
+            origin.x: shape.sw / 2
+            origin.y: shape.sh / 2
+        }
+
+        TextGlyphs {
+            anchors.fill: parent
+            text: shape.textContent
+            color: "white"
+            family: shape.fontFamily
+            weight: shape.fontWeight
+            size: shape.fontSize
+            spacingPct: shape.letterSpacing
+            halign: shape.hAlign
+            valign: shape.vAlign
+            wrap: !shape.autoSize
+            autoLeading: shape.lineHeightAuto
+            leading: shape.lineHeight
         }
     }
 
@@ -284,6 +508,27 @@ Item {
             visible: shape.shapeType === "image" && imageObj.status !== Image.Ready
         }
 
+        // Outer glows: grown silhouettes in glow colors, blurred behind
+        // the pixels (spread grows the rect like the stroker dilate).
+        // Bottom-first so index 0 paints topmost.
+        Repeater {
+            model: shape.shapeType === "image" ? shape.outerGlows.slice().reverse() : []
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: -Number((modelData ?? {}).spread || 0)
+                radius: Math.max(0, shape.radius) + Number((modelData ?? {}).spread || 0)
+                color: String((modelData ?? {}).color ?? "#cc00ffff")
+                layer.enabled: true
+                layer.smooth: true
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: 64
+                    blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) * shape.zoom / 64))
+                }
+            }
+        }
+
         Image {
             id: imageObj
 
@@ -295,13 +540,42 @@ Item {
             smooth: true
             mipmap: true
             visible: status === Image.Ready
-            layer.enabled: status === Image.Ready && shape.radius > 0
+            layer.enabled: status === Image.Ready && (shape.radius > 0 || shape.hasLayerBlur)
             layer.smooth: true
             layer.effect: MultiEffect {
-                maskEnabled: true
+                maskEnabled: shape.radius > 0
                 maskSource: maskRect
                 maskThresholdMin: 0.5
                 maskSpreadAtMin: 1.0
+                blurEnabled: shape.hasLayerBlur
+                blurMax: 64
+                blur: shape.hasLayerBlur ? Math.min(1, Math.max(0, Number((shape.layerBlur ?? {}).radius || 0) / 64)) : 0
+            }
+            // Opacity mix for layer blur: sharp base stays, blurred copy
+            // fades over it (export mixes the same values on the CPU).
+            opacity: shape.hasLayerBlur ? 1 - Number((shape.layerBlur ?? {}).opacity ?? 1) : 1
+        }
+
+        Image {
+            anchors.fill: parent
+            visible: imageObj.status === Image.Ready && shape.hasLayerBlur
+            source: imageObj.source
+            fillMode: Image.Stretch
+            asynchronous: true
+            cache: true
+            smooth: true
+            mipmap: true
+            opacity: Number((shape.layerBlur ?? {}).opacity ?? 1)
+            layer.enabled: true
+            layer.smooth: true
+            layer.effect: MultiEffect {
+                maskEnabled: shape.radius > 0
+                maskSource: maskRect
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
+                blurEnabled: true
+                blurMax: 64
+                blur: Math.min(1, Math.max(0, Number((shape.layerBlur ?? {}).radius || 0) / 64))
             }
         }
 
@@ -316,12 +590,83 @@ Item {
             layer.smooth: true
         }
 
+        // Inner glows: glow washes over the pixels, each cut by its own
+        // blurred inset silhouette (inverted mask) into an edge band.
+        Repeater {
+            model: shape.shapeType === "image" ? shape.innerGlows.slice().reverse() : []
+
+            Item {
+                anchors.fill: parent
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Math.max(0, shape.radius)
+                    color: String((modelData ?? {}).color ?? "#cc00ffff")
+                    layer.enabled: true
+                    layer.smooth: true
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: erode
+                        maskInverted: true
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 1.0
+                    }
+                }
+
+                Item {
+                    id: erode
+
+                    anchors.fill: parent
+                    visible: false
+                    layer.enabled: true
+                    layer.smooth: true
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: Number((modelData ?? {}).spread || 0)
+                        radius: Math.max(0, Math.max(0, shape.radius) - Number((modelData ?? {}).spread || 0))
+                        color: "white"
+                        layer.enabled: true
+                        layer.smooth: true
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blurMax: 64
+                            blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) * shape.zoom / 64))
+                        }
+                    }
+                }
+            }
+        }
+
         Rectangle {
             anchors.fill: parent
             radius: Math.max(0, shape.radius)
             color: "transparent"
             border.width: shape.strokeWidth
             border.color: shape.strokeWidth > 0 ? shape.strokeColor : "transparent"
+        }
+    }
+
+    // Animated film grain over vectors and images (text confines to its
+    // glyphs just below). Seed reseeds every transport frame; amount
+    // scales dot alpha like the exporter.
+    GrainOverlay {
+        anchors.fill: parent
+        visible: shape.hasGrain && shape.shapeType !== "text"
+        opacity: shape.shapeOpacity
+        uid: shape.uid
+        frameNo: shape.grainFrame
+        amount: Number((shape.grain ?? {}).amount ?? 0.5)
+        grainSize: Number((shape.grain ?? {}).size ?? 2)
+        maskKind: (shape.shapeType === "rectangle" && !shape.independentCorners) || shape.shapeType === "image" ? "rect" : "path"
+        maskRadius: shape.radius
+        maskPath: shape.geometry.vectorPath(shape)
+        maskStroke: shape.strokeWidth
+        transform: Scale {
+            xScale: shape.flipH ? -1 : 1
+            yScale: shape.flipV ? -1 : 1
+            origin.x: shape.sw / 2
+            origin.y: shape.sh / 2
         }
     }
 

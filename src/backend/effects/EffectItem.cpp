@@ -31,13 +31,20 @@ void EffectItem::paint(QPainter *painter)
     opts.pathData = m_pathData;
     opts.ox = m_nodeX;
     opts.oy = m_nodeY;
-    const Effects::Shadow sh = Effects::Shadow::fromMap(m_shadow);
-    Effects::paintLeaf(painter, m_shapeType, QRectF(m_pad, m_pad, m_boxW, m_boxH), opts, st, sh, 1.0);
+    const QList<Effects::Shadow> sh = Effects::Shadow::listFrom(m_shadows);
+    const Effects::Blur lb = Effects::Blur::fromMap(m_layerBlur);
+    const QList<Effects::Glow> gl = Effects::Glow::listFrom(m_glows);
+    // Stacked: outer shadows -> outer glows -> fill -> inners -> stroke,
+    // then layer-blur mixes the whole stack. Blurred rasters memoize in
+    // m_masks (same pixels, skipped recompute); export passes null.
+    Effects::paintLeaf(painter, m_shapeType, QRectF(m_pad, m_pad, m_boxW, m_boxH), opts, st, sh, gl, lb,
+        1.0, &m_masks);
 }
 
 void EffectItem::updatePad()
 {
-    const double next = Effects::shadowPad(Effects::Shadow::fromMap(m_shadow), m_strokeWidth);
+    const double next = Effects::effectPad(Effects::Shadow::listFrom(m_shadows),
+        Effects::Glow::listFrom(m_glows), Effects::Blur::fromMap(m_layerBlur), m_strokeWidth);
     if (qFuzzyCompare(m_pad, next))
         return;
     m_pad = next;
@@ -55,6 +62,7 @@ void EffectItem::setShapeType(const QString &v)
     if (m_shapeType == v)
         return;
     m_shapeType = v;
+    m_masks.clear();
     emit shapeChanged();
     update();
 }
@@ -69,6 +77,7 @@ void EffectItem::setBoxW(double v)
     if (qFuzzyCompare(m_boxW, v))
         return;
     m_boxW = v;
+    m_masks.clear();
     emit shapeChanged();
     update();
 }
@@ -83,6 +92,7 @@ void EffectItem::setBoxH(double v)
     if (qFuzzyCompare(m_boxH, v))
         return;
     m_boxH = v;
+    m_masks.clear();
     emit shapeChanged();
     update();
 }
@@ -97,6 +107,7 @@ void EffectItem::setRadius(double v)
     if (qFuzzyCompare(m_radius, v))
         return;
     m_radius = v;
+    m_masks.clear();
     emit shapeChanged();
     update();
 }
@@ -111,6 +122,7 @@ void EffectItem::setIndependentCorners(bool v)
     if (m_independentCorners == v)
         return;
     m_independentCorners = v;
+    m_masks.clear();
     emit shapeChanged();
     update();
 }
@@ -123,6 +135,7 @@ QVariantList EffectItem::cornerRadii() const
 void EffectItem::setCornerRadii(const QVariantList &v)
 {
     m_cornerRadii = v;
+    m_masks.clear();
     emit shapeChanged();
     update();
 }
@@ -137,6 +150,7 @@ void EffectItem::setPoints(int v)
     if (m_points == v)
         return;
     m_points = v;
+    m_masks.clear();
     emit shapeChanged();
     update();
 }
@@ -149,6 +163,7 @@ QVariantList EffectItem::pathData() const
 void EffectItem::setPathData(const QVariantList &v)
 {
     m_pathData = v;
+    m_masks.clear();
     emit shapeChanged();
     update();
 }
@@ -163,6 +178,11 @@ void EffectItem::setNodeX(double v)
     if (qFuzzyCompare(m_nodeX, v))
         return;
     m_nodeX = v;
+    // Pen paths resolve against the origin; every other kind ignores it
+    // in paint, so its moves ride the parent transform with no repaint.
+    if (m_shapeType != QStringLiteral("pen"))
+        return;
+    m_masks.clear();
     emit shapeChanged();
     update();
 }
@@ -177,6 +197,9 @@ void EffectItem::setNodeY(double v)
     if (qFuzzyCompare(m_nodeY, v))
         return;
     m_nodeY = v;
+    if (m_shapeType != QStringLiteral("pen"))
+        return;
+    m_masks.clear();
     emit shapeChanged();
     update();
 }
@@ -271,6 +294,9 @@ void EffectItem::setStrokeWidth(double v)
     if (qFuzzyCompare(m_strokeWidth, v))
         return;
     m_strokeWidth = v;
+    // Plain rects inset the stroke inside the bounds, so the silhouette
+    // moves with the width.
+    m_masks.clear();
     emit strokeChanged();
     updatePad();
     // updatePad only schedules when the pad itself changed; content
@@ -278,18 +304,59 @@ void EffectItem::setStrokeWidth(double v)
     update();
 }
 
-QVariantMap EffectItem::shadow() const
+QVariantList EffectItem::shadows() const
 {
-    return m_shadow;
+    return m_shadows;
 }
 
-void EffectItem::setShadow(const QVariantMap &v)
+void EffectItem::setShadows(const QVariantList &v)
 {
-    m_shadow = v;
+    m_shadows = v;
     emit shadowChanged();
     updatePad();
     // Same as setStrokeWidth: pad-equal changes (flipping inner/outer
     // or recoloring at fixed blur) must still repaint.
+    update();
+}
+
+QVariantMap EffectItem::layerBlur() const
+{
+    return m_layerBlur;
+}
+
+void EffectItem::setLayerBlur(const QVariantMap &v)
+{
+    m_layerBlur = v;
+    emit blurChanged();
+    updatePad();
+    update();
+}
+
+QVariantMap EffectItem::backgroundBlur() const
+{
+    return m_backgroundBlur;
+}
+
+void EffectItem::setBackgroundBlur(const QVariantMap &v)
+{
+    // Backdrop sampling lives in QML/export; stored here so pad and
+    // repaints stay in sync when the effect switches.
+    m_backgroundBlur = v;
+    emit blurChanged();
+    update();
+}
+
+QVariantList EffectItem::glows() const
+{
+    return m_glows;
+}
+
+void EffectItem::setGlows(const QVariantList &v)
+{
+    m_glows = v;
+    emit glowChanged();
+    updatePad();
+    // Pad-equal changes (recoloring at fixed blur) must still repaint.
     update();
 }
 

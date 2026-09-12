@@ -4,7 +4,7 @@ import Totm
 // Scene contents for one canvas. Positions by pan offset and scales
 // around top-left so screen = offset + zoom * local.
 Item {
-    id: layer
+    id: layerRoot
 
     required property var doc
     required property real zoom
@@ -20,56 +20,72 @@ Item {
     // item hides its static glyphs; others are unaffected.
     property int editingUid: -1
     property var measurePolicy: null
+    // Live backdrop for background-blur sampling (hidden duplicate
+    // without blur shapes, no recursion). Null inside the duplicate.
+    property var backdropItem: null
+    // Backdrop duplicates hide blurred shapes so each frosted panel
+    // samples only the content behind it (blur-over-blur accumulates
+    // in a follow-up).
+    property bool hideBlurShapes: false
+    // Animated-grain frame number (floor(seconds * 60), shared with the
+    // exporter). Reads the transport clock, so it shimmers while playing
+    // or scrubbing and freezes on a deterministic field otherwise.
+    readonly property int grainFrame: layerRoot.doc && layerRoot.doc.anim ? Math.floor(Number(layerRoot.doc.anim.currentTime || 0) * 60) : 0
 
-    x: layer.offsetX
-    y: layer.offsetY
-    scale: layer.zoom
+    x: layerRoot.offsetX
+    y: layerRoot.offsetY
+    scale: layerRoot.zoom
     transformOrigin: Item.TopLeft
+    // Explicit scene size: blur effects sample this layer as a texture
+    // and scale the source to the effect rect, so a 0-size source would
+    // sample empty. Children already live in these content coords.
+    width: layerRoot.doc ? layerRoot.doc.sceneWidth : 0
+    height: layerRoot.doc ? layerRoot.doc.sceneHeight : 0
 
     Rectangle {
-        width: layer.doc ? layer.doc.sceneWidth : 0
-        height: layer.doc ? layer.doc.sceneHeight : 0
-        visible: layer.doc !== null
-        color: layer.doc ? layer.doc.sceneColor : "transparent"
+        width: layerRoot.doc ? layerRoot.doc.sceneWidth : 0
+        height: layerRoot.doc ? layerRoot.doc.sceneHeight : 0
+        visible: layerRoot.doc !== null
+        color: layerRoot.doc ? layerRoot.doc.sceneColor : "transparent"
     }
 
     Repeater {
-        model: layer.doc ? layer.doc.leafList : null
+        model: layerRoot.doc ? layerRoot.doc.leafList : null
 
         onItemAdded: (index, item) => {
-            item.zoom = Qt.binding(() => layer.zoom);
-            item.activatePolicy = () => layer.activatePolicy();
-            item.pressPolicy = (uid, mods) => layer.pressPolicy(uid, mods);
-            item.movePolicy = (dx, dy) => layer.movePolicy(dx, dy);
-            item.releasePolicy = (wasMoved, mods) => layer.releasePolicy(wasMoved, mods);
-            item.doublePolicy = uid => layer.doublePolicy(uid);
+            item.zoom = Qt.binding(() => layerRoot.zoom);
+            item.activatePolicy = () => layerRoot.activatePolicy();
+            item.pressPolicy = (uid, mods) => layerRoot.pressPolicy(uid, mods);
+            item.movePolicy = (dx, dy) => layerRoot.movePolicy(dx, dy);
+            item.releasePolicy = (wasMoved, mods) => layerRoot.releasePolicy(wasMoved, mods);
+            item.doublePolicy = uid => layerRoot.doublePolicy(uid);
             item.measurePolicy = (uid, w, h) => {
-                if (layer.measurePolicy)
-                    layer.measurePolicy(uid, w, h);
+                if (layerRoot.measurePolicy)
+                    layerRoot.measurePolicy(uid, w, h);
             };
-            item.editing = Qt.binding(() => layer.editingUid === item.uid);
+            item.editing = Qt.binding(() => layerRoot.editingUid === item.uid);
             item.shapeVisible = Qt.binding(() => {
-                if (layer.doc)
-                    layer.doc.rev;
-                var n = layer.doc ? layer.doc.findNode(item.uid) : null;
-                return n ? layer.doc.isEffectivelyVisible(n) : true;
+                if (layerRoot.doc)
+                    layerRoot.doc.rev;
+                var n = layerRoot.doc ? layerRoot.doc.findNode(item.uid) : null;
+                return n ? layerRoot.doc.isEffectivelyVisible(n) : true;
             });
             item.shapeLocked = Qt.binding(() => {
-                if (layer.doc)
-                    layer.doc.rev;
-                var m = layer.doc ? layer.doc.findNode(item.uid) : null;
-                return m ? layer.doc.isEffectivelyLocked(m) : false;
+                if (layerRoot.doc)
+                    layerRoot.doc.rev;
+                var m = layerRoot.doc ? layerRoot.doc.findNode(item.uid) : null;
+                return m ? layerRoot.doc.isEffectivelyLocked(m) : false;
             });
             item.selected = Qt.binding(() => {
-                if (layer.doc)
-                    layer.doc.rev;
-                var s = layer.doc ? layer.doc.findNode(item.uid) : null;
+                if (layerRoot.doc)
+                    layerRoot.doc.rev;
+                var s = layerRoot.doc ? layerRoot.doc.findNode(item.uid) : null;
                 if (!s)
                     return false;
                 if (s.selected)
                     return true;
-                var path = layer.doc.drillPath;
-                var hit = layer.doc._find(item.uid);
+                var path = layerRoot.doc.drillPath;
+                var hit = layerRoot.doc._find(item.uid);
                 if (hit) {
                     for (var i = hit.ancestors.length - 1; i >= 0; i--) {
                         if (hit.ancestors[i].selected)
@@ -95,7 +111,14 @@ Item {
             strokeType: modelData.strokeType ?? "solid"
             strokeGradient: modelData.strokeGradient
             strokeWidth: modelData.strokeWidth
-            shadow: modelData.shadow
+            shadows: modelData.shadows ?? []
+            layerBlur: modelData.layerBlur
+            backgroundBlur: modelData.backgroundBlur
+            glows: modelData.glows ?? []
+            grain: modelData.grain
+            grainFrame: layerRoot.grainFrame
+            backdropItem: layerRoot.backdropItem
+            isBackdropCapture: layerRoot.hideBlurShapes
             shapeOpacity: modelData.opacity
             radius: modelData.radius
             independentCorners: modelData.independentCorners === true

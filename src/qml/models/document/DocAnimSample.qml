@@ -278,18 +278,53 @@ QtObject {
         } else if (preset === "customShadow") {
             var sc = lerpColorA(o.fromColor, o.toColor, e);
             if (sc) {
-                out.shadow = {
-                    enabled: true,
-                    // Stepped like customHide (bools can't ease): first
-                    // half reads from, second half reads to.
-                    inner: e < 0.5 ? o.fromInner === true : o.toInner === true,
-                    color: sc,
-                    x: lerp(Number(o.fromX) || 0, Number(o.toX) || 0, e),
-                    y: lerp(Number(o.fromY) || 0, Number(o.toY) || 0, e),
-                    blur: Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
-                    spread: Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
-                };
+                out.shadows = [
+                    {
+                        enabled: true,
+                        // Stepped like customHide (bools can't ease): first
+                        // half reads from, second half reads to.
+                        inner: e < 0.5 ? o.fromInner === true : o.toInner === true,
+                        color: sc,
+                        x: lerp(Number(o.fromX) || 0, Number(o.toX) || 0, e),
+                        y: lerp(Number(o.fromY) || 0, Number(o.toY) || 0, e),
+                        blur: Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
+                        spread: Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
+                    }
+                ];
             }
+        } else if (preset === "customLayerBlur") {
+            out.layerBlur = {
+                enabled: true,
+                radius: Math.max(0, lerp(Number(o.fromRadius) || 0, Number(o.toRadius) || 0, e)),
+                opacity: Math.min(1, Math.max(0, lerp(Number(o.fromOpacity) ?? 1, Number(o.toOpacity) ?? 1, e)))
+            };
+        } else if (preset === "customBackgroundBlur") {
+            out.backgroundBlur = {
+                enabled: true,
+                radius: Math.max(0, lerp(Number(o.fromRadius) || 0, Number(o.toRadius) || 0, e)),
+                opacity: Math.min(1, Math.max(0, lerp(Number(o.fromOpacity) ?? 0.7, Number(o.toOpacity) ?? 0.7, e)))
+            };
+        } else if (preset === "customGlow") {
+            var gc = lerpColorA(o.fromColor, o.toColor, e);
+            if (gc) {
+                out.glows = [
+                    {
+                        enabled: true,
+                        // Stepped like customHide (bools can't ease): first
+                        // half reads from, second half reads to.
+                        inner: e < 0.5 ? o.fromInner === true : o.toInner === true,
+                        color: gc,
+                        blur: Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
+                        spread: Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
+                    }
+                ];
+            }
+        } else if (preset === "customGrain") {
+            out.grain = {
+                enabled: true,
+                amount: Math.min(1, Math.max(0, lerp(Number(o.fromAmount) || 0, Number(o.toAmount) || 0, e))),
+                size: Math.min(10, Math.max(1, lerp(Number(o.fromSize) || 0, Number(o.toSize) || 0, e)))
+            };
         } else if (preset === "customPath") {
             var sampled = samplerPath.samplePath(o.pts, o.closed === true, e);
             if (sampled) {
@@ -375,9 +410,22 @@ QtObject {
     // Writes an overlay map with no touch(): playback stays invisible to
     // autosave, undo and selection bindings. Locked leaves hold still.
     // Pen paths ride their bbox so previews never shear off the points.
+    // Nodes resolve in one traversal (not one tree search per leaf), so
+    // wide scenes stay at 60fps; every write below is unchanged.
     function applySample(doc, map) {
+        var anyWork = false;
+        for (var probe in map) {
+            anyWork = true;
+            break;
+        }
+        if (!anyWork)
+            return;
+        var byUid = {};
+        var all = doc.tree.allLeaves();
+        for (var i = 0; i < all.length; i++)
+            byUid[all[i].uid] = all[i];
         for (var uid in map) {
-            var n = doc.findNode(Number(uid));
+            var n = byUid[Number(uid)] ?? doc.findNode(Number(uid));
             if (!n || doc.isEffectivelyLocked(n))
                 continue;
             var ov = map[uid];
@@ -455,15 +503,55 @@ QtObject {
                         }
                     ]
                 };
-            if (ov.shadow !== undefined)
-                n.shadow = {
-                    enabled: ov.shadow.enabled === true,
-                    inner: ov.shadow.inner === true,
-                    color: String(ov.shadow.color),
-                    x: ov.shadow.x,
-                    y: ov.shadow.y,
-                    blur: ov.shadow.blur,
-                    spread: ov.shadow.spread
+            if (ov.shadows !== undefined) {
+                var shOut = [];
+                var shSrc = ov.shadows || [];
+                for (var si = 0; si < shSrc.length; si++) {
+                    var ss = shSrc[si] || {};
+                    shOut.push({
+                        enabled: ss.enabled !== false,
+                        inner: ss.inner === true,
+                        color: String(ss.color),
+                        x: ss.x,
+                        y: ss.y,
+                        blur: ss.blur,
+                        spread: ss.spread
+                    });
+                }
+                n.shadows = shOut;
+            }
+            if (ov.layerBlur !== undefined)
+                n.layerBlur = {
+                    enabled: ov.layerBlur.enabled === true,
+                    radius: Math.max(0, Number(ov.layerBlur.radius) || 0),
+                    opacity: Math.min(1, Math.max(0, Number(ov.layerBlur.opacity ?? 1)))
+                };
+            if (ov.backgroundBlur !== undefined)
+                n.backgroundBlur = {
+                    enabled: ov.backgroundBlur.enabled === true,
+                    radius: Math.max(0, Number(ov.backgroundBlur.radius) || 0),
+                    opacity: Math.min(1, Math.max(0, Number(ov.backgroundBlur.opacity ?? 0.7)))
+                };
+            if (ov.glows !== undefined) {
+                var glOut = [];
+                var glSrc = ov.glows || [];
+                for (var gi = 0; gi < glSrc.length; gi++) {
+                    var gs = glSrc[gi] || {};
+                    glOut.push({
+                        enabled: gs.enabled !== false,
+                        inner: gs.inner === true,
+                        color: String(gs.color),
+                        blur: Math.max(0, Number(gs.blur) || 0),
+                        spread: Math.max(0, Number(gs.spread) || 0)
+                    });
+                }
+                n.glows = glOut;
+            }
+            if (ov.grain !== undefined)
+                n.grain = {
+                    enabled: ov.grain.enabled === true,
+                    amount: Math.min(1, Math.max(0, Number(ov.grain.amount) || 0)),
+                    size: Math.min(10, Math.max(1, Number(ov.grain.size) || 0))
                 };
             if (ov.visible !== undefined)
                 n.visible = ov.visible;

@@ -15,6 +15,7 @@
 #include <QAtomicInteger>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPainterPathStroker>
 #include <QPalette>
 #include <QProcess>
 #include <QStandardPaths>
@@ -329,7 +330,7 @@ protected:
                 const bool ancVis = srcIdx >= 0 ? leaves.at(srcIdx).ancestorsVisible : true;
                 if (!ancVis || !m.value(QStringLiteral("visible"), true).toBool())
                     continue;
-                paintLeaf(pt, m, ox, oy, scale);
+                paintLeaf(pt, img, m, ox, oy, scale, Effects::grainFrameNo(t));
             }
             pt.end();
 
@@ -399,7 +400,8 @@ protected:
         emit renderDone(m_tempPath);
     }
 
-    static void paintLeaf(QPainter &pt, const QVariantMap &m, double ox, double oy, double scale) {
+    static void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, double oy, double scale,
+        int frameNo) {
         const QString shapeType = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
         const double x = ox + num(m, "x") * scale;
         const double y = oy + num(m, "y") * scale;
@@ -414,6 +416,16 @@ protected:
         const QColor stroke(str(m, "stroke", QStringLiteral("#000000")));
         const double sw = qMax(0.0, num(m, "strokeWidth") * scale);
         const double cx = x + w / 2.0, cy = y + h / 2.0;
+        const int uid = m.value(QStringLiteral("uid"), -1).toInt();
+
+        const QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
+        const Effects::Blur layerBlur = Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap());
+        const Effects::Blur backgroundBlur = Effects::Blur::fromMap(m.value(QStringLiteral("backgroundBlur")).toMap());
+        const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
+        const bool useBackground = backgroundBlur.enabled && backgroundBlur.radius > 0.01
+            && shapeType != QLatin1String("text");
+        const Effects::Grain grain = Effects::Grain::fromMap(m.value(QStringLiteral("grain")).toMap());
+        const bool useGrain = grain.enabled && grain.amount > 0.001;
 
         pt.save();
         pt.setOpacity(opacity);
@@ -424,23 +436,70 @@ protected:
         pt.translate(-cx, -cy);
 
         if (shapeType == QLatin1String("text")) {
-            paintText(pt, m, x, y, w, h, scale, fill);
+            // Inner has no glyph path: text renders every glow outer
+            // (same rule as the canvas preview, so both sides agree).
+            paintText(pt, m, x, y, w, h, scale, fill, glows,
+                useGrain ? grain : Effects::Grain(), uid, frameNo);
             pt.restore();
             return;
         }
 
         if (shapeType == QLatin1String("image")) {
-            paintImage(pt, m, x, y, w, h, scale, stroke, sw);
+            if (useBackground)
+                paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale, backgroundBlur.opacity);
+            paintImage(pt, m, x, y, w, h, scale, stroke, sw, layerBlur, glows,
+                useGrain ? grain : Effects::Grain(), uid, frameNo);
             pt.restore();
             return;
         }
 
         // Vector shapes share the CPU engine with canvas preview
         // (EffectItem), so export matches preview by construction.
-        // Text and images keep their dedicated painters on both sides.
+        // Background blur composites here (backdrop is the frame so far);
+        // layer blur rides inside paintLeaf. Text keeps its painter.
+        if (useBackground)
+            paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale, backgroundBlur.opacity);
         Effects::paintLeaf(&pt, shapeType, QRectF(x, y, w, h), Effects::PathOpts::fromMap(m),
-            Effects::Style::fromMap(m),
-            Effects::Shadow::fromMap(m.value(QStringLiteral("shadow")).toMap()), scale);
+            Effects::Style::fromMap(m), shadows, glows, layerBlur, scale);
+        // Grain sits over fill and stroke on every kind (preview layers
+        // its tile the same way, under the same leaf opacity).
+        if (useGrain) {
+            Effects::paintGrainPath(&pt,
+                Effects::outlinePath(shapeType, QRectF(x, y, w, h), Effects::PathOpts::fromMap(m),
+                    Effects::Style::fromMap(m), scale),
+                sw, QRectF(x, y, w, h), grain, uid, frameNo, scale);
+        }
+        pt.restore();
+    }
+
+    // Frosted-glass backdrop: blur the already-painted frame under the
+    // bbox and composite by opacity. Caller holds the leaf transform;
+    // coordinates are output px. v1 confines to the bbox (shape-masked
+    // in a follow-up); rect panels (the common case) are already exact.
+    static void paintBackdropBlur(QPainter &pt, QImage &frame, double x, double y, double w, double h,
+        double radius, double opacity)
+    {
+        if (radius <= 0.01 || opacity <= 0.001)
+            return;
+        const double margin = qMin(128.0, radius * 2.0);
+        const QRect srcRect(qMax(0, qRound(x - margin)), qMax(0, qRound(y - margin)),
+            qRound(w + margin * 2.0), qRound(h + margin * 2.0));
+        const QRect bounded = srcRect.intersected(frame.rect());
+        if (bounded.isEmpty())
+            return;
+        QImage cut = frame.copy(bounded);
+        QImage blurred = cut.copy();
+        Effects::blurImage(blurred, radius);
+        Effects::mixBlurred(cut, blurred, qBound(0.0, opacity, 1.0));
+        // Only the bbox portion lands on the shape; the margin fed the blur.
+        const QPoint dstTopLeft(qRound(x), qRound(y));
+        const QPoint srcOffset(dstTopLeft - bounded.topLeft());
+        QImage piece = cut.copy(QRect(srcOffset, QSize(qRound(w), qRound(h))));
+        // World transform is active (rotation/flip): map through it so
+        // the blurred tile registers under the shape fill.
+        pt.save();
+        pt.setOpacity(1.0);
+        pt.drawImage(QRectF(x, y, w, h), piece);
         pt.restore();
     }
 
@@ -479,7 +538,9 @@ protected:
     }
 
     static void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h, double s,
-        const QColor &stroke, double sw) {
+        const QColor &stroke, double sw, const Effects::Blur &layerBlur = Effects::Blur(),
+        const QList<Effects::Glow> &glows = QList<Effects::Glow>(), const Effects::Grain &grain = Effects::Grain(),
+        int uid = -1, int frameNo = 0) {
         const QString name = str(m, "imageSource", str(m, "image", QString()));
         const double r = qMin(qMax(0.0, num(m, "radius") * s), qMin(w, h) / 2.0);
         QPainterPath clip;
@@ -487,14 +548,35 @@ protected:
             clip.addRoundedRect(QRectF(x, y, w, h), r, r);
         else
             clip.addRect(QRectF(x, y, w, h));
-        const QImage img = loadExportImage(name, qMax(1, qRound(w)), qMax(1, qRound(h)));
+        // Outer glows: bottom-first so index 0 paints topmost.
+        for (int i = glows.size() - 1; i >= 0; --i) {
+            const Effects::Glow &g = glows.at(i);
+            if (g.enabled && !g.inner)
+                paintImageGlow(pt, clip, g, s);
+        }
+        QImage img = loadExportImage(name, qMax(1, qRound(w)), qMax(1, qRound(h)));
         if (img.isNull()) {
-            pt.fillPath(clip, QColor(QStringLiteral("#d9d9d9")));
-        } else {
-            pt.save();
-            pt.setClipPath(clip, Qt::IntersectClip);
-            pt.drawImage(QRectF(x, y, w, h), img);
-            pt.restore();
+            QImage tile(qMax(1, qRound(w)), qMax(1, qRound(h)), QImage::Format_ARGB32_Premultiplied);
+            tile.fill(QColor(QStringLiteral("#d9d9d9")));
+            img = tile;
+        }
+        // Layer blur on images: blur the raster then mix by opacity.
+        if (layerBlur.enabled && layerBlur.radius > 0.01) {
+            QImage blurred = img.copy();
+            Effects::blurImage(blurred, layerBlur.radius * s);
+            QImage sharp = img.copy();
+            Effects::mixBlurred(sharp, blurred, layerBlur.opacity);
+            img = sharp;
+        }
+        pt.save();
+        pt.setClipPath(clip, Qt::IntersectClip);
+        pt.drawImage(QRectF(x, y, w, h), img);
+        pt.restore();
+        // Inner glows over the pixels, index 0 topmost.
+        for (int i = glows.size() - 1; i >= 0; --i) {
+            const Effects::Glow &g = glows.at(i);
+            if (g.enabled && g.inner)
+                paintImageGlowInner(pt, clip, g, s);
         }
         if (sw > 0.01) {
             QPen pen(stroke, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
@@ -502,12 +584,95 @@ protected:
             pt.setBrush(Qt::NoBrush);
             pt.drawPath(clip);
         }
+        // Grain over pixels and stroke (preview tiles the same way).
+        if (grain.enabled && grain.amount > 0.001)
+            Effects::paintGrainPath(&pt, clip, sw, QRectF(x, y, w, h), grain, uid, frameNo, s);
+    }
+
+    // Outer image glow: the clip silhouette dilated by spread, blurred,
+    // tinted, drawn under the raster.
+    static void paintImageGlow(QPainter &pt, const QPainterPath &clip, const Effects::Glow &glow, double s) {
+        QPainterPath silhouette = clip;
+        if (glow.spread * s > 0.01) {
+            QPainterPathStroker stroker;
+            stroker.setWidth(glow.spread * 2.0 * s);
+            stroker.setCapStyle(Qt::RoundCap);
+            stroker.setJoinStyle(Qt::RoundJoin);
+            silhouette = stroker.createStroke(clip).united(clip);
+        }
+        const double m = glow.blur * s * 2.0 + 1.0;
+        QRectF area = silhouette.boundingRect();
+        area.adjust(-m, -m, m, m);
+        QImage mask(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())), QImage::Format_ARGB32_Premultiplied);
+        mask.fill(0);
+        {
+            QPainter mp(&mask);
+            mp.setRenderHint(QPainter::Antialiasing, true);
+            mp.translate(-area.topLeft());
+            mp.fillPath(silhouette, Qt::black);
+        }
+        Effects::blurImage(mask, glow.blur * s);
+        {
+            QPainter mp(&mask);
+            mp.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            mp.fillRect(mask.rect(), glow.color);
+        }
+        pt.drawImage(area.topLeft(), mask);
+    }
+
+    // Inner image glow: tinted clip with the blurred eroded copy cut out,
+    // leaving the halo band at the inside edges (above the pixels).
+    static void paintImageGlowInner(QPainter &pt, const QPainterPath &clip, const Effects::Glow &glow, double s) {
+        QPainterPath eroded = clip;
+        if (glow.spread * s > 0.01) {
+            QPainterPathStroker stroker;
+            stroker.setWidth(glow.spread * 2.0 * s);
+            stroker.setCapStyle(Qt::RoundCap);
+            stroker.setJoinStyle(Qt::RoundJoin);
+            eroded = clip.subtracted(stroker.createStroke(clip));
+        }
+        const double m = glow.blur * s * 2.0 + 1.0;
+        QRectF area = clip.boundingRect();
+        area.adjust(-m, -m, m, m);
+        const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
+        QImage cutter(size, QImage::Format_ARGB32_Premultiplied);
+        cutter.fill(0);
+        {
+            QPainter mp(&cutter);
+            mp.setRenderHint(QPainter::Antialiasing, true);
+            mp.translate(-area.topLeft());
+            mp.fillPath(eroded, Qt::black);
+        }
+        Effects::blurImage(cutter, glow.blur * s);
+        QImage mask(size, QImage::Format_ARGB32_Premultiplied);
+        mask.fill(0);
+        {
+            QPainter mp(&mask);
+            mp.setRenderHint(QPainter::Antialiasing, true);
+            mp.translate(-area.topLeft());
+            mp.fillPath(clip, glow.color);
+            mp.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+            mp.resetTransform();
+            mp.drawImage(0, 0, cutter);
+        }
+        pt.drawImage(area.topLeft(), mask);
     }
 
     // Text via QTextDocument (mirrors TextGlyphs). Outline uses a 1px
     // content-space hairline; line height follows the
-    // natural-unless-overridden rule.
-    static void paintText(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h, double s, const QColor &fill) {
+    // natural-unless-overridden rule. Outer glow renders the glyphs in
+    // the glow color behind the fill; the inner flag is ignored for text
+    // (no glyph path), matching the canvas preview rule.
+    static void paintText(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h, double s,
+        const QColor &fill, const QList<Effects::Glow> &glows = QList<Effects::Glow>(),
+        const Effects::Grain &grain = Effects::Grain(), int uid = -1, int frameNo = 0) {
+        // Every enabled glow renders outer (no glyph path for inner),
+        // bottom-first so index 0 paints topmost like the preview.
+        for (int i = glows.size() - 1; i >= 0; --i) {
+            const Effects::Glow &g = glows.at(i);
+            if (g.enabled)
+                paintTextGlow(pt, m, x, y, w, h, s, g);
+        }
         QTextDocument doc;
         doc.setPlainText(str(m, "textContent"));
         const double px = qMax(1.0, num(m, "fontSize", 16.0) * s);
@@ -561,6 +726,63 @@ protected:
             pt.setClipRect(QRectF(0, 0, w, h));
         doc.documentLayout()->draw(&pt, ctx);
         pt.restore();
+        // Grain confined to the glyphs: ghost the coverage, keep dots
+        // where the ghost is opaque (preview masks its tile the same way).
+        if (grain.enabled && grain.amount > 0.001) {
+            QImage ghost(qMax(1, qRound(w)), qMax(1, qRound(h)), QImage::Format_ARGB32_Premultiplied);
+            ghost.fill(0);
+            {
+                QVariantMap gm = m;
+                gm[QStringLiteral("strokeWidth")] = 0.0;
+                QPainter gp(&ghost);
+                gp.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+                paintText(gp, gm, 0, 0, w, h, s, Qt::white);
+            }
+            QImage dots = Effects::grainDots(ghost.size(), qMax(1.0, grain.size * s),
+                Effects::grainSeed(uid, frameNo), grain.amount);
+            {
+                QPainter dp(&dots);
+                dp.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+                dp.drawImage(0, 0, ghost);
+            }
+            pt.drawImage(QRectF(x, y, w, h), dots);
+        }
+    }
+
+    // Outer text glow: ghost the glyphs in the glow color (spread widens
+    // the pen, like the vector dilate), blur, and lay behind the fill.
+    // The ghost reuses paintText with a zeroed outline so the halo
+    // follows the glyph shape, never the stroke.
+    static void paintTextGlow(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h,
+        double s, const Effects::Glow &glow) {
+        const double spread = glow.spread * s;
+        const double margin = qMin(256.0, spread + glow.blur * s * 2.0) + 1.0;
+        QImage ghost(qMax(1, qRound(w + margin * 2.0)), qMax(1, qRound(h + margin * 2.0)),
+            QImage::Format_ARGB32_Premultiplied);
+        ghost.fill(0);
+        {
+            QVariantMap gm = m;
+            gm[QStringLiteral("strokeWidth")] = 0.0;
+            QPainter gp(&ghost);
+            gp.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+            gp.translate(margin, margin);
+            paintText(gp, gm, 0, 0, w, h, s, glow.color);
+        }
+        if (spread > 0.01) {
+            // Cheap dilate: stamp the ghost around itself so the halo
+            // starts outside the glyphs (8 taps approximate a disc).
+            QImage grown(ghost.size(), QImage::Format_ARGB32_Premultiplied);
+            grown.fill(0);
+            QPainter gp(&grown);
+            for (int oy = -1; oy <= 1; ++oy) {
+                for (int ox = -1; ox <= 1; ++ox)
+                    gp.drawImage(QPointF(ox * spread, oy * spread), ghost);
+            }
+            gp.end();
+            ghost = grown;
+        }
+        Effects::blurImage(ghost, glow.blur * s);
+        pt.drawImage(QRectF(x - margin, y - margin, ghost.width(), ghost.height()), ghost);
     }
 
     QVariantMap m_scene;

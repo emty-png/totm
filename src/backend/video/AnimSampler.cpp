@@ -382,8 +382,39 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             sh[QStringLiteral("y")] = num(o, "fromY") + (num(o, "toY") - num(o, "fromY")) * e;
             sh[QStringLiteral("blur")] = qMax(0.0, num(o, "fromBlur") + (num(o, "toBlur") - num(o, "fromBlur")) * e);
             sh[QStringLiteral("spread")] = qMax(0.0, num(o, "fromSpread") + (num(o, "toSpread") - num(o, "fromSpread")) * e);
-            out[QStringLiteral("shadow")] = sh;
+            out[QStringLiteral("shadows")] = QVariantList{sh};
         }
+    } else if (preset == QLatin1String("customLayerBlur")) {
+        QVariantMap b;
+        b[QStringLiteral("enabled")] = true;
+        b[QStringLiteral("radius")] = qMax(0.0, num(o, "fromRadius") + (num(o, "toRadius") - num(o, "fromRadius")) * e);
+        b[QStringLiteral("opacity")] = qBound(0.0, num(o, "fromOpacity", 1.0) + (num(o, "toOpacity", 1.0) - num(o, "fromOpacity", 1.0)) * e, 1.0);
+        out[QStringLiteral("layerBlur")] = b;
+    } else if (preset == QLatin1String("customBackgroundBlur")) {
+        QVariantMap b;
+        b[QStringLiteral("enabled")] = true;
+        b[QStringLiteral("radius")] = qMax(0.0, num(o, "fromRadius") + (num(o, "toRadius") - num(o, "fromRadius")) * e);
+        b[QStringLiteral("opacity")] = qBound(0.0, num(o, "fromOpacity", 0.7) + (num(o, "toOpacity", 0.7) - num(o, "fromOpacity", 0.7)) * e, 1.0);
+        out[QStringLiteral("backgroundBlur")] = b;
+    } else if (preset == QLatin1String("customGlow")) {
+        const QString c = lerpColorA(str(o, "fromColor", QStringLiteral("#cc00ffff")),
+            str(o, "toColor", QStringLiteral("#cc00ffff")), e);
+        if (!c.isEmpty()) {
+            QVariantMap g;
+            g[QStringLiteral("enabled")] = true;
+            // Stepped like customHide (mirrors DocAnimSample).
+            g[QStringLiteral("inner")] = e < 0.5 ? o.value(QStringLiteral("fromInner")).toBool() : o.value(QStringLiteral("toInner")).toBool();
+            g[QStringLiteral("color")] = c;
+            g[QStringLiteral("blur")] = qMax(0.0, num(o, "fromBlur") + (num(o, "toBlur") - num(o, "fromBlur")) * e);
+            g[QStringLiteral("spread")] = qMax(0.0, num(o, "fromSpread") + (num(o, "toSpread") - num(o, "fromSpread")) * e);
+            out[QStringLiteral("glows")] = QVariantList{g};
+        }
+    } else if (preset == QLatin1String("customGrain")) {
+        QVariantMap g;
+        g[QStringLiteral("enabled")] = true;
+        g[QStringLiteral("amount")] = qBound(0.0, num(o, "fromAmount") + (num(o, "toAmount") - num(o, "fromAmount")) * e, 1.0);
+        g[QStringLiteral("size")] = qBound(1.0, num(o, "fromSize", 2.0) + (num(o, "toSize", 2.0) - num(o, "fromSize", 2.0)) * e, 10.0);
+        out[QStringLiteral("grain")] = g;
     } else if (preset == QLatin1String("customPath")) {
         const PathSample s = samplePath(o.value(QStringLiteral("pts")).toList(), o.value(QStringLiteral("closed")).toBool(), e);
         if (s.valid) {
@@ -433,7 +464,11 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
         b[QStringLiteral("fill")] = str(m, "fill", QStringLiteral("#d9d9d9"));
         b[QStringLiteral("fillType")] = str(m, "fillType", QStringLiteral("solid"));
         b[QStringLiteral("fillGradient")] = m.value(QStringLiteral("fillGradient")).toMap();
-        b[QStringLiteral("shadow")] = m.value(QStringLiteral("shadow")).toMap();
+        b[QStringLiteral("shadows")] = m.value(QStringLiteral("shadows")).toList();
+        b[QStringLiteral("layerBlur")] = m.value(QStringLiteral("layerBlur")).toMap();
+        b[QStringLiteral("backgroundBlur")] = m.value(QStringLiteral("backgroundBlur")).toMap();
+        b[QStringLiteral("glows")] = m.value(QStringLiteral("glows")).toList();
+        b[QStringLiteral("grain")] = m.value(QStringLiteral("grain")).toMap();
         b[QStringLiteral("visible")] = m.value(QStringLiteral("visible"), true).toBool();
         b[QStringLiteral("radius")] = num(m, "radius");
         b[QStringLiteral("strokeWidth")] = num(m, "strokeWidth");
@@ -612,8 +647,10 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
             }
         }
         for (const QString &k : {QStringLiteral("rotation"), QStringLiteral("opacity"), QStringLiteral("fill"),
-                 QStringLiteral("fillType"), QStringLiteral("fillGradient"), QStringLiteral("shadow"),
-                 QStringLiteral("visible"), QStringLiteral("radius"), QStringLiteral("strokeWidth")}) {
+                 QStringLiteral("fillType"), QStringLiteral("fillGradient"), QStringLiteral("shadows"),
+                 QStringLiteral("layerBlur"), QStringLiteral("backgroundBlur"), QStringLiteral("glows"),
+                 QStringLiteral("grain"), QStringLiteral("visible"), QStringLiteral("radius"),
+                 QStringLiteral("strokeWidth")}) {
             if (ov.contains(k))
                 m[k] = ov.value(k);
         }

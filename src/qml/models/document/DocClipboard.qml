@@ -40,7 +40,11 @@ QtObject {
             strokeType: node.strokeType ?? "solid",
             strokeGradient: doc.factory._copyGradient(node.strokeGradient),
             strokeWidth: node.strokeWidth,
-            shadow: doc.factory._copyShadow(node.shadow),
+            shadows: doc.factory._copyShadows(node.shadows),
+            glows: doc.factory._copyGlows(node.glows),
+            layerBlur: doc.factory._copyBlur(node.layerBlur, 8, 1),
+            backgroundBlur: doc.factory._copyBlur(node.backgroundBlur, 16, 0.7),
+            grain: doc.factory._copyGrain(node.grain),
             opacity: node.opacity,
             radius: node.radius,
             independentCorners: node.independentCorners === true,
@@ -291,8 +295,16 @@ QtObject {
             snap.strokeType = b.strokeType;
         if (snap.strokeGradient !== undefined && b.strokeGradient !== undefined)
             snap.strokeGradient = doc.factory._copyGradient(b.strokeGradient);
-        if (snap.shadow !== undefined && b.shadow !== undefined)
-            snap.shadow = doc.factory._copyShadow(b.shadow);
+        if (snap.shadows !== undefined && b.shadows !== undefined)
+            snap.shadows = doc.factory._copyShadows(b.shadows);
+        if (snap.glows !== undefined && b.glows !== undefined)
+            snap.glows = doc.factory._copyGlows(b.glows);
+        if (snap.layerBlur !== undefined && b.layerBlur !== undefined)
+            snap.layerBlur = doc.factory._copyBlur(b.layerBlur, 8, 1);
+        if (snap.backgroundBlur !== undefined && b.backgroundBlur !== undefined)
+            snap.backgroundBlur = doc.factory._copyBlur(b.backgroundBlur, 16, 0.7);
+        if (snap.grain !== undefined && b.grain !== undefined)
+            snap.grain = doc.factory._copyGrain(b.grain);
     }
 
     // Replace the whole tree with a stored scene. Old nodes are

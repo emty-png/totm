@@ -1,6 +1,8 @@
 #pragma once
 
+#include <QCache>
 #include <QColor>
+#include <QImage>
 #include <QQuickPaintedItem>
 #include <QVariantList>
 #include <QVariantMap>
@@ -15,6 +17,9 @@
 // path. The item is bigger than the shape by pad() on every side (shadow
 // blur never clips); the shape paints at (pad,pad). One instance per
 // effected shape; plain shapes keep the fast GPU items.
+// Blurred silhouette/cutter rasters memoize in m_masks (same pixels,
+// skipped blur recompute); geometry edits clear it, style and effect
+// edits keep it so stacked siblings reuse each other's rasters.
 class EffectItem : public QQuickPaintedItem {
     Q_OBJECT
     QML_ELEMENT
@@ -36,7 +41,10 @@ class EffectItem : public QQuickPaintedItem {
     Q_PROPERTY(QString strokeType READ strokeType WRITE setStrokeType NOTIFY strokeChanged)
     Q_PROPERTY(QVariantMap strokeGradient READ strokeGradient WRITE setStrokeGradient NOTIFY strokeChanged)
     Q_PROPERTY(double strokeWidth READ strokeWidth WRITE setStrokeWidth NOTIFY strokeChanged)
-    Q_PROPERTY(QVariantMap shadow READ shadow WRITE setShadow NOTIFY shadowChanged)
+    Q_PROPERTY(QVariantList shadows READ shadows WRITE setShadows NOTIFY shadowChanged)
+    Q_PROPERTY(QVariantMap layerBlur READ layerBlur WRITE setLayerBlur NOTIFY blurChanged)
+    Q_PROPERTY(QVariantMap backgroundBlur READ backgroundBlur WRITE setBackgroundBlur NOTIFY blurChanged)
+    Q_PROPERTY(QVariantList glows READ glows WRITE setGlows NOTIFY glowChanged)
     Q_PROPERTY(double pad READ pad NOTIFY padChanged)
 
 public:
@@ -78,8 +86,14 @@ public:
     void setStrokeGradient(const QVariantMap &v);
     double strokeWidth() const;
     void setStrokeWidth(double v);
-    QVariantMap shadow() const;
-    void setShadow(const QVariantMap &v);
+    QVariantList shadows() const;
+    void setShadows(const QVariantList &v);
+    QVariantMap layerBlur() const;
+    void setLayerBlur(const QVariantMap &v);
+    QVariantMap backgroundBlur() const;
+    void setBackgroundBlur(const QVariantMap &v);
+    QVariantList glows() const;
+    void setGlows(const QVariantList &v);
     double pad() const;
 
 signals:
@@ -87,6 +101,8 @@ signals:
     void fillChanged();
     void strokeChanged();
     void shadowChanged();
+    void blurChanged();
+    void glowChanged();
     void padChanged();
 
 private:
@@ -109,6 +125,10 @@ private:
     QString m_strokeType = QStringLiteral("solid");
     QVariantMap m_strokeGradient;
     double m_strokeWidth = 0.0;
-    QVariantMap m_shadow;
+    QVariantList m_shadows;
+    QVariantMap m_layerBlur;
+    QVariantMap m_backgroundBlur;
+    QVariantList m_glows;
     double m_pad = 0.0;
+    QCache<QByteArray, QImage> m_masks{16 * 1024 * 1024};
 };

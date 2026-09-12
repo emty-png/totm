@@ -42,7 +42,7 @@ QtObject {
             };
         }
         if (presetId === "customShadow" && leaf) {
-            var sh = leaf.shadow ?? {};
+            var sh = (leaf.shadows && leaf.shadows.length > 0 ? leaf.shadows[0] : {}) ?? {};
             var fx = Number(sh.x) || 0;
             var fy = sh.y !== undefined ? (Number(sh.y) || 0) : 4;
             var fb = sh.blur !== undefined ? Math.max(0, Number(sh.blur) || 0) : 8;
@@ -60,6 +60,54 @@ QtObject {
                 toSpread: Math.round(fs * 100) / 100,
                 fromInner: sh.inner === true,
                 toInner: sh.inner === true
+            };
+        }
+        if (presetId === "customLayerBlur" && leaf) {
+            var lb = leaf.layerBlur ?? {};
+            var lr = lb.radius !== undefined ? Math.max(0, Number(lb.radius) || 0) : 8;
+            var lo = lb.opacity !== undefined ? Math.min(1, Math.max(0, Number(lb.opacity))) : 1;
+            return {
+                fromRadius: Math.round(lr * 100) / 100,
+                toRadius: Math.round(Math.min(100, lr + 8) * 100) / 100,
+                fromOpacity: Math.round(lo * 100) / 100,
+                toOpacity: Math.round(lo * 100) / 100
+            };
+        }
+        if (presetId === "customBackgroundBlur" && leaf) {
+            var bb = leaf.backgroundBlur ?? {};
+            var br = bb.radius !== undefined ? Math.max(0, Number(bb.radius) || 0) : 16;
+            var bo = bb.opacity !== undefined ? Math.min(1, Math.max(0, Number(bb.opacity))) : 0.7;
+            return {
+                fromRadius: Math.round(br * 100) / 100,
+                toRadius: Math.round(Math.min(100, br + 8) * 100) / 100,
+                fromOpacity: Math.round(bo * 100) / 100,
+                toOpacity: Math.round(bo * 100) / 100
+            };
+        }
+        if (presetId === "customGlow" && leaf) {
+            var gl = (leaf.glows && leaf.glows.length > 0 ? leaf.glows[0] : {}) ?? {};
+            var gb = gl.blur !== undefined ? Math.max(0, Number(gl.blur) || 0) : 16;
+            var gs = gl.spread !== undefined ? Math.max(0, Number(gl.spread) || 0) : 4;
+            return {
+                fromColor: String(gl.color || "#cc00ffff"),
+                toColor: String(gl.color || "#cc00ffff"),
+                fromBlur: Math.round(gb * 100) / 100,
+                toBlur: Math.round(Math.min(100, gb + 12) * 100) / 100,
+                fromSpread: Math.round(gs * 100) / 100,
+                toSpread: Math.round(gs * 100) / 100,
+                fromInner: gl.inner === true,
+                toInner: gl.inner === true
+            };
+        }
+        if (presetId === "customGrain" && leaf) {
+            var gn = leaf.grain ?? {};
+            var ga = gn.amount !== undefined ? Math.min(1, Math.max(0, Number(gn.amount))) : 0.5;
+            var gz = gn.size !== undefined ? Math.min(10, Math.max(1, Number(gn.size) || 0)) : 2;
+            return {
+                fromAmount: Math.round(ga * 100) / 100,
+                toAmount: ga > 0 ? 0 : 0.5,
+                fromSize: Math.round(gz * 100) / 100,
+                toSize: Math.round(gz * 100) / 100
             };
         }
         if (presetId === "customResize" && leaf) {
