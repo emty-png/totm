@@ -471,6 +471,7 @@ PanelSection {
     EffectsPopup {
         id: picker
 
+        textSelected: section.hasText()
         onOuterShadowClicked: section.addShadow(false)
         onInnerShadowClicked: section.addShadow(true)
         onLayerBlurClicked: section.enableBlur("layerBlur")
@@ -491,9 +492,8 @@ PanelSection {
     }
 
     // Picker entries stack: shadows/glows always append, singles
-    // enable in place. Inner glow on text falls back to outer (inner
-    // has no glyph path); the card switch blocks it up front, this
-    // guards pastes and mixed picks.
+    // enable in place (background blur skips text: glyphs never sample
+    // the backdrop, so the picker row disables up front for text).
     function setEffect(type, inner) {
         if (type === "shadow")
             section.addShadow(inner);
@@ -535,9 +535,7 @@ PanelSection {
                 continue;
             var next = (n.glows || []).slice();
             // Fresh map per leaf (never share one object across nodes).
-            // Inner has no glyph path: text in a mixed pick stays outer.
-            var wantInner = inner === true && n.shapeType !== "text";
-            var entry = d.factory.defaultGlow(wantInner);
+            var entry = d.factory.defaultGlow(inner);
             next.push(entry);
             n.glows = next;
         }
@@ -552,6 +550,10 @@ PanelSection {
         var leaves = d._selectedLeaves();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
+                continue;
+            // Background blur never lands on text (glyphs sample no
+            // backdrop); layer blur stacks over glyphs like vectors.
+            if (role === "backgroundBlur" && leaves[i].shapeType === "text")
                 continue;
             var cur = leaves[i][role] ?? {};
             var defRadius = role === "backgroundBlur" ? 16 : 8;
@@ -596,12 +598,21 @@ PanelSection {
                 continue;
             leaves[i].shadows = [];
             leaves[i].glows = [];
+            // Whole-object reassigns (never in-place .enabled flips):
+            // var maps notify only on assign, so mutations alone leave
+            // the canvas stale until the tab rebuilds.
             if (leaves[i].layerBlur)
-                leaves[i].layerBlur.enabled = false;
+                leaves[i].layerBlur = Object.assign({}, leaves[i].layerBlur, {
+                    enabled: false
+                });
             if (leaves[i].backgroundBlur)
-                leaves[i].backgroundBlur.enabled = false;
+                leaves[i].backgroundBlur = Object.assign({}, leaves[i].backgroundBlur, {
+                    enabled: false
+                });
             if (leaves[i].grain)
-                leaves[i].grain.enabled = false;
+                leaves[i].grain = Object.assign({}, leaves[i].grain, {
+                    enabled: false
+                });
         }
         d.touch();
     }
@@ -751,7 +762,7 @@ PanelSection {
                 continue;
             var entry = Object.assign({}, list[at]);
             entry.enabled = true;
-            entry.inner = on === true && n.shapeType !== "text";
+            entry.inner = on === true;
             list[at] = entry;
             n.glows = list;
         }
@@ -833,7 +844,9 @@ PanelSection {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
             if (leaves[i][role])
-                leaves[i][role].enabled = false;
+                leaves[i][role] = Object.assign({}, leaves[i][role], {
+                    enabled: false
+                });
         }
         d.touch();
     }
@@ -869,7 +882,9 @@ PanelSection {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
             if (leaves[i].grain)
-                leaves[i].grain.enabled = false;
+                leaves[i].grain = Object.assign({}, leaves[i].grain, {
+                    enabled: false
+                });
         }
         d.touch();
     }

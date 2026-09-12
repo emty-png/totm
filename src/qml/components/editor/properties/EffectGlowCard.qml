@@ -27,8 +27,6 @@ ColumnLayout {
             mixedBlur: true,
             mixedSpread: true
         })
-    property bool hasText: card.section ? card.section.hasText() : false
-
     spacing: 8
 
     RowLayout {
@@ -104,8 +102,6 @@ ColumnLayout {
         SegmentedOption {
             label: qsTr("Inner")
             active: card.current.value.inner === true
-            enabled: !card.hasText
-            opacity: card.hasText ? 0.45 : 1
             onClicked: {
                 if (card.section)
                     card.section.setGlowInnerAt(card.entryIndex, true);

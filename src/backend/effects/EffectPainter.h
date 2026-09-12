@@ -105,6 +105,28 @@ struct Grain {
     static Grain fromMap(const QVariantMap &m);
 };
 
+// Text layout for the glyph raster path. Content-space values straight
+// off the node (like PathOpts); the painter scales by `scale`.
+// autoSize boxes grow with content, fixed boxes wrap and clip; vAlign
+// parks fixed boxes top/middle/bottom. Plain data, backend-readable.
+struct TextOpts {
+    QString content;
+    QString family = QStringLiteral("Inter");
+    int weight = 400;
+    double size = 16.0;
+    double spacingPct = 0.0;
+    QString halign = QStringLiteral("left");
+    QString valign = QStringLiteral("top");
+    bool autoSize = true;
+    bool lineAuto = true;
+    double leading = 1.2;
+    double boxW = 10.0;
+    double boxH = 10.0;
+    double outlinePx = 1.0;
+
+    static TextOpts fromMap(const QVariantMap &m);
+};
+
 // Frames tick at 60Hz on both sides (preview transport seconds and
 // export frame times share this rule).
 inline int grainFrameNo(double t)
@@ -127,6 +149,20 @@ uint32_t grainHash(uint32_t cx, uint32_t cy, uint32_t seed);
 void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathOpts &opts,
     const Style &st, const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur,
     double scale, QCache<QByteArray, QImage> *maskCache = nullptr);
+// White glyph coverage for one text box (fill silhouette plus the
+// outline ring unioned in when outlinePx > 0), laid out by the shared
+// QTextDocument builder so preview and export shape glyphs alike.
+// Device px throughout (already scaled); clips fixed boxes like the
+// canvas, lets auto-size boxes overflow like the canvas.
+QImage textGhost(const TextOpts &text, double w, double h, double scale, bool withOutline);
+// Effected text leaf: outer shadows/glows under the glyphs, fill (solid
+// or linear across the box), real inner bands, stroke ring on top, then
+// layer-blur mixes the whole stack. Same fixed order as vectors; grain
+// stays a separate overlay on both sides. maskCache memoizes blurred
+// rasters (null recomputes, same pixels).
+void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const Style &st,
+    const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur, double scale,
+    QCache<QByteArray, QImage> *maskCache = nullptr);
 // Full leaf: shadow composite under the shape. scale maps content px to
 // device px for blur/offset fidelity (preview passes 1, export its ratio).
 void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathOpts &opts,

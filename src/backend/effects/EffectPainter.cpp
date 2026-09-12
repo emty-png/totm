@@ -2,11 +2,18 @@
 
 #include "EffectSpec.h"
 
+#include <QAbstractTextDocumentLayout>
 #include <QDataStream>
+#include <QFont>
 #include <QImage>
 #include <QIODevice>
 #include <QLinearGradient>
 #include <QPainterPathStroker>
+#include <QPalette>
+#include <QTextCursor>
+#include <QTextDocument>
+#include <QTextFormat>
+#include <QTextOption>
 #include <QtMath>
 
 namespace Effects {
@@ -99,6 +106,25 @@ Grain Grain::fromMap(const QVariantMap &m)
     g.amount = qBound(0.0, m.value(QStringLiteral("amount"), 0.5).toDouble(), 1.0);
     g.size = qBound(1.0, m.value(QStringLiteral("size"), 2.0).toDouble(), 10.0);
     return g;
+}
+
+TextOpts TextOpts::fromMap(const QVariantMap &m)
+{
+    TextOpts t;
+    t.content = m.value(QStringLiteral("content")).toString();
+    t.family = m.value(QStringLiteral("family"), QStringLiteral("Inter")).toString();
+    t.weight = qBound(100, m.value(QStringLiteral("weight"), 400).toInt(), 900);
+    t.size = qMax(1.0, m.value(QStringLiteral("size"), 16.0).toDouble());
+    t.spacingPct = m.value(QStringLiteral("spacing"), 0.0).toDouble();
+    t.halign = m.value(QStringLiteral("halign"), QStringLiteral("left")).toString();
+    t.valign = m.value(QStringLiteral("valign"), QStringLiteral("top")).toString();
+    t.autoSize = m.value(QStringLiteral("autoSize"), true).toBool();
+    t.lineAuto = m.value(QStringLiteral("lineAuto"), true).toBool();
+    t.leading = qMax(0.5, m.value(QStringLiteral("leading"), 1.2).toDouble());
+    t.boxW = qMax(1.0, m.value(QStringLiteral("boxW"), 10.0).toDouble());
+    t.boxH = qMax(1.0, m.value(QStringLiteral("boxH"), 10.0).toDouble());
+    t.outlinePx = qMax(0.0, m.value(QStringLiteral("outlinePx"), 0.0).toDouble());
+    return t;
 }
 
 uint32_t grainSeed(int uid, int frameNo)
@@ -1023,6 +1049,386 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
         pt->setPen(QPen(sb, o.sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         pt->setBrush(Qt::NoBrush);
         pt->drawPath(o.path);
+    }
+}
+
+namespace {
+
+// Shared QTextDocument builder: mirrors the canvas TextGlyphs settings
+// (family, pixel size, weight, absolute letter spacing, alignment,
+// wrap, fixed line height) so preview and export lay glyphs alike.
+void setupTextDoc(QTextDocument &doc, const TextOpts &t, double s, const QColor &fg, double outlinePx)
+{
+    doc.setPlainText(t.content);
+    const double px = qMax(1.0, t.size * s);
+    QFont font(t.family);
+    font.setPixelSize(qRound(px));
+    font.setWeight(QFont::Weight(qBound(100, t.weight, 900)));
+    if (!qFuzzyIsNull(t.spacingPct))
+        font.setLetterSpacing(QFont::AbsoluteSpacing, t.size * s * t.spacingPct / 100.0);
+    doc.setDefaultFont(font);
+    QTextCursor cur(&doc);
+    cur.select(QTextCursor::Document);
+    QTextCharFormat fmt;
+    fmt.setForeground(fg);
+    if (outlinePx > 0.01)
+        fmt.setTextOutline(QPen(Qt::white, qMax(qreal(0.5), outlinePx)));
+    cur.mergeCharFormat(fmt);
+    if (!t.lineAuto) {
+        QTextBlockFormat bf;
+        bf.setLineHeight(qMax(0.5, t.leading * px), QTextBlockFormat::FixedHeight);
+        cur.mergeBlockFormat(bf);
+    }
+    QTextOption opt;
+    opt.setAlignment(t.halign == QLatin1String("center")
+            ? Qt::AlignHCenter
+            : t.halign == QLatin1String("right") ? Qt::AlignRight
+            : t.halign == QLatin1String("justify") ? Qt::AlignJustify
+                                                  : Qt::AlignLeft);
+    opt.setWrapMode(t.autoSize ? QTextOption::NoWrap : QTextOption::WordWrap);
+    doc.setDefaultTextOption(opt);
+    if (!t.autoSize)
+        doc.setTextWidth(t.boxW * s);
+}
+
+// Glyph-box fingerprint: layout inputs plus device scale. Fill colors,
+// offsets and tints never enter (they apply after), so color/offset
+// edits reuse the cached ghost and halo rasters bit-for-bit.
+QByteArray textKey(const TextOpts &t, double s)
+{
+    QByteArray bytes;
+    QDataStream ds(&bytes, QIODevice::WriteOnly);
+    ds.setVersion(QDataStream::Qt_6_0);
+    ds << quint8('T') << t.content << t.family << t.weight << t.size << t.spacingPct << t.halign
+       << t.valign << t.autoSize << t.lineAuto << t.leading << t.boxW << t.boxH << t.outlinePx << s;
+    return bytes;
+}
+
+double textDy(const TextOpts &t, double docH, double boxH)
+{
+    if (t.autoSize)
+        return 0.0;
+    if (t.valign == QLatin1String("middle"))
+        return qMax(0.0, (boxH - docH) / 2.0);
+    if (t.valign == QLatin1String("bottom"))
+        return qMax(0.0, boxH - docH);
+    return 0.0;
+}
+
+// Alpha-complement (white with inverted alpha) for the erode-by-dual.
+QImage inverted(const QImage &src)
+{
+    QImage inv(src.size(), QImage::Format_ARGB32_Premultiplied);
+    inv.fill(Qt::white);
+    QPainter p(&inv);
+    p.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+    p.drawImage(0, 0, src);
+    return inv;
+}
+
+// Nine-tap stamp dilate: halo starts outside the glyphs like the old
+// exporter stamp pass. Eight taps approximate a disc; the blur that
+// always follows rounds off the rest.
+QImage stamped(const QImage &src, double spread)
+{
+    if (spread <= 0.01 || src.isNull())
+        return src.copy();
+    QImage grown(src.size(), QImage::Format_ARGB32_Premultiplied);
+    grown.fill(0);
+    QPainter gp(&grown);
+    for (int oy = -1; oy <= 1; ++oy) {
+        for (int ox = -1; ox <= 1; ++ox)
+            gp.drawImage(QPointF(ox * spread, oy * spread), src);
+    }
+    gp.end();
+    return grown;
+}
+
+// Erode by duality (not dilate(not)): blurred-mask pipeline stays in
+// plain QPainter ops, no extra dependencies.
+QImage eroded(const QImage &src, double spread)
+{
+    if (spread <= 0.01 || src.isNull())
+        return src.copy();
+    return inverted(stamped(inverted(src), spread));
+}
+
+QByteArray textOuterKey(const QByteArray &tkey, bool outlined, double spread, double blur, double s)
+{
+    QByteArray key;
+    QDataStream ds(&key, QIODevice::WriteOnly);
+    ds.setVersion(QDataStream::Qt_6_0);
+    ds << quint8('O') << tkey << outlined << spread << blur << s;
+    return key;
+}
+
+QByteArray textInnerKey(const QByteArray &tkey, double spread, double blur, double ox, double oy, double s)
+{
+    QByteArray key;
+    QDataStream ds(&key, QIODevice::WriteOnly);
+    ds.setVersion(QDataStream::Qt_6_0);
+    ds << quint8('I') << tkey << spread << blur << ox << oy << s;
+    return key;
+}
+
+// Stroke ring: outlined coverage minus its erosion. A single render
+// feeds both sides, so antialiased edge ramps never punch holes in
+// the band (mixing hinted bare glyphs with unhinted outlined ones
+// does). Cached on layout plus outline width.
+QImage textRing(const QImage &outlined, const QByteArray &tkey, double outlineW, double s,
+    QCache<QByteArray, QImage> *cache)
+{
+    QByteArray key;
+    {
+        QDataStream ds(&key, QIODevice::WriteOnly);
+        ds.setVersion(QDataStream::Qt_6_0);
+        ds << quint8('R') << tkey << outlineW << s;
+    }
+    if (cache) {
+        if (QImage *hit = cache->object(key))
+            return *hit;
+    }
+    QImage ring(outlined.size(), QImage::Format_ARGB32_Premultiplied);
+    ring.fill(0);
+    {
+        QPainter p(&ring);
+        p.drawImage(0, 0, outlined);
+        p.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+        p.drawImage(0, 0, eroded(outlined, outlineW * s));
+    }
+    if (cache && !ring.isNull())
+        cache->insert(key, new QImage(ring), qMax(1, int(ring.sizeInBytes())));
+    return ring;
+}
+
+// White glyph coverage, cached on the layout key. withOutline unions
+// the outline ring in (halo/fill silhouette); without it is the bare
+// glyphs (fill and inner-band silhouette).
+QImage textCoverage(const TextOpts &t, double w, double h, double s, bool withOutline,
+    QCache<QByteArray, QImage> *cache, QByteArray *keyOut)
+{
+    const QByteArray tkey = textKey(t, s);
+    const QByteArray key = textOuterKey(tkey, withOutline, -1.0, -1.0, s);
+    if (keyOut)
+        *keyOut = tkey;
+    if (cache) {
+        if (QImage *hit = cache->object(key))
+            return *hit;
+    }
+    const int iw = qMax(1, qRound(w)), ih = qMax(1, qRound(h));
+    QImage ghost(QSize(iw, ih), QImage::Format_ARGB32_Premultiplied);
+    ghost.fill(0);
+    if (!t.content.isEmpty()) {
+        QTextDocument doc;
+        setupTextDoc(doc, t, s, Qt::white, withOutline ? qMax(qreal(0.5), t.outlinePx * s) : 0.0);
+        QPainter gp(&ghost);
+        gp.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+        gp.translate(0, textDy(t, doc.size().height(), h));
+        QAbstractTextDocumentLayout::PaintContext ctx;
+        ctx.palette.setColor(QPalette::Text, Qt::white);
+        if (!t.autoSize)
+            gp.setClipRect(QRectF(0, 0, w, h));
+        doc.documentLayout()->draw(&gp, ctx);
+    }
+    if (cache && !t.content.isEmpty())
+        cache->insert(key, new QImage(ghost), qMax(1, int(ghost.sizeInBytes())));
+    return ghost;
+}
+
+// Blurred dilated halo canvas (pre-tint), grown by margin on every
+// side like the vector pad so nothing clips. Cached on layout plus
+// spread/blur; tint and offset apply per paint.
+QImage textHalo(const QImage &outlined, const QByteArray &tkey, double spread, double blur, double s,
+    QCache<QByteArray, QImage> *cache, double *marginOut)
+{
+    const double margin = qMin(256.0, spread * s + blur * s * 2.0) + 1.0;
+    if (marginOut)
+        *marginOut = margin;
+    const QByteArray key = textOuterKey(tkey, true, spread, blur, s);
+    if (cache) {
+        if (QImage *hit = cache->object(key))
+            return *hit;
+    }
+    const QSize csz(qMax(1, outlined.width() + qRound(margin * 2.0)),
+        qMax(1, outlined.height() + qRound(margin * 2.0)));
+    QImage canvas(csz, QImage::Format_ARGB32_Premultiplied);
+    canvas.fill(0);
+    {
+        QPainter p(&canvas);
+        p.drawImage(QPointF(margin, margin), outlined);
+    }
+    QImage grown = stamped(canvas, spread * s);
+    blurImageImpl(grown, blur * s);
+    if (cache)
+        cache->insert(key, new QImage(grown), qMax(1, int(grown.sizeInBytes())));
+    return grown;
+}
+
+// Blurred eroded cutter canvas for inner bands, shift baked in like
+// the vector cutter. The margin covers spread (stamp reach) plus blur
+// plus offset so the stamp dilate never clips. Cached on layout plus
+// spread/blur/offset.
+QImage textCutter(const QImage &base, const QByteArray &tkey, double spread, double blur, double ox,
+    double oy, double s, QCache<QByteArray, QImage> *cache, double *marginOut)
+{
+    const double margin = qMin(256.0, spread * s + blur * s * 2.0) + 1.0 + qHypot(ox * s, oy * s);
+    if (marginOut)
+        *marginOut = margin;
+    const QByteArray key = textInnerKey(tkey, spread, blur, ox, oy, s);
+    if (cache) {
+        if (QImage *hit = cache->object(key))
+            return *hit;
+    }
+    const QSize csz(qMax(1, base.width() + qRound(margin * 2.0)),
+        qMax(1, base.height() + qRound(margin * 2.0)));
+    QImage canvas(csz, QImage::Format_ARGB32_Premultiplied);
+    canvas.fill(0);
+    {
+        QPainter p(&canvas);
+        p.drawImage(QPointF(margin + ox * s, margin + oy * s), base);
+    }
+    QImage cut = eroded(canvas, spread * s);
+    blurImageImpl(cut, blur * s);
+    if (cache)
+        cache->insert(key, new QImage(cut), qMax(1, int(cut.sizeInBytes())));
+    return cut;
+}
+
+void tintImage(QImage &img, const QBrush &brush)
+{
+    QPainter p(&img);
+    p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    p.fillRect(img.rect(), brush);
+}
+
+// Tinted glyphs minus the blurred cutter: the edge band. Both canvases
+// share the (margin, margin) basis, so the erase registers exactly.
+void paintTextInner(QPainter *pt, const QPointF &at, const QImage &base, const QImage &cutter,
+    const QBrush &tint)
+{
+    QImage mask(base.size(), QImage::Format_ARGB32_Premultiplied);
+    mask.fill(0);
+    {
+        QPainter mp(&mask);
+        mp.drawImage(0, 0, base);
+    }
+    tintImage(mask, tint);
+    {
+        QPainter mp(&mask);
+        mp.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+        mp.drawImage(0, 0, cutter);
+    }
+    pt->drawImage(at, mask);
+}
+
+} // namespace
+
+QImage textGhost(const TextOpts &text, double w, double h, double scale, bool withOutline)
+{
+    return textCoverage(text, w, h, scale > 0 ? scale : 1.0, withOutline, nullptr, nullptr);
+}
+
+void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const Style &st,
+    const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur, double scale,
+    QCache<QByteArray, QImage> *maskCache)
+{
+    if (!pt || box.width() <= 0 || box.height() <= 0)
+        return;
+    const double s = scale > 0 ? scale : 1.0;
+    // Whole-stack layer blur first (mirrors the vector leaf): the sharp
+    // stack renders offscreen, blurs, mixes, composites.
+    if (layerBlur.enabled && layerBlur.radius > 0.01) {
+        const double rad = qMax(0.0, layerBlur.radius) * s;
+        const double margin = qMin(256.0, rad * 2.0) + 1.0;
+        const QSize tsz(qMax(1, qRound(box.width() + margin * 2.0)), qMax(1, qRound(box.height() + margin * 2.0)));
+        QImage sharp(tsz, QImage::Format_ARGB32_Premultiplied);
+        sharp.fill(0);
+        {
+            QPainter tp(&sharp);
+            tp.setRenderHint(QPainter::Antialiasing, true);
+            tp.translate(-box.topLeft() + QPointF(margin, margin));
+            Blur off;
+            paintTextLeaf(&tp, box, text, st, shadows, glows, off, scale, maskCache);
+        }
+        QImage blurred = sharp.copy();
+        blurImageImpl(blurred, rad);
+        mixBlurred(sharp, blurred, layerBlur.opacity);
+        pt->drawImage(box.topLeft() - QPointF(margin, margin), sharp);
+        return;
+    }
+    QByteArray tkey;
+    const bool outlined = text.outlinePx > 0.01;
+    const QImage cover = textCoverage(text, box.width(), box.height(), s, outlined, maskCache, &tkey);
+    const QImage base = outlined ? textCoverage(text, box.width(), box.height(), s, false, maskCache, nullptr)
+                                 : cover;
+    const QRectF fillBox = box;
+    // Outer halos under the glyphs, bottom-first so index 0 paints
+    // topmost (closest to the glyphs), like vectors.
+    for (int i = shadows.size() - 1; i >= 0; --i) {
+        const Shadow &sh = shadows.at(i);
+        if (!sh.enabled || sh.inner)
+            continue;
+        double m = 0.0;
+        QImage halo = textHalo(cover, tkey, sh.spread, sh.blur, s, maskCache, &m);
+        tintImage(halo, sh.color);
+        pt->drawImage(box.topLeft() + QPointF(-m + sh.x * s, -m + sh.y * s), halo);
+    }
+    for (int i = glows.size() - 1; i >= 0; --i) {
+        const Glow &g = glows.at(i);
+        if (!g.enabled || g.inner)
+            continue;
+        double m = 0.0;
+        QImage halo = textHalo(cover, tkey, g.spread, g.blur, s, maskCache, &m);
+        tintImage(halo, g.color);
+        pt->drawImage(box.topLeft() + QPointF(-m, -m), halo);
+    }
+    // Fill (solid or linear across the box) confined to the glyphs.
+    {
+        QImage fill(base.size(), QImage::Format_ARGB32_Premultiplied);
+        fill.fill(0);
+        {
+            QPainter p(&fill);
+            p.drawImage(0, 0, base);
+        }
+        tintImage(fill, paintBrush(fillBox, st.fillType, st.fillGradient, st.fill));
+        pt->drawImage(box.topLeft(), fill);
+    }
+    // Real inner bands above the fill, index 0 topmost. The tinted
+    // canvas shares the cutter's size and (margin, margin) basis so the
+    // erase registers exactly, like the vector band.
+    for (int i = shadows.size() - 1; i >= 0; --i) {
+        const Shadow &sh = shadows.at(i);
+        if (!sh.enabled || !sh.inner)
+            continue;
+        double m = 0.0;
+        QImage cutter = textCutter(base, tkey, sh.spread, sh.blur, sh.x, sh.y, s, maskCache, &m);
+        QImage tinted(cutter.size(), QImage::Format_ARGB32_Premultiplied);
+        tinted.fill(0);
+        {
+            QPainter p(&tinted);
+            p.drawImage(QPointF(m, m), base);
+        }
+        paintTextInner(pt, box.topLeft() + QPointF(-m, -m), tinted, cutter, sh.color);
+    }
+    for (int i = glows.size() - 1; i >= 0; --i) {
+        const Glow &g = glows.at(i);
+        if (!g.enabled || !g.inner)
+            continue;
+        double m = 0.0;
+        QImage cutter = textCutter(base, tkey, g.spread, g.blur, 0.0, 0.0, s, maskCache, &m);
+        QImage tinted(cutter.size(), QImage::Format_ARGB32_Premultiplied);
+        tinted.fill(0);
+        {
+            QPainter p(&tinted);
+            p.drawImage(QPointF(m, m), base);
+        }
+        paintTextInner(pt, box.topLeft() + QPointF(-m, -m), tinted, cutter, g.color);
+    }
+    // Stroke ring (outer band of the outline) on top, like vectors.
+    if (outlined) {
+        QImage ring = textRing(cover, tkey, text.outlinePx, s, maskCache);
+        tintImage(ring, st.stroke);
+        pt->drawImage(box.topLeft(), ring);
     }
 }
 
