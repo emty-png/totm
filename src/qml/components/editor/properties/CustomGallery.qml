@@ -250,6 +250,11 @@ ScrollView {
                         id: "customColor",
                         name: qsTr("Color"),
                         icon: "apps"
+                    },
+                    {
+                        id: "customGradient",
+                        name: qsTr("Gradient"),
+                        icon: "circle"
                     }
                 ]
             },
@@ -275,6 +280,11 @@ ScrollView {
                         id: "customStroke",
                         name: qsTr("Stroke"),
                         icon: "minimize"
+                    },
+                    {
+                        id: "customShadow",
+                        name: qsTr("Shadow"),
+                        icon: "square"
                     }
                 ]
             },

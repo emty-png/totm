@@ -20,6 +20,11 @@ TextField {
     property string prefixIcon: ""
     // Value change per dragged pixel.
     property real scrubStep: 1
+    // Release-committed scrub: drags preview text only, the single write
+    // lands on release. For rows inside rev-driven Repeaters, where a
+    // live commit would rebuild the delegate mid-gesture. Default keeps
+    // live canvas-following scrubs everywhere else.
+    property bool commitOnRelease: false
 
     signal committed(real newValue)
     signal scrubStarted
@@ -140,10 +145,14 @@ TextField {
 
     Component.onCompleted: field.text = field.formatValue(field.value)
     onValueChanged: {
+        if (typeof field.formatValue !== "function")
+            return;
         if (!field.activeFocus)
             field.text = field.mixed ? "" : field.formatValue(field.value);
     }
     onMixedChanged: {
+        if (typeof field.formatValue !== "function")
+            return;
         if (!field.activeFocus)
             field.text = field.mixed ? "" : field.formatValue(field.value);
     }
@@ -158,6 +167,11 @@ TextField {
     }
 
     function commit() {
+        // Focus loss during panel-Repeater teardown (any rev bump while
+        // focused destroys the delegate) can land here after JS teardown
+        // began: bail quietly instead of faulting on a dead method.
+        if (typeof field.formatValue !== "function")
+            return;
         // Enter always finishes editing: blur even when the text parses
         // back to the current value. (Commit-on-focus-loss re-enters
         // here already blurred, so this is a no-op for that path.)
@@ -193,14 +207,25 @@ TextField {
             area.moved = true;
             field.scrubStarted();
         }
+        // No commit before the threshold: sub-threshold wiggles must stay
+        // side-effect free, otherwise the first pixel already checkpoints
+        // + touches, which rebuilds rev-driven Repeaters (killing this
+        // very gesture) and mints phantom undo entries.
+        if (!area.moved)
+            return;
         var step = field.scrubStep;
         if (mouse.modifiers & Qt.ShiftModifier)
             step *= 0.1;
         else if (mouse.modifiers & Qt.ControlModifier)
             step *= 10;
         var v = Math.min(field.maximum, Math.max(field.minimum, area.pressValue + dx * step));
+        // Teardown race (see commit guard): a rev from elsewhere can
+        // destroy this delegate mid-drag; never call into a dead object.
+        if (typeof field.formatValue !== "function")
+            return;
         field.text = field.formatValue(v);
-        field.committed(v);
+        if (!field.commitOnRelease)
+            field.committed(v);
     }
 
     function scrubRelease(area) {
@@ -208,6 +233,10 @@ TextField {
             field.forceActiveFocus();
             field.selectAll();
         } else {
+            // The release write runs on the live delegate; any rebuild
+            // it triggers lands after the gesture is over.
+            if (field.commitOnRelease)
+                field.commit();
             field.scrubFinished();
         }
     }

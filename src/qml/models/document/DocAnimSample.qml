@@ -93,6 +93,46 @@ QtObject {
         return toHex(lerp(a.r, b.r, t), lerp(a.g, b.g, t), lerp(a.b, b.b, t));
     }
 
+    // Alpha-aware twin for shadow colors (#aarrggbb in, out). Opaque
+    // pairs stay #rrggbb so stored clips never gain stray alpha.
+    function parseHexA(hex) {
+        var t = String(hex || "").trim().toLowerCase();
+        if (t.charAt(0) === "#")
+            t = t.slice(1);
+        if (/^[0-9a-f]{3}$/.test(t))
+            t = t.charAt(0) + t.charAt(0) + t.charAt(1) + t.charAt(1) + t.charAt(2) + t.charAt(2);
+        var a = 255;
+        if (t.length === 8) {
+            a = parseInt(t.slice(0, 2), 16);
+            if (isNaN(a))
+                return null;
+            t = t.slice(2);
+        } else if (t.length !== 6) {
+            return null;
+        }
+        if (!/^[0-9a-f]{6}$/.test(t))
+            return null;
+        return {
+            a: a,
+            r: parseInt(t.slice(0, 2), 16),
+            g: parseInt(t.slice(2, 4), 16),
+            b: parseInt(t.slice(4, 6), 16)
+        };
+    }
+
+    function lerpColorA(fromHex, to, t) {
+        var a = parseHexA(fromHex);
+        var b = parseHexA(to);
+        if (!a || !b)
+            return null;
+        var al = Math.round(Math.min(255, Math.max(0, lerp(a.a, b.a, t))));
+        var body = toHex(lerp(a.r, b.r, t), lerp(a.g, b.g, t), lerp(a.b, b.b, t)).slice(1);
+        if (al >= 255)
+            return "#" + body;
+        var h = al.toString(16);
+        return "#" + (h.length === 1 ? "0" + h : h) + body;
+    }
+
     // One clip's contribution for a single leaf. base holds the leaf's
     // captured values ({x, y, w, h, rotation, opacity, fontSize,
     // shapeType}) and is the ONLY read source: deriving frames from live
@@ -213,6 +253,43 @@ QtObject {
             out.radius = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
         } else if (preset === "customStroke") {
             out.strokeWidth = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+        } else if (preset === "customGradient") {
+            // Fill gradient from-to: stop colors ease in sRGB, angle
+            // linearly. Ports to AnimSampler; also flips fillType so a
+            // solid base renders the gradient from the first frame.
+            var gc1 = lerpColor(o.fromC1, o.toC1, e);
+            var gc2 = lerpColor(o.fromC2, o.toC2, e);
+            if (gc1 && gc2) {
+                out.fillType = "linear";
+                out.fillGradient = {
+                    angle: lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e),
+                    stops: [
+                        {
+                            color: gc1,
+                            pos: 0
+                        },
+                        {
+                            color: gc2,
+                            pos: 1
+                        }
+                    ]
+                };
+            }
+        } else if (preset === "customShadow") {
+            var sc = lerpColorA(o.fromColor, o.toColor, e);
+            if (sc) {
+                out.shadow = {
+                    enabled: true,
+                    // Stepped like customHide (bools can't ease): first
+                    // half reads from, second half reads to.
+                    inner: e < 0.5 ? o.fromInner === true : o.toInner === true,
+                    color: sc,
+                    x: lerp(Number(o.fromX) || 0, Number(o.toX) || 0, e),
+                    y: lerp(Number(o.fromY) || 0, Number(o.toY) || 0, e),
+                    blur: Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
+                    spread: Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
+                };
+            }
         } else if (preset === "customPath") {
             var sampled = samplerPath.samplePath(o.pts, o.closed === true, e);
             if (sampled) {
@@ -362,6 +439,32 @@ QtObject {
                 n.fontSize = ov.fontSize;
             if (ov.fill !== undefined)
                 n.fill = ov.fill;
+            if (ov.fillType !== undefined)
+                n.fillType = ov.fillType;
+            if (ov.fillGradient !== undefined)
+                n.fillGradient = {
+                    angle: ov.fillGradient.angle,
+                    stops: [
+                        {
+                            color: String(ov.fillGradient.stops[0].color),
+                            pos: 0
+                        },
+                        {
+                            color: String(ov.fillGradient.stops[1].color),
+                            pos: 1
+                        }
+                    ]
+                };
+            if (ov.shadow !== undefined)
+                n.shadow = {
+                    enabled: ov.shadow.enabled === true,
+                    inner: ov.shadow.inner === true,
+                    color: String(ov.shadow.color),
+                    x: ov.shadow.x,
+                    y: ov.shadow.y,
+                    blur: ov.shadow.blur,
+                    spread: ov.shadow.spread
+                };
             if (ov.visible !== undefined)
                 n.visible = ov.visible;
             if (ov.radius !== undefined) {

@@ -21,10 +21,30 @@ Popup {
     property real sat: 1
     property real val: 1
     property bool scrubbing: false
+    // Gradient mode for fill/stroke gradients (Figma-style Solid |
+    // Gradient tabs on top). Callers that support it pass allowGradient
+    // and open via openForGradient; the working copy lives here so tab
+    // switches never lose the draft.
+    property bool allowGradient: false
+    property string editMode: "solid"
+    property var gradient: ({
+            "angle": 90,
+            "stops": [
+                {
+                    "color": "#000000",
+                    "pos": 0
+                },
+                {
+                    "color": "#ffffff",
+                    "pos": 1
+                }
+            ]
+        })
 
     readonly property color liveColor: Qt.hsva(picker.hue, picker.sat, picker.val, 1)
 
     signal committed(color newColor)
+    signal gradientCommitted(var gradient)
     signal scrubStarted
     signal scrubFinished
 
@@ -69,7 +89,26 @@ Popup {
         width: parent.width
         spacing: 8
 
+        RowLayout {
+            width: parent.width
+            visible: picker.allowGradient
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Solid")
+                active: picker.editMode === "solid"
+                onClicked: picker.editMode = "solid"
+            }
+
+            SegmentedOption {
+                label: qsTr("Gradient")
+                active: picker.editMode === "gradient"
+                onClicked: picker.toGradient()
+            }
+        }
+
         ColorSVPad {
+            visible: picker.editMode === "solid"
             width: parent.width
             height: 190
             hue: picker.hue
@@ -81,6 +120,7 @@ Popup {
         }
 
         ColorHueSlider {
+            visible: picker.editMode === "solid"
             width: parent.width
             hue: picker.hue
             pressPolicy: h => picker.applyHue(h, true)
@@ -89,6 +129,7 @@ Popup {
         }
 
         RowLayout {
+            visible: picker.editMode === "solid"
             width: parent.width
             spacing: 8
 
@@ -115,6 +156,17 @@ Popup {
                 border.color: AppTheme.fieldBorder
             }
         }
+
+        GradientEditor {
+            id: gradEditor
+
+            visible: picker.editMode === "gradient"
+            width: parent.width
+            gradient: picker.gradient
+            onGradientCommitted: g => picker.applyGradient(g)
+            onScrubStarted: picker.scrubStarted()
+            onScrubFinished: picker.scrubFinished()
+        }
     }
 
     // Press-outside mid-drag cancels the pad/slider gesture without a
@@ -123,14 +175,86 @@ Popup {
     onClosed: {
         if (picker.scrubbing)
             picker.endDrag();
+        gradEditor.endDrag();
     }
 
     // Swatch entry: seed h/s/v from the variant. Greys carry no hue,
     // so they keep the current one instead of jumping the square red.
     function openFor(c, anchor, ax, ay) {
+        picker.editMode = "solid";
         picker.seedFrom(c);
         picker.placeNear(anchor, ax, ay);
         picker.open();
+    }
+
+    // Gradient entry: works on a private copy so closing without touching
+    // anything commits nothing, like the solid path.
+    function openForGradient(g, anchor, ax, ay) {
+        picker.editMode = "gradient";
+        picker.gradient = picker.copyGradient(g);
+        picker.placeNear(anchor, ax, ay);
+        picker.open();
+    }
+
+    // Solid -> Gradient convert from the tab: first stop keeps the live
+    // color, second contrasts against it. Gradient -> Solid just flips
+    // the tab; the pad keeps its state and commits route as solid.
+    function toGradient() {
+        if (picker.editMode === "gradient")
+            return;
+        var live = picker.toHex(picker.liveColor);
+        var other = picker.isDarkColor(live) ? "#ffffff" : "#000000";
+        picker.gradient = {
+            angle: 90,
+            stops: [
+                {
+                    color: live,
+                    pos: 0
+                },
+                {
+                    color: other,
+                    pos: 1
+                }
+            ]
+        };
+        picker.editMode = "gradient";
+    }
+
+    function isDarkColor(hex) {
+        var t = String(hex).toLowerCase();
+        if (t.charAt(0) === "#")
+            t = t.slice(1);
+        if (t.length < 6)
+            return true;
+        var r = parseInt(t.slice(0, 2), 16), g = parseInt(t.slice(2, 4), 16), b = parseInt(t.slice(4, 6), 16);
+        return (0.299 * r + 0.587 * g + 0.114 * b) < 128;
+    }
+
+    function copyGradient(g) {
+        var d = g ?? {};
+        var raw = d.stops;
+        var out = [];
+        if (raw && typeof raw.length === "number") {
+            for (var i = 0; i < raw.length && out.length < 2; i++)
+                out.push({
+                    color: String((raw[i] || {}).color ?? "#000000"),
+                    pos: out.length === 0 ? 0 : 1
+                });
+        }
+        while (out.length < 2)
+            out.push({
+                color: out.length === 0 ? "#000000" : "#ffffff",
+                pos: out.length === 0 ? 0 : 1
+            });
+        return {
+            angle: Number(d.angle) || 0,
+            stops: out
+        };
+    }
+
+    function applyGradient(g) {
+        picker.gradient = g;
+        picker.gradientCommitted(g);
     }
 
     // Anchor-relative placement in overlay coords: below the click when

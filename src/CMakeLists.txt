@@ -13,6 +13,11 @@ qt_add_qml_module(totm
     URI Totm
     VERSION 1.0
     SOURCES
+        backend/effects/EffectSpec.h
+        backend/effects/EffectPainter.h
+        backend/effects/EffectPainter.cpp
+        backend/effects/EffectItem.h
+        backend/effects/EffectItem.cpp
         backend/library/LibraryStore.h
         backend/library/LibraryStore.cpp
         backend/settings/SettingsStore.h
@@ -92,11 +97,16 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ColorSVPad.qml
         qml/components/editor/properties/ColorHueSlider.qml
         qml/components/editor/properties/ColorPickerPopup.qml
+        qml/components/editor/properties/GradientEditor.qml
+        qml/components/editor/properties/EffectsSection.qml
+        qml/components/editor/properties/EffectsPopup.qml
         qml/components/editor/properties/PresetCard.qml
         qml/components/editor/properties/PresetGallery.qml
         qml/components/editor/properties/CustomGallery.qml
         qml/components/editor/properties/ClipCustomTransformOptions.qml
         qml/components/editor/properties/ClipCustomStyleOptions.qml
+        qml/components/editor/properties/ClipCustomGradientOptions.qml
+        qml/components/editor/properties/ClipCustomShadowOptions.qml
         qml/components/editor/properties/ClipCustomOtherOptions.qml
         qml/components/editor/properties/ClipPathOptions.qml
         qml/components/editor/properties/ShapeAnimationsPanel.qml
@@ -184,6 +194,7 @@ target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia)
 # Backend headers register QML types by basename (see the generated
 # qmltyperegistrations.cpp), so each backend dir must be on the include path.
 target_include_directories(totm PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/effects
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/library
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/settings
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/video

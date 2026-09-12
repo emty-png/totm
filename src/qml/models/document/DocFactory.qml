@@ -21,8 +21,13 @@ QtObject {
             h: s.h ?? 10,
             rotation: s.rotation ?? 0,
             fill: s.fill ?? "#d9d9d9",
+            fillType: s.fillType ?? "solid",
+            fillGradient: factory._copyGradient(s.fillGradient),
             stroke: s.stroke ?? "#000000",
+            strokeType: s.strokeType ?? "solid",
+            strokeGradient: factory._copyGradient(s.strokeGradient),
             strokeWidth: s.strokeWidth ?? 0,
+            shadow: factory._copyShadow(s.shadow),
             opacity: s.opacity ?? 1,
             radius: s.radius ?? 0,
             independentCorners: s.independentCorners === true,
@@ -65,6 +70,56 @@ QtObject {
     }
 
     // Deep copy so snapshots never share point objects with live nodes.
+    function _copyGradient(src) {
+        // 2-stop linear only in v1: angle + exactly two {color,pos}.
+        // Missing/invalid input falls back to black->white at 90deg so
+        // converts and old scenes always render something sane.
+        var d = src ?? {};
+        var angle = Number(d.angle);
+        if (isNaN(angle))
+            angle = 90;
+        var raw = d.stops;
+        var cols = [], poss = [];
+        if (raw && typeof raw.length === "number") {
+            for (var i = 0; i < raw.length && cols.length < 2; i++) {
+                var st = raw[i] || {};
+                cols.push(String(st.color ?? "#000000"));
+                var p = Number(st.pos);
+                poss.push(isNaN(p) ? (cols.length === 1 ? 0 : 1) : Math.min(1, Math.max(0, p)));
+            }
+        }
+        while (cols.length < 2) {
+            cols.push(cols.length === 0 ? "#000000" : "#ffffff");
+            poss.push(cols.length === 1 ? 0 : 1);
+        }
+        return {
+            angle: angle,
+            stops: [
+                {
+                    color: cols[0],
+                    pos: poss[0]
+                },
+                {
+                    color: cols[1],
+                    pos: poss[1]
+                }
+            ]
+        };
+    }
+
+    function _copyShadow(src) {
+        var d = src ?? {};
+        return {
+            enabled: d.enabled === true,
+            inner: d.inner === true,
+            color: String(d.color ?? "#80000000"),
+            x: d.x !== undefined ? (Number(d.x) || 0) : 0,
+            y: d.y !== undefined ? (Number(d.y) || 0) : 4,
+            blur: d.blur !== undefined ? Math.max(0, Number(d.blur) || 0) : 8,
+            spread: d.spread !== undefined ? Math.max(0, Number(d.spread) || 0) : 0
+        };
+    }
+
     function _copyPath(pathData) {
         if (!pathData)
             return [];

@@ -21,7 +21,9 @@ TextField {
     placeholderTextColor: AppTheme.muted
     selectByMouse: true
 
-    readonly property bool valid: field.normalize(field.text) !== ""
+    // Teardown-guarded like commit below: bindings re-evaluate while
+    // panel-Repeater delegates die, and must never call into them.
+    readonly property bool valid: typeof field.normalize === "function" && field.normalize(field.text) !== ""
 
     background: Rectangle {
         radius: 6
@@ -57,6 +59,10 @@ TextField {
     }
 
     function commit() {
+        // Same teardown race as NumberField (see its commit guard):
+        // focus loss on a destroyed delegate must stay silent.
+        if (typeof field.normalize !== "function")
+            return;
         // Enter always finishes editing: blur even when nothing changed.
         field.focus = false;
         var c = field.normalize(field.text);

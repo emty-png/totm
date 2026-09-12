@@ -62,8 +62,13 @@ Item {
                     sh: Math.max(1, modelData.h || 10)
                     shapeRotation: modelData.rotation || 0
                     fill: modelData.fill || "#d9d9d9"
+                    fillType: modelData.fillType || "solid"
+                    fillGradient: modelData.fillGradient
                     strokeColor: modelData.stroke || "#000000"
+                    strokeType: modelData.strokeType || "solid"
+                    strokeGradient: modelData.strokeGradient
                     strokeWidth: modelData.strokeWidth || 0
+                    shadow: modelData.shadow
                     shapeOpacity: modelData.opacity !== undefined ? modelData.opacity : 1
                     radius: modelData.radius || 0
                     independentCorners: modelData.independentCorners === true

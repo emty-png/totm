@@ -21,9 +21,52 @@ QtObject {
     property real h: 10
     property real rotation: 0
     property color fill: "#d9d9d9"
+    // Fill paint: solid uses fill, linear blends fillGradient stops by
+    // angle (0 = left->right, 90 = top->bottom, clockwise, bbox-relative).
+    // Plain maps so scenes stay backend-readable for video rendering.
+    property string fillType: "solid"
+    property var fillGradient: ({
+            angle: 90,
+            stops: [
+                {
+                    color: "#000000",
+                    pos: 0
+                },
+                {
+                    color: "#ffffff",
+                    pos: 1
+                }
+            ]
+        })
     property color stroke: "#000000"
+    property string strokeType: "solid"
+    property var strokeGradient: ({
+            angle: 90,
+            stops: [
+                {
+                    color: "#000000",
+                    pos: 0
+                },
+                {
+                    color: "#ffffff",
+                    pos: 1
+                }
+            ]
+        })
     property real strokeWidth: 0
     property real opacity: 1
+    // Single shadow, outer or inner (color alpha carries opacity).
+    // Spread dilates the silhouette before blur; preview and export
+    // share the meaning.
+    property var shadow: ({
+            enabled: false,
+            inner: false,
+            color: "#80000000",
+            x: 0,
+            y: 4,
+            blur: 8,
+            spread: 0
+        })
     property real radius: 0
     // Independent corners (rectangle/triangle/star). When true the
     // renderer reads cornerRadii per vertex in paint order; toggling on

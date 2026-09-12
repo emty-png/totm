@@ -62,7 +62,7 @@ QtObject {
     }
 
     function presetIds() {
-        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customHide", "customResize", "customCorner", "customStroke", "customPath"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customShadow", "customPath"];
     }
 
     // Custom from-to clips reuse the preset pipeline (timeline, undo,
@@ -97,6 +97,8 @@ QtObject {
             return qsTr("Opacity");
         if (presetId === "customColor")
             return qsTr("Color");
+        if (presetId === "customGradient")
+            return qsTr("Gradient");
         if (presetId === "customHide")
             return qsTr("Hide / Show");
         if (presetId === "customResize")
@@ -105,6 +107,8 @@ QtObject {
             return qsTr("Corner Radius");
         if (presetId === "customStroke")
             return qsTr("Stroke");
+        if (presetId === "customShadow")
+            return qsTr("Shadow");
         if (presetId === "customPath")
             return qsTr("Path");
         return qsTr("Fade");
@@ -168,6 +172,15 @@ QtObject {
                 from: "#000000",
                 to: "#ff0000"
             };
+        if (presetId === "customGradient")
+            return {
+                fromC1: "#000000",
+                toC1: "#000000",
+                fromC2: "#ffffff",
+                toC2: "#ff0000",
+                fromAngle: 90,
+                toAngle: 90
+            };
         if (presetId === "customHide")
             return {
                 fromVisible: true,
@@ -189,6 +202,21 @@ QtObject {
             return {
                 from: 0,
                 to: 4
+            };
+        if (presetId === "customShadow")
+            return {
+                fromColor: "#80000000",
+                toColor: "#80000000",
+                fromX: 0,
+                toX: 0,
+                fromY: 4,
+                toY: 12,
+                fromBlur: 8,
+                toBlur: 16,
+                fromSpread: 0,
+                toSpread: 0,
+                fromInner: false,
+                toInner: false
             };
         if (presetId === "customPath")
             return {
@@ -221,6 +249,19 @@ QtObject {
         if (/^[0-9a-f]{3}$/.test(t))
             t = t.charAt(0) + t.charAt(0) + t.charAt(1) + t.charAt(1) + t.charAt(2) + t.charAt(2);
         if (/^[0-9a-f]{6}$/.test(t))
+            return "#" + t;
+        return fallback;
+    }
+
+    // Alpha-aware twin for shadow colors: preserves #aarrggbb so
+    // opacity animates; opaque stays #rrggbb.
+    function normalizeHexA(v, fallback) {
+        var t = String(v !== undefined ? v : "").trim().toLowerCase();
+        if (t.charAt(0) === "#")
+            t = t.slice(1);
+        if (/^[0-9a-f]{3}$/.test(t))
+            t = t.charAt(0) + t.charAt(0) + t.charAt(1) + t.charAt(1) + t.charAt(2) + t.charAt(2);
+        if (/^[0-9a-f]{8}$/.test(t) || /^[0-9a-f]{6}$/.test(t))
             return "#" + t;
         return fallback;
     }
@@ -295,6 +336,15 @@ QtObject {
                 from: normalizeHex(r.from !== undefined ? r.from : "#000000", "#000000"),
                 to: normalizeHex(r.to !== undefined ? r.to : "#ff0000", "#ff0000")
             };
+        if (presetId === "customGradient")
+            return {
+                fromC1: normalizeHex(r.fromC1 !== undefined ? r.fromC1 : "#000000", "#000000"),
+                toC1: normalizeHex(r.toC1 !== undefined ? r.toC1 : "#000000", "#000000"),
+                fromC2: normalizeHex(r.fromC2 !== undefined ? r.fromC2 : "#ffffff", "#ffffff"),
+                toC2: normalizeHex(r.toC2 !== undefined ? r.toC2 : "#ff0000", "#ff0000"),
+                fromAngle: clampNum(r.fromAngle !== undefined ? r.fromAngle : 90, 90, 0, 360),
+                toAngle: clampNum(r.toAngle !== undefined ? r.toAngle : 90, 90, 0, 360)
+            };
         if (presetId === "customHide")
             return {
                 fromVisible: r.fromVisible === undefined ? true : !!r.fromVisible,
@@ -316,6 +366,21 @@ QtObject {
             return {
                 from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 100),
                 to: clampNum(r.to !== undefined ? r.to : 4, 4, 0, 100)
+            };
+        if (presetId === "customShadow")
+            return {
+                fromColor: normalizeHexA(r.fromColor !== undefined ? r.fromColor : "#80000000", "#80000000"),
+                toColor: normalizeHexA(r.toColor !== undefined ? r.toColor : "#80000000", "#80000000"),
+                fromX: clampNum(r.fromX !== undefined ? r.fromX : 0, 0, -500, 500),
+                toX: clampNum(r.toX !== undefined ? r.toX : 0, 0, -500, 500),
+                fromY: clampNum(r.fromY !== undefined ? r.fromY : 4, 4, -500, 500),
+                toY: clampNum(r.toY !== undefined ? r.toY : 12, 12, -500, 500),
+                fromBlur: clampNum(r.fromBlur !== undefined ? r.fromBlur : 8, 8, 0, 100),
+                toBlur: clampNum(r.toBlur !== undefined ? r.toBlur : 16, 16, 0, 100),
+                fromSpread: clampNum(r.fromSpread !== undefined ? r.fromSpread : 0, 0, 0, 50),
+                toSpread: clampNum(r.toSpread !== undefined ? r.toSpread : 0, 0, 0, 50),
+                fromInner: r.fromInner === undefined ? false : !!r.fromInner,
+                toInner: r.toInner === undefined ? false : !!r.toInner
             };
         if (presetId === "customPath")
             return {

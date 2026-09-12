@@ -73,5 +73,10 @@ ScrollView {
             Layout.fillWidth: true
             snapshot: panel.snapshot
         }
+
+        EffectsSection {
+            Layout.fillWidth: true
+            snapshot: panel.snapshot
+        }
     }
 }

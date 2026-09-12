@@ -158,6 +158,19 @@ ScrollView {
             }
         }
 
+        // Custom Gradient (fill-gradient stops + angle).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && editor.clipData.preset === "customGradient"
+
+            ClipCustomGradientOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
         // Custom Other (hide / resize / corner / stroke).
         PanelSection {
             width: parent.width
@@ -165,6 +178,19 @@ ScrollView {
             visible: !!editor.clipData && (editor.clipData.preset === "customHide" || editor.clipData.preset === "customResize" || editor.clipData.preset === "customCorner" || editor.clipData.preset === "customStroke")
 
             ClipCustomOtherOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
+        // Custom Shadow (outer-shadow color / offsets / blur / spread).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && editor.clipData.preset === "customShadow"
+
+            ClipCustomShadowOptions {
                 Layout.fillWidth: true
                 doc: editor.doc
                 clipId: editor.clipId
