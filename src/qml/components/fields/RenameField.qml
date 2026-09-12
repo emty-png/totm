@@ -19,6 +19,9 @@ TextField {
     selectionColor: AppTheme.selection
     selectedTextColor: "#ffffff"
     selectByMouse: true
+    // Matches the backend trim cap (kMaxNameLength) so overlong names
+    // never silently truncate on commit.
+    maximumLength: 120
     topPadding: 0
     bottomPadding: 0
     leftPadding: 8
@@ -53,6 +56,11 @@ TextField {
     }
 
     function settle() {
+        // Runs twice per Enter (accepted, then focus loss from the
+        // blur below): the second pass finds the field hidden and
+        // bails, so one keypress commits exactly once.
+        if (!field.visible)
+            return;
         field.focus = false;
         if (field.text === field.editOrig)
             field.cancelled();

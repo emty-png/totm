@@ -18,6 +18,18 @@ Item {
     // (fresh arrays every read churn delegates).
     property var starredDesigns: []
 
+    // Workspace rows, cached like the grid: a store write mid-edit
+    // (e.g. starring a card) rebuilds delegates and eats typed text.
+    property var workspaces: []
+
+    function refreshWorkspaces() {
+        var out = [];
+        var all = LibraryStore.workspaceList;
+        for (var i = 0; i < all.length; i++)
+            out.push(all[i]);
+        panel.workspaces = out;
+    }
+
     function refreshStarred() {
         var out = [];
         var all = LibraryStore.designList;
@@ -28,12 +40,17 @@ Item {
         panel.starredDesigns = out;
     }
 
-    Component.onCompleted: panel.refreshStarred()
+    Component.onCompleted: {
+        panel.refreshStarred();
+        panel.refreshWorkspaces();
+    }
 
     Connections {
         target: LibraryStore
         function onLibraryChanged() {
             panel.refreshStarred();
+            if (panel.editingWorkspaceId === "")
+                panel.refreshWorkspaces();
         }
     }
 
@@ -62,7 +79,7 @@ Item {
         }
 
         Repeater {
-            model: LibraryStore.workspaceList
+            model: panel.workspaces
 
             WorkspaceRow {
                 workspaceId: modelData.workspaceId
@@ -78,11 +95,17 @@ Item {
                     panel.editingWorkspaceId = id;
                 }
                 commitPolicy: (id, text) => {
+                    if (panel.editingWorkspaceId !== id)
+                        return;
                     LibraryStore.renameWorkspace(id, text);
                     panel.editingWorkspaceId = "";
+                    panel.refreshWorkspaces();
                 }
-                cancelPolicy: () => {
+                cancelPolicy: id => {
+                    if (panel.editingWorkspaceId !== id)
+                        return;
                     panel.editingWorkspaceId = "";
+                    panel.refreshWorkspaces();
                 }
                 deletePolicy: id => {
                     if (id === panel.selectedWorkspaceId && panel.selectPolicy)

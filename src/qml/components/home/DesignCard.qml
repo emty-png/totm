@@ -119,6 +119,8 @@ Item {
             }
 
             RenameField {
+                id: editField
+
                 Layout.fillWidth: true
                 visible: card.editing
                 initialText: card.designName
@@ -128,7 +130,7 @@ Item {
                 }
                 onCancelled: {
                     if (card.cancelPolicy)
-                        card.cancelPolicy();
+                        card.cancelPolicy(card.designId);
                 }
             }
 
@@ -210,6 +212,10 @@ Item {
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onPressed: mouse => {
+            // Pressing anywhere settles this card's own edit first, so a
+            // click never opens or menus behind a half-typed rename.
+            if (card.editing)
+                editField.settle();
             if (mouse.button === Qt.RightButton) {
                 if (!card.selected && card.selectOnlyPolicy)
                     card.selectOnlyPolicy(card.designId);
@@ -243,12 +249,28 @@ Item {
                 return;
             if (mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 return;
-            if (card.openPolicy)
-                card.openPolicy(card.designId);
+            // Delayed past the system double-click interval: a second
+            // press turns this into a rename, never an open + rename.
+            openTimer.restart();
         }
         onDoubleClicked: mouse => {
-            if (mouse.button === Qt.LeftButton && card.beginRenamePolicy)
+            if (mouse.button !== Qt.LeftButton)
+                return;
+            openTimer.stop();
+            if (card.beginRenamePolicy)
                 card.beginRenamePolicy(card.designId);
+        }
+    }
+
+    // Single-click open, held back one double-click interval so
+    // double-click renames in place instead of navigating away first.
+    Timer {
+        id: openTimer
+
+        interval: Qt.styleHints.mouseDoubleClickInterval
+        onTriggered: {
+            if (card.openPolicy)
+                card.openPolicy(card.designId);
         }
     }
 

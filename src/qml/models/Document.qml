@@ -409,7 +409,6 @@ QtObject {
         renamer.beginRename(uid);
     }
     function commitRename(uid, name) {
-        history.checkpoint();
         renamer.commitRename(uid, name);
     }
     function cancelRename(uid) {
