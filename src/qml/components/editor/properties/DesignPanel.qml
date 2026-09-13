@@ -14,9 +14,23 @@ ScrollView {
     property var snapshot: SelectionSnapshot {
         doc: panel.doc
     }
+    property var pluginSections: []
+
+    function refreshPlugins() {
+        panel.pluginSections = PluginStore.designSections();
+    }
+
+    Component.onCompleted: panel.refreshPlugins()
 
     contentWidth: availableWidth
     clip: true
+
+    Connections {
+        target: PluginStore
+        function onPluginsChanged() {
+            panel.refreshPlugins();
+        }
+    }
 
     ColumnLayout {
         width: panel.availableWidth
@@ -77,6 +91,19 @@ ScrollView {
         EffectsSection {
             Layout.fillWidth: true
             snapshot: panel.snapshot
+        }
+
+        // Plugin sections (ui.slots). Each entry gets doc + snapshot +
+        // pluginId when it declares them; failures show a muted row.
+        Repeater {
+            model: panel.pluginSections
+
+            delegate: PluginSlot {
+                Layout.fillWidth: true
+                entry: modelData
+                doc: panel.doc
+                snapshot: panel.snapshot
+            }
         }
     }
 }

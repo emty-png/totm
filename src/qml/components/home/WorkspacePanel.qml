@@ -9,10 +9,12 @@ Item {
 
     required property string selectedWorkspaceId
     property string editingWorkspaceId: ""
+    property bool settingsSelected: false
 
     property var selectPolicy: null
     property var movePolicy: null
     property var openPolicy: null
+    property var settingsPolicy: null
 
     // Starred designs, newest first. Cached stable for the Repeater
     // (fresh arrays every read churn delegates).
@@ -85,7 +87,7 @@ Item {
                 workspaceId: modelData.workspaceId
                 workspaceName: modelData.name
                 isDefault: modelData.isDefault
-                selected: modelData.workspaceId === panel.selectedWorkspaceId
+                selected: !panel.settingsSelected && modelData.workspaceId === panel.selectedWorkspaceId
                 editing: modelData.workspaceId === panel.editingWorkspaceId
                 selectPolicy: id => {
                     if (panel.selectPolicy)
@@ -208,6 +210,70 @@ Item {
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
+        }
+
+        // Hairline above the pinned entry, matching panel section tops.
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            Layout.leftMargin: 12
+            Layout.rightMargin: 12
+            Layout.bottomMargin: 6
+            color: AppTheme.border
+        }
+
+        // Pinned bottom entry. Placeholder target until the settings
+        // screen lands; selection lives in HomeView like workspaces.
+        Item {
+            id: settingsRow
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+            Layout.bottomMargin: 8
+
+            readonly property bool hovered: settingsMouse.containsMouse
+
+            LayerHighlight {
+                selected: panel.settingsSelected
+                hovered: settingsRow.hovered
+                lifted: false
+            }
+
+            MouseArea {
+                id: settingsMouse
+
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                onClicked: {
+                    if (panel.settingsPolicy)
+                        panel.settingsPolicy();
+                }
+            }
+
+            Text {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 8
+                verticalAlignment: Text.AlignVCenter
+                leftPadding: 22
+                text: qsTr("Settings")
+                font.pixelSize: 12
+                elide: Text.ElideRight
+                color: panel.settingsSelected ? AppTheme.foreground : settingsRow.hovered ? AppTheme.foreground : AppTheme.muted
+            }
+
+            AppIcon {
+                anchors {
+                    left: parent.left
+                    verticalCenter: parent.verticalCenter
+                    leftMargin: 16
+                }
+                kind: "gear"
+                width: 14
+                height: 14
+                iconColor: panel.settingsSelected ? AppTheme.foreground : settingsRow.hovered ? AppTheme.foreground : AppTheme.muted
+            }
         }
     }
 

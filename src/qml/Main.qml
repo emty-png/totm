@@ -20,7 +20,10 @@ ApplicationWindow {
         TabState.saveAllOpen();
     }
 
-    Component.onCompleted: root.restoreWindow()
+    Component.onCompleted: {
+        root.restoreWindow();
+        PluginStore.scan();
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -112,6 +115,45 @@ ApplicationWindow {
     WindowResizeHandles {
         window: root
     }
+
+    // Advanced-tier plugin overlays: full-window layer above both views.
+    // Standard slots live in the toolbar and design panel; only plugins
+    // with ui.fullOverlay granted appear here.
+    Item {
+        id: pluginOverlayHost
+
+        anchors.fill: parent
+        z: 10
+
+        Repeater {
+            model: PluginStore.fullOverlays()
+
+            delegate: Loader {
+                property var entry: modelData
+
+                anchors.fill: parent
+                active: true
+                asynchronous: true
+                source: entry.url
+
+                onLoaded: {
+                    if (item && "pluginId" in item)
+                        item.pluginId = entry.pluginId;
+                }
+            }
+        }
+    }
+
+    PluginPermissionPopup {
+        onAllow: function (granted) {
+            PluginStore.grantPending(granted);
+        }
+        onDeny: PluginStore.dismissPending()
+    }
+
+    // Trusted host picker: opens system dialogs for plugin media
+    // requests and imports through LibraryStore. Invisible.
+    PluginFilePicker {}
 
     // Window state: geometry + maximized persist via SettingsStore
     // (native QSettings). Restores once on launch; saves debounced on

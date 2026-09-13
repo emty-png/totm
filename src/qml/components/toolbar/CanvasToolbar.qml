@@ -9,6 +9,11 @@ Rectangle {
     id: toolbar
 
     property var doc: null
+    property var pluginTools: []
+
+    function refreshPlugins() {
+        toolbar.pluginTools = PluginStore.toolbarTools();
+    }
 
     // Whether the shapes menu is open (used by the canvas outside-click
     // catcher below the toolbar).
@@ -21,6 +26,15 @@ Rectangle {
     // Map the active shape subtype to its toolbar icon.
     function shapeIcon() {
         return ToolState.shapeIconFor(ToolState.activeShapeType);
+    }
+
+    Component.onCompleted: toolbar.refreshPlugins()
+
+    Connections {
+        target: PluginStore
+        function onPluginsChanged() {
+            toolbar.refreshPlugins();
+        }
     }
 
     implicitWidth: barRow.implicitWidth + 16
@@ -240,6 +254,36 @@ Rectangle {
             iconKind: "image"
             active: ToolState.activeTool === "image"
             onClicked: ToolState.setActiveTool("image")
+        }
+
+        // Plugin tools (ui.slots). Each entry loads one plugin QML file
+        // with doc + pluginId injected when the item declares them.
+        Repeater {
+            model: toolbar.pluginTools
+
+            delegate: Loader {
+                property var entry: modelData
+                property var toolDoc: toolbar.doc
+
+                Layout.preferredWidth: 36
+                Layout.preferredHeight: 32
+                active: true
+                asynchronous: true
+                source: entry.url
+
+                onLoaded: {
+                    if (item) {
+                        if ("pluginId" in item)
+                            item.pluginId = entry.pluginId;
+                        if ("doc" in item)
+                            item.doc = toolDoc;
+                    }
+                }
+                onToolDocChanged: {
+                    if (item && "doc" in item)
+                        item.doc = toolDoc;
+                }
+            }
         }
     }
 }
