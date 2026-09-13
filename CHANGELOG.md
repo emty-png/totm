@@ -7,6 +7,7 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ### Added
 
+* App icon — the "totm" wordmark ships in every size a desktop needs: hicolor PNGs (16–256) + desktop entry on Linux (X11 + Wayland via `cmake --install`), multi-size `.ico` wired into the Windows exe, `.icns` in the macOS bundle, and the window/taskbar icon set at runtime.
 * Card previews + rename hardening — home thumbnails reuse the canvas `ShapeItem` through one shared mapping (real uids, paint-depth order, hidden-branch pruning, fixed-box wrapping, frosted-glass backdrop sampling), so they match the canvas for every tool and effect; blank designs show an "Empty canvas" placeholder. Renaming got sturdier too: double-click renames in place (single-click open waits out the double-click interval), Enter commits exactly once, fast re-targets can't clobber the live edit, and grid rebuilds no longer eat typed text.
 * Draggable tabs — doc tabs drag to reorder with a live gap preview, selection follows the dragged tab.
 * Audio properties — design-panel section for the audio selection (per-clip controls with mixed-value handling and undo-coalesced scrubs) plus timeline lane scrolling.
@@ -31,6 +32,7 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ### Changed
 
+* App icon restyle — the mark now sits on a padded squircle (12.5% inset, ~23.5% corner radius) instead of a full-bleed square, so it no longer reads oversized on taskbars/docks. All sizes regenerated from a new `packaging/icons/totm.svg` source: hicolor PNGs (16–256), multi-size `.ico`, `.icns`, plus the runtime `:/icons/totm.png`.
 * Library storage — scenes moved out of `library.json` into one file per design (`designs/<id>.json`), so an autosave writes a single scene instead of rewriting the whole library. Unreferenced image blobs are swept at startup, and the store reports blob count + bytes for a future storage UI. A corrupt design file is archived aside with a timestamp and starts fresh instead of blocking the library.
 * Bottom panel now hosts the timeline (taller than before, 300px).
 * Right panel got an animate mode with a preset/custom switcher.

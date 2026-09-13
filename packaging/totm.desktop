@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.5
+Type=Application
+Name=totm
+GenericName=Motion graphics editor
+Comment=Draw vector shapes and animate them
+Exec=totm
+Icon=totm
+Terminal=false
+Categories=Graphics;2DGraphics;
+Keywords=animation;motion;vector;design;
+StartupWMClass=totm

@@ -1,0 +1,4 @@
+#include <windows.h>
+
+// Application icon (multi-size ICO lives beside this file).
+IDI_ICON1 ICON "totm.ico"

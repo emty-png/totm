@@ -1,6 +1,19 @@
 qt_add_executable(totm
     main.cpp
+    "${PROJECT_SOURCE_DIR}/packaging/icons.qrc"
 )
+
+# Platform icons: macOS bundle icon, Windows exe icon. The Linux
+# hicolor set + desktop entry install below instead of embedding.
+if(APPLE)
+    set_source_files_properties(
+        "${PROJECT_SOURCE_DIR}/packaging/icons/totm.icns"
+        PROPERTIES MACOSX_PACKAGE_LOCATION "Resources"
+    )
+    target_sources(totm PRIVATE "${PROJECT_SOURCE_DIR}/packaging/icons/totm.icns")
+elseif(WIN32)
+    target_sources(totm PRIVATE "${PROJECT_SOURCE_DIR}/packaging/icons/totm.rc")
+endif()
 
 set_source_files_properties(
     qml/theme/AppTheme.qml
@@ -222,6 +235,22 @@ target_include_directories(totm PRIVATE
 set_target_properties(totm PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_ICON_FILE totm.icns
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
 )
+
+# Linux desktop integration (X11 + Wayland): hicolor icons, desktop
+# entry. `cmake --install` picks these up; no prebuilt packages ship.
+if(UNIX AND NOT APPLE)
+    foreach(icon_size IN ITEMS 16 22 24 32 48 64 128 256)
+        install(
+            FILES "${PROJECT_SOURCE_DIR}/packaging/icons/hicolor/${icon_size}x${icon_size}/apps/totm.png"
+            DESTINATION "share/icons/hicolor/${icon_size}x${icon_size}/apps"
+        )
+    endforeach()
+    install(
+        FILES "${PROJECT_SOURCE_DIR}/packaging/totm.desktop"
+        DESTINATION "share/applications"
+    )
+endif()

@@ -77,6 +77,10 @@ cmake --build --preset dev
 .\build\dev\src\totm.exe
 ```
 
+### Desktop integration (Linux)
+
+`cmake --install build/dev` installs `totm` with its hicolor icons and desktop entry, so it shows up in your launcher with the proper logo on both X11 and Wayland.
+
 ## Contributing
 
 While the stack is not the most inviting for people to contribute in but if you still want to do it-

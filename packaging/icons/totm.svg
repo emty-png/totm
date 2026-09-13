@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- totm app icon: black squircle with white ./ glyph.
+       12.5% padding (32px), side 192px, radius 23.5% of side (~45.1px).
+       Glyph is the legacy mark proportionally mapped into the padded box. -->
+  <rect x="32" y="32" width="192" height="192" rx="45.1" fill="#000000"/>
+  <polygon points="181.25,77 152.75,77 104.75,178.25 133.25,178.25" fill="#ffffff"/>
+  <circle cx="83" cy="163.62" r="9.56" fill="#ffffff"/>
+</svg>
