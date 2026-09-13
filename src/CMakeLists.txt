@@ -39,6 +39,9 @@ qt_add_qml_module(totm
         backend/video/VideoExporter.cpp
         backend/video/AnimSampler.h
         backend/video/AnimSampler.cpp
+        backend/plugins/PluginStore.h
+        backend/plugins/PluginStore.cpp
+        backend/plugins/PluginNetworkGuard.h
     QML_FILES
         # Shell
         qml/Main.qml
@@ -205,8 +208,18 @@ qt_add_qml_module(totm
         qml/components/home/DesignCard.qml
         qml/components/home/DesignCardPreview.qml
         qml/components/home/DesignContextMenu.qml
+        # Plugins (permission-gated QML extensions)
+        qml/components/plugins/PluginPermissionPopup.qml
+        qml/components/plugins/PluginPermissionRow.qml
+        qml/components/plugins/PluginManagerRow.qml
+        qml/components/plugins/PluginFilePicker.qml
+        qml/components/plugins/PluginSlot.qml
         # Views (screen roots only)
         qml/views/home/HomeView.qml
+        qml/views/settings/SettingsView.qml
+        qml/views/settings/SettingsTabBar.qml
+        qml/views/settings/SettingsTab.qml
+        qml/views/settings/PluginSettingsView.qml
         qml/views/editor/EditorView.qml
 )
 
@@ -219,7 +232,7 @@ qt_add_shaders(totm "totm_grain_shaders"
         qml/components/editor/shapes/grain.frag
 )
 
-target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia)
+target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia Qt6::Network)
 
 # Backend headers register QML types by basename (see the generated
 # qmltyperegistrations.cpp), so each backend dir must be on the include path.
@@ -228,6 +241,7 @@ target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/library
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/settings
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/video
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/plugins
 )
 
 # Cross-platform desktop bundle settings.
@@ -252,5 +266,10 @@ if(UNIX AND NOT APPLE)
     install(
         FILES "${PROJECT_SOURCE_DIR}/packaging/totm.desktop"
         DESTINATION "share/applications"
+    )
+    # Maker guide for plug-ins, opened from Settings -> Plugin.
+    install(
+        FILES "${PROJECT_SOURCE_DIR}/PLUG_IN.html"
+        DESTINATION "share/doc/totm"
     )
 endif()

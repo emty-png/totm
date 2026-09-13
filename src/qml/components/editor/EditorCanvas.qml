@@ -373,6 +373,59 @@ Item {
         editActive: ToolState.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc !== null
     }
 
+    // Plugin canvas overlays (ui.slots). Plain Items under the chrome so
+    // they can annotate the scene; each entry gets doc/zoom/offset when
+    // it declares them. The host itself takes no input, so canvas tools
+    // keep working unless an overlay adds its own MouseArea.
+    Item {
+        id: pluginOverlayHost
+
+        anchors.fill: parent
+
+        property var entries: []
+
+        function refreshPlugins() {
+            pluginOverlayHost.entries = PluginStore.canvasOverlays();
+        }
+
+        Component.onCompleted: pluginOverlayHost.refreshPlugins()
+
+        Connections {
+            target: PluginStore
+            function onPluginsChanged() {
+                pluginOverlayHost.refreshPlugins();
+            }
+        }
+
+        Repeater {
+            model: pluginOverlayHost.entries
+
+            delegate: Loader {
+                property var entry: modelData
+
+                anchors.fill: parent
+                active: true
+                asynchronous: true
+                source: entry.url
+
+                onLoaded: {
+                    if (item) {
+                        if ("pluginId" in item)
+                            item.pluginId = entry.pluginId;
+                        if ("doc" in item)
+                            item.doc = canvas.doc;
+                        if ("zoom" in item)
+                            item.zoom = canvas.zoom;
+                        if ("offsetX" in item)
+                            item.offsetX = canvas.offsetX;
+                        if ("offsetY" in item)
+                            item.offsetY = canvas.offsetY;
+                    }
+                }
+            }
+        }
+    }
+
     DrillBreadcrumb {
         anchors {
             left: parent.left

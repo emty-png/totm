@@ -13,8 +13,30 @@ Popup {
     property string quality: "hd"
     property int fps: 30
     property string performance: "normal"
+    property var suggestion: ({})
 
     signal renderClicked(string quality, int fps, string performance)
+
+    // First enabled export.hook suggestion wins; refreshed whenever the
+    // popup opens or grants change.
+    function refreshSuggestion() {
+        var found = {};
+        var rows = PluginStore.pluginList;
+        for (var i = 0; i < rows.length; i++) {
+            var sug = PluginStore.exportSuggestion(rows[i].id);
+            if (sug && sug.quality) {
+                found = sug;
+                break;
+            }
+        }
+        qualityPopup.suggestion = found;
+    }
+
+    function qualityLabel(value) {
+        return value === "sd" ? qsTr("SD") : value === "4k" ? qsTr("4K") : qsTr("HD");
+    }
+
+    onOpened: qualityPopup.refreshSuggestion()
 
     anchors.centerIn: parent
     implicitWidth: 300
@@ -140,6 +162,49 @@ Popup {
                 label: qsTr("Fast")
                 active: qualityPopup.performance === "fast"
                 onClicked: qualityPopup.performance = "fast"
+            }
+        }
+
+        // Plugin suggestion (export.hook): one-tap apply, never automatic.
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            visible: !!(qualityPopup.suggestion && qualityPopup.suggestion.quality)
+
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("%1 suggests %2 · %3 fps").arg(qualityPopup.suggestion.pluginName || "").arg(qualityPopup.qualityLabel(qualityPopup.suggestion.quality || "")).arg(qualityPopup.suggestion.fps || 0)
+                font.pixelSize: 11
+                color: AppTheme.muted
+                elide: Text.ElideRight
+            }
+
+            Text {
+                text: qsTr("Apply")
+                font.pixelSize: 11
+                font.underline: true
+                color: applyMouse.containsMouse ? AppTheme.foreground : AppTheme.muted
+
+                MouseArea {
+                    id: applyMouse
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        qualityPopup.quality = qualityPopup.suggestion.quality;
+                        qualityPopup.fps = qualityPopup.suggestion.fps;
+                    }
+                }
+            }
+        }
+
+        Connections {
+            target: PluginStore
+            function onPluginsChanged() {
+                if (qualityPopup.opened)
+                    qualityPopup.refreshSuggestion();
             }
         }
 

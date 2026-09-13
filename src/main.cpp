@@ -4,6 +4,8 @@
 #include <QQmlApplicationEngine>
 #include <QStandardPaths>
 
+#include "PluginNetworkGuard.h"
+
 // Message filter for known-benign third-party noise: KDE Breeze styling
 // of stock FileDialogs, missing desktop icon themes, the QtMultimedia
 // backend banner, and VDPAU probes on machines without NVIDIA drivers
@@ -47,6 +49,10 @@ int main(int argc, char *argv[])
     }
 
     QQmlApplicationEngine engine;
+    // Remote transport is denied engine-wide (see PluginNetworkGuard):
+    // the app loads nothing remote, and plugins must stay offline.
+    PluginNetworkFactory networkFactory;
+    engine.setNetworkAccessManagerFactory(&networkFactory);
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,

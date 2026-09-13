@@ -15,6 +15,9 @@ RowLayout {
 
     property string selectedWorkspaceId: ""
     property string editingDesignId: ""
+    // Placeholder settings view; true while the sidebar Settings entry
+    // owns the content area instead of a workspace grid.
+    property bool settingsSelected: false
 
     // Card selection state (components/home/HomeSelection). One instance
     // per HomeView; ids reassign wholesale so card bindings update.
@@ -73,8 +76,10 @@ RowLayout {
         Layout.preferredWidth: 230
         Layout.fillHeight: true
         selectedWorkspaceId: homeView.selectedWorkspaceId
+        settingsSelected: homeView.settingsSelected
         selectPolicy: id => {
             homeView.selectedWorkspaceId = id;
+            homeView.settingsSelected = false;
         }
         movePolicy: (idsJson, workspaceId) => {
             var ids = homeView.parseIds(idsJson);
@@ -82,6 +87,10 @@ RowLayout {
                 LibraryStore.moveDesign(ids[i], workspaceId);
         }
         openPolicy: id => TabState.openDesign(id)
+        settingsPolicy: () => {
+            homeView.editingDesignId = "";
+            homeView.settingsSelected = true;
+        }
     }
 
     function parseIds(idsJson) {
@@ -105,6 +114,7 @@ RowLayout {
             Layout.topMargin: 12
             Layout.bottomMargin: 8
             spacing: 8
+            visible: !homeView.settingsSelected
 
             Text {
                 Layout.fillWidth: true
@@ -121,7 +131,7 @@ RowLayout {
             Layout.fillHeight: true
             Layout.leftMargin: 16
             Layout.rightMargin: 16
-            visible: homeView.filteredDesigns.length === 0
+            visible: !homeView.settingsSelected && homeView.filteredDesigns.length === 0
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             wrapMode: Text.WordWrap
@@ -130,12 +140,18 @@ RowLayout {
             color: AppTheme.muted
         }
 
+        SettingsView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: homeView.settingsSelected
+        }
+
         Item {
             id: gridArea
 
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: homeView.filteredDesigns.length > 0
+            visible: !homeView.settingsSelected && homeView.filteredDesigns.length > 0
             clip: true
 
             // Flow + Repeater (not GridView): synchronous delegates with
