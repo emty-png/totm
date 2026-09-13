@@ -458,8 +458,15 @@ protected:
         // (EffectItem), so export matches preview by construction.
         // Background blur composites here (backdrop is the frame so far);
         // layer blur rides inside paintLeaf. Text keeps its painter.
-        if (useBackground)
-            paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale, backgroundBlur.opacity);
+        if (useBackground) {
+            // Masked to the silhouette like the canvas rigMask: the bbox
+            // tile alone would leak blurred corners outside rounded,
+            // star/pen and rotated shapes with a hard seam.
+            const QPainterPath clip = Effects::outlinePath(shapeType, QRectF(x, y, w, h),
+                Effects::PathOpts::fromMap(m), Effects::Style::fromMap(m), scale);
+            paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale,
+                backgroundBlur.opacity, clip);
+        }
         Effects::paintLeaf(&pt, shapeType, QRectF(x, y, w, h), Effects::PathOpts::fromMap(m),
             Effects::Style::fromMap(m), shadows, glows, layerBlur, scale);
         // Grain sits over fill and stroke on every kind (preview layers
@@ -475,10 +482,13 @@ protected:
 
     // Frosted-glass backdrop: blur the already-painted frame under the
     // bbox and composite by opacity. Caller holds the leaf transform;
-    // coordinates are output px. v1 confines to the bbox (shape-masked
-    // in a follow-up); rect panels (the common case) are already exact.
+    // coordinates are output px. The tile is clipped to the shape
+    // silhouette (empty path = whole bbox, for images which fill it):
+    // bbox corners outside rounded/star/pen/rotated shapes would else
+    // land as blurred pixels past the fill with a hard seam, and the
+    // canvas preview already masks the same way via its rigMask.
     static void paintBackdropBlur(QPainter &pt, QImage &frame, double x, double y, double w, double h,
-        double radius, double opacity)
+        double radius, double opacity, const QPainterPath &clip = QPainterPath())
     {
         if (radius <= 0.01 || opacity <= 0.001)
             return;
@@ -500,6 +510,8 @@ protected:
         // the blurred tile registers under the shape fill.
         pt.save();
         pt.setOpacity(1.0);
+        if (!clip.isEmpty())
+            pt.setClipPath(clip, Qt::IntersectClip);
         pt.drawImage(QRectF(x, y, w, h), piece);
         pt.restore();
     }
