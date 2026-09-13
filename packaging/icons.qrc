@@ -1,0 +1,7 @@
+<RCC version="1.0">
+    <!-- Window/taskbar icon (X11, Wayland, Windows). The installable
+         hicolor set, .ico and .icns beside it cover the OS chrome. -->
+    <qresource prefix="/icons">
+        <file alias="totm.png">icons/totm.png</file>
+    </qresource>
+</RCC>

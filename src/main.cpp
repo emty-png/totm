@@ -1,6 +1,8 @@
 #include <QDebug>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
+#include <QStandardPaths>
 
 // Message filter for known-benign third-party noise: KDE Breeze styling
 // of stock FileDialogs, missing desktop icon themes, the QtMultimedia
@@ -32,6 +34,17 @@ int main(int argc, char *argv[])
     app.setApplicationName(QStringLiteral("totm"));
     app.setApplicationVersion(QStringLiteral("0.1.0"));
     app.setOrganizationName(QStringLiteral("tot"));
+    // Window/taskbar icon (X11, Wayland, Windows).
+    app.setWindowIcon(QIcon(QStringLiteral(":/icons/totm.png")));
+    // The desktop id drives portal registration (Wayland app-id
+    // matching, notifications). Claim it only when totm.desktop is
+    // actually installed: dev builds run straight from the build tree,
+    // where the portal lookup fails and Qt warns on every launch.
+    if (!QStandardPaths::locateAll(QStandardPaths::ApplicationsLocation,
+                                   QStringLiteral("totm.desktop"))
+             .isEmpty()) {
+        app.setDesktopFileName(QStringLiteral("totm"));
+    }
 
     QQmlApplicationEngine engine;
 
