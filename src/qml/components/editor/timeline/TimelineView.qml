@@ -118,8 +118,12 @@ Item {
             Flickable {
                 id: gutterScroll
 
-                Layout.preferredWidth: timeline.gutterWidth
-                Layout.fillHeight: true
+                // Plain Column ignores Layout.* props (only layouts honor
+                // them), so size explicitly: full sidebar width with the
+                // transport block's height removed. Without this the
+                // viewport is 0x0 and every lane label stays invisible.
+                width: parent.width
+                height: parent.height - timeline.topPad - timeline.headerHeight
                 interactive: false
                 clip: true
                 contentWidth: timeline.gutterWidth
@@ -136,7 +140,7 @@ Item {
                             width: timeline.gutterWidth
                             height: timeline.laneHeight
 
-                            Text {
+                            RowLayout {
                                 anchors {
                                     left: parent.left
                                     right: parent.right
@@ -144,10 +148,25 @@ Item {
                                     leftMargin: 12
                                     rightMargin: 8
                                 }
-                                text: modelData.name
-                                font.pixelSize: 12
-                                elide: Text.ElideRight
-                                color: AppTheme.foreground
+                                spacing: 4
+
+                                Text {
+                                    Layout.maximumWidth: parent.width
+                                    Layout.preferredWidth: Math.min(implicitWidth, parent.width)
+                                    text: modelData.objectName
+                                    font.pixelSize: 12
+                                    font.weight: Font.DemiBold
+                                    elide: Text.ElideRight
+                                    color: AppTheme.foreground
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.presetName
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    color: AppTheme.muted
+                                }
                             }
 
                             Rectangle {
@@ -510,12 +529,15 @@ Item {
         var out = [];
         for (var t = 0; t < order.length; t++) {
             var mine = byTarget[order[t]].slice().sort((a, b) => a.t0 - b.t0);
-            var n = d.findNode(order[t]);
-            var base = n ? n.name : qsTr("Clip");
+            var n = d.findNode(Number(order[t]));
+            var base = n && n.name ? n.name : qsTr("Clip");
             for (var j = 0; j < mine.length; j++) {
+                var preset = d.anim.presets.presetName(mine[j].preset);
                 out.push({
                     uid: order[t],
-                    name: base + " · " + d.anim.presets.presetName(mine[j].preset),
+                    name: base + " · " + preset,
+                    objectName: base,
+                    presetName: "· " + preset,
                     clips: [mine[j]],
                     selected: sel
                 });
