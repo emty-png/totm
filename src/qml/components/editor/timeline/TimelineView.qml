@@ -308,11 +308,20 @@ Item {
 
             // Ruler block: ruler bottom-aligned with the sidebar transport,
             // sharing its hairline. Pinned to the viewport so vertical
-            // scrolling moves lanes under a steady ruler.
+            // scrolling moves lanes under a steady ruler. Opaque and
+            // above the lanes so bars/diamonds slide underneath like
+            // gutter labels slide under the transport. Covers the top
+            // pad too, or lane tips peek through the strip above.
             Item {
-                y: timeline.topPad + tracks.contentY
+                z: 2
+                y: tracks.contentY
                 width: tracks.contentWidth
-                height: timeline.headerHeight
+                height: timeline.topPad + timeline.headerHeight
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: AppTheme.background
+                }
 
                 TimelineRuler {
                     anchors {
@@ -337,16 +346,15 @@ Item {
                 }
             }
 
-            // Lanes.
+            // Lanes. Explicit content geometry (never anchored to the
+            // Flickable): anchors pin to the viewport, so lanes would sit
+            // still while the ruler scrolls away on horizontal pans.
             Column {
                 id: laneColumn
 
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: parent.top
-                    topMargin: timeline.tracksTop
-                }
+                x: 0
+                y: timeline.tracksTop
+                width: tracks.contentWidth
                 height: timeline.lanes.length * timeline.laneHeight
 
                 Repeater {
@@ -375,12 +383,11 @@ Item {
             }
 
             // Audio header spacer: pairs with the gutter header so rows
-            // stay aligned across the divider.
+            // stay aligned across the divider. Content geometry like the
+            // lanes so horizontal pans move the hairline with the ruler.
             Item {
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                }
+                x: 0
+                width: tracks.contentWidth
                 y: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight
                 height: timeline.audioHeadHeight
                 visible: timeline.hasAudio
@@ -396,14 +403,14 @@ Item {
                 }
             }
 
-            // Audio lanes, one row per clip.
+            // Audio lanes, one row per clip. Content geometry like the
+            // lanes so clips pan with the ruler instead of sticking to
+            // the viewport.
             Column {
                 id: audioColumn
 
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                }
+                x: 0
+                width: tracks.contentWidth
                 y: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight + timeline.audioTop
                 height: timeline.audioRows.length * timeline.laneHeight
 
@@ -430,7 +437,9 @@ Item {
             // Playhead overlay: pill readout on the ruler plus a line down
             // through every lane. Pinned to the viewport (not the content)
             // so the line always reaches the panel bottom while scrolling.
+            // Above the ruler so the pill/line stay visible over ticks.
             Item {
+                z: 3
                 x: timeline.originX + timeline.playheadX
                 y: tracks.contentY
                 width: 0
