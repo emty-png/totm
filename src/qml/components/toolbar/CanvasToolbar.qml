@@ -39,7 +39,7 @@ Rectangle {
 
     implicitWidth: barRow.implicitWidth + 16
     implicitHeight: 44
-    radius: 12
+    radius: AppTheme.radiusXLarge
     color: AppTheme.surface
     border.width: 1
     border.color: AppTheme.border
@@ -116,7 +116,7 @@ Rectangle {
                 Rectangle {
                     Layout.preferredWidth: 18
                     Layout.fillHeight: true
-                    radius: 6
+                    radius: AppTheme.radiusSmall
                     color: chevronMouse.containsMouse || chevronMouse.pressed ? AppTheme.hover : shapesMenu.opened ? AppTheme.hover : "transparent"
 
                     AppIcon {
@@ -189,7 +189,7 @@ Rectangle {
                 }
 
                 background: Rectangle {
-                    radius: 10
+                    radius: AppTheme.radiusLarge
                     color: AppTheme.surface
                     border.width: 1
                     border.color: AppTheme.border

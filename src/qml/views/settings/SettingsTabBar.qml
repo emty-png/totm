@@ -13,6 +13,14 @@ Item {
         {
             id: "plugin",
             title: qsTr("Plugin")
+        },
+        {
+            id: "shortcut",
+            title: qsTr("Shortcut")
+        },
+        {
+            id: "appearance",
+            title: qsTr("Appearance")
         }
     ]
     property string activeTab: "plugin"

@@ -31,7 +31,7 @@ ScrollView {
             width: parent.width - 24
             x: 12
             height: 40
-            radius: 8
+            radius: AppTheme.radiusMedium
             scale: newMouse.pressed ? 0.98 : 1
             transformOrigin: Item.Center
             color: AppTheme.foreground
@@ -72,7 +72,7 @@ ScrollView {
                 width: panel.availableWidth - 24
                 x: 12
                 height: 48
-                radius: 8
+                radius: AppTheme.radiusMedium
                 color: cardMouse.containsMouse || cardMouse.pressed ? AppTheme.hover : AppTheme.surface
                 border.width: 1
                 border.color: AppTheme.fieldBorder

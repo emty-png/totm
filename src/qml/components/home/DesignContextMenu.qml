@@ -37,7 +37,7 @@ Item {
             id: card
             anchors.fill: parent
             anchors.margins: 10
-            radius: 10
+            radius: AppTheme.radiusLarge
             color: AppTheme.surface
             border.width: 1
             border.color: AppTheme.fieldBorder

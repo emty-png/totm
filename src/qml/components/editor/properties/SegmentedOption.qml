@@ -14,7 +14,7 @@ Rectangle {
 
     Layout.fillWidth: true
     Layout.preferredHeight: 28
-    radius: 6
+    radius: AppTheme.radiusSmall
     border.width: 1
     border.color: seg.active ? AppTheme.foreground : AppTheme.fieldBorder
     color: seg.active ? AppTheme.foreground : segMouse.containsMouse || segMouse.pressed ? AppTheme.hover : AppTheme.surface

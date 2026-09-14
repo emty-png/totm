@@ -68,54 +68,11 @@ ColumnLayout {
         return !!f && typeof f.text !== "undefined" && typeof f.undo === "function" && typeof f.selectAll === "function";
     }
 
-    Shortcut {
-        sequences: [StandardKey.Undo]
-        enabled: !TabState.isHomeSelected
-        onActivated: {
-            if (view.focusInTextInput())
-                return;
-            var d = TabState.documentFor(TabState.currentIndex);
-            if (d)
-                d.undo();
-        }
-    }
-
-    Shortcut {
-        sequences: [StandardKey.Redo, "Ctrl+Y"]
-        enabled: !TabState.isHomeSelected
-        onActivated: {
-            if (view.focusInTextInput())
-                return;
-            var d = TabState.documentFor(TabState.currentIndex);
-            if (d)
-                d.redo();
-        }
-    }
-
-    // Timeline clip delete. Same text-input guard as undo/redo. Audio
-    // selection deletes alongside animation clips; each side no-ops
-    // quietly when empty so no phantom undo entries appear.
-    Shortcut {
-        sequences: ["Delete"]
-        enabled: !TabState.isHomeSelected && rightPanel.mode === "animate" && (view.hasSelectedClips() || view.hasSelectedAudio())
-        onActivated: {
-            if (view.focusInTextInput())
-                return;
-            if (view.hasSelectedClips() && view.playDoc)
-                view.playDoc.deleteSelectedClips();
-            if (view.hasSelectedAudio() && view.playDoc)
-                view.playDoc.deleteSelectedAudio();
-        }
-    }
-
-    function hasSelectedClips() {
-        var d = view.playDoc;
-        return !!d && d.anim.selectedClipIds.length > 0;
-    }
-
-    function hasSelectedAudio() {
-        var d = view.playDoc;
-        return !!d && d.audio.selectedAudioIds.length > 0;
+    // All editor keyboard shortcuts live in one helper so this screen
+    // stays a thin composition of panels + canvas + timeline.
+    EditorShortcuts {
+        view: view
+        panel: rightPanel
     }
 
     // Debounced autosave: each mutation queues its tab id; the queue

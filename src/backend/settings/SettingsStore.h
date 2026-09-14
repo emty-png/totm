@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QMap>
 #include <QQmlEngine>
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
@@ -34,6 +35,29 @@ class SettingsStore : public QObject {
     Q_PROPERTY(int windowHeight READ windowHeight NOTIFY windowGeometryChanged)
     Q_PROPERTY(bool windowMaximized READ windowMaximized NOTIFY windowGeometryChanged)
     Q_PROPERTY(bool hasWindowGeometry READ hasWindowGeometry NOTIFY windowGeometryChanged)
+    // Shortcut overrides keyed by action id (e.g. "homeNew" -> "Ctrl+N").
+    // Only non-default values are stored; missing keys mean "use default".
+    // Reassigned wholesale so QML bindings update.
+    Q_PROPERTY(QVariantMap shortcutOverrides READ shortcutOverrides NOTIFY shortcutsChanged)
+    // Appearance: theme colors per light/dark (only non-defaults stored),
+    // corner-radius preset + custom per-size values, UI font family.
+    // Reassigned wholesale so QML bindings update.
+    Q_PROPERTY(QVariantMap lightColors READ lightColors NOTIFY appearanceChanged)
+    Q_PROPERTY(QVariantMap darkColors READ darkColors NOTIFY appearanceChanged)
+    Q_PROPERTY(QString radiusPreset READ radiusPreset WRITE setRadiusPreset NOTIFY appearanceChanged)
+    Q_PROPERTY(int customRadiusSmall READ customRadiusSmall WRITE setCustomRadiusSmall NOTIFY appearanceChanged)
+    Q_PROPERTY(int customRadiusMedium READ customRadiusMedium WRITE setCustomRadiusMedium NOTIFY appearanceChanged)
+    Q_PROPERTY(int customRadiusLarge READ customRadiusLarge WRITE setCustomRadiusLarge NOTIFY appearanceChanged)
+    Q_PROPERTY(int customRadiusXLarge READ customRadiusXLarge WRITE setCustomRadiusXLarge NOTIFY appearanceChanged)
+    Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY appearanceChanged)
+    Q_PROPERTY(QStringList importedFonts READ importedFonts NOTIFY appearanceChanged)
+    // File name -> detected family for imported fonts. Reassigned
+    // wholesale so QML bindings update.
+    Q_PROPERTY(QVariantMap importedFontFamilyMap READ importedFontFamilyMap NOTIFY appearanceChanged)
+    // True when the stored family is not available (e.g. its file was
+    // deleted): the app falls back to the system font and the UI shows
+    // a "Font not found" error until another font is picked or reset.
+    Q_PROPERTY(bool fontMissing READ fontMissing NOTIFY appearanceChanged)
 
 public:
     static SettingsStore *create(QQmlEngine *engine, QJSEngine *scriptEngine);
@@ -63,16 +87,79 @@ public:
     // so restore never inherits the maximized frame.
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height, bool maximized);
 
+    // Shortcut overrides (persisted under QSettings group "shortcuts/").
+    // fallback is returned when no override exists. setShortcut stores the
+    // canonical PortableText form; empty resets to default, invalid
+    // sequences are ignored. Only known ids are accepted.
+    Q_INVOKABLE QString shortcut(const QString &id, const QString &fallback) const;
+    Q_INVOKABLE void setShortcut(const QString &id, const QString &sequence);
+    Q_INVOKABLE void resetShortcut(const QString &id);
+    Q_INVOKABLE void resetAllShortcuts();
+    QVariantMap shortcutOverrides() const;
+
+    // Appearance colors: effective value for key in the given theme.
+    // fallback is returned when no override exists. setAppearanceColor
+    // stores the canonical #rrggbb (or #aarrggbb when translucent) form;
+    // empty resets to default, invalid values are ignored. Only known
+    // AppTheme keys are accepted.
+    Q_INVOKABLE QString appearanceColor(const QString &key, bool dark, const QString &fallback) const;
+    Q_INVOKABLE void setAppearanceColor(const QString &key, bool dark, const QString &color);
+    Q_INVOKABLE void resetAppearanceColor(const QString &key, bool dark);
+    Q_INVOKABLE void resetAllAppearanceColors(bool dark);
+    QVariantMap lightColors() const;
+    QVariantMap darkColors() const;
+
+    // Corner radius: preset is one of "sharp", "rounded", "pill",
+    // "custom". Unknown values fall back to "rounded". Custom per-size
+    // values (0..28px) apply only when preset is "custom"; presets map
+    // to fixed values in AppTheme (sharp 0, rounded 6/8/10/12,
+    // pill 14/18/22/28).
+    QString radiusPreset() const;
+    void setRadiusPreset(const QString &preset);
+    int customRadiusSmall() const;
+    void setCustomRadiusSmall(int v);
+    int customRadiusMedium() const;
+    void setCustomRadiusMedium(int v);
+    int customRadiusLarge() const;
+    void setCustomRadiusLarge(int v);
+    int customRadiusXLarge() const;
+    void setCustomRadiusXLarge(int v);
+
+    // UI font: empty means system default. Imported .ttf/.otf files live
+    // under <AppData>/totm/fonts/ and are loaded via QFontDatabase at
+    // startup; importFont copies + registers, removeImportedFont deletes.
+    QString fontFamily() const;
+    void setFontFamily(const QString &family);
+    QStringList importedFonts() const;
+    QVariantMap importedFontFamilyMap() const;
+    bool fontMissing() const;
+    Q_INVOKABLE QStringList importedFontFamilies() const;
+    Q_INVOKABLE QString importFont(const QUrl &fileUrl);
+    Q_INVOKABLE void removeImportedFont(const QString &fileName);
+    Q_INVOKABLE void selectImportedFont(const QString &fileName);
+    Q_INVOKABLE QString fontsDir() const;
+
+    // Clears all appearance overrides (colors, radius, font) to defaults.
+    Q_INVOKABLE void resetAppearance();
+
 signals:
     void isDarkChanged();
     void followSystemChanged();
     void systemDarkChanged();
     void windowGeometryChanged();
+    void shortcutsChanged();
+    void appearanceChanged();
 
 private:
     void load();
     void persist();
     void persistWindow();
+    void loadShortcuts();
+    void loadAppearance();
+    void persistAppearance();
+    void loadImportedFonts();
+    void applyFontFamily();
+    void refreshFontMissing();
     void refreshSystemDark();
     void onSystemSchemeChanged();
 
@@ -88,4 +175,20 @@ private:
     int m_windowWidth = 900;
     int m_windowHeight = 640;
     bool m_windowMaximized = false;
+    // Non-default shortcut sequences by action id.
+    QVariantMap m_shortcutOverrides;
+    // Non-default appearance colors by AppTheme key, split per theme.
+    QVariantMap m_lightColors;
+    QVariantMap m_darkColors;
+    QString m_radiusPreset = QStringLiteral("rounded");
+    int m_customRadiusSmall = 6;
+    int m_customRadiusMedium = 8;
+    int m_customRadiusLarge = 10;
+    int m_customRadiusXLarge = 12;
+    QString m_fontFamily;
+    QStringList m_importedFonts;
+    // Detected family per imported file name. Populated at load/import
+    // from the QFontDatabase id so QML never needs per-row FontLoaders.
+    QMap<QString, QString> m_importedFontFamily;
+    bool m_fontMissing = false;
 };

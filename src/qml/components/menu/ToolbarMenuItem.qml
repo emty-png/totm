@@ -14,7 +14,7 @@ Rectangle {
 
     Layout.fillWidth: true
     Layout.preferredHeight: 34
-    radius: 6
+    radius: AppTheme.radiusSmall
     color: menuItem.active ? AppTheme.foreground : mouse.containsMouse || mouse.pressed ? AppTheme.hover : "transparent"
 
     Behavior on color {

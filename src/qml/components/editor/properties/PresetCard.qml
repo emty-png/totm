@@ -44,7 +44,7 @@ Item {
         Rectangle {
             width: parent.width
             height: 96
-            radius: 8
+            radius: AppTheme.radiusMedium
             color: tileMouse.containsMouse || tileMouse.pressed ? AppTheme.hover : AppTheme.surface
             border.width: 1
             border.color: AppTheme.fieldBorder

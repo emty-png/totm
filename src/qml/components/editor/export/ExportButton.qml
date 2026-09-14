@@ -16,7 +16,7 @@ Rectangle {
 
     implicitWidth: 36
     implicitHeight: 36
-    radius: 10
+    radius: AppTheme.radiusLarge
     opacity: exportButton.ready ? 1 : 0.4
     border.width: 1
     border.color: exportButton.active ? AppTheme.foreground : AppTheme.border

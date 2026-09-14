@@ -21,7 +21,7 @@ Item {
             rightMargin: 8
         }
         height: 32
-        radius: 8
+        radius: AppTheme.radiusMedium
         color: AppTheme.hover
 
         // Sliding thumb (half the track minus gaps).
@@ -31,7 +31,7 @@ Item {
             y: 2
             width: (track.width - 6) / 2
             height: 28
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: AppTheme.foreground
 
             Behavior on x {

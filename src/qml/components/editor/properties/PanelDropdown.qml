@@ -17,7 +17,7 @@ Rectangle {
     Layout.fillWidth: true
     Layout.minimumWidth: 0
     Layout.preferredHeight: 28
-    radius: 6
+    radius: AppTheme.radiusSmall
     color: menu.opened || dropMouse.containsMouse || dropMouse.pressed ? AppTheme.hover : AppTheme.surface
     border.width: 1
     border.color: AppTheme.fieldBorder
@@ -103,7 +103,7 @@ Rectangle {
         }
 
         background: Rectangle {
-            radius: 10
+            radius: AppTheme.radiusLarge
             color: AppTheme.surface
             border.width: 1
             border.color: AppTheme.border
@@ -120,7 +120,7 @@ Rectangle {
                     // contentWidth here would loop, like the graph menu).
                     width: menu.availableWidth
                     height: 30
-                    radius: 6
+                    radius: AppTheme.radiusSmall
                     color: modelData.id === drop.currentId ? AppTheme.hover : optMouse.containsMouse || optMouse.pressed ? AppTheme.hover : "transparent"
 
                     Text {

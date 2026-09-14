@@ -12,7 +12,7 @@ Rectangle {
     property bool checked: true
     property var togglePolicy: null
 
-    radius: 6
+    radius: AppTheme.radiusSmall
     color: rowMouse.containsMouse ? AppTheme.hover : "transparent"
 
     RowLayout {
@@ -25,7 +25,7 @@ Rectangle {
             Layout.preferredWidth: 20
             Layout.preferredHeight: 20
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             border.width: 1
             border.color: AppTheme.fieldBorder
             color: row.checked ? AppTheme.foreground : AppTheme.surface

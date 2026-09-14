@@ -69,7 +69,7 @@ ScrollView {
                         Rectangle {
                             width: parent.width
                             height: 34
-                            radius: 6
+                            radius: AppTheme.radiusSmall
                             color: rowMouse.containsMouse || rowMouse.pressed ? AppTheme.hover : "transparent"
 
                             Behavior on color {
@@ -154,7 +154,7 @@ ScrollView {
                 Rectangle {
                     width: parent.width
                     height: 48
-                    radius: 8
+                    radius: AppTheme.radiusMedium
                     color: cardMouse.containsMouse || cardMouse.pressed ? AppTheme.hover : AppTheme.surface
                     border.width: 1
                     border.color: AppTheme.fieldBorder

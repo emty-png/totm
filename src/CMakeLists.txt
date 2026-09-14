@@ -19,6 +19,7 @@ set_source_files_properties(
     qml/theme/AppTheme.qml
     qml/stores/TabState.qml
     qml/stores/ToolState.qml
+    qml/stores/ShortcutState.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -49,6 +50,7 @@ qt_add_qml_module(totm
         qml/theme/AppTheme.qml
         qml/stores/TabState.qml
         qml/stores/ToolState.qml
+        qml/stores/ShortcutState.qml
         # Document + helpers
         qml/models/Document.qml
         qml/models/DocNode.qml
@@ -168,6 +170,7 @@ qt_add_qml_module(totm
         qml/components/editor/AudioPreview.qml
         qml/components/editor/EditorLeftPanel.qml
         qml/components/editor/EditorRightPanel.qml
+        qml/components/editor/EditorShortcuts.qml
         qml/components/editor/EditorModeSwitcher.qml
         qml/components/editor/AnimateModeSwitcher.qml
         qml/components/editor/timeline/TimelineView.qml
@@ -220,7 +223,17 @@ qt_add_qml_module(totm
         qml/views/settings/SettingsTabBar.qml
         qml/views/settings/SettingsTab.qml
         qml/views/settings/PluginSettingsView.qml
+        qml/views/settings/ShortcutSettingsView.qml
+        qml/views/settings/AppearanceSettingsView.qml
         qml/views/editor/EditorView.qml
+        # Settings rows
+        qml/components/settings/ShortcutRow.qml
+        qml/components/settings/AppearanceThemeSection.qml
+        qml/components/settings/AppearanceColorRow.qml
+        qml/components/settings/AppearanceColorsSection.qml
+        qml/components/settings/AppearanceRadiusSection.qml
+        qml/components/settings/AppearanceFontSection.qml
+        qml/components/settings/AppearanceFontRow.qml
 )
 
 # Grain shaders precompiled with qsb (Qt6 ShaderEffect takes .qsb URLs,

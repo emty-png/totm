@@ -15,7 +15,7 @@ Rectangle {
 
     Layout.preferredWidth: 36
     Layout.preferredHeight: 32
-    radius: 8
+    radius: AppTheme.radiusMedium
     opacity: toolButton.enabled ? 1 : 0.4
     border.width: 1
     border.color: toolButton.active ? AppTheme.foreground : "transparent"

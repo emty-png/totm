@@ -1,9 +1,23 @@
 #include "SettingsStore.h"
 
+#include <QColor>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QFont>
+#include <QFontDatabase>
 #include <QGuiApplication>
+#include <QKeySequence>
+#include <QQuickWindow>
 #include <QScreen>
+#include <QSet>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QStyleHints>
+#include <QUrl>
+#include <QWindow>
+
+#include <optional>
 
 namespace {
 constexpr char kFollowKey[] = "theme/followSystem";
@@ -19,6 +33,78 @@ constexpr int kDefaultWidth = 900;
 constexpr int kDefaultHeight = 640;
 constexpr int kMinWidth = 480;
 constexpr int kMinHeight = 360;
+
+constexpr char kRadiusPresetKey[] = "appearance/radiusPreset";
+constexpr char kRadiusSmallKey[] = "appearance/radiusSmall";
+constexpr char kRadiusMediumKey[] = "appearance/radiusMedium";
+constexpr char kRadiusLargeKey[] = "appearance/radiusLarge";
+constexpr char kRadiusXLargeKey[] = "appearance/radiusXLarge";
+constexpr char kFontFamilyKey[] = "appearance/fontFamily";
+
+constexpr int kRadiusMin = 0;
+constexpr int kRadiusMax = 28;
+
+// Known shortcut action ids. QML defaults live in ShortcutState; C++ only
+// accepts these so corrupt storage or callers can't pollute the group.
+bool isKnownShortcutId(const QString &id) {
+    static const QSet<QString> known = {
+        QStringLiteral("homeNew"), QStringLiteral("homeOpen"), QStringLiteral("homeRename"), QStringLiteral("homeDelete"),
+        QStringLiteral("homeDuplicate"), QStringLiteral("homeStar"), QStringLiteral("toolSelect"), QStringLiteral("toolRect"),
+        QStringLiteral("toolEllipse"), QStringLiteral("toolTriangle"), QStringLiteral("toolStar"), QStringLiteral("toolPen"),
+        QStringLiteral("toolText"), QStringLiteral("toolImage"), QStringLiteral("editUndo"), QStringLiteral("editRedo"),
+        QStringLiteral("editCopy"), QStringLiteral("editPaste"), QStringLiteral("editDuplicate"), QStringLiteral("editDelete"),
+        QStringLiteral("editGroup"), QStringLiteral("editUngroup"), QStringLiteral("arrangeFront"), QStringLiteral("arrangeBack"),
+        QStringLiteral("arrangeForward"), QStringLiteral("arrangeBackward"), QStringLiteral("layersRename"),
+        QStringLiteral("nudgeLeft"), QStringLiteral("nudgeRight"), QStringLiteral("nudgeUp"), QStringLiteral("nudgeDown"),
+        QStringLiteral("nudgeLeftBig"), QStringLiteral("nudgeRightBig"), QStringLiteral("nudgeUpBig"), QStringLiteral("nudgeDownBig"),
+        QStringLiteral("modeToggle"), QStringLiteral("modeDesign"), QStringLiteral("modeAnimate"), QStringLiteral("transportPlay"),
+        QStringLiteral("transportStepBack"), QStringLiteral("transportStepFwd"), QStringLiteral("transportStart"),
+        QStringLiteral("transportEnd"),
+    };
+    return known.contains(id);
+}
+
+// A chord is unusable when it carries no real trigger key: bare words
+// like "Ctrl" parse to Key_unknown, trailing modifiers ("Ctrl+Shift")
+// parse to the modifier key itself. Both must be rejected.
+bool isNonTriggerKey(Qt::Key key) {
+    switch (key) {
+    case Qt::Key_unknown:
+    case Qt::Key_Shift:
+    case Qt::Key_Control:
+    case Qt::Key_Alt:
+    case Qt::Key_Meta:
+    case Qt::Key_AltGr:
+    case Qt::Key_Super_L:
+    case Qt::Key_Super_R:
+    case Qt::Key_Hyper_L:
+    case Qt::Key_Hyper_R:
+        return true;
+    default:
+        return false;
+    }
+}
+
+std::optional<QString> canonicalShortcut(const QString &raw) {
+    const QString trimmed = raw.trimmed();
+    if (trimmed.isEmpty())
+        return QString();
+    const QKeySequence seq(trimmed, QKeySequence::PortableText);
+    if (seq.isEmpty())
+        return std::nullopt;
+    // Bare modifiers ("Ctrl", "Ctrl+Shift") parse but never make sane
+    // shortcuts: every chord must carry a real key.
+    bool anyReal = false;
+    for (int i = 0; i < seq.count(); i++) {
+        if (!isNonTriggerKey(seq[i].key())) {
+            anyReal = true;
+            break;
+        }
+    }
+    if (!anyReal)
+        return std::nullopt;
+    return seq.toString(QKeySequence::PortableText);
+}
 
 // Validates a stored rect against current screens.
 // Contract: size is clamped to [480x360, largest screen]; position must
@@ -44,6 +130,53 @@ QRect validatedRect(int x, int y, int w, int h) {
     const QRect primary = QGuiApplication::primaryScreen()->availableGeometry();
     return QRect(primary.x() + (primary.width() - w) / 2, primary.y() + (primary.height() - h) / 2, w, h);
 }
+
+// Known AppTheme color keys. QML defaults live in AppTheme; C++ only
+// accepts these so corrupt storage can't pollute the palette.
+bool isKnownAppearanceColor(const QString &key) {
+    static const QSet<QString> known = {
+        QStringLiteral("background"), QStringLiteral("foreground"), QStringLiteral("surface"), QStringLiteral("border"),
+        QStringLiteral("muted"), QStringLiteral("hover"), QStringLiteral("pressed"), QStringLiteral("closeHover"),
+        QStringLiteral("closePressed"), QStringLiteral("canvas"), QStringLiteral("sceneFrame"),
+        QStringLiteral("fieldBorder"), QStringLiteral("selection"), QStringLiteral("snapGuide"),
+        QStringLiteral("layerSelected"),
+    };
+    return known.contains(key);
+}
+
+bool isKnownRadiusPreset(const QString &preset) {
+    return preset == QStringLiteral("sharp") || preset == QStringLiteral("rounded") || preset == QStringLiteral("pill")
+        || preset == QStringLiteral("custom");
+}
+
+// Canonical #rrggbb (opaque) or #aarrggbb (translucent) form, lowercase.
+// QColor accepts both #rrggbb and #aarrggbb; name() would drop alpha so
+// translucent values keep the HexArgb form.
+std::optional<QString> canonicalAppearanceColor(const QString &raw) {
+    const QString trimmed = raw.trimmed();
+    if (trimmed.isEmpty())
+        return QString();
+    const QColor c(trimmed);
+    if (!c.isValid())
+        return std::nullopt;
+    if (c.alpha() < 255)
+        return c.name(QColor::HexArgb).toLower();
+    return c.name(QColor::HexRgb).toLower();
+}
+
+int clampedRadius(int v) {
+    return qBound(kRadiusMin, v, kRadiusMax);
+}
+
+bool isSafeFontName(const QString &name) {
+    if (name.isEmpty() || name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
+        || name.contains(QStringLiteral("..")))
+        return false;
+    const QString lower = name.toLower();
+    return lower.endsWith(QStringLiteral(".ttf")) || lower.endsWith(QStringLiteral(".otf"))
+        || lower.endsWith(QStringLiteral(".ttc")) || lower.endsWith(QStringLiteral(".woff"))
+        || lower.endsWith(QStringLiteral(".woff2"));
+}
 } // namespace
 
 SettingsStore *SettingsStore::create(QQmlEngine *engine, QJSEngine *scriptEngine) {
@@ -57,6 +190,9 @@ SettingsStore::SettingsStore(QObject *parent)
     : QObject(parent) {
     refreshSystemDark();
     load();
+    loadImportedFonts();
+    refreshFontMissing();
+    applyFontFamily();
     // While following, OS scheme changes flow through isDark.
     auto *hints = QGuiApplication::styleHints();
     if (hints) {
@@ -117,6 +253,420 @@ void SettingsStore::load() {
     m_windowWidth = settings.value(QString::fromLatin1(kWinWKey), kDefaultWidth).toInt();
     m_windowHeight = settings.value(QString::fromLatin1(kWinHKey), kDefaultHeight).toInt();
     m_windowMaximized = settings.value(QString::fromLatin1(kWinMaxKey), false).toBool();
+    loadShortcuts();
+    loadAppearance();
+}
+
+void SettingsStore::loadShortcuts() {
+    m_shortcutOverrides.clear();
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("shortcuts"));
+    const QStringList keys = settings.childKeys();
+    for (const QString &id : keys) {
+        if (!isKnownShortcutId(id))
+            continue;
+        const QString raw = settings.value(id).toString();
+        const auto canon = canonicalShortcut(raw);
+        if (!canon.has_value() || canon->isEmpty())
+            continue;
+        m_shortcutOverrides.insert(id, *canon);
+    }
+    settings.endGroup();
+}
+
+QVariantMap SettingsStore::shortcutOverrides() const {
+    return m_shortcutOverrides;
+}
+
+QString SettingsStore::shortcut(const QString &id, const QString &fallback) const {
+    if (!isKnownShortcutId(id))
+        return fallback;
+    return m_shortcutOverrides.value(id, fallback).toString();
+}
+
+void SettingsStore::setShortcut(const QString &id, const QString &sequence) {
+    if (!isKnownShortcutId(id))
+        return;
+    const auto canon = canonicalShortcut(sequence);
+    if (!canon.has_value())
+        return;
+    if (canon->isEmpty()) {
+        resetShortcut(id);
+        return;
+    }
+    if (m_shortcutOverrides.value(id).toString() == *canon)
+        return;
+    m_shortcutOverrides.insert(id, *canon);
+    QSettings settings;
+    settings.setValue(QStringLiteral("shortcuts/") + id, *canon);
+    settings.sync();
+    emit shortcutsChanged();
+}
+
+void SettingsStore::resetShortcut(const QString &id) {
+    if (!isKnownShortcutId(id))
+        return;
+    if (!m_shortcutOverrides.contains(id))
+        return;
+    m_shortcutOverrides.remove(id);
+    QSettings settings;
+    settings.remove(QStringLiteral("shortcuts/") + id);
+    settings.sync();
+    emit shortcutsChanged();
+}
+
+void SettingsStore::resetAllShortcuts() {
+    if (m_shortcutOverrides.isEmpty())
+        return;
+    m_shortcutOverrides.clear();
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("shortcuts"));
+    settings.remove(QString());
+    settings.endGroup();
+    settings.sync();
+    emit shortcutsChanged();
+}
+
+void SettingsStore::loadAppearance() {
+    m_lightColors.clear();
+    m_darkColors.clear();
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("appearanceColorsLight"));
+    for (const QString &key : settings.childKeys()) {
+        if (!isKnownAppearanceColor(key))
+            continue;
+        const auto canon = canonicalAppearanceColor(settings.value(key).toString());
+        if (!canon.has_value() || canon->isEmpty())
+            continue;
+        m_lightColors.insert(key, *canon);
+    }
+    settings.endGroup();
+    settings.beginGroup(QStringLiteral("appearanceColorsDark"));
+    for (const QString &key : settings.childKeys()) {
+        if (!isKnownAppearanceColor(key))
+            continue;
+        const auto canon = canonicalAppearanceColor(settings.value(key).toString());
+        if (!canon.has_value() || canon->isEmpty())
+            continue;
+        m_darkColors.insert(key, *canon);
+    }
+    settings.endGroup();
+    const QString preset = settings.value(QString::fromLatin1(kRadiusPresetKey), QStringLiteral("rounded")).toString();
+    m_radiusPreset = isKnownRadiusPreset(preset) ? preset : QStringLiteral("rounded");
+    m_customRadiusSmall = clampedRadius(settings.value(QString::fromLatin1(kRadiusSmallKey), 6).toInt());
+    m_customRadiusMedium = clampedRadius(settings.value(QString::fromLatin1(kRadiusMediumKey), 8).toInt());
+    m_customRadiusLarge = clampedRadius(settings.value(QString::fromLatin1(kRadiusLargeKey), 10).toInt());
+    m_customRadiusXLarge = clampedRadius(settings.value(QString::fromLatin1(kRadiusXLargeKey), 12).toInt());
+    m_fontFamily = settings.value(QString::fromLatin1(kFontFamilyKey), QString()).toString().trimmed();
+}
+
+void SettingsStore::persistAppearance() {
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kRadiusPresetKey), m_radiusPreset);
+    settings.setValue(QString::fromLatin1(kRadiusSmallKey), m_customRadiusSmall);
+    settings.setValue(QString::fromLatin1(kRadiusMediumKey), m_customRadiusMedium);
+    settings.setValue(QString::fromLatin1(kRadiusLargeKey), m_customRadiusLarge);
+    settings.setValue(QString::fromLatin1(kRadiusXLargeKey), m_customRadiusXLarge);
+    settings.setValue(QString::fromLatin1(kFontFamilyKey), m_fontFamily);
+    settings.sync();
+}
+
+QVariantMap SettingsStore::lightColors() const {
+    return m_lightColors;
+}
+
+QVariantMap SettingsStore::darkColors() const {
+    return m_darkColors;
+}
+
+QString SettingsStore::appearanceColor(const QString &key, bool dark, const QString &fallback) const {
+    if (!isKnownAppearanceColor(key))
+        return fallback;
+    const QVariantMap &map = dark ? m_darkColors : m_lightColors;
+    return map.value(key, fallback).toString();
+}
+
+void SettingsStore::setAppearanceColor(const QString &key, bool dark, const QString &color) {
+    if (!isKnownAppearanceColor(key))
+        return;
+    const auto canon = canonicalAppearanceColor(color);
+    if (!canon.has_value())
+        return;
+    if (canon->isEmpty()) {
+        resetAppearanceColor(key, dark);
+        return;
+    }
+    QVariantMap &map = dark ? m_darkColors : m_lightColors;
+    if (map.value(key).toString() == *canon)
+        return;
+    map.insert(key, *canon);
+    QSettings settings;
+    const QString group = dark ? QStringLiteral("appearanceColorsDark/") : QStringLiteral("appearanceColorsLight/");
+    settings.setValue(group + key, *canon);
+    settings.sync();
+    emit appearanceChanged();
+}
+
+void SettingsStore::resetAppearanceColor(const QString &key, bool dark) {
+    if (!isKnownAppearanceColor(key))
+        return;
+    QVariantMap &map = dark ? m_darkColors : m_lightColors;
+    if (!map.contains(key))
+        return;
+    map.remove(key);
+    QSettings settings;
+    const QString group = dark ? QStringLiteral("appearanceColorsDark/") : QStringLiteral("appearanceColorsLight/");
+    settings.remove(group + key);
+    settings.sync();
+    emit appearanceChanged();
+}
+
+void SettingsStore::resetAllAppearanceColors(bool dark) {
+    QVariantMap &map = dark ? m_darkColors : m_lightColors;
+    if (map.isEmpty())
+        return;
+    map.clear();
+    QSettings settings;
+    settings.beginGroup(dark ? QStringLiteral("appearanceColorsDark") : QStringLiteral("appearanceColorsLight"));
+    settings.remove(QString());
+    settings.endGroup();
+    settings.sync();
+    emit appearanceChanged();
+}
+
+QString SettingsStore::radiusPreset() const {
+    return m_radiusPreset;
+}
+
+void SettingsStore::setRadiusPreset(const QString &preset) {
+    if (!isKnownRadiusPreset(preset) || m_radiusPreset == preset)
+        return;
+    m_radiusPreset = preset;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
+int SettingsStore::customRadiusSmall() const {
+    return m_customRadiusSmall;
+}
+
+void SettingsStore::setCustomRadiusSmall(int v) {
+    v = clampedRadius(v);
+    if (m_customRadiusSmall == v)
+        return;
+    m_customRadiusSmall = v;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
+int SettingsStore::customRadiusMedium() const {
+    return m_customRadiusMedium;
+}
+
+void SettingsStore::setCustomRadiusMedium(int v) {
+    v = clampedRadius(v);
+    if (m_customRadiusMedium == v)
+        return;
+    m_customRadiusMedium = v;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
+int SettingsStore::customRadiusLarge() const {
+    return m_customRadiusLarge;
+}
+
+void SettingsStore::setCustomRadiusLarge(int v) {
+    v = clampedRadius(v);
+    if (m_customRadiusLarge == v)
+        return;
+    m_customRadiusLarge = v;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
+int SettingsStore::customRadiusXLarge() const {
+    return m_customRadiusXLarge;
+}
+
+void SettingsStore::setCustomRadiusXLarge(int v) {
+    v = clampedRadius(v);
+    if (m_customRadiusXLarge == v)
+        return;
+    m_customRadiusXLarge = v;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
+QString SettingsStore::fontFamily() const {
+    return m_fontFamily;
+}
+
+void SettingsStore::setFontFamily(const QString &family) {
+    const QString trimmed = family.trimmed();
+    if (m_fontFamily == trimmed)
+        return;
+    m_fontFamily = trimmed;
+    persistAppearance();
+    refreshFontMissing();
+    applyFontFamily();
+    emit appearanceChanged();
+}
+
+QStringList SettingsStore::importedFonts() const {
+    return m_importedFonts;
+}
+
+QVariantMap SettingsStore::importedFontFamilyMap() const {
+    QVariantMap out;
+    for (auto it = m_importedFontFamily.constBegin(); it != m_importedFontFamily.constEnd(); ++it)
+        out.insert(it.key(), it.value());
+    return out;
+}
+
+bool SettingsStore::fontMissing() const {
+    return m_fontMissing;
+}
+
+void SettingsStore::refreshFontMissing() {
+    // Empty means system default, always available. Otherwise the family
+    // must exist in QFontDatabase (system or imported); anything else
+    // fell back visually, so flag it for the "Font not found" error.
+    m_fontMissing = !m_fontFamily.isEmpty() && !QFontDatabase::families().contains(m_fontFamily);
+}
+
+QString SettingsStore::fontsDir() const {
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (dir.isEmpty())
+        dir = QDir::homePath() + QStringLiteral("/.totm");
+    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
+        dir += QStringLiteral("/totm");
+    return dir + QStringLiteral("/fonts");
+}
+
+QStringList SettingsStore::importedFontFamilies() const {
+    return QFontDatabase::families();
+}
+
+void SettingsStore::loadImportedFonts() {
+    m_importedFonts.clear();
+    m_importedFontFamily.clear();
+    QDir dir(fontsDir());
+    if (!dir.exists())
+        return;
+    const QStringList files = dir.entryList(QDir::Files);
+    for (const QString &name : files) {
+        if (!isSafeFontName(name))
+            continue;
+        const QString path = dir.filePath(name);
+        const int fontId = QFontDatabase::addApplicationFont(path);
+        if (fontId < 0)
+            continue;
+        m_importedFonts.append(name);
+        const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        if (!families.isEmpty())
+            m_importedFontFamily.insert(name, families.first());
+    }
+}
+
+void SettingsStore::applyFontFamily() {
+    QFont font;
+    if (!m_fontFamily.isEmpty())
+        font.setFamily(m_fontFamily);
+    QGuiApplication::setFont(font);
+    // setFont alone does not always repolish existing QML items in the
+    // same frame: nudge every quick window so the new family paints
+    // immediately instead of on the next restart.
+    for (QWindow *w : QGuiApplication::allWindows()) {
+        if (auto *qw = qobject_cast<QQuickWindow *>(w))
+            qw->update();
+    }
+}
+
+QString SettingsStore::importFont(const QUrl &fileUrl) {
+    const QString local = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
+    if (local.isEmpty())
+        return QString();
+    QFile src(local);
+    if (!src.exists())
+        return QString();
+    QString name = QFileInfo(local).fileName();
+    if (!isSafeFontName(name))
+        return QString();
+    QDir().mkpath(fontsDir());
+    QString dest = QDir(fontsDir()).filePath(name);
+    // Deduplicate: name (1), name (2), ... keeps imports lossless.
+    if (QFile::exists(dest)) {
+        const QString base = QFileInfo(name).completeBaseName();
+        const QString suffix = QFileInfo(name).suffix();
+        int n = 1;
+        do {
+            name = QStringLiteral("%1 (%2).%3").arg(base).arg(n).arg(suffix);
+            dest = QDir(fontsDir()).filePath(name);
+            n++;
+        } while (QFile::exists(dest) && n < 100);
+        if (QFile::exists(dest))
+            return QString();
+    }
+    if (!QFile::copy(local, dest))
+        return QString();
+    const int fontId = QFontDatabase::addApplicationFont(dest);
+    if (fontId < 0) {
+        QFile::remove(dest);
+        return QString();
+    }
+    m_importedFonts.append(name);
+    const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+    const QString family = families.isEmpty() ? QString() : families.first();
+    if (!family.isEmpty())
+        m_importedFontFamily.insert(name, family);
+    emit appearanceChanged();
+    return family;
+}
+
+void SettingsStore::removeImportedFont(const QString &fileName) {
+    if (!m_importedFonts.contains(fileName) || !isSafeFontName(fileName))
+        return;
+    m_importedFonts.removeAll(fileName);
+    m_importedFontFamily.remove(fileName);
+    QFile::remove(QDir(fontsDir()).filePath(fileName));
+    refreshFontMissing();
+    emit appearanceChanged();
+}
+
+void SettingsStore::selectImportedFont(const QString &fileName) {
+    if (!m_importedFonts.contains(fileName) || !isSafeFontName(fileName))
+        return;
+    const QString family = m_importedFontFamily.value(fileName);
+    if (family.isEmpty() || family == m_fontFamily)
+        return;
+    m_fontFamily = family;
+    persistAppearance();
+    refreshFontMissing();
+    applyFontFamily();
+    emit appearanceChanged();
+}
+
+void SettingsStore::resetAppearance() {
+    m_lightColors.clear();
+    m_darkColors.clear();
+    m_radiusPreset = QStringLiteral("rounded");
+    m_customRadiusSmall = 6;
+    m_customRadiusMedium = 8;
+    m_customRadiusLarge = 10;
+    m_customRadiusXLarge = 12;
+    m_fontFamily.clear();
+    m_fontMissing = false;
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("appearanceColorsLight"));
+    settings.remove(QString());
+    settings.endGroup();
+    settings.beginGroup(QStringLiteral("appearanceColorsDark"));
+    settings.remove(QString());
+    settings.endGroup();
+    persistAppearance();
+    applyFontFamily();
+    emit appearanceChanged();
 }
 
 void SettingsStore::persist() {

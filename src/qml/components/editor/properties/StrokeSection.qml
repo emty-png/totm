@@ -38,7 +38,7 @@ PanelSection {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: section.snapshot.commonOf("stroke").value
             border.width: 1
             border.color: AppTheme.border
@@ -100,7 +100,7 @@ PanelSection {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             border.width: 1
             border.color: AppTheme.border
             gradient: Gradient {

@@ -46,7 +46,7 @@ TextField {
     }
 
     background: Rectangle {
-        radius: 6
+        radius: AppTheme.radiusSmall
         color: field.activeFocus ? AppTheme.hover : field.hovered ? AppTheme.hover : AppTheme.surface
         border.width: 1
         border.color: field.activeFocus ? AppTheme.selection : AppTheme.fieldBorder

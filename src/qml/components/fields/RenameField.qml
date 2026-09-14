@@ -29,7 +29,7 @@ TextField {
     verticalAlignment: TextInput.AlignVCenter
 
     background: Rectangle {
-        radius: 6
+        radius: AppTheme.radiusSmall
         color: AppTheme.background
         border.width: 1
         border.color: field.activeFocus ? AppTheme.selection : AppTheme.fieldBorder

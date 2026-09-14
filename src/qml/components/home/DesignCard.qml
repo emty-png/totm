@@ -3,9 +3,11 @@ import QtQuick.Layouts
 import Totm
 
 // One design card: bordered live scene tile with a hover-revealed
-// star toggle, divider, then name and edited stamp. Click opens,
-// Ctrl-click toggles selection, drag onto a sidebar workspace moves,
-// right-click opens the card menu. Marquee selection draws an outline.
+// star toggle, divider, then name and edited stamp. Click selects just
+// this card, Ctrl-click toggles selection, double-click opens the design,
+// drag onto a sidebar workspace moves, right-click opens the card menu.
+// Marquee selection draws an outline. Rename lives in the context menu
+// and the F2 shortcut.
 Item {
     id: card
 
@@ -26,7 +28,6 @@ Item {
     property var openPolicy: null
     property var contextPolicy: null
     property var starPolicy: null
-    property var beginRenamePolicy: null
     property var commitPolicy: null
     property var cancelPolicy: null
 
@@ -49,7 +50,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 12
+        radius: AppTheme.radiusXLarge
         color: cardMouse.pressed ? AppTheme.pressed : cardMouse.containsMouse || card.Drag.active ? AppTheme.hover : AppTheme.surface
         border.width: 1
         border.color: AppTheme.border
@@ -70,7 +71,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 104
-            radius: 8
+            radius: AppTheme.radiusMedium
             color: AppTheme.canvas
 
             // Clipping happens a pixel inside so content never touches
@@ -91,7 +92,7 @@ Item {
             // the rounded outline if it lived on the base box.
             Rectangle {
                 anchors.fill: parent
-                radius: 8
+                radius: AppTheme.radiusMedium
                 color: "transparent"
                 border.width: 1
                 border.color: AppTheme.border
@@ -161,7 +162,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: starMouse.containsMouse || card.starred ? AppTheme.hover : AppTheme.surface
             border.width: 1
             border.color: AppTheme.border
@@ -198,7 +199,7 @@ Item {
     // Selected outline (marquee or click).
     Rectangle {
         anchors.fill: parent
-        radius: 12
+        radius: AppTheme.radiusXLarge
         visible: card.selected
         color: "transparent"
         border.width: 1
@@ -249,26 +250,15 @@ Item {
                 return;
             if (mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 return;
-            // Delayed past the system double-click interval: a second
-            // press turns this into a rename, never an open + rename.
-            openTimer.restart();
+            // Click only selects (single). Opening is double-click, so a
+            // click never navigates away and selection stays put for the
+            // shortcuts. Repeats are idempotent, no timer needed.
+            if (card.selectOnlyPolicy)
+                card.selectOnlyPolicy(card.designId);
         }
         onDoubleClicked: mouse => {
             if (mouse.button !== Qt.LeftButton)
                 return;
-            openTimer.stop();
-            if (card.beginRenamePolicy)
-                card.beginRenamePolicy(card.designId);
-        }
-    }
-
-    // Single-click open, held back one double-click interval so
-    // double-click renames in place instead of navigating away first.
-    Timer {
-        id: openTimer
-
-        interval: Qt.styleHints.mouseDoubleClickInterval
-        onTriggered: {
             if (card.openPolicy)
                 card.openPolicy(card.designId);
         }
