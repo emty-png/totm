@@ -57,12 +57,18 @@ QtObject {
                 name: qsTr("Move & Scale"),
                 category: "",
                 defaultEasing: "easeOut"
+            },
+            {
+                id: "type",
+                name: qsTr("Type"),
+                category: qsTr("Text"),
+                defaultEasing: "linear"
             }
         ];
     }
 
     function presetIds() {
-        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
     }
 
     // Custom from-to clips reuse the preset pipeline (timeline, undo,
@@ -87,6 +93,8 @@ QtObject {
             return qsTr("Twist");
         if (presetId === "movescale")
             return qsTr("Move & Scale");
+        if (presetId === "type")
+            return qsTr("Type");
         if (presetId === "customScale")
             return qsTr("Scale");
         if (presetId === "customRotate")
@@ -152,6 +160,12 @@ QtObject {
                 direction: "left",
                 distance: 200,
                 scale: 0
+            };
+        if (presetId === "type")
+            return {
+                unit: "letters",
+                cps: 20,
+                cursor: false
             };
         if (presetId === "customScale")
             return {
@@ -275,6 +289,10 @@ QtObject {
         return v === "ccw" ? "ccw" : "cw";
     }
 
+    function typeUnit(v) {
+        return v === "words" || v === "lines" ? v : "letters";
+    }
+
     function clampNum(v, fallback, lo, hi) {
         var n = Number(v);
         if (isNaN(n))
@@ -348,6 +366,12 @@ QtObject {
                 direction: slideDirection(r.direction !== undefined ? r.direction : "left"),
                 distance: clampNum(r.distance !== undefined ? r.distance : 200, 200, 0, 2000),
                 scale: clampNum(r.scale !== undefined ? r.scale : 0, 0, 0, 150)
+            };
+        if (presetId === "type")
+            return {
+                unit: typeUnit(r.unit !== undefined ? r.unit : "letters"),
+                cps: clampNum(r.cps !== undefined ? r.cps : 20, 20, 1, 120),
+                cursor: r.cursor === true
             };
         if (presetId === "customScale")
             return {

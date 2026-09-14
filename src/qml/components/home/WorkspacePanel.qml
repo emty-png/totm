@@ -15,6 +15,7 @@ Item {
     property var movePolicy: null
     property var openPolicy: null
     property var settingsPolicy: null
+    property var creditsPolicy: null
 
     // Starred designs, newest first. Cached stable for the Repeater
     // (fresh arrays every read churn delegates).
@@ -212,7 +213,7 @@ Item {
             Layout.fillHeight: true
         }
 
-        // Hairline above the pinned entry, matching panel section tops.
+        // Hairline above the pinned entries, matching panel section tops.
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
@@ -220,6 +221,61 @@ Item {
             Layout.rightMargin: 12
             Layout.bottomMargin: 6
             color: AppTheme.border
+        }
+
+        // Credits page entry, directly above Settings. Momentary button
+        // (opens CREDITS.html in a browser), never a selection
+        // destination like the workspaces above.
+        Item {
+            id: creditsRow
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+            Layout.bottomMargin: 2
+
+            readonly property bool hovered: creditsMouse.containsMouse
+
+            LayerHighlight {
+                selected: false
+                hovered: creditsRow.hovered
+                lifted: false
+            }
+
+            MouseArea {
+                id: creditsMouse
+
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                onClicked: {
+                    if (panel.creditsPolicy)
+                        panel.creditsPolicy();
+                }
+            }
+
+            Text {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 8
+                verticalAlignment: Text.AlignVCenter
+                leftPadding: 22
+                text: qsTr("Credits")
+                font.pixelSize: 12
+                elide: Text.ElideRight
+                color: creditsRow.hovered ? AppTheme.foreground : AppTheme.muted
+            }
+
+            AppIcon {
+                anchors {
+                    left: parent.left
+                    verticalCenter: parent.verticalCenter
+                    leftMargin: 16
+                }
+                kind: "sparkle"
+                width: 14
+                height: 14
+                iconColor: creditsRow.hovered ? AppTheme.foreground : AppTheme.muted
+            }
         }
 
         // Pinned bottom entry. Placeholder target until the settings

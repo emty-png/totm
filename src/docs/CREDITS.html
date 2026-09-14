@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Credits</title>
+
+  <!-- Prevent theme flash (FOUC) by applying saved preference before first paint -->
+  <script>
+    (function () {
+      try {
+        const saved = localStorage.getItem("totm-credits-theme");
+        if (saved === "light" || saved === "dark") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <style>
+    /* ==========================================================================
+       Design Tokens & Theme Variables
+       ========================================================================== */
+    :root {
+      color-scheme: dark light;
+      --background: #1e1e1e;
+      --foreground: #f6f6f6;
+      --surface: #2e2e2e;
+      --border: #3e3e46;
+      --muted: #9a9a9a;
+      --hover: #3e3e46;
+      --canvas: #101010;
+      --accent: #0d99ff;
+      --radius: 12px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        color-scheme: light;
+        --background: #ffffff;
+        --foreground: #0f0f0f;
+        --surface: #fffde0;
+        --border: #000000;
+        --muted: #5a5a5a;
+        --hover: #f0ead0;
+        --canvas: #ececec;
+      }
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --background: #ffffff;
+      --foreground: #0f0f0f;
+      --surface: #fffde0;
+      --border: #000000;
+      --muted: #5a5a5a;
+      --hover: #f0ead0;
+      --canvas: #ececec;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+    }
+
+    /* ==========================================================================
+       Reset & Base Styles
+       ========================================================================== */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font: 16px/1.65 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    p,
+    li {
+      color: var(--foreground);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    /* ==========================================================================
+       Layout
+       ========================================================================== */
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+    }
+
+    /* ==========================================================================
+       Theme Toggle Button
+       ========================================================================== */
+    .theme-toggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 10;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--foreground);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .theme-toggle:hover {
+      background: var(--hover);
+    }
+
+    .theme-toggle:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      display: block;
+    }
+
+    /* ==========================================================================
+       Hero Section & Headings
+       ========================================================================== */
+    header.hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+
+    header.hero p {
+      color: var(--muted);
+      margin: 8px 0 0;
+    }
+
+    h1 {
+      font-size: 32px;
+      margin: 0;
+      letter-spacing: -0.5px;
+    }
+
+    h1 .accent {
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      margin: 40px 0 12px;
+      letter-spacing: -0.3px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+    }
+
+    h2 .license {
+      font-size: 16px;
+    }
+
+    h3 {
+      font-size: 17px;
+      margin: 24px 0 8px;
+    }
+
+    /* ==========================================================================
+       Table of Contents
+       ========================================================================== */
+    .toc {
+      list-style: none;
+      padding: 0;
+      margin: 16px 0 0;
+      columns: 2;
+      font-size: 14.5px;
+    }
+
+    .toc li {
+      margin: 4px 0;
+      break-inside: avoid;
+    }
+
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       Cards & License Text
+       ========================================================================== */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      margin: 16px 0;
+    }
+
+    .card > :first-child {
+      margin-top: 0;
+    }
+
+    .card > :last-child {
+      margin-bottom: 0;
+    }
+
+    .card a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .card a:hover,
+    .card a:focus-visible {
+      text-decoration: underline;
+    }
+
+    .license {
+      color: var(--accent);
+      white-space: nowrap;
+      font-weight: 600;
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    }
+
+    pre {
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+  <button class="theme-toggle" id="themeToggle" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+
+  <main class="wrap">
+    <header class="hero">
+      <h1>Credits for <span class="accent">totm</span></h1>
+      <p>The open-source work that makes totm possible.</p>
+      <nav aria-label="Table of contents">
+        <ul class="toc">
+          <li><a href="#icons">1 · Phosphor Icons</a></li>
+          <li><a href="#font">2 · Google Sans</a></li>
+          <li><a href="CONTRIBUTORS.html">3 · Contributors</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <h2 id="icons"><span>1 · Phosphor Icons</span><span class="license">MIT License</span></h2>
+    <div class="card">
+      <p>Every glyph in the app — title bar, toolbar, panels, timeline — comes from the Phosphor fill set, embedded as vector paths.</p>
+    </div>
+    <h3>License</h3>
+    <pre><code>MIT License
+
+Copyright (c) 2023 Phosphor Icons
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.</code></pre>
+
+    <h2 id="font"><span>2 · Google Sans</span><span class="license">OFL-1.1</span></h2>
+    <div class="card">
+      <p>The default interface typeface, bundled with its license.</p>
+      <p class="muted">Header as distributed with the font files; the full OFL.txt ships beside the bundled fonts.</p>
+    </div>
+    <h3>License</h3>
+    <pre><code>Copyright 2017 Google, Inc. All Rights Reserved.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://openfontlicense.org
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION &amp; CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.</code></pre>
+  </main>
+
+  <script>
+    (function () {
+      const STORAGE_KEY = "totm-credits-theme";
+      const root = document.documentElement;
+      const btn = document.getElementById("themeToggle");
+
+      // Phosphor fill glyphs (moon in dark, sun in light)
+      const SUN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z"/></svg>';
+      const MOON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z"/></svg>';
+
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: light)");
+
+      function getEffectiveTheme() {
+        return root.getAttribute("data-theme") || (mediaQuery.matches ? "light" : "dark");
+      }
+
+      function paintButton() {
+        btn.innerHTML = getEffectiveTheme() === "light" ? SUN : MOON;
+      }
+
+      function setTheme(theme) {
+        root.setAttribute("data-theme", theme);
+        try {
+          localStorage.setItem(STORAGE_KEY, theme);
+        } catch (e) {}
+        paintButton();
+      }
+
+      btn.addEventListener("click", function () {
+        const nextTheme = getEffectiveTheme() === "light" ? "dark" : "light";
+        setTheme(nextTheme);
+      });
+
+      // Synchronize button icon if OS theme changes without explicit override
+      mediaQuery.addEventListener("change", function () {
+        if (!root.hasAttribute("data-theme")) {
+          paintButton();
+        }
+      });
+
+      paintButton();
+    })();
+  </script>
+</body>
+</html>

@@ -333,6 +333,31 @@ QtObject {
                 if (o.orient === true)
                     out.rotation = (Number(base.rotation) || 0) + sampled.angleDelta;
             }
+        } else if (preset === "type") {
+            // Typewriter reveal of the base text, chunked by unit. Units
+            // split exactly like the C++ sampler (CRLF/CR fold to LF,
+            // words split on U+0020 keeping empties, lines on LF), so
+            // canvas preview and video export reveal the same chunks.
+            // cps seeds the clip duration at apply time; sampling reads
+            // eased progress only, so lane stretches just re-time.
+            var full = String(base.textContent !== undefined ? base.textContent : "");
+            var norm = full.split("\r\n").join("\n").split("\r").join("\n");
+            var unit = o.unit === "words" ? "words" : o.unit === "lines" ? "lines" : "letters";
+            var sep = unit === "words" ? " " : "\n";
+            var total = unit === "letters" ? norm.length : norm.split(sep).length;
+            var shown = 0;
+            if (total > 0) {
+                var frac = inward ? e : 1 - e;
+                shown = Math.min(total, Math.max(0, Math.floor(frac * total + 1e-6)));
+            }
+            var txt = "";
+            if (unit === "letters")
+                txt = norm.substring(0, shown);
+            else
+                txt = norm.split(sep).slice(0, shown).join(sep);
+            if (o.cursor === true && shown < total)
+                txt += "|";
+            out.textContent = txt;
         }
         return out;
     }
@@ -614,6 +639,8 @@ QtObject {
                 n.opacity = ov.opacity;
             if (ov.fontSize !== undefined && n.shapeType === "text")
                 n.fontSize = ov.fontSize;
+            if (ov.textContent !== undefined && n.shapeType === "text")
+                n.textContent = ov.textContent;
             if (ov.fill !== undefined)
                 n.fill = ov.fill;
             if (ov.fillType !== undefined)

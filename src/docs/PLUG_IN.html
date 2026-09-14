@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Plug-in Guide</title>
+
+  <!-- Prevent theme flash (FOUC) by applying saved preference before first paint -->
+  <script>
+    (function () {
+      try {
+        const saved = localStorage.getItem("totm-guide-theme");
+        if (saved === "light" || saved === "dark") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <style>
+    /* ==========================================================================
+       Design Tokens & Theme Variables
+       ========================================================================== */
+    :root {
+      color-scheme: dark light;
+      --background: #1e1e1e;
+      --foreground: #f6f6f6;
+      --surface: #2e2e2e;
+      --border: #3e3e46;
+      --muted: #9a9a9a;
+      --hover: #3e3e46;
+      --canvas: #101010;
+      --accent: #0d99ff;
+      --radius: 12px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        color-scheme: light;
+        --background: #ffffff;
+        --foreground: #0f0f0f;
+        --surface: #fffde0;
+        --border: #000000;
+        --muted: #5a5a5a;
+        --hover: #f0ead0;
+        --canvas: #ececec;
+      }
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --background: #ffffff;
+      --foreground: #0f0f0f;
+      --surface: #fffde0;
+      --border: #000000;
+      --muted: #5a5a5a;
+      --hover: #f0ead0;
+      --canvas: #ececec;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+    }
+
+    /* ==========================================================================
+       Reset & Base Styles
+       ========================================================================== */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font: 16px/1.65 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    p,
+    li {
+      color: var(--foreground);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    /* ==========================================================================
+       Layout
+       ========================================================================== */
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+    }
+
+    /* ==========================================================================
+       Theme Toggle Button
+       ========================================================================== */
+    .theme-toggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 10;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--foreground);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .theme-toggle:hover {
+      background: var(--hover);
+    }
+
+    .theme-toggle:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      display: block;
+    }
+
+    /* ==========================================================================
+       Hero Section & Headings
+       ========================================================================== */
+    header.hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+
+    header.hero p {
+      color: var(--muted);
+      margin: 8px 0 0;
+    }
+
+    h1 {
+      font-size: 32px;
+      margin: 0;
+      letter-spacing: -0.5px;
+    }
+
+    h1 .accent {
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      margin: 40px 0 12px;
+      letter-spacing: -0.3px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 17px;
+      margin: 24px 0 8px;
+    }
+
+    /* ==========================================================================
+       Table of Contents
+       ========================================================================== */
+    .toc {
+      list-style: none;
+      padding: 0;
+      margin: 16px 0 0;
+      columns: 2;
+      font-size: 14.5px;
+    }
+
+    .toc li {
+      margin: 4px 0;
+      break-inside: avoid;
+    }
+
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       Cards, Tables & Code
+       ========================================================================== */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      margin: 16px 0;
+    }
+
+    .card > :first-child {
+      margin-top: 0;
+    }
+
+    .card > :last-child {
+      margin-bottom: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 14.5px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    }
+
+    code {
+      font-size: 0.86em;
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1px 6px;
+    }
+
+    pre {
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .perm {
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    .warn {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 14.5px;
+    }
+
+    kbd {
+      font-family: inherit;
+      font-size: 0.86em;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0 6px;
+      background: var(--surface);
+    }
+  </style>
+</head>
+<body>
+  <button class="theme-toggle" id="themeToggle" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+
+  <main class="wrap">
+    <header class="hero">
+      <h1>Plug-ins for <span class="accent">totm</span></h1>
+      <p>The maker guide: how to build, permission, style, and ship a QML-only plug-in.</p>
+      <nav aria-label="Table of contents">
+        <ul class="toc">
+          <li><a href="#start">1 · Quick start</a></li>
+          <li><a href="#manifest">2 · manifest.json reference</a></li>
+          <li><a href="#permissions">3 · Permissions</a></li>
+          <li><a href="#slots">4 · UI slots</a></li>
+          <li><a href="#api">5 · PluginStore API</a></li>
+          <li><a href="#sandbox">6 · Sandbox rules</a></li>
+          <li><a href="#style">7 · UI style rules</a></li>
+          <li><a href="#sample">8 · Full sample</a></li>
+          <li><a href="#testing">9 · Testing &amp; troubleshooting</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <h2 id="start">1 · Quick start</h2>
+    <p>Plug-ins are <strong>plain QML plus a manifest</strong> — no compiler, no SDK. You get a folder:</p>
+    <pre><code>&lt;plugins&gt;/com.example.grids/
+  manifest.json
+  main.qml
+  ui/GridTool.qml
+  ui/GridSection.qml</code></pre>
+    <div class="card">
+      <h3>Install path</h3>
+      <p>Copy your folder into the plug-in directory, then press the sparkle <strong>Rescan</strong> button in <em>Settings → Plugin</em> (or restart):</p>
+      <pre><code>~/.local/share/tot/totm/plugins/&lt;your-id&gt;/   # Linux
+# macOS / Windows: the empty-state hint in Settings → Plugin shows it</code></pre>
+      <p class="muted">The folder name <strong>must equal</strong> the <code>id</code> in your manifest, or the plug-in is rejected.</p>
+    </div>
+    <div class="card">
+      <h3>Minimal manifest</h3>
+      <pre><code>{
+  "id": "com.example.grids",
+  "name": "Grids",
+  "version": "1.0.0",
+  "author": "You",
+  "description": "Snap helpers and a panel readout.",
+  "entry": "main.qml",
+  "tier": "standard",
+  "contributions": {
+    "toolbarTools": ["ui/GridTool.qml"],
+    "designSections": ["ui/GridSection.qml"]
+  },
+  "permissions": ["doc.read", "ui.slots", "plugin.storage"],
+  "permissionReasons": {
+    "doc.read": "Reads the selection to show its size.",
+    "ui.slots": "Adds a toolbar button and a panel section.",
+    "plugin.storage": "Remembers the grid spacing."
+  }
+}</code></pre>
+    </div>
+    <p>On first scan totm shows an <strong>approval popup</strong> listing every permission with your reason. The user can untick anything (it may break the plug-in) and change their mind later via <strong>Review</strong> in <em>Settings → Plugin</em>. New plug-ins start <strong>disabled</strong> until approved.</p>
+
+    <h2 id="manifest">2 · manifest.json reference</h2>
+    <table>
+      <thead>
+        <tr><th scope="col">Field</th><th scope="col">Required</th><th scope="col">Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>id</code></td><td>yes</td><td>Lowercase reverse-dns, <code>[a-z0-9._-]</code>, ≤ 64 chars. Must equal the folder name.</td></tr>
+        <tr><td><code>name</code></td><td>yes</td><td>Shown in the manager, popups and suggestions.</td></tr>
+        <tr><td><code>version</code></td><td>no</td><td>Shown as <code>v1.0.0</code> on the card. Informational only.</td></tr>
+        <tr><td><code>author</code>, <code>description</code></td><td>no</td><td>Shown on the manager card.</td></tr>
+        <tr><td><code>entry</code></td><td>no</td><td>Defaults to <code>main.qml</code>. Must exist. (totm loads contribution files directly; the entry marks the root.)</td></tr>
+        <tr><td><code>tier</code></td><td>no</td><td><code>standard</code> (default) or <code>advanced</code>. Advanced is required for <code>fullOverlay</code> and shows a stronger trust warning.</td></tr>
+        <tr><td><code>contributions</code></td><td>no</td><td><code>toolbarTools[]</code>, <code>designSections[]</code>, <code>canvasOverlays[]</code>, <code>fullOverlay</code>. Relative <code>.qml</code> paths inside your folder; every file must exist.</td></tr>
+        <tr><td><code>permissions</code></td><td>no</td><td>Subset of the 11 known ids (§3). Unknown ids reject the plug-in.</td></tr>
+        <tr><td><code>permissionReasons</code></td><td>no</td><td>One short “why” per permission, shown in the approval popup. Write these well — they are your install screen.</td></tr>
+        <tr><td><code>totmVersion</code></td><td>no</td><td>Informational compatibility hint (e.g. <code>&gt;=0.1.0</code>).</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="permissions">3 · Permissions</h2>
+    <p>Every capability is gated by <code>PluginStore.hasPermission(pluginId, "…")</code>. Check before acting; disabled plug-ins fail every check.</p>
+    <table>
+      <thead>
+        <tr><th scope="col">Id</th><th scope="col">What it gates</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="perm">doc.read</td><td>Reading the injected <code>doc</code> (selection, nodes, scene props).</td></tr>
+        <tr><td class="perm">doc.write</td><td>Mutating <code>doc</code> (move/add/restyle). Normal undo still applies — prefer small, undoable edits.</td></tr>
+        <tr><td class="perm">library.read</td><td><em>Reserved.</em> No mediated API yet; the grant is recorded and shown.</td></tr>
+        <tr><td class="perm">library.write</td><td><em>Reserved.</em> No mediated API yet; the grant is recorded and shown.</td></tr>
+        <tr><td class="perm">images.use</td><td>Mediated image picks (§5). You only ever see the picked blob name, never a path.</td></tr>
+        <tr><td class="perm">audio.use</td><td>Mediated audio picks, same pattern as images.</td></tr>
+        <tr><td class="perm">settings.read</td><td>Follow the theme via <code>AppTheme.isDark</code>. Nothing else is exposed.</td></tr>
+        <tr><td class="perm">export.hook</td><td>Suggesting quality/fps shown in the export popup. You never drive the exporter.</td></tr>
+        <tr><td class="perm">ui.slots</td><td>Toolbar tools, design sections and canvas overlays.</td></tr>
+        <tr><td class="perm">ui.fullOverlay</td><td>Full-window overlay (needs the <code>advanced</code> tier). Keep it non-blocking: no full-fill MouseArea.</td></tr>
+        <tr><td class="perm">plugin.storage</td><td>Scoped key/value storage (1 MB cap) that lives in totm’s own settings — never the filesystem.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="slots">4 · UI slots</h2>
+    <table>
+      <thead>
+        <tr><th scope="col">Contribution</th><th scope="col">Where it appears</th><th scope="col">Injected props (declare the ones you need)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>toolbarTools[]</code></td><td>Floating canvas toolbar, after the image tool</td><td><code>doc</code>, <code>pluginId</code> (doc stays live on tab/switch)</td></tr>
+        <tr><td><code>designSections[]</code></td><td>Design panel, after Effects</td><td><code>doc</code>, <code>snapshot</code> (selection with mixed-value helpers), <code>pluginId</code></td></tr>
+        <tr><td><code>canvasOverlays[]</code></td><td>Over the scene, under the chrome</td><td><code>doc</code>, <code>zoom</code>, <code>offsetX</code>, <code>offsetY</code>, <code>pluginId</code></td></tr>
+        <tr><td><code>fullOverlay</code></td><td>Whole window, above views</td><td><code>pluginId</code> (read <code>TabState</code>/<code>ToolState</code> yourself)</td></tr>
+      </tbody>
+    </table>
+    <div class="warn">Declare injected props exactly as <code>property var doc</code> / <code>property string pluginId</code> etc. The host sets them on load when present; anything undeclared is simply skipped.</div>
+    <p>Reactive tip: <code>doc.rev</code> is the mutation tick — reference it in a binding to refresh derived values on every document change:</p>
+    <pre><code>text: {
+    var tick = doc ? doc.rev : 0;   // dependency only
+    var n = doc &amp;&amp; doc.selectedTops ? doc.selectedTops().length : 0;
+    return n + " selected";
+}</code></pre>
+
+    <h2 id="api">5 · PluginStore API</h2>
+    <p>Your only backend. Everything is permission-checked; denied calls return <code>false</code> / <code>{}</code>.</p>
+    <table>
+      <thead>
+        <tr><th scope="col">Call</th><th scope="col">Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>hasPermission(id, perm)</code></td><td>Gate every action on this.</td></tr>
+        <tr><td><code>getValue(id, key, fallback)</code> · <code>setValue(id, key, value)</code> · <code>removeValue(id, key)</code></td><td>Scoped storage (<code>plugin.storage</code>).</td></tr>
+        <tr><td><code>requestImage(id)</code> · <code>requestAudio(id)</code></td><td>Opens the host picker; listen for <code>onPicked(pluginId, kind, name)</code>.</td></tr>
+        <tr><td><code>imageUrlFor(id, name)</code> · <code>audioUrlFor(id, name)</code> · <code>imageInfoFor(id, name)</code></td><td>Resolve only names <em>you</em> picked; anything else returns empty.</td></tr>
+        <tr><td><code>suggestExport(id, quality, fps)</code> · <code>exportSuggestion(id)</code> · <code>clearExportSuggestion(id)</code></td><td><code>quality</code> is <code>sd|hd|4k</code>, <code>fps</code> is <code>30|60</code>. The export popup offers it with Apply — never automatic.</td></tr>
+        <tr><td><code>pluginList</code> · <code>plugin(id)</code> · <code>permissionCatalog()</code></td><td>Read-only introspection for manager-style UI.</td></tr>
+      </tbody>
+    </table>
+    <p>Use the host’s building blocks directly: <code>ToolbarButton</code>, <code>PanelSection</code>, <code>SegmentedOption</code>, <code>AppIcon</code> (kinds like <code>star</code>, <code>plus</code>, <code>book</code>), <code>AppTheme.*</code> colors.</p>
+
+    <h2 id="sandbox">6 · Sandbox rules</h2>
+    <div class="card">
+      <ul>
+        <li><strong>Imports:</strong> only <code>QtQuick</code>, <code>QtQuick.Layouts</code>, <code>QtQuick.Controls</code>, <code>QtQuick.Shapes</code>, <code>QtQuick.Effects</code>, <code>Totm</code>. Anything else (notably <code>QtQuick.Dialogs</code>, <code>QtCore</code>, <code>QtMultimedia</code>) rejects the plug-in.</li>
+        <li><strong>Forbidden identifiers:</strong> <code>LibraryStore</code>, <code>VideoExporter</code>, <code>SettingsStore</code>, <code>FileDialog</code>, <code>FolderDialog</code>, <code>StandardPaths</code>, <code>MediaPlayer</code>, <code>XMLHttpRequest</code>, <code>WorkerScript</code>, <code>LocalStorage</code>, <code>Qt.createQmlObject</code>, <code>Qt.openUrlExternally</code> — even inside strings or comments. Go through <code>PluginStore</code> so permissions apply.</li>
+        <li><strong>No network:</strong> remote <code>http/https/ftp</code> transport is denied engine-wide, so plug-ins stay offline by construction.</li>
+        <li><strong>No raw files:</strong> UI loads through mediated URLs; state lives in scoped storage; media arrives as picked blob names.</li>
+        <li>One bad plug-in never blocks the rest — it shows a disabled card with the exact error.</li>
+      </ul>
+    </div>
+
+    <h2 id="style">7 · UI style rules</h2>
+    <div class="card">
+      <ul>
+        <li><strong>Colors:</strong> bind <code>AppTheme.*</code> only — never hardcode hex (dark and light themes come free).</li>
+        <li><strong>Type:</strong> 12px default, 11px muted captions, <code>DemiBold</code> titles; <code>elide: Text.ElideRight</code>, <code>qsTr()</code> for strings.</li>
+        <li><strong>Metrics:</strong> radius 6 fields/buttons, 8 toolbar buttons, 10 popups, 12 cards; 28px field height; 8px body spacing.</li>
+        <li><strong>Delegates:</strong> keep them self-contained — pass data via properties, wire callbacks where the outer scope is visible (see §8).</li>
+        <li><strong>Hygiene:</strong> one responsibility per file (aim ≤ 200 lines), 4-space indent, run <kbd>qmlformat</kbd> + <kbd>qmllint</kbd> before sharing.</li>
+      </ul>
+    </div>
+
+    <h2 id="sample">8 · Full sample</h2>
+    <p>A toolbar button that counts taps in storage and logs the live selection:</p>
+    <pre><code>import QtQuick
+import Totm
+
+ToolbarButton {
+    property var doc: null
+    property string pluginId: ""
+
+    iconKind: "star"
+    onClicked: {
+        if (!PluginStore.hasPermission(pluginId, "plugin.storage"))
+            return;
+        var n = Number(PluginStore.getValue(pluginId, "taps", 0)) + 1;
+        PluginStore.setValue(pluginId, "taps", n);
+        var selected = doc &amp;&amp; doc.selectedTops ? doc.selectedTops().length : 0;
+        console.log("tap " + n + " (selection: " + selected + ")");
+    }
+}</code></pre>
+    <p>A design-panel section with a mediated image pick:</p>
+    <pre><code>import QtQuick
+import QtQuick.Layouts
+import Totm
+
+PanelSection {
+    property var doc: null
+    property var snapshot: null
+    property string pluginId: ""
+    property string mascot: ""
+
+    title: qsTr("Mascot")
+
+    Connections {
+        target: PluginStore
+        function onPicked(pickedId, kind, name) {
+            if (pickedId === pluginId &amp;&amp; kind === "image")
+                mascot = name;
+        }
+    }
+
+    Image {
+        Layout.preferredWidth: 64
+        Layout.preferredHeight: 64
+        visible: mascot !== ""
+        source: mascot === "" ? "" : PluginStore.imageUrlFor(pluginId, mascot)
+        fillMode: Image.PreserveAspectFit
+    }
+
+    SegmentedOption {
+        label: qsTr("Pick mascot")
+        enabled: PluginStore.hasPermission(pluginId, "images.use")
+        onClicked: PluginStore.requestImage(pluginId)
+    }
+}</code></pre>
+
+    <h2 id="testing">9 · Testing &amp; troubleshooting</h2>
+    <div class="card">
+      <ol>
+        <li>Copy the folder into the plug-in directory and press <strong>Rescan</strong> in <em>Settings → Plugin</em>.</li>
+        <li>Approve permissions (try unticking one — the plug-in must degrade, never crash).</li>
+        <li>Open a design: toolbar tool, panel section and overlay should appear; run your actions, then <kbd>Ctrl+Z</kbd> to confirm writes undo cleanly.</li>
+        <li>Disable the plug-in in <em>Settings → Plugin</em> — its UI must vanish without errors.</li>
+        <li>Deny a permission via <strong>Review</strong> — gated buttons must disable gracefully.</li>
+      </ol>
+      <p class="muted">Broken plug-ins show a disabled card with the exact reason (bad manifest, missing file, forbidden import/identifier). The approval popup reopens automatically whenever an <em>enabled</em> plug-in is missing a grant.</p>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const STORAGE_KEY = "totm-guide-theme";
+      const root = document.documentElement;
+      const btn = document.getElementById("themeToggle");
+
+      // Phosphor fill glyphs (moon in dark, sun in light)
+      const SUN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z"/></svg>';
+      const MOON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z"/></svg>';
+
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: light)");
+
+      function getEffectiveTheme() {
+        return root.getAttribute("data-theme") || (mediaQuery.matches ? "light" : "dark");
+      }
+
+      function paintButton() {
+        btn.innerHTML = getEffectiveTheme() === "light" ? SUN : MOON;
+      }
+
+      function setTheme(theme) {
+        root.setAttribute("data-theme", theme);
+        try {
+          localStorage.setItem(STORAGE_KEY, theme);
+        } catch (e) {}
+        paintButton();
+      }
+
+      btn.addEventListener("click", function () {
+        const nextTheme = getEffectiveTheme() === "light" ? "dark" : "light";
+        setTheme(nextTheme);
+      });
+
+      // Synchronize button icon if OS theme changes without explicit override
+      mediaQuery.addEventListener("change", function () {
+        if (!root.hasAttribute("data-theme")) {
+          paintButton();
+        }
+      });
+
+      paintButton();
+    })();
+  </script>
+</body>
+</html>

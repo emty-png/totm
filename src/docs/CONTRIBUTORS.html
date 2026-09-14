@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Contributors</title>
+
+  <!-- Prevent theme flash (FOUC) by applying saved preference before first paint -->
+  <script>
+    (function () {
+      try {
+        const saved = localStorage.getItem("totm-contributors-theme");
+        if (saved === "light" || saved === "dark") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <style>
+    /* ==========================================================================
+       Design Tokens & Theme Variables
+       ========================================================================== */
+    :root {
+      color-scheme: dark light;
+      --background: #1e1e1e;
+      --foreground: #f6f6f6;
+      --surface: #2e2e2e;
+      --border: #3e3e46;
+      --muted: #9a9a9a;
+      --hover: #3e3e46;
+      --canvas: #101010;
+      --accent: #0d99ff;
+      --radius: 12px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        color-scheme: light;
+        --background: #ffffff;
+        --foreground: #0f0f0f;
+        --surface: #fffde0;
+        --border: #000000;
+        --muted: #5a5a5a;
+        --hover: #f0ead0;
+        --canvas: #ececec;
+      }
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --background: #ffffff;
+      --foreground: #0f0f0f;
+      --surface: #fffde0;
+      --border: #000000;
+      --muted: #5a5a5a;
+      --hover: #f0ead0;
+      --canvas: #ececec;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+    }
+
+    /* ==========================================================================
+       Reset & Base Styles
+       ========================================================================== */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font: 16px/1.65 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    p,
+    li {
+      color: var(--foreground);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    /* ==========================================================================
+       Layout
+       ========================================================================== */
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+    }
+
+    /* ==========================================================================
+       Theme Toggle Button
+       ========================================================================== */
+    .theme-toggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 10;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--foreground);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .theme-toggle:hover {
+      background: var(--hover);
+    }
+
+    .theme-toggle:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      display: block;
+    }
+
+    /* ==========================================================================
+       Hero Section & Headings
+       ========================================================================== */
+    header.hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+
+    header.hero p {
+      color: var(--muted);
+      margin: 8px 0 0;
+    }
+
+    h1 {
+      font-size: 32px;
+      margin: 0;
+      letter-spacing: -0.5px;
+    }
+
+    h1 .accent {
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      margin: 40px 0 12px;
+      letter-spacing: -0.3px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    h2 .tag {
+      font-size: 14px;
+      font-weight: 400;
+    }
+
+    /* ==========================================================================
+       Table of Contents
+       ========================================================================== */
+    .toc {
+      list-style: none;
+      padding: 0;
+      margin: 16px 0 0;
+      columns: 2;
+      font-size: 14.5px;
+    }
+
+    .toc li {
+      margin: 4px 0;
+      break-inside: avoid;
+    }
+
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       Tables
+       ========================================================================== */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 14.5px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    td.name {
+      white-space: nowrap;
+      font-weight: 600;
+    }
+
+    td.version {
+      white-space: nowrap;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <button class="theme-toggle" id="themeToggle" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+
+  <main class="wrap">
+    <header class="hero">
+      <h1>Contributors to <span class="accent">totm</span></h1>
+      <p>Everyone who built the app, and what they built.</p>
+      <nav aria-label="Table of contents">
+        <ul class="toc">
+          <li><a href="#v010">1. v0.1.0</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <h2 id="v010">v0.1.0 <span class="muted tag">Self-build</span></h2>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Contributor</th>
+          <th scope="col">Contribution</th>
+          <th scope="col">Version</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="name">emty-png</td><td>App foundation: canvas, shapes, layers and groups, snapping, design panel, tabs, theme</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Design library: workspaces, starring, live card previews, inline rename, per-design scene files</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Properties panel: position, layout, appearance, fill and stroke sections with mixed values and scrub fields</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Text: inline editing, typography controls and text animation presets</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Pen tool: vector path drawing, live preview and point editing</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Animation system: presets, custom from-to clips, motion paths and easing graphs</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Timeline: lanes, ruler, transport, audio lanes and scrolling</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Effects engine: gradients, shadows and glows, blurs and film grain, shared by canvas and export</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Video export: system-ffmpeg pipeline with quality picker, progress, cancel and audio mix</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Images and audio: picker-then-place images, timeline audio import with live preview</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Theme and window: persistent theme, window state, frameless title bar with draggable tabs</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Plug-in system: QML extensions, permission gates, settings UI and maker guide</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Settings: editable shortcuts and appearance panels</td><td class="version">v0.1.0</td></tr>
+        <tr><td class="name">emty-png</td><td>Home and icon: canvas-matching card previews, app icon and desktop integration</td><td class="version">v0.1.0</td></tr>
+      </tbody>
+    </table>
+  </main>
+
+  <script>
+    (function () {
+      const STORAGE_KEY = "totm-contributors-theme";
+      const root = document.documentElement;
+      const btn = document.getElementById("themeToggle");
+
+      // Phosphor fill glyphs (moon in dark, sun in light)
+      const SUN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z"/></svg>';
+      const MOON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z"/></svg>';
+
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: light)");
+
+      function getEffectiveTheme() {
+        return root.getAttribute("data-theme") || (mediaQuery.matches ? "light" : "dark");
+      }
+
+      function paintButton() {
+        btn.innerHTML = getEffectiveTheme() === "light" ? SUN : MOON;
+      }
+
+      function setTheme(theme) {
+        root.setAttribute("data-theme", theme);
+        try {
+          localStorage.setItem(STORAGE_KEY, theme);
+        } catch (e) {}
+        paintButton();
+      }
+
+      btn.addEventListener("click", function () {
+        const nextTheme = getEffectiveTheme() === "light" ? "dark" : "light";
+        setTheme(nextTheme);
+      });
+
+      // Synchronize button icon if OS theme changes without explicit override
+      mediaQuery.addEventListener("change", function () {
+        if (!root.hasAttribute("data-theme")) {
+          paintButton();
+        }
+      });
+
+      paintButton();
+    })();
+  </script>
+</body>
+</html>

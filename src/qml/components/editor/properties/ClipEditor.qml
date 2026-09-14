@@ -132,6 +132,19 @@ ScrollView {
             }
         }
 
+        // Typewriter options (reveal unit, speed, cursor).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && editor.clipData.preset === "type"
+
+            ClipTextOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
         // Custom Transform (scale / rotate / move).
         PanelSection {
             width: parent.width

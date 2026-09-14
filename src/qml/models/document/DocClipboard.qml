@@ -282,9 +282,13 @@ QtObject {
             snap.pathData = doc.factory._copyPath(b.pathData);
         // Text snapshots carry fontSize (grow/shrink animate it): rebase
         // it too, but only where the snapshot has one so plain shapes
-        // never gain stray keys in saved scenes.
+        // never gain stray keys in saved scenes. Typing animates
+        // textContent the same way (substring reveal must save the full
+        // document text, never the mid-type frame).
         if (snap.fontSize !== undefined && b.fontSize !== undefined)
             snap.fontSize = b.fontSize;
+        if (snap.textContent !== undefined && b.textContent !== undefined)
+            snap.textContent = b.textContent;
         // Gradient/shadow animate in custom clips: rebase from base when
         // present so saves capture the document, never the frame.
         if (snap.fillType !== undefined && b.fillType !== undefined)

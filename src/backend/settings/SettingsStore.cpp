@@ -1,6 +1,8 @@
 #include "SettingsStore.h"
 
 #include <QColor>
+#include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -767,4 +769,19 @@ void SettingsStore::saveWindowGeometry(int x, int y, int width, int height, bool
     }
     persistWindow();
     emit windowGeometryChanged();
+}
+
+bool SettingsStore::openCredits() {
+    const QString exeDir = QCoreApplication::applicationDirPath();
+    const QStringList candidates = {
+        exeDir + QStringLiteral("/../share/doc/totm/CREDITS.html"),
+        exeDir + QStringLiteral("/../Resources/CREDITS.html"),
+        exeDir + QStringLiteral("/../../../src/docs/CREDITS.html"),
+    };
+    for (const QString &candidate : candidates) {
+        const QString path = QDir::cleanPath(candidate);
+        if (QFile::exists(path))
+            return QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    }
+    return false;
 }

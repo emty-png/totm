@@ -205,6 +205,7 @@ RowLayout {
             homeView.editingDesignId = "";
             homeView.settingsSelected = true;
         }
+        creditsPolicy: () => SettingsStore.openCredits()
     }
 
     function parseIds(idsJson) {
