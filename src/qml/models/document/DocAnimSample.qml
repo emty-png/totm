@@ -337,42 +337,171 @@ QtObject {
         return out;
     }
 
+    // Position presets output x/y (move, slide, scale-anchored shifts,
+    // resize centering, drawn paths). Their x/y chain from the previous
+    // end so sequential moves accumulate instead of snapping to origin;
+    // all other props keep later-wins on the frozen base.
+    function isPositionPreset(preset) {
+        return preset === "slide" || preset === "movescale" || preset === "grow" || preset === "shrink" || preset === "customScale" || preset === "customMove" || preset === "customResize" || preset === "customPath";
+    }
+
+    // Local x/y offset of one clip from its own base (overlay minus base).
+    // Base-independent for moves/paths/slides (pure offsets); scale-driven
+    // shifts depend only on sizes, so adding them onto a moved start keeps
+    // groups coherent. Empty paths report no move.
+    function moveOffset(c, base, cx, cy, e, p) {
+        var ov = presetOverlay(c.preset, c.mode, c.options || {}, base, cx, cy, e, p);
+        var hasX = ov.x !== undefined && !isNaN(ov.x);
+        var hasY = ov.y !== undefined && !isNaN(ov.y);
+        if (!hasX && !hasY)
+            return {
+                dx: 0,
+                dy: 0,
+                has: false
+            };
+        var bx = Number(base.x) || 0, by = Number(base.y) || 0;
+        return {
+            dx: hasX ? ov.x - bx : 0,
+            dy: hasY ? ov.y - by : 0,
+            has: true
+        };
+    }
+
+    // Chained offset at time t over a time-sorted position list.
+    // Latest started wins; its start base is the chained value at its own
+    // t0 (partial handoff when overlapping, summed ends when sequential),
+    // so back-to-back Move 0->200 twice ends at +400 with no jump.
+    function chainedOffsetAt(list, base, t, upTo) {
+        var li = -1;
+        for (var i = 0; i <= upTo; i++) {
+            if (list[i].c.t0 <= t)
+                li = i;
+            else
+                break;
+        }
+        if (li < 0)
+            return {
+                dx: 0,
+                dy: 0
+            };
+        var cur = list[li];
+        var dur = Math.max(0.001, cur.c.duration);
+        var p = Math.min(1, Math.max(0, (t - cur.c.t0) / dur));
+        var ez = cur.c.easing || {};
+        var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, p);
+        var off = moveOffset(cur.c, base, cur.cx, cur.cy, e, p);
+        var before = {
+            dx: 0,
+            dy: 0
+        };
+        if (li > 0)
+            before = chainedOffsetAt(list, base, cur.c.t0, li - 1);
+        return {
+            dx: before.dx + off.dx,
+            dy: before.dy + off.dy
+        };
+    }
+
     // Full overlay map for time t: later clips win per property, so
     // stacked presets coexist (Slide owns x/y, Fade owns opacity) while
     // same-property overlaps resolve to the topmost clip. Times outside
     // a clip hold its end state; times before its start stay silent.
     // Every frame derives from base (the playBase snapshot, or live
     // values only for nodes born mid-play): never from the live tree.
+    // Movement x/y chains from the previous end (see above); w/h and all
+    // other props stay base-relative later-wins.
     function sampleAnim(doc, t, base) {
         var acc = {};
         var clips = doc.anim.clips;
+        // Per-clip target boxes from the frozen base (centers stay fixed
+        // for the gesture, so group transforms never chase themselves).
+        var infos = [];
+        for (var n = 0; n < clips.length; n++) {
+            var cc = clips[n];
+            var anode = doc.findNode(cc.targetUid);
+            if (!anode) {
+                infos.push(null);
+                continue;
+            }
+            var aleaves = anode.kind === "group" ? doc._leavesUnder(anode) : [anode];
+            var abox = baseBox(doc, aleaves, base);
+            if (!abox) {
+                infos.push(null);
+                continue;
+            }
+            infos.push({
+                box: abox,
+                cx: abox.x + abox.w / 2,
+                cy: abox.y + abox.h / 2,
+                leaves: aleaves
+            });
+        }
         for (var i = 0; i < clips.length; i++) {
             var c = clips[i];
             if (t < c.t0)
+                continue;
+            var info = infos[i];
+            if (!info)
                 continue;
             var dur = Math.max(0.001, c.duration);
             var p = Math.min(1, Math.max(0, (t - c.t0) / dur));
             var ez = c.easing || {};
             var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, p);
-            var node = doc.findNode(c.targetUid);
-            if (!node)
-                continue;
-            var leaves = node.kind === "group" ? doc._leavesUnder(node) : [node];
-            var box = baseBox(doc, leaves, base);
-            if (!box)
-                continue;
-            var cx = box.x + box.w / 2, cy = box.y + box.h / 2;
-            for (var j = 0; j < leaves.length; j++) {
-                var lf = leaves[j];
+            var skipXY = isPositionPreset(c.preset);
+            for (var j = 0; j < info.leaves.length; j++) {
+                var lf = info.leaves[j];
                 if (c.preset !== "customHide" && !doc.isEffectivelyVisible(lf))
                     continue;
                 var bv = base && base[lf.uid] ? base[lf.uid] : lf;
-                var ov = presetOverlay(c.preset, c.mode, c.options || {}, bv, cx, cy, e, p);
+                var ov = presetOverlay(c.preset, c.mode, c.options || {}, bv, info.cx, info.cy, e, p);
                 var entry = acc[lf.uid] || {};
-                for (var k in ov)
+                for (var k in ov) {
+                    // Movement x/y resolves in the chaining pass below.
+                    if (skipXY && (k === "x" || k === "y"))
+                        continue;
                     entry[k] = ov[k];
+                }
                 acc[lf.uid] = entry;
             }
+        }
+        // Chained x/y per leaf over time-sorted position clips.
+        var posByUid = {};
+        var leafByUid = {};
+        for (var m = 0; m < clips.length; m++) {
+            var pc = clips[m];
+            if (!isPositionPreset(pc.preset) || t < pc.t0)
+                continue;
+            var pinfo = infos[m];
+            if (!pinfo)
+                continue;
+            for (var q = 0; q < pinfo.leaves.length; q++) {
+                var plf = pinfo.leaves[q];
+                if (pc.preset !== "customHide" && !doc.isEffectivelyVisible(plf))
+                    continue;
+                var arr = posByUid[plf.uid] || [];
+                arr.push({
+                    c: pc,
+                    idx: m,
+                    cx: pinfo.cx,
+                    cy: pinfo.cy
+                });
+                posByUid[plf.uid] = arr;
+                if (!leafByUid[plf.uid])
+                    leafByUid[plf.uid] = plf;
+            }
+        }
+        for (var uid in posByUid) {
+            var list = posByUid[uid];
+            list.sort((a, b) => (a.c.t0 - b.c.t0) || (a.idx - b.idx));
+            var leafRef = leafByUid[uid];
+            if (!leafRef)
+                continue;
+            var bentry = base && base[leafRef.uid] ? base[leafRef.uid] : leafRef;
+            var total = chainedOffsetAt(list, bentry, t, list.length - 1);
+            var entry2 = acc[uid] || {};
+            entry2.x = (Number(bentry.x) || 0) + total.dx;
+            entry2.y = (Number(bentry.y) || 0) + total.dy;
+            acc[uid] = entry2;
         }
         return acc;
     }

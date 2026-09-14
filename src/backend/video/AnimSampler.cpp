@@ -528,6 +528,63 @@ bool chainVisible(const QVariantList &nodes, int target) {
     }
     return true;
 }
+// Position presets output x/y. Their x/y chain from the previous end so
+// sequential moves accumulate; all other props stay base-relative.
+bool isPositionPreset(const QString &preset) {
+    return preset == QLatin1String("slide") || preset == QLatin1String("movescale")
+        || preset == QLatin1String("grow") || preset == QLatin1String("shrink")
+        || preset == QLatin1String("customScale") || preset == QLatin1String("customMove")
+        || preset == QLatin1String("customResize") || preset == QLatin1String("customPath");
+}
+
+struct PosClip {
+    QVariantMap c;
+    int idx = -1;
+    double cx = 0.0;
+    double cy = 0.0;
+};
+
+// Local x/y offset of one clip from its own base (overlay minus base).
+QPointF moveOffsetFor(const QVariantMap &c, const QVariantMap &base, double cx, double cy, double e, double p, bool *has = nullptr) {
+    const QString preset = c.value(QStringLiteral("preset")).toString();
+    const QVariantMap ov = Anims::presetOverlay(preset, c.value(QStringLiteral("mode"), QStringLiteral("in")).toString(),
+        c.value(QStringLiteral("options")).toMap(), base, cx, cy, e, p);
+    const bool hasX = ov.contains(QStringLiteral("x"));
+    const bool hasY = ov.contains(QStringLiteral("y"));
+    if (has)
+        *has = hasX || hasY;
+    double dx = 0.0, dy = 0.0;
+    if (hasX)
+        dx = ov.value(QStringLiteral("x")).toDouble() - Anims::num(base, "x");
+    if (hasY)
+        dy = ov.value(QStringLiteral("y")).toDouble() - Anims::num(base, "y");
+    return {dx, dy};
+}
+
+// Chained offset at time t over a time-sorted position list. Latest
+// started wins; its start is the chained value at its own t0.
+QPointF chainedOffsetAt(const QList<PosClip> &list, const QVariantMap &base, double t, int upTo) {
+    int li = -1;
+    for (int i = 0; i <= upTo && i < list.size(); ++i) {
+        if (list.at(i).c.value(QStringLiteral("t0"), 0.0).toDouble() <= t)
+            li = i;
+        else
+            break;
+    }
+    if (li < 0)
+        return {0.0, 0.0};
+    const PosClip &cur = list.at(li);
+    const double dur = qMax(0.001, cur.c.value(QStringLiteral("duration"), 0.8).toDouble());
+    const double p = qBound(0.0, (t - cur.c.value(QStringLiteral("t0"), 0.0).toDouble()) / dur, 1.0);
+    const QVariantMap ez = cur.c.value(QStringLiteral("easing")).toMap();
+    const double e = Anims::easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
+        ez.value(QStringLiteral("bezier")).toList(), p);
+    const QPointF off = moveOffsetFor(cur.c, base, cur.cx, cur.cy, e, p);
+    QPointF before(0.0, 0.0);
+    if (li > 0)
+        before = chainedOffsetAt(list, base, cur.c.value(QStringLiteral("t0"), 0.0).toDouble(), li - 1);
+    return {before.x() + off.x(), before.y() + off.y()};
+}
 } // namespace
 
 QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
@@ -552,22 +609,30 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
     const QVariantList roots = scene.value(QStringLiteral("nodes")).toList();
 
     QMap<int, QVariantMap> acc;
-    for (const QVariant &cv : clips) {
-        const QVariantMap c = cv.toMap();
-        if (t < c.value(QStringLiteral("t0"), 0.0).toDouble())
-            continue;
-        const double dur = qMax(0.001, c.value(QStringLiteral("duration"), 0.8).toDouble());
-        const double p = qBound(0.0, (t - c.value(QStringLiteral("t0"), 0.0).toDouble()) / dur, 1.0);
-        const QVariantMap ez = c.value(QStringLiteral("easing")).toMap();
-        const double e = easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
-            ez.value(QStringLiteral("bezier")).toList(), p);
+    struct ClipInfo {
+        QVariantMap c;
+        int idx = -1;
+        QList<int> targetLeaves;
+        double cx = 0.0;
+        double cy = 0.0;
+        bool hasBox = false;
+    };
+    QList<ClipInfo> infos;
+    infos.reserve(clips.size());
+    for (int ci = 0; ci < clips.size(); ++ci) {
+        const QVariantMap c = clips.at(ci).toMap();
+        ClipInfo info;
+        info.c = c;
+        info.idx = ci;
         const int targetUid = c.value(QStringLiteral("targetUid"), -1).toInt();
-        if (!nodeByUid.contains(targetUid))
+        if (!nodeByUid.contains(targetUid)) {
+            infos.append(info);
             continue;
-        const QList<int> targetLeaves = leavesUnder(nodeByUid.value(targetUid));
+        }
+        info.targetLeaves = leavesUnder(nodeByUid.value(targetUid));
         double x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18;
         bool found = false;
-        for (int uid : targetLeaves) {
+        for (int uid : info.targetLeaves) {
             if (!base.contains(uid))
                 continue;
             const QVariantMap b = base[uid];
@@ -579,22 +644,83 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
             x1 = qMax(x1, num(b, "x") + num(b, "w"));
             y1 = qMax(y1, num(b, "y") + num(b, "h"));
         }
-        if (!found)
+        if (found) {
+            info.hasBox = true;
+            info.cx = (x0 + x1) / 2.0;
+            info.cy = (y0 + y1) / 2.0;
+        }
+        infos.append(info);
+    }
+    for (const ClipInfo &info : infos) {
+        const QVariantMap c = info.c;
+        if (t < c.value(QStringLiteral("t0"), 0.0).toDouble())
             continue;
-        const double cx = (x0 + x1) / 2.0, cy = (y0 + y1) / 2.0;
+        if (!info.hasBox)
+            continue;
+        const double dur = qMax(0.001, c.value(QStringLiteral("duration"), 0.8).toDouble());
+        const double p = qBound(0.0, (t - c.value(QStringLiteral("t0"), 0.0).toDouble()) / dur, 1.0);
+        const QVariantMap ez = c.value(QStringLiteral("easing")).toMap();
+        const double e = easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
+            ez.value(QStringLiteral("bezier")).toList(), p);
         const QString preset = c.value(QStringLiteral("preset")).toString();
-        for (int uid : targetLeaves) {
+        const bool skipXY = isPositionPreset(preset);
+        for (int uid : info.targetLeaves) {
             if (preset != QLatin1String("customHide") && !chainVisible(roots, uid))
                 continue;
             if (!base.contains(uid))
                 continue;
             const QVariantMap ov = presetOverlay(preset, c.value(QStringLiteral("mode"), QStringLiteral("in")).toString(),
-                c.value(QStringLiteral("options")).toMap(), base[uid], cx, cy, e, p);
+                c.value(QStringLiteral("options")).toMap(), base[uid], info.cx, info.cy, e, p);
             QVariantMap entry = acc.value(uid);
-            for (auto it = ov.constBegin(); it != ov.constEnd(); ++it)
+            for (auto it = ov.constBegin(); it != ov.constEnd(); ++it) {
+                // Movement x/y resolves in the chaining pass below.
+                if (skipXY && (it.key() == QLatin1String("x") || it.key() == QLatin1String("y")))
+                    continue;
                 entry[it.key()] = it.value();
+            }
             acc[uid] = entry;
         }
+    }
+    // Chained x/y per leaf over time-sorted position clips: sequential
+    // moves accumulate instead of snapping to origin.
+    QMap<int, QList<PosClip>> posByUid;
+    for (const ClipInfo &info : infos) {
+        const QVariantMap c = info.c;
+        if (!isPositionPreset(c.value(QStringLiteral("preset")).toString()))
+            continue;
+        if (t < c.value(QStringLiteral("t0"), 0.0).toDouble())
+            continue;
+        if (!info.hasBox)
+            continue;
+        const QString preset = c.value(QStringLiteral("preset")).toString();
+        for (int uid : info.targetLeaves) {
+            if (preset != QLatin1String("customHide") && !chainVisible(roots, uid))
+                continue;
+            if (!base.contains(uid))
+                continue;
+            PosClip pc;
+            pc.c = c;
+            pc.idx = info.idx;
+            pc.cx = info.cx;
+            pc.cy = info.cy;
+            posByUid[uid].append(pc);
+        }
+    }
+    for (auto it = posByUid.begin(); it != posByUid.end(); ++it) {
+        const int uid = it.key();
+        QList<PosClip> list = it.value();
+        std::sort(list.begin(), list.end(), [](const PosClip &a, const PosClip &b) {
+            const double ta = a.c.value(QStringLiteral("t0"), 0.0).toDouble();
+            const double tb = b.c.value(QStringLiteral("t0"), 0.0).toDouble();
+            if (!qFuzzyCompare(1.0 + ta, 1.0 + tb))
+                return ta < tb;
+            return a.idx < b.idx;
+        });
+        const QPointF total = chainedOffsetAt(list, base[uid], t, list.size() - 1);
+        QVariantMap entry = acc.value(uid);
+        entry[QStringLiteral("x")] = num(base[uid], "x") + total.x();
+        entry[QStringLiteral("y")] = num(base[uid], "y") + total.y();
+        acc[uid] = entry;
     }
 
     for (int i = 0; i < work.size(); ++i) {

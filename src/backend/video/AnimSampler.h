@@ -66,7 +66,9 @@ QList<Leaf> collectLeaves(const QVariantMap &scene);
 // Pre-play values keyed by uid (mirrors DocTransport.captureBase).
 QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves);
 // Full frame at time t in seconds: leaves top-first with later clips
-// winning per property. Locked leaves are returned unmodified.
+// winning per property, except movement x/y which chains from the
+// previous end so sequential moves accumulate. Locked leaves are
+// returned unmodified.
 QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t);
 
 } // namespace Anims
