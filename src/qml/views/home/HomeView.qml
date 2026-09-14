@@ -3,10 +3,10 @@ import QtQuick.Layouts
 import Totm
 
 // Home screen: workspace sidebar + design grid for the selection.
-// Cards show a live miniature of the stored scene; click opens, drag onto
-// a sidebar workspace moves. Empty-area drag marquee-selects via the
-// shared DragSelection core; Delete removes the selection, right-click
-// opens the card menu.
+// Cards show a live miniature of the stored scene; click selects one,
+// double-click opens, drag onto a sidebar workspace moves. Empty-area
+// drag marquee-selects via the shared DragSelection core; Delete removes
+// the selection, right-click opens the card menu.
 RowLayout {
     id: homeView
 
@@ -52,6 +52,60 @@ RowLayout {
         cardMenu.openFor(designId, !!info.starred, count, p.x, p.y);
     }
 
+    // Home shortcuts (single source: ShortcutState, editable in Settings).
+    // Text inputs and open rename editors swallow keys first, like the
+    // editor guards. Suspended while capturing a new sequence.
+    function focusInTextInput() {
+        var w = homeView.Window.window;
+        var f = w ? w.activeFocusItem : null;
+        return !!f && typeof f.text !== "undefined" && typeof f.undo === "function" && typeof f.selectAll === "function";
+    }
+
+    function homeEditing() {
+        return homeView.editingDesignId !== "" || workspacePanel.editingWorkspaceId !== "" || homeView.focusInTextInput();
+    }
+
+    function homeNewDesign() {
+        var ws = homeView.selectedWorkspaceId || LibraryStore.defaultWorkspaceId;
+        var id = LibraryStore.createDesign(ws, "Untitled");
+        if (id)
+            TabState.openDesign(id);
+    }
+
+    function homeOpenSelected() {
+        if (homeView.selection.selectedIds.length !== 1)
+            return;
+        TabState.openDesign(homeView.selection.selectedIds[0]);
+    }
+
+    function homeDuplicateSelected() {
+        var ids = homeView.selection.selectedIds.slice();
+        if (ids.length === 0)
+            return;
+        var made = [];
+        for (var i = 0; i < ids.length; i++) {
+            var info = LibraryStore.design(ids[i]);
+            if (!info || !info.id)
+                continue;
+            var name = (info.name || "Untitled") + qsTr(" copy");
+            var ws = info.workspaceId || homeView.selectedWorkspaceId || LibraryStore.defaultWorkspaceId;
+            var fresh = LibraryStore.createDesign(ws, name);
+            if (!fresh)
+                continue;
+            LibraryStore.saveScene(fresh, LibraryStore.loadScene(ids[i]));
+            made.push(fresh);
+        }
+        if (made.length > 0)
+            homeView.selection.selectedIds = made;
+        homeView.refreshFiltered();
+    }
+
+    function homeToggleStarSelected() {
+        var ids = homeView.selection.selectedIds.slice();
+        for (var i = 0; i < ids.length; i++)
+            LibraryStore.toggleStarred(ids[i]);
+    }
+
     Keys.onDeletePressed: event => {
         if (homeView.editingDesignId !== "" || workspacePanel.editingWorkspaceId !== "")
             return;
@@ -63,6 +117,66 @@ RowLayout {
             return;
         homeView.selection.clearSelection();
         event.accepted = true;
+    }
+
+    Shortcut {
+        sequences: [ShortcutState.homeNew]
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing
+        onActivated: {
+            if (homeView.homeEditing())
+                return;
+            homeView.homeNewDesign();
+        }
+    }
+
+    Shortcut {
+        sequences: [ShortcutState.homeOpen, "Enter"]
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length === 1
+        onActivated: {
+            if (homeView.homeEditing())
+                return;
+            homeView.homeOpenSelected();
+        }
+    }
+
+    Shortcut {
+        sequences: [ShortcutState.homeRename]
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length === 1
+        onActivated: {
+            if (homeView.homeEditing())
+                return;
+            homeView.editingDesignId = homeView.selection.selectedIds[0];
+        }
+    }
+
+    Shortcut {
+        sequences: [ShortcutState.homeDelete, "Backspace"]
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length > 0
+        onActivated: {
+            if (homeView.homeEditing())
+                return;
+            homeView.selection.deleteSelected();
+        }
+    }
+
+    Shortcut {
+        sequences: [ShortcutState.homeDuplicate]
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length > 0
+        onActivated: {
+            if (homeView.homeEditing())
+                return;
+            homeView.homeDuplicateSelected();
+        }
+    }
+
+    Shortcut {
+        sequences: [ShortcutState.homeStar]
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length > 0
+        onActivated: {
+            if (homeView.homeEditing())
+                return;
+            homeView.homeToggleStarSelected();
+        }
     }
 
     Component.onCompleted: {
@@ -194,9 +308,6 @@ RowLayout {
                             openPolicy: id => TabState.openDesign(id)
                             contextPolicy: (item, x, y) => homeView.openCardMenu(item, modelData.designId, x, y)
                             starPolicy: id => LibraryStore.toggleStarred(id)
-                            beginRenamePolicy: id => {
-                                homeView.editingDesignId = id;
-                            }
                             commitPolicy: (id, text) => {
                                 // Stale settles (e.g. the previous card's
                                 // focus-loss commit landing after a fast
@@ -239,16 +350,20 @@ RowLayout {
 
             // Presses on cards fall through (accepted = false) so cards
             // keep clicks and drags; empty-area presses start the marquee.
+            // preventStealing keeps the Flickable from hijacking the
+            // gesture mid-drag once this area owns the press.
             MouseArea {
                 id: marqueeMouse
 
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
+                preventStealing: true
                 onPressed: mouse => {
                     if (homeView.selection.cardAt(flow.children, marqueeMouse, mouse.x, mouse.y) !== null) {
                         mouse.accepted = false;
                         return;
                     }
+                    mouse.accepted = true;
                     homeView.forceActiveFocus();
                     marquee.pressAt(mouse.x, mouse.y);
                 }

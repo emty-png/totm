@@ -33,7 +33,7 @@ ColumnLayout {
         Rectangle {
             Layout.preferredWidth: 38
             Layout.preferredHeight: 22
-            radius: 11
+            radius: AppTheme.radiusLarge
             color: section.opts.orient === true ? AppTheme.foreground : AppTheme.surface
             border.width: 1
             border.color: section.opts.orient === true ? AppTheme.foreground : AppTheme.fieldBorder
@@ -43,7 +43,7 @@ ColumnLayout {
                 y: 3
                 width: 16
                 height: 16
-                radius: 8
+                radius: AppTheme.radiusMedium
                 color: section.opts.orient === true ? AppTheme.background : AppTheme.muted
             }
 
@@ -69,7 +69,7 @@ ColumnLayout {
         Rectangle {
             Layout.preferredWidth: 38
             Layout.preferredHeight: 22
-            radius: 11
+            radius: AppTheme.radiusLarge
             color: section.opts.closed === true ? AppTheme.foreground : AppTheme.surface
             border.width: 1
             border.color: section.opts.closed === true ? AppTheme.foreground : AppTheme.fieldBorder
@@ -79,7 +79,7 @@ ColumnLayout {
                 y: 3
                 width: 16
                 height: 16
-                radius: 8
+                radius: AppTheme.radiusMedium
                 color: section.opts.closed === true ? AppTheme.background : AppTheme.muted
             }
 
@@ -98,7 +98,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         Layout.preferredHeight: 32
-        radius: 6
+        radius: AppTheme.radiusSmall
         color: redrawMouse.containsMouse || redrawMouse.pressed ? AppTheme.hover : AppTheme.surface
         border.width: 1
         border.color: AppTheme.fieldBorder

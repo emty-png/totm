@@ -15,7 +15,7 @@ Rectangle {
 
     Layout.fillWidth: true
     Layout.preferredHeight: 32
-    radius: 6
+    radius: AppTheme.radiusSmall
     opacity: menuItem.enabled ? 1 : 0.4
     color: !menuItem.enabled ? "transparent" : mouse.containsMouse || mouse.pressed ? AppTheme.hover : "transparent"
 

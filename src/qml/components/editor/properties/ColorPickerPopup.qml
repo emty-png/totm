@@ -79,7 +79,7 @@ Popup {
     }
 
     background: Rectangle {
-        radius: 10
+        radius: AppTheme.radiusLarge
         color: AppTheme.surface
         border.width: 1
         border.color: AppTheme.border
@@ -150,7 +150,7 @@ Popup {
             Rectangle {
                 Layout.preferredWidth: 44
                 Layout.preferredHeight: 28
-                radius: 6
+                radius: AppTheme.radiusSmall
                 color: picker.liveColor
                 border.width: 1
                 border.color: AppTheme.fieldBorder

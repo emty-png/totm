@@ -38,7 +38,7 @@ ColumnLayout {
         Rectangle {
             Layout.preferredWidth: 38
             Layout.preferredHeight: 22
-            radius: 11
+            radius: AppTheme.radiusLarge
             color: (section.opts.fromVisible !== false) ? AppTheme.foreground : AppTheme.surface
             border.width: 1
             border.color: (section.opts.fromVisible !== false) ? AppTheme.foreground : AppTheme.fieldBorder
@@ -48,7 +48,7 @@ ColumnLayout {
                 y: 3
                 width: 16
                 height: 16
-                radius: 8
+                radius: AppTheme.radiusMedium
                 color: (section.opts.fromVisible !== false) ? AppTheme.background : AppTheme.muted
             }
 
@@ -82,7 +82,7 @@ ColumnLayout {
         Rectangle {
             Layout.preferredWidth: 38
             Layout.preferredHeight: 22
-            radius: 11
+            radius: AppTheme.radiusLarge
             color: (section.opts.toVisible === true) ? AppTheme.foreground : AppTheme.surface
             border.width: 1
             border.color: (section.opts.toVisible === true) ? AppTheme.foreground : AppTheme.fieldBorder
@@ -92,7 +92,7 @@ ColumnLayout {
                 y: 3
                 width: 16
                 height: 16
-                radius: 8
+                radius: AppTheme.radiusMedium
                 color: (section.opts.toVisible === true) ? AppTheme.background : AppTheme.muted
             }
 

@@ -135,7 +135,7 @@ ScrollView {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 32
-                radius: 6
+                radius: AppTheme.radiusSmall
                 border.width: 1
                 border.color: AppTheme.fieldBorder
                 color: replaceMouse.containsMouse || replaceMouse.pressed ? AppTheme.hover : AppTheme.surface

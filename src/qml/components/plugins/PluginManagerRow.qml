@@ -12,7 +12,7 @@ Rectangle {
     property var togglePolicy: null
     property var reviewPolicy: null
 
-    radius: 10
+    radius: AppTheme.radiusLarge
     border.width: 1
     border.color: AppTheme.border
     color: hoverMouse.containsMouse ? AppTheme.hover : AppTheme.surface
@@ -49,7 +49,7 @@ Rectangle {
             Layout.preferredHeight: 20
             Layout.alignment: Qt.AlignTop
             Layout.topMargin: 2
-            radius: 6
+            radius: AppTheme.radiusSmall
             border.width: 1
             border.color: AppTheme.fieldBorder
             color: row.entry && row.entry.enabled ? AppTheme.foreground : AppTheme.surface

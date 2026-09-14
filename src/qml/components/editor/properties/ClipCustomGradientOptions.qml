@@ -29,7 +29,7 @@ ColumnLayout {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: String(section.opts.fromC1 || "#000000")
             border.width: 1
             border.color: AppTheme.border
@@ -45,7 +45,7 @@ ColumnLayout {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: String(section.opts.fromC2 || "#ffffff")
             border.width: 1
             border.color: AppTheme.border
@@ -84,7 +84,7 @@ ColumnLayout {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: String(section.opts.toC1 || "#000000")
             border.width: 1
             border.color: AppTheme.border
@@ -100,7 +100,7 @@ ColumnLayout {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: String(section.opts.toC2 || "#ff0000")
             border.width: 1
             border.color: AppTheme.border

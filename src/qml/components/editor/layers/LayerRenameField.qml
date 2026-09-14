@@ -64,7 +64,7 @@ Item {
         verticalAlignment: TextInput.AlignVCenter
 
         background: Rectangle {
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: AppTheme.background
             border.width: 1
             border.color: nameField.activeFocus ? AppTheme.selection : AppTheme.fieldBorder

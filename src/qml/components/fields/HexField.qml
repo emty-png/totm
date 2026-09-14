@@ -2,8 +2,9 @@ import QtQuick
 import QtQuick.Controls
 import Totm
 
-// Hex color field (#rrggbb, accepts rgb shorthand and bare hex).
-// Shows `mixed` as "Mixed"; invalid text gets a red border and reverts.
+// Hex color field (#rrggbb or #aarrggbb, accepts rgb shorthand and
+// bare hex). Shows `mixed` as "Mixed"; invalid text gets a red border
+// and reverts.
 TextField {
     id: field
 
@@ -26,7 +27,7 @@ TextField {
     readonly property bool valid: typeof field.normalize === "function" && field.normalize(field.text) !== ""
 
     background: Rectangle {
-        radius: 6
+        radius: AppTheme.radiusSmall
         color: field.activeFocus ? AppTheme.hover : field.hovered ? AppTheme.hover : AppTheme.surface
         border.width: 1
         border.color: !field.valid ? "#e81123" : field.activeFocus ? AppTheme.selection : AppTheme.fieldBorder
@@ -54,6 +55,8 @@ TextField {
         if (/^[0-9a-f]{3}$/.test(t))
             t = t.charAt(0) + t.charAt(0) + t.charAt(1) + t.charAt(1) + t.charAt(2) + t.charAt(2);
         if (/^[0-9a-f]{6}$/.test(t))
+            return "#" + t;
+        if (/^[0-9a-f]{8}$/.test(t))
             return "#" + t;
         return "";
     }

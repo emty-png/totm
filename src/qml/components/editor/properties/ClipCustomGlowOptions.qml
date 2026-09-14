@@ -29,7 +29,7 @@ ColumnLayout {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: String(section.opts.fromColor || "#cc00ffff")
             border.width: 1
             border.color: AppTheme.border
@@ -87,7 +87,7 @@ ColumnLayout {
         Rectangle {
             Layout.preferredWidth: 38
             Layout.preferredHeight: 22
-            radius: 11
+            radius: AppTheme.radiusLarge
             color: (section.opts.fromInner === true) ? AppTheme.foreground : AppTheme.surface
             border.width: 1
             border.color: (section.opts.fromInner === true) ? AppTheme.foreground : AppTheme.fieldBorder
@@ -97,7 +97,7 @@ ColumnLayout {
                 y: 3
                 width: 16
                 height: 16
-                radius: 8
+                radius: AppTheme.radiusMedium
                 color: (section.opts.fromInner === true) ? AppTheme.background : AppTheme.muted
             }
 
@@ -123,7 +123,7 @@ ColumnLayout {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: String(section.opts.toColor || "#cc00ffff")
             border.width: 1
             border.color: AppTheme.border
@@ -181,7 +181,7 @@ ColumnLayout {
         Rectangle {
             Layout.preferredWidth: 38
             Layout.preferredHeight: 22
-            radius: 11
+            radius: AppTheme.radiusLarge
             color: (section.opts.toInner === true) ? AppTheme.foreground : AppTheme.surface
             border.width: 1
             border.color: (section.opts.toInner === true) ? AppTheme.foreground : AppTheme.fieldBorder
@@ -191,7 +191,7 @@ ColumnLayout {
                 y: 3
                 width: 16
                 height: 16
-                radius: 8
+                radius: AppTheme.radiusMedium
                 color: (section.opts.toInner === true) ? AppTheme.background : AppTheme.muted
             }
 

@@ -25,4 +25,16 @@ ColumnLayout {
         Layout.fillHeight: true
         visible: settingsView.activeTab === "plugin"
     }
+
+    ShortcutSettingsView {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        visible: settingsView.activeTab === "shortcut"
+    }
+
+    AppearanceSettingsView {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        visible: settingsView.activeTab === "appearance"
+    }
 }

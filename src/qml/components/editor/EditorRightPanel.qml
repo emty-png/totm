@@ -21,6 +21,16 @@ Item {
     // applying or going back clears it.
     property bool pickingPreset: false
 
+    // Mode writes for shortcuts (mode itself stays a readonly alias).
+    function setMode(m) {
+        if (m === "design" || m === "animate")
+            modeSwitcher.mode = m;
+    }
+
+    function toggleMode() {
+        modeSwitcher.mode = modeSwitcher.mode === "design" ? "animate" : "design";
+    }
+
     // Clip selection helpers for the gallery/shape/editor routing. Last
     // selected clip drives the editor; empty selection shows the shape
     // panel (shape selected) or the gallery.

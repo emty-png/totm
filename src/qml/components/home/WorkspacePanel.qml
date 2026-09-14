@@ -151,7 +151,7 @@ Item {
                     anchors.rightMargin: 8
                     anchors.topMargin: 2
                     anchors.bottomMargin: 2
-                    radius: 6
+                    radius: AppTheme.radiusSmall
                     color: parent.hovered ? AppTheme.hover : "transparent"
 
                     Behavior on color {

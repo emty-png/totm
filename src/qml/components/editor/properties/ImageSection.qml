@@ -29,7 +29,7 @@ PanelSection {
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: AppTheme.surface
             border.width: 1
             border.color: AppTheme.fieldBorder

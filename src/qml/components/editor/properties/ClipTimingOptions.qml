@@ -52,7 +52,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         Layout.preferredHeight: 28
-        radius: 6
+        radius: AppTheme.radiusSmall
         color: easingMouse.containsMouse || easingMouse.pressed ? AppTheme.hover : AppTheme.surface
         border.width: 1
         border.color: AppTheme.fieldBorder

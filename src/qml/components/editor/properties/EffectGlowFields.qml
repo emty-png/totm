@@ -37,7 +37,7 @@ ColumnLayout {
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
-            radius: 6
+            radius: AppTheme.radiusSmall
             color: fields.glowRgb
             border.width: 1
             border.color: AppTheme.border

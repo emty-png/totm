@@ -15,7 +15,7 @@ Rectangle {
     anchors.rightMargin: 8
     anchors.topMargin: 2
     anchors.bottomMargin: 2
-    radius: 6
+    radius: AppTheme.radiusSmall
     color: highlight.selected ? AppTheme.layerSelected : highlight.hovered ? AppTheme.hover : "transparent"
     border.width: highlight.lifted ? 1 : 0
     border.color: AppTheme.selection

@@ -19,7 +19,7 @@ Rectangle {
 
     width: 28
     height: 28
-    radius: 6
+    radius: AppTheme.radiusSmall
     border.width: 1
     border.color: button.active ? AppTheme.foreground : button.filled ? AppTheme.fieldBorder : "transparent"
     color: !button.enabled ? "transparent" : button.active ? AppTheme.foreground : mouse.pressed ? AppTheme.pressed : mouse.containsMouse ? AppTheme.hover : button.filled ? AppTheme.surface : "transparent"
