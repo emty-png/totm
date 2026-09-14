@@ -172,12 +172,20 @@ ScrollView {
                     cards: [gallery.cardFor("appear", qsTr("Appear")), gallery.cardFor("fade", qsTr("Fade"))]
                 },
                 {
+                    title: qsTr("Type"),
+                    cards: [gallery.typeCard(qsTr("Type · Letters"), "letters"), gallery.typeCard(qsTr("Type · Words"), "words"), gallery.typeCard(qsTr("Type · Lines"), "lines")]
+                },
+                {
                     title: qsTr("Slide"),
                     cards: [gallery.textSlideCard(qsTr("Slide ↑"), "up"), gallery.textSlideCard(qsTr("Slide ↓"), "down"), gallery.textSlideCard(qsTr("Slide ←"), "left"), gallery.textSlideCard(qsTr("Slide →"), "right")]
                 },
                 {
                     title: qsTr("Scale"),
                     cards: [gallery.cardFor("grow", qsTr("Grow")), gallery.cardFor("shrink", qsTr("Shrink"))]
+                },
+                {
+                    title: qsTr("Expressive"),
+                    cards: [gallery.textBlurCard(), gallery.textWaveCard()]
                 }
             ];
         }
@@ -250,6 +258,86 @@ ScrollView {
         };
     }
 
+    // Typewriter card per reveal unit. Thumbnail and apply share the
+    // default 20 chars/sec; duration auto-sizes from the selection at
+    // apply time (see applyPreset), the clip editor retimes after.
+    function typeCard(name, unit) {
+        return {
+            id: "type",
+            name: name,
+            options: {
+                unit: unit,
+                cps: 20,
+                cursor: false
+            },
+            apply: {
+                unit: unit,
+                cps: 20,
+                cursor: false
+            },
+            easing: "linear"
+        };
+    }
+
+    // Blur-in for text: whole-glyph layer blur relaxing to sharp.
+    // Reuses the custom blur pipeline (preview and export already
+    // paint it on text), so no new sampler math is needed.
+    function textBlurCard() {
+        return {
+            id: "customLayerBlur",
+            name: qsTr("Blur"),
+            options: {
+                fromRadius: 12,
+                fromOpacity: 1,
+                toRadius: 0,
+                toOpacity: 1
+            },
+            apply: {
+                fromRadius: 12,
+                fromOpacity: 1,
+                toRadius: 0,
+                toOpacity: 1
+            },
+            easing: "easeOut"
+        };
+    }
+
+    // Wave for text: whole-glyph rotation wobble (the twist preset).
+    function textWaveCard() {
+        return {
+            id: "twist",
+            name: qsTr("Wave"),
+            options: {
+                direction: "cw"
+            },
+            apply: {
+                direction: "cw"
+            },
+            easing: "easeInOut"
+        };
+    }
+
+    // Longest selected text length in chars (groups count their longest
+    // leaf), for auto-sizing Type durations from chars/sec.
+    function selectionTextLen() {
+        var d = gallery.doc;
+        if (!d)
+            return 0;
+        var best = 0;
+        var tops = d.selectedTops();
+        for (var i = 0; i < tops.length; i++) {
+            var leaves = tops[i].kind === "group" ? d._leavesUnder(tops[i]) : [tops[i]];
+            for (var j = 0; j < leaves.length; j++) {
+                if (leaves[j].shapeType !== "text")
+                    continue;
+                var len = String(leaves[j].textContent || "").length;
+                if (len > best)
+                    best = len;
+            }
+        }
+        return best;
+    }
+
     function applyPreset(presetId, apply) {
         var d = gallery.doc;
         if (!d)
@@ -261,7 +349,17 @@ ScrollView {
         for (var i = 0; i < tops.length; i++)
             uids.push(tops[i].uid);
         var t0 = d.anim.currentTime;
-        var made = d.applyPreset(presetId, uids, t0, 0.8, "in", apply || {}, null);
+        var dur = 0.8;
+        if (presetId === "type") {
+            // cps paces the clip: duration covers the longest selection
+            // at the card speed, so typing lands exactly at the tail.
+            var cps = 20;
+            if (apply && Number(apply.cps) > 0)
+                cps = Math.min(120, Math.max(1, Number(apply.cps)));
+            var len = gallery.selectionTextLen();
+            dur = len > 0 ? Math.min(60, Math.max(0.5, len / cps)) : 0.8;
+        }
+        var made = d.applyPreset(presetId, uids, t0, dur, "in", apply || {}, null);
         if (made.length > 0) {
             d.anim.currentTime = t0;
             d.anim.play();

@@ -423,6 +423,39 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             if (o.value(QStringLiteral("orient")).toBool())
                 out[QStringLiteral("rotation")] = num(base, "rotation") + s.angleDelta;
         }
+    } else if (preset == QLatin1String("type")) {
+        // Typewriter reveal, mirroring DocAnimSample: CRLF/CR fold to LF,
+        // words split on U+0020 keeping empties, lines on LF, letters
+        // count UTF-16 units like JS string length. cps seeds the clip
+        // duration at apply time; sampling reads eased progress only.
+        QString full = str(base, "textContent");
+        full.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+        full.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+        const QString unit = str(o, "unit", QStringLiteral("letters"));
+        const bool words = unit == QLatin1String("words");
+        const bool lines = !words && unit == QLatin1String("lines");
+        QStringList parts;
+        int total = 0;
+        if (!words && !lines) {
+            total = full.size();
+        } else {
+            parts = full.split(words ? QLatin1Char(' ') : QLatin1Char('\n'), Qt::KeepEmptyParts);
+            total = parts.size();
+        }
+        int shown = 0;
+        if (total > 0) {
+            const double frac = inward ? e : 1.0 - e;
+            shown = qBound(0, int(frac * total + 1e-6), total);
+        }
+        QString txt;
+        if (!words && !lines) {
+            txt = full.left(shown);
+        } else {
+            txt = parts.mid(0, shown).join(words ? QStringLiteral(" ") : QStringLiteral("\n"));
+        }
+        if (o.value(QStringLiteral("cursor")).toBool() && shown < total)
+            txt += QLatin1Char('|');
+        out[QStringLiteral("textContent")] = txt;
     }
     return out;
 }
@@ -460,6 +493,7 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
         b[QStringLiteral("rotation")] = num(m, "rotation");
         b[QStringLiteral("opacity")] = num(m, "opacity", 1.0);
         b[QStringLiteral("fontSize")] = num(m, "fontSize", 16.0);
+        b[QStringLiteral("textContent")] = str(m, "textContent");
         b[QStringLiteral("shapeType")] = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
         b[QStringLiteral("fill")] = str(m, "fill", QStringLiteral("#d9d9d9"));
         b[QStringLiteral("fillType")] = str(m, "fillType", QStringLiteral("solid"));
@@ -776,7 +810,7 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
                  QStringLiteral("fillType"), QStringLiteral("fillGradient"), QStringLiteral("shadows"),
                  QStringLiteral("layerBlur"), QStringLiteral("backgroundBlur"), QStringLiteral("glows"),
                  QStringLiteral("grain"), QStringLiteral("visible"), QStringLiteral("radius"),
-                 QStringLiteral("strokeWidth")}) {
+                 QStringLiteral("strokeWidth"), QStringLiteral("textContent")}) {
             if (ov.contains(k))
                 m[k] = ov.value(k);
         }

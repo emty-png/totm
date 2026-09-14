@@ -139,6 +139,11 @@ public:
     Q_INVOKABLE void selectImportedFont(const QString &fileName);
     Q_INVOKABLE QString fontsDir() const;
 
+    // Opens CREDITS.html in the default browser. Candidates mirror
+    // PluginStore.openGuide: installed doc dir beside the binary first,
+    // then the file in a dev checkout (build/<preset>/src -> src/docs).
+    Q_INVOKABLE bool openCredits();
+
     // Clears all appearance overrides (colors, radius, font) to defaults.
     Q_INVOKABLE void resetAppearance();
 

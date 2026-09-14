@@ -317,12 +317,12 @@ bool PluginStore::hasPermission(const QString &id, const QString &permission) co
 
 bool PluginStore::openGuide() {
     // Candidates: installed doc dir beside the binary first, then the
-    // file beside a dev checkout (build/<preset>/src -> repo root).
+    // file in a dev checkout (build/<preset>/src -> src/docs).
     const QString exeDir = QCoreApplication::applicationDirPath();
     const QStringList candidates = {
         exeDir + QStringLiteral("/../share/doc/totm/PLUG_IN.html"),
         exeDir + QStringLiteral("/../Resources/PLUG_IN.html"),
-        exeDir + QStringLiteral("/../../../PLUG_IN.html"),
+        exeDir + QStringLiteral("/../../../src/docs/PLUG_IN.html"),
     };
     for (const QString &candidate : candidates) {
         const QString path = QDir::cleanPath(candidate);

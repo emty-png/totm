@@ -139,6 +139,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/SegmentedOption.qml
         qml/components/editor/properties/ClipSlideOptions.qml
         qml/components/editor/properties/ClipSpinOptions.qml
+        qml/components/editor/properties/ClipTextOptions.qml
         qml/components/editor/properties/ClipTimingOptions.qml
         qml/components/editor/properties/EasingGraph.qml
         qml/components/editor/properties/GraphEditorPopup.qml
@@ -281,8 +282,13 @@ if(UNIX AND NOT APPLE)
         DESTINATION "share/applications"
     )
     # Maker guide for plug-ins, opened from Settings -> Plugin.
+    # Credits page, opened from the sidebar Credits row above Settings.
+    # Contributors page, linked from the credits page TOC.
     install(
-        FILES "${PROJECT_SOURCE_DIR}/PLUG_IN.html"
+        FILES
+            "${PROJECT_SOURCE_DIR}/src/docs/PLUG_IN.html"
+            "${PROJECT_SOURCE_DIR}/src/docs/CREDITS.html"
+            "${PROJECT_SOURCE_DIR}/src/docs/CONTRIBUTORS.html"
         DESTINATION "share/doc/totm"
     )
 endif()

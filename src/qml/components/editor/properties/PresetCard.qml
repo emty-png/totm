@@ -104,7 +104,7 @@ Item {
 
                     TextGlyphs {
                         anchors.fill: parent
-                        text: "Text"
+                        text: card.frame.textContent !== undefined ? card.frame.textContent : "Text"
                         color: AppTheme.foreground
                         family: "Inter"
                         weight: 600
@@ -146,7 +146,23 @@ Item {
         if (!card.driver)
             return {};
         var e = sampler.easeValue(card.easingId, null, card.phase);
-        return sampler.presetOverlay(card.presetId, "in", card.thumbOptions || {}, card.baseLeaf, 40, 40, e, card.phase);
+        // Typewriter thumbs need a text base (content to reveal); every
+        // other preset samples the shared rectangle base.
+        var base = card.baseLeaf;
+        if (card.presetId === "type") {
+            base = {
+                x: 12,
+                y: 12,
+                w: 56,
+                h: 56,
+                rotation: 0,
+                opacity: 1,
+                shapeType: "text",
+                fontSize: 22,
+                textContent: "Text"
+            };
+        }
+        return sampler.presetOverlay(card.presetId, "in", card.thumbOptions || {}, base, 40, 40, e, card.phase);
     }
 
     DocAnimSample {

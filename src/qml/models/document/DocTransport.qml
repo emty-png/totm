@@ -106,6 +106,7 @@ QtObject {
                 opacity: n.opacity,
                 fontSize: n.fontSize,
                 shapeType: n.shapeType,
+                textContent: n.textContent,
                 fill: String(n.fill),
                 fillType: n.fillType ?? "solid",
                 fillGradient: doc.factory._copyGradient(n.fillGradient),
@@ -170,6 +171,8 @@ QtObject {
                 n.strokeWidth = b.strokeWidth;
             if (b.fontSize !== undefined && n.shapeType === "text")
                 n.fontSize = b.fontSize;
+            if (b.textContent !== undefined && n.shapeType === "text")
+                n.textContent = b.textContent;
             if (b.pathData !== undefined && n.shapeType === "pen")
                 n.pathData = doc.factory._copyPath(b.pathData);
             if (b.cornerRadii !== undefined && n.independentCorners)
