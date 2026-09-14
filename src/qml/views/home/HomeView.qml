@@ -121,7 +121,7 @@ RowLayout {
 
     Shortcut {
         sequences: [ShortcutState.homeNew]
-        enabled: TabState.isHomeSelected && !ShortcutState.capturing
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.homeEditing()
         onActivated: {
             if (homeView.homeEditing())
                 return;
@@ -131,7 +131,7 @@ RowLayout {
 
     Shortcut {
         sequences: [ShortcutState.homeOpen, "Enter"]
-        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length === 1
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length === 1 && !homeView.homeEditing()
         onActivated: {
             if (homeView.homeEditing())
                 return;
@@ -141,7 +141,7 @@ RowLayout {
 
     Shortcut {
         sequences: [ShortcutState.homeRename]
-        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length === 1
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length === 1 && !homeView.homeEditing()
         onActivated: {
             if (homeView.homeEditing())
                 return;
@@ -151,7 +151,7 @@ RowLayout {
 
     Shortcut {
         sequences: [ShortcutState.homeDelete, "Backspace"]
-        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length > 0
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length > 0 && !homeView.homeEditing()
         onActivated: {
             if (homeView.homeEditing())
                 return;
@@ -161,7 +161,7 @@ RowLayout {
 
     Shortcut {
         sequences: [ShortcutState.homeDuplicate]
-        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length > 0
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length > 0 && !homeView.homeEditing()
         onActivated: {
             if (homeView.homeEditing())
                 return;
@@ -171,7 +171,7 @@ RowLayout {
 
     Shortcut {
         sequences: [ShortcutState.homeStar]
-        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length > 0
+        enabled: TabState.isHomeSelected && !ShortcutState.capturing && !homeView.settingsSelected && homeView.selection.selectedIds.length > 0 && !homeView.homeEditing()
         onActivated: {
             if (homeView.homeEditing())
                 return;
