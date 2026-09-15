@@ -1,0 +1,24 @@
+# Maintainer: tot <https://github.com/emty-png/totm>
+pkgname=totm
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Cross-platform desktop motion-graphics editor"
+arch=('x86_64')
+url="https://github.com/emty-png/totm"
+license=('Apache-2.0')
+depends=('ffmpeg' 'hicolor-icon-theme' 'qt6-base' 'qt6-declarative' 'qt6-multimedia' 'qt6-multimedia-ffmpeg' 'qt6-shadertools' 'qt6-svg')
+makedepends=('cmake' 'git' 'ninja')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/$pkgver.tar.gz")
+# Replace with updpkgsums output once the 0.1.0 tag is pushed.
+sha256sums=('SKIP')
+
+build() {
+  cmake -B build -S "$pkgname-$pkgver" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

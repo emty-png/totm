@@ -31,3 +31,53 @@ jobs:
         run: |
           shopt -s globstar
           qmllint src/qml/**/*.qml
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            qt-arch: linux_gcc_64
+          - os: windows-2022
+            qt-arch: win64_msvc2022_64
+          - os: macos-15
+            qt-arch: clang_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          arch: ${{ matrix.qt-arch }}
+          modules: qtmultimedia qtshadertools
+          cache: true
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure
+        run: cmake --preset ci
+      - name: Build
+        run: cmake --build --preset ci
+
+  pkgbuild:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      # namcap lints the PKGBUILD; the .SRCINFO drift check keeps the
+      # committed file honest (makepkg refuses root, hence runuser).
+      - name: Validate PKGBUILD
+        run: |
+          pacman -Syu --noconfirm namcap diffutils
+          namcap packaging/arch/PKGBUILD
+          useradd -m builder
+          mkdir -p /tmp/pkgcheck
+          cp packaging/arch/PKGBUILD /tmp/pkgcheck/
+          chown -R builder:builder /tmp/pkgcheck
+          runuser -u builder -- bash -c 'cd /tmp/pkgcheck && makepkg --printsrcinfo' > /tmp/SRCINFO.gen
+          diff -u packaging/arch/.SRCINFO /tmp/SRCINFO.gen
