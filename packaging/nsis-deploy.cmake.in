@@ -1,0 +1,13 @@
+# Deploy the Qt runtime next to the staged totm.exe. Runs via
+# install(SCRIPT), after the exe is installed. windeployqt must be on PATH.
+find_program(WINDEPLOYQT_EXECUTABLE windeployqt)
+if(NOT WINDEPLOYQT_EXECUTABLE)
+    message(FATAL_ERROR "windeployqt not on PATH; cannot stage Qt runtime for the installer")
+endif()
+execute_process(
+    COMMAND "${WINDEPLOYQT_EXECUTABLE}" --release --qmldir "@PROJECT_SOURCE_DIR@/src/qml" "${CMAKE_INSTALL_PREFIX}/bin/totm.exe"
+    RESULT_VARIABLE _windeploy_result
+)
+if(NOT _windeploy_result EQUAL 0)
+    message(FATAL_ERROR "windeployqt failed with exit code ${_windeploy_result}")
+endif()

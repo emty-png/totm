@@ -31,12 +31,19 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 
 ## Install
 
-No releases yet, so you gotta build it yourself for now. You need CMake 3.21+, Qt 6.8+ with the `Quick` module, a C++17 compiler and Ninja.
+Grab `0.1.0` from the [Releases page](https://github.com/emty-png/totm/releases):
+
+* **Ubuntu / Debian:** `totm-x86_64.AppImage` — `chmod +x` and run. On Ubuntu 24.04+ install FUSE first (`sudo apt install libfuse2t64`). `ffmpeg` is bundled inside, video export works out of the box.
+* **Arch:** build `packaging/arch/PKGBUILD` with `makepkg -si` (deps: `qt6-base qt6-declarative qt6-svg qt6-multimedia qt6-multimedia-ffmpeg qt6-shadertools ffmpeg`).
+* **macOS (apple silicon):** `totm-arm64.dmg` — drag to Applications. It is unsigned, so first launch needs right-click > Open. `ffmpeg` via `brew install ffmpeg` for video export.
+* **Windows:** the `totm-*-win64.exe` installer. `ffmpeg` via `winget install -e --id Gyan.FFmpeg` for video export.
+
+Or build from source. You need CMake 3.21+, Qt 6.8+ with the `Quick`, `Svg`, `Multimedia`, `ShaderTools` and `Network` modules, a C++17 compiler and Ninja. Video export shells out to a system `ffmpeg`, so have it on your `PATH` too (check with `ffmpeg -version`) — the app runs fine without it, export just tells you how to install it.
 
 ### Arch / CachyOS (btw i use cachy)
 
 ```sh
-sudo pacman -S --needed base-devel cmake ninja qt6-base qt6-declarative
+sudo pacman -S --needed base-devel cmake ninja qt6-base qt6-declarative qt6-svg qt6-multimedia qt6-multimedia-ffmpeg qt6-shadertools ffmpeg
 cmake --preset dev
 cmake --build --preset dev
 ./build/dev/src/totm
@@ -44,11 +51,18 @@ cmake --build --preset dev
 
 ### Ubuntu / Debian
 
-Heads up: apt's Qt is too old (6.4, we need 6.8+), so grab Qt 6.8 from the online installer at <https://www.qt.io/download-qt-installer> (tick Qt 6.8 Desktop + CMake + Ninja) or via `pip install aqtinstall`. Then:
+Heads up: apt's Qt is too old (6.4, we need 6.8+), so grab Qt 6.8 from the online installer at <https://www.qt.io/download-qt-installer> (tick Qt 6.8 Desktop — it bundles all required modules — plus CMake + Ninja), or via aqtinstall:
 
 ```sh
-sudo apt install build-essential ninja-build libgl1 libxkbcommon0 libdbus-1-3
-export CMAKE_PREFIX_PATH=~/Qt/6.8.3/gcc_64
+pip install aqtinstall
+aqt install-qt linux desktop 6.8.3 linux_gcc_64 --outputdir ~/Qt -m qtmultimedia qtshadertools
+```
+
+Then:
+
+```sh
+sudo apt install build-essential ninja-build libgl1 libxkbcommon0 libdbus-1-3 ffmpeg
+export CMAKE_PREFIX_PATH=~/Qt/6.8.3/gcc_64 # match the version you installed
 cmake --preset dev
 cmake --build --preset dev
 ./build/dev/src/totm
@@ -58,7 +72,7 @@ cmake --build --preset dev
 
 ```sh
 xcode-select --install
-brew install cmake ninja qt@6
+brew install cmake ninja qt@6 ffmpeg
 export CMAKE_PREFIX_PATH=$(brew --prefix qt@6)
 cmake --preset dev
 cmake --build --preset dev
@@ -70,12 +84,14 @@ open build/dev/src/totm.app
 Grab Visual Studio 2022 (or just the Build Tools) with the C++ workload, and Qt 6.8 MSVC 2022 64-bit from the online installer at <https://www.qt.io/download-qt-installer>. Then in `pwsh`:
 
 ```ps1
-winget install Kitware.CMake Ninja-build.Ninja-build
-$env:CMAKE_PREFIX_PATH = "C:\Qt\6.8.3\msvc2022_64"
+winget install Kitware.CMake Ninja-build.Ninja-build Gyan.FFmpeg
+$env:CMAKE_PREFIX_PATH = "C:\Qt\6.8.3\msvc2022_64" # match the version you installed
 cmake --preset dev
 cmake --build --preset dev
 .\build\dev\src\totm.exe
 ```
+
+No winget? Grab a build at <https://www.gyan.dev/ffmpeg/builds/>, unzip it and add its `bin` folder to `PATH`. Either way, close + reopen the terminal and check `ffmpeg -version`.
 
 ### Desktop integration (Linux)
 

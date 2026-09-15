@@ -49,6 +49,10 @@ int main(int argc, char *argv[])
     }
 
     QQmlApplicationEngine engine;
+    // Resolve the Totm module from embedded resources (:/Totm/qmldir), so
+    // packaged builds need no module files beside the executable (a Totm/
+    // dir would collide with the `totm` exe on case-insensitive filesystems).
+    engine.addImportPath(QStringLiteral("qrc:/"));
     // Remote transport is denied engine-wide (see PluginNetworkGuard):
     // the app loads nothing remote, and plugins must stay offline.
     PluginNetworkFactory networkFactory;

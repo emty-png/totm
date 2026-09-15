@@ -3,9 +3,11 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
-## [Unreleased]
+## [0.1.0] - 2026-09-15
 
 ### Added
+
+* Initial launch: canvas, shapes, layers/groups, snapping, design panel, tabs, theme.
 
 * Credits page — a `CREDITS.html` sibling to the plug-in guide (hero, numbered sections, theme toggle with saved choice) with the full Phosphor Icons (MIT) and Google Sans (OFL-1.1) license texts, plus a linked `CONTRIBUTORS.html` table (contributor, one-line contribution, version — v0.1.0 so far). A Credits row above Settings in the home sidebar opens it in the default browser via a new `SettingsStore.openCredits()` (both pages install to `share/doc/totm` alongside the guide).
 * Text typing kit — the animate tab's text gallery grew Type (letters/words/lines with chars-per-second pacing and an optional `|` cursor), Blur (layer-blur relax to sharp) and Wave (rotation wobble) cards with live thumbnails. Type durations auto-size from the selection at the card speed and the clip editor retimes on cps edits. The `type` preset reuses the whole preset pipeline (timeline lanes, easing, undo, video-safe plain data) with one sampler in QML preview and C++ export so both reveal identical chunks.
@@ -63,7 +65,3 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 * Sampler conformance rig (`tests/samplerconf/`) — dropped, export now relies on the shared `AnimSampler` matching the canvas preview.
 * Dead `_isEffectively` helper and flat-list compat shims (`moveRow`, `rowOf`, `snapshotAt`).
 * Diamond and polygon shapes (star took their place).
-
-## [0.1.0] - 2026-09-06
-
-* Initial prototype: canvas, shapes, layers/groups, snapping, design panel, tabs, theme.

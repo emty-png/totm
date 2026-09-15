@@ -1,0 +1,191 @@
+name: release
+
+on:
+  push:
+    tags: ["*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  linux-appimage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          modules: qtmultimedia qtshadertools
+          cache: true
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Configure
+        run: cmake --preset ci -DCMAKE_INSTALL_PREFIX=/usr
+      - name: Build
+        run: cmake --build --preset ci
+      - name: Stage AppDir
+        run: DESTDIR="${{ github.workspace }}/AppDir" cmake --install build/ci
+      # Static ffmpeg is a separate frame-pipe process (aggregation, GPL).
+      # BtbN (GitHub CDN) instead of johnvansickle.com, which serves flaky
+      # HTML error pages to CI runners.
+      - name: Bundle ffmpeg
+        run: |
+          set -e
+          curl -fSL --retry 3 --retry-all-errors -o ffmpeg.tar.xz https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+          test "$(stat -c%s ffmpeg.tar.xz)" -gt 10000000
+          tar xf ffmpeg.tar.xz
+          FFMPEG_BIN="$(find . -maxdepth 3 -type f -name ffmpeg | head -n 1)"
+          test -n "$FFMPEG_BIN"
+          cp "$FFMPEG_BIN" "${{ github.workspace }}/AppDir/usr/bin/"
+          chmod +x "${{ github.workspace }}/AppDir/usr/bin/ffmpeg"
+      # linuxdeploy-plugin-qt misses the Wayland platform plugins and the
+      # QtMultimedia backend. Stage them so linuxdeploy pulls their lib deps.
+      - name: Stage extra Qt plugins
+        run: |
+          set -e
+          QTP="$QT_ROOT_DIR/plugins"
+          ls "$QTP/platforms" "$QTP/multimedia"
+          mkdir -p AppDir/usr/plugins/platforms AppDir/usr/plugins/multimedia AppDir/usr/lib
+          cp "$QTP"/platforms/libqwayland-*.so "$QTP"/platforms/libqoffscreen.so "$QTP"/platforms/libqminimal.so AppDir/usr/plugins/platforms/
+          for d in wayland-shell-integration wayland-graphics-integration-client wayland-decoration-client; do
+            cp -R "$QTP/$d" AppDir/usr/plugins/
+          done
+          cp "$QTP"/multimedia/*.so AppDir/usr/plugins/multimedia/
+          # Qt libs the staged plugins need but nothing links yet (linuxdeploy
+          # leaves Qt libs to the qt plugin, which only sees the exe's deps).
+          cp "$QT_ROOT_DIR"/lib/libQt6Wayland*.so.6* AppDir/usr/lib/
+          if compgen -G "$QT_ROOT_DIR/lib/libavformat*" > /dev/null; then
+            cp "$QT_ROOT_DIR"/lib/libav*.so* "$QT_ROOT_DIR"/lib/libsw*.so* AppDir/usr/lib/ 2>/dev/null || true
+          fi
+          for lib in libavformat libavcodec libavutil libswscale libswresample; do
+            f="$(ldconfig -p | grep -m1 -o "/[^ ]*/$lib\\.so\\.[0-9]*" || true)"
+            [ -n "$f" ] && cp -L "$f" AppDir/usr/lib/ || true
+          done
+      - name: Build AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          QML_SOURCES_PATHS: ${{ github.workspace }}/src/qml
+        run: |
+          curl -L -o linuxdeploy-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -L -o linuxdeploy-plugin-qt-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-*.AppImage
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir \
+            -d packaging/totm.desktop \
+            -i packaging/icons/hicolor/256x256/apps/totm.png \
+            --plugin qt --output appimage
+      # Boot the artifact headless; fail on QML/platform/media-backend errors.
+      - name: Smoke test AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          QT_QPA_PLATFORM: xcb
+        run: |
+          command -v xvfb-run >/dev/null || sudo apt-get install -y xvfb
+          set +e
+          timeout 25 xvfb-run -a ./totm-*.AppImage > smoke.log 2>&1
+          code=$?
+          set -e
+          cat smoke.log
+          if grep -Eq 'contains no type named|no Qt platform plugin could be initialized|Could not load the Qt platform plugin|No QtMultimedia backends found' smoke.log; then
+            echo "SMOKE FAIL: error pattern in log"
+            exit 1
+          fi
+          if [ "$code" -ne 124 ] && [ "$code" -ne 0 ]; then
+            echo "SMOKE FAIL: exited early with $code"
+            exit 1
+          fi
+      - name: Upload AppImage
+        uses: softprops/action-gh-release@v2
+        with:
+          files: totm-*.AppImage
+
+  macos-dmg:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          modules: qtmultimedia qtshadertools
+          cache: true
+      - name: Configure
+        run: cmake --preset ci
+      - name: Build
+        run: cmake --build --preset ci
+      - name: Bundle Qt frameworks
+        run: macdeployqt build/ci/src/totm.app -qmldir=src/qml -dmg
+      - name: Bundle Qt frameworks
+        run: macdeployqt build/ci/src/totm.app -qmldir=src/qml -dmg
+      - name: Rename DMG
+        run: mv build/ci/src/*.dmg totm-arm64.dmg
+      - name: Upload DMG
+        uses: softprops/action-gh-release@v2
+        with:
+          files: totm-arm64.dmg
+
+  windows-installer:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          arch: win64_msvc2022_64
+          modules: qtmultimedia qtshadertools
+          cache: true
+      - name: Install NSIS
+        run: choco install nsis -y
+      # Qt DLLs are deployed into the staging tree by
+      # packaging/nsis-deploy.cmake during packaging.
+      - name: Configure
+        run: cmake --preset ci
+      - name: Build
+        run: cmake --build --preset ci
+      - name: Build installer
+        working-directory: build/ci
+        run: cpack -G NSIS
+      - name: Upload installer
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/ci/totm-*-win64.exe
+
+  notes:
+    needs: [linux-appimage, macos-dmg, windows-installer]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Commit-grouped notes (no PRs in this repo): feat:/fix: prefixes
+      # become Features/Fixes/Other one-liners via the extractor below.
+      - name: Build changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v6
+        with:
+          mode: "COMMIT"
+          configurationJson: |
+            {
+              "template": "#{{CHANGELOG}}",
+              "categories": [
+                {"title": "## Features", "labels": ["feat"]},
+                {"title": "## Fixes", "labels": ["fix"]},
+                {"title": "## Other", "labels": []}
+              ],
+              "label_extractor": [
+                {
+                  "pattern": "^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\\([\\w\\-\\.]+\\))?(!)?: ([\\w ])+([\\s\\S]*)",
+                  "on_property": "title",
+                  "target": "$1"
+                }
+              ]
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish notes
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.changelog }}
