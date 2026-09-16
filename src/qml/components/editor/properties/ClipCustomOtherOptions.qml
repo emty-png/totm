@@ -2,9 +2,10 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Custom Other editors: Hide/Show (stepped bools), Resize (absolute box),
-// Corner Radius and Stroke width (absolute px). Resize centers on each
-// leaf's own center; corner writes all four when independent is on.
+// Custom Other editors: Hide/Show (stepped bools), Flip axis (stepped
+// mirror), Resize (absolute box), Corner Radius and Stroke width
+// (absolute px). Resize centers on each leaf's own center; corner writes
+// all four when independent is on.
 ColumnLayout {
     id: section
 
@@ -102,6 +103,30 @@ ColumnLayout {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: section.setOption("toVisible", !(section.opts.toVisible === true))
             }
+        }
+    }
+
+    Text {
+        visible: section.preset === "customFlip"
+        text: qsTr("Axis")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        visible: section.preset === "customFlip"
+        spacing: 8
+
+        SegmentedOption {
+            label: qsTr("Horizontal")
+            active: section.opts.axis !== "v"
+            onClicked: section.setOption("axis", "h")
+        }
+
+        SegmentedOption {
+            label: qsTr("Vertical")
+            active: section.opts.axis === "v"
+            onClicked: section.setOption("axis", "v")
         }
     }
 

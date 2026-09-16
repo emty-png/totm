@@ -4,11 +4,12 @@ import Totm
 // One timeline lane: span bars per clip plus draggable diamond keyframes
 // at each clip end. Start diamonds and bars move the whole clip, end
 // diamonds stretch its duration (6px snap to playhead, zero and sibling
-// ends); clicks still select, Delete still removes. Empty lane space
-// falls through to the view marquee below for multi-select. Drag state
-// lives here while delegates stay model-bound: the doc clips update
-// silently in place (no rebuild, live canvas preview) and release
-// touches once for a single undo entry.
+// ends); clicks still select, Delete still removes. Stepped clips
+// (hide/show, appear, flip) are instants: one diamond at t0, no bar,
+// nothing to stretch. Empty lane space falls through to the view marquee
+// below for multi-select. Drag state lives here while delegates stay
+// model-bound: the doc clips update silently in place (no rebuild, live
+// canvas preview) and release touches once for a single undo entry.
 // Plain props with defaults (never required): Repeater delegates
 // evaluate required bindings before the model context attaches, which
 // breaks modelData reads.
@@ -56,6 +57,14 @@ Item {
         return lane.selectedIds.indexOf(id) >= 0;
     }
 
+    // Stepped clips (hide/show, appear, flip) are instants, not spans:
+    // one diamond at t0, no bar, no stretch handle.
+    function isStepped(preset) {
+        if (!lane.doc)
+            return false;
+        return lane.doc.anim.presets.isStepped(preset);
+    }
+
     function laneX(t) {
         return lane.originX + t * lane.pxPerSec;
     }
@@ -67,6 +76,7 @@ Item {
         model: lane.clips
 
         Rectangle {
+            visible: !lane.isStepped(modelData.preset)
             x: lane.barX(modelData)
             y: (parent.height - 10) / 2
             width: Math.max(14, lane.barW(modelData))
@@ -107,6 +117,20 @@ Item {
                     if (lane.diamondPolicy)
                         lane.diamondPolicy(modelData.id, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)));
                 }
+            }
+
+            // Loop badge: one glyph so short clips still read as looped.
+            Text {
+                anchors {
+                    right: parent.right
+                    verticalCenter: parent.verticalCenter
+                    rightMargin: 3
+                }
+                visible: modelData.loop === "loop" || modelData.loop === "pingpong"
+                text: modelData.loop === "pingpong" ? "⇄" : "⟳"
+                font.pixelSize: 9
+                color: AppTheme.foreground
+                opacity: 0.9
             }
         }
     }
@@ -180,7 +204,8 @@ Item {
         return lane.laneX(end.x);
     }
 
-    // Both ends of every clip as {clipId, x seconds, end}.
+    // Both ends of every clip as {clipId, x seconds, end}. Stepped
+    // clips expose only their start: one keyframe, nothing to stretch.
     function keyEnds() {
         var out = [];
         var list = lane.clips || [];
@@ -190,6 +215,8 @@ Item {
                 x: list[i].t0,
                 end: "start"
             });
+            if (lane.isStepped(list[i].preset))
+                continue;
             out.push({
                 clipId: list[i].id,
                 x: list[i].t0 + list[i].duration,

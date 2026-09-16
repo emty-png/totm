@@ -24,6 +24,9 @@ void EffectItem::paint(QPainter *painter)
     st.strokeGradient = m_strokeGradient;
     st.strokeWidth = m_strokeWidth;
     st.radius = m_radius;
+    st.penFill = m_penFill;
+    st.strokeCap = m_strokeCap;
+    st.strokeJoin = m_strokeJoin;
     Effects::PathOpts opts;
     opts.cornerRadii = m_cornerRadii;
     opts.points = m_points;
@@ -51,8 +54,12 @@ void EffectItem::paint(QPainter *painter)
 
 void EffectItem::updatePad()
 {
-    const double next = Effects::effectPad(Effects::Shadow::listFrom(m_shadows),
+    double next = Effects::effectPad(Effects::Shadow::listFrom(m_shadows),
         Effects::Glow::listFrom(m_glows), Effects::Blur::fromMap(m_layerBlur), m_strokeWidth);
+    // Miter spikes can overshoot the round-cap bounds the pad assumes,
+    // so effected pens hold at least one stroke width of margin.
+    if (m_shapeType == QStringLiteral("pen") && m_strokeJoin == QStringLiteral("miter") && m_strokeWidth > 0)
+        next = qMax(next, m_strokeWidth);
     if (qFuzzyCompare(m_pad, next))
         return;
     m_pad = next;
@@ -309,6 +316,52 @@ void EffectItem::setStrokeWidth(double v)
     updatePad();
     // updatePad only schedules when the pad itself changed; content
     // changes (e.g. same-width swaps) still need a repaint.
+    update();
+}
+
+bool EffectItem::penFill() const
+{
+    return m_penFill;
+}
+
+void EffectItem::setPenFill(bool v)
+{
+    if (m_penFill == v)
+        return;
+    m_penFill = v;
+    emit fillChanged();
+    update();
+}
+
+QString EffectItem::strokeCap() const
+{
+    return m_strokeCap;
+}
+
+void EffectItem::setStrokeCap(const QString &v)
+{
+    if (m_strokeCap == v)
+        return;
+    m_strokeCap = v;
+    // Caps reshape the silhouette, so cached blur rasters drop.
+    m_masks.clear();
+    emit strokeChanged();
+    update();
+}
+
+QString EffectItem::strokeJoin() const
+{
+    return m_strokeJoin;
+}
+
+void EffectItem::setStrokeJoin(const QString &v)
+{
+    if (m_strokeJoin == v)
+        return;
+    m_strokeJoin = v;
+    m_masks.clear();
+    emit strokeChanged();
+    updatePad();
     update();
 }
 

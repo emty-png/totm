@@ -152,10 +152,14 @@ ScrollView {
         for (var j = 0; j < clips.length; j++) {
             if (!ids[clips[j].targetUid])
                 continue;
+            var loopSuffix = clips[j].loop === "loop" ? " · " + qsTr("Loop") : clips[j].loop === "pingpong" ? " · " + qsTr("Ping-pong") : "";
+            var detail = clips[j].t0.toFixed(1) + "s – " + (clips[j].t0 + clips[j].duration).toFixed(1) + "s · " + d.anim.presets.easingName(clips[j].easing.id) + loopSuffix;
+            if (d.anim.presets.isStepped(clips[j].preset))
+                detail = qsTr("at %1s · Instant").arg(clips[j].t0.toFixed(1)) + loopSuffix;
             out.push({
                 id: clips[j].id,
                 name: d.anim.presets.presetName(clips[j].preset),
-                detail: clips[j].t0.toFixed(1) + "s – " + (clips[j].t0 + clips[j].duration).toFixed(1) + "s · " + d.anim.presets.easingName(clips[j].easing.id)
+                detail: detail
             });
         }
         out.sort((a, b) => a.id - b.id);

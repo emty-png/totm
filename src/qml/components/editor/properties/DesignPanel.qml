@@ -88,6 +88,12 @@ ScrollView {
             snapshot: panel.snapshot
         }
 
+        PenSection {
+            Layout.fillWidth: true
+            snapshot: panel.snapshot
+            doc: panel.doc
+        }
+
         EffectsSection {
             Layout.fillWidth: true
             snapshot: panel.snapshot

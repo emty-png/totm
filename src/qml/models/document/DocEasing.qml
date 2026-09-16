@@ -9,7 +9,8 @@ QtObject {
     id: easing
 
     // Easing ids: linear | easeIn | easeOut | easeInOut | slowDown |
-    // custom (cubic-bezier [x1, y1, x2, y2]).
+    // backOut | backInOut | bounceOut | elasticOut | custom
+    // (cubic-bezier [x1, y1, x2, y2]).
     function easeValue(id, bezier, t) {
         var x = Math.min(1, Math.max(0, t));
         if (id === "linear")
@@ -22,6 +23,34 @@ QtObject {
         }
         if (id === "easeInOut")
             return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+        if (id === "backOut") {
+            var c1 = 1.70158;
+            var c3 = c1 + 1;
+            return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+        }
+        if (id === "backInOut") {
+            var c2 = 1.70158 * 1.525;
+            return x < 0.5 ? (Math.pow(2 * x, 2) * ((c2 + 1) * 2 * x - c2)) / 2 : (Math.pow(2 * x - 2, 2) * ((c2 + 1) * (x * 2 - 2) + c2) + 2) / 2;
+        }
+        if (id === "bounceOut") {
+            var n1 = 7.5625;
+            var d1 = 2.75;
+            if (x < 1 / d1)
+                return n1 * x * x;
+            if (x < 2 / d1)
+                return n1 * (x -= 1.5 / d1) * x + 0.75;
+            if (x < 2.5 / d1)
+                return n1 * (x -= 2.25 / d1) * x + 0.9375;
+            return n1 * (x -= 2.625 / d1) * x + 0.984375;
+        }
+        if (id === "elasticOut") {
+            if (x <= 0)
+                return 0;
+            if (x >= 1)
+                return 1;
+            var c4 = (2 * Math.PI) / 3;
+            return Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
+        }
         if (id === "custom") {
             var b = bezier || [0.25, 0.1, 0.25, 1];
             return easing.cubicBezier(b[0], b[1], b[2], b[3], x);

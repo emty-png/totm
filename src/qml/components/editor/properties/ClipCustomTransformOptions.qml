@@ -3,8 +3,9 @@ import QtQuick.Layouts
 import Totm
 
 // Custom Transform editors: Scale (uniform factor), Rotate (offset deg),
-// Move (relative offset px). From-to values lerp with easing; scale and
-// move derive from base so clips stay valid when nodes move after apply.
+// Move (relative offset px), Font size (absolute px, text only).
+// From-to values lerp with easing; scale and move derive from base so
+// clips stay valid when nodes move after apply.
 ColumnLayout {
     id: section
 
@@ -159,6 +160,44 @@ ColumnLayout {
             onScrubStarted: section.beginScrub()
             onScrubFinished: section.endScrub()
         }
+    }
+
+    Text {
+        visible: section.preset === "customFontSize"
+        text: qsTr("From")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: section.preset === "customFontSize"
+        Layout.fillWidth: true
+        suffix: qsTr("px")
+        minimum: 1
+        maximum: 500
+        value: Number(section.opts.from) || 0
+        onCommitted: v => section.setOption("from", v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        visible: section.preset === "customFontSize"
+        text: qsTr("To")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: section.preset === "customFontSize"
+        Layout.fillWidth: true
+        suffix: qsTr("px")
+        minimum: 1
+        maximum: 500
+        value: Number(section.opts.to) || 0
+        onCommitted: v => section.setOption("to", v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
     }
 
     function setOption(role, value) {

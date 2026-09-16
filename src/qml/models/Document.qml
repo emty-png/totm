@@ -140,8 +140,8 @@ QtObject {
 
     // Animation. DocAnim checkpoints internally after validating, so
     // these stay thin pass-throughs (never double-checkpoint here).
-    function applyPreset(presetId, targetUids, t0, duration, mode, options, easing) {
-        return anim.applyPreset(presetId, targetUids, t0, duration, mode, options, easing);
+    function applyPreset(presetId, targetUids, t0, duration, mode, options, easing, loop, stagger) {
+        return anim.applyPreset(presetId, targetUids, t0, duration, mode, options, easing, loop, stagger);
     }
     function setClipOptions(id, patch) {
         return anim.setClipOptions(id, patch);
@@ -158,11 +158,17 @@ QtObject {
     function setClipMode(id, mode) {
         return anim.setClipMode(id, mode);
     }
+    function setClipLoop(id, loop) {
+        return anim.setClipLoop(id, loop);
+    }
     function deleteClips(ids) {
         return anim.deleteClips(ids);
     }
     function deleteSelectedClips() {
         return anim.deleteSelectedClips();
+    }
+    function duplicateClips(ids) {
+        return anim.duplicateClips(ids);
     }
     function setAnimDuration(v) {
         return anim.setDuration(v);
@@ -527,6 +533,10 @@ QtObject {
     function penDeletePoint(uid, sub, idx) {
         history.checkpoint();
         return penOps.deletePoint(uid, sub, idx);
+    }
+    function setPenClosed(closed) {
+        history.checkpoint();
+        return penOps.setClosedSelected(closed);
     }
     function toggleIndependentCorners(on) {
         history.checkpoint();

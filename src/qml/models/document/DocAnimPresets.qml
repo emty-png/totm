@@ -68,7 +68,14 @@ QtObject {
     }
 
     function presetIds() {
-        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customFontSize", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
+    }
+
+    // Stepped presets switch state instead of interpolating (bools or
+    // hard pops): they render as one diamond at t0 with a locked 0.1s
+    // duration, never a span bar.
+    function isStepped(presetId) {
+        return presetId === "appear" || presetId === "customHide" || presetId === "customFlip";
     }
 
     // Custom from-to clips reuse the preset pipeline (timeline, undo,
@@ -115,6 +122,12 @@ QtObject {
             return qsTr("Corner Radius");
         if (presetId === "customStroke")
             return qsTr("Stroke");
+        if (presetId === "customStrokeColor")
+            return qsTr("Stroke color");
+        if (presetId === "customFontSize")
+            return qsTr("Font size");
+        if (presetId === "customFlip")
+            return qsTr("Flip");
         if (presetId === "customShadow")
             return qsTr("Shadow");
         if (presetId === "customLayerBlur")
@@ -224,6 +237,20 @@ QtObject {
             return {
                 from: 0,
                 to: 4
+            };
+        if (presetId === "customStrokeColor")
+            return {
+                from: "#000000",
+                to: "#ff0000"
+            };
+        if (presetId === "customFontSize")
+            return {
+                from: 16,
+                to: 32
+            };
+        if (presetId === "customFlip")
+            return {
+                axis: "h"
             };
         if (presetId === "customShadow")
             return {
@@ -431,6 +458,20 @@ QtObject {
                 from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 100),
                 to: clampNum(r.to !== undefined ? r.to : 4, 4, 0, 100)
             };
+        if (presetId === "customStrokeColor")
+            return {
+                from: normalizeHex(r.from !== undefined ? r.from : "#000000", "#000000"),
+                to: normalizeHex(r.to !== undefined ? r.to : "#ff0000", "#ff0000")
+            };
+        if (presetId === "customFontSize")
+            return {
+                from: clampNum(r.from !== undefined ? r.from : 16, 16, 1, 500),
+                to: clampNum(r.to !== undefined ? r.to : 32, 32, 1, 500)
+            };
+        if (presetId === "customFlip")
+            return {
+                axis: r.axis === "v" ? "v" : "h"
+            };
         if (presetId === "customShadow")
             return {
                 fromColor: normalizeHexA(r.fromColor !== undefined ? r.fromColor : "#80000000", "#80000000"),
@@ -491,6 +532,14 @@ QtObject {
         return mode === "out" ? "out" : "in";
     }
 
+    // Clip loop: none holds the end state (current behavior), loop
+    // restarts each cycle, pingpong runs forward then backward.
+    // Stored top-level on the clip (not in options) so edits that
+    // rebuild options never drop it; old scenes miss it and read none.
+    function normalizeLoop(loop) {
+        return loop === "loop" || loop === "pingpong" ? loop : "none";
+    }
+
     // Easing presets for the graph editor. Bezier values are the
     // CSS-equivalent handles for display and dragging; the sampler keeps
     // exact cubics for the named ids and uses bezier only for custom.
@@ -520,6 +569,26 @@ QtObject {
                 id: "slowDown",
                 name: qsTr("Slow down"),
                 bezier: [0.22, 1, 0.36, 1]
+            },
+            {
+                id: "backOut",
+                name: qsTr("Pop"),
+                bezier: [0.34, 1.56, 0.64, 1]
+            },
+            {
+                id: "backInOut",
+                name: qsTr("Pop in-out"),
+                bezier: [0.68, -0.4, 0.32, 1.4]
+            },
+            {
+                id: "bounceOut",
+                name: qsTr("Bounce"),
+                bezier: [0.34, 1.3, 0.64, 1]
+            },
+            {
+                id: "elasticOut",
+                name: qsTr("Elastic"),
+                bezier: [0.3, 1.2, 0.4, 1]
             }
         ];
     }
@@ -542,14 +611,18 @@ QtObject {
         return [0.25, 0.1, 0.25, 1];
     }
 
-    function buildClip(presetId, clipId, targetUid, t0, duration, mode, options, easing) {
+    function buildClip(presetId, clipId, targetUid, t0, duration, mode, options, easing, loop) {
         var ez = easing || {};
         var ct0 = Math.max(0, Number(t0) || 0);
         // Clips never stage past the composition end (applying near the
         // tail yields a shorter clip, never an overhanging one).
+        // Stepped clips are instants: locked to the 0.1s floor so the
+        // switch reads as one keyframe at t0 on every surface.
         var comp = presets.doc && presets.doc.anim ? presets.doc.anim.duration : 60;
         var cd = Math.min(60, Math.max(0.1, Number(duration) || 0.8));
         cd = Math.min(cd, Math.max(0.1, comp - ct0));
+        if (isStepped(presetId))
+            cd = 0.1;
         return {
             id: clipId,
             targetUid: targetUid,
@@ -557,6 +630,7 @@ QtObject {
             t0: ct0,
             duration: cd,
             mode: normalizeMode(mode),
+            loop: normalizeLoop(loop),
             options: normalizeOptions(presetId, options),
             easing: {
                 id: typeof ez.id === "string" && ez.id !== "" ? ez.id : defaultEasingFor(presetId),

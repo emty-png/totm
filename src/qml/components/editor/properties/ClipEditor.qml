@@ -149,7 +149,7 @@ ScrollView {
         PanelSection {
             width: parent.width
             title: editor.presetTitle()
-            visible: !!editor.clipData && (editor.clipData.preset === "customScale" || editor.clipData.preset === "customRotate" || editor.clipData.preset === "customMove")
+            visible: !!editor.clipData && (editor.clipData.preset === "customScale" || editor.clipData.preset === "customRotate" || editor.clipData.preset === "customMove" || editor.clipData.preset === "customFontSize")
 
             ClipCustomTransformOptions {
                 Layout.fillWidth: true
@@ -162,7 +162,7 @@ ScrollView {
         PanelSection {
             width: parent.width
             title: editor.presetTitle()
-            visible: !!editor.clipData && (editor.clipData.preset === "customOpacity" || editor.clipData.preset === "customColor")
+            visible: !!editor.clipData && (editor.clipData.preset === "customOpacity" || editor.clipData.preset === "customColor" || editor.clipData.preset === "customStrokeColor")
 
             ClipCustomStyleOptions {
                 Layout.fillWidth: true
@@ -188,7 +188,7 @@ ScrollView {
         PanelSection {
             width: parent.width
             title: editor.presetTitle()
-            visible: !!editor.clipData && (editor.clipData.preset === "customHide" || editor.clipData.preset === "customResize" || editor.clipData.preset === "customCorner" || editor.clipData.preset === "customStroke")
+            visible: !!editor.clipData && (editor.clipData.preset === "customHide" || editor.clipData.preset === "customResize" || editor.clipData.preset === "customCorner" || editor.clipData.preset === "customStroke" || editor.clipData.preset === "customFlip")
 
             ClipCustomOtherOptions {
                 Layout.fillWidth: true

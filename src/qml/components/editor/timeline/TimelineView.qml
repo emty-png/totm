@@ -513,11 +513,11 @@ Item {
         onClicked: audioPicker.open()
     }
 
-    // One row per clip (not per shape): stacked animations on one
-    // target read as separate lanes, grouped by target in
-    // first-appearance order, earliest first. Reads rev, clips and clip
-    // selection so renames, edits and selection all refresh the rows;
-    // delegates bind modelData only.
+    // One row per animated target (not per clip): stacked animations
+    // on one target share a lane, grouped by target in first-appearance
+    // order, earliest first. Reads rev, clips and clip selection so
+    // renames, edits and selection all refresh the rows; delegates bind
+    // modelData only.
     function computeLanes() {
         var d = timeline.doc;
         if (!d)
@@ -540,17 +540,15 @@ Item {
             var mine = byTarget[order[t]].slice().sort((a, b) => a.t0 - b.t0);
             var n = d.findNode(Number(order[t]));
             var base = n && n.name ? n.name : qsTr("Clip");
-            for (var j = 0; j < mine.length; j++) {
-                var preset = d.anim.presets.presetName(mine[j].preset);
-                out.push({
-                    uid: order[t],
-                    name: base + " · " + preset,
-                    objectName: base,
-                    presetName: "· " + preset,
-                    clips: [mine[j]],
-                    selected: sel
-                });
-            }
+            var sub = mine.length > 1 ? "· " + qsTr("%1 clips").arg(mine.length) : "· " + d.anim.presets.presetName(mine[0].preset);
+            out.push({
+                uid: order[t],
+                name: base + " " + sub,
+                objectName: base,
+                presetName: sub,
+                clips: mine,
+                selected: sel
+            });
         }
         return out;
     }

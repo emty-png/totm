@@ -81,6 +81,42 @@ double easeValue(const QString &id, const QVariantList &bezier, double t) {
     }
     if (id == QLatin1String("slowDown"))
         return cubicBezier(0.22, 1.0, 0.36, 1.0, x);
+    if (id == QLatin1String("backOut")) {
+        const double c1 = 1.70158;
+        const double c3 = c1 + 1.0;
+        return 1.0 + c3 * qPow(x - 1.0, 3.0) + c1 * qPow(x - 1.0, 2.0);
+    }
+    if (id == QLatin1String("backInOut")) {
+        const double c2 = 1.70158 * 1.525;
+        return x < 0.5
+            ? (qPow(2.0 * x, 2.0) * ((c2 + 1.0) * 2.0 * x - c2)) / 2.0
+            : (qPow(2.0 * x - 2.0, 2.0) * ((c2 + 1.0) * (x * 2.0 - 2.0) + c2) + 2.0) / 2.0;
+    }
+    if (id == QLatin1String("bounceOut")) {
+        const double n1 = 7.5625;
+        const double d1 = 2.75;
+        if (x < 1.0 / d1)
+            return n1 * x * x;
+        if (x < 2.0 / d1) {
+            const double t = x - 1.5 / d1;
+            return n1 * t * t + 0.75;
+        }
+        if (x < 2.5 / d1) {
+            const double t = x - 2.25 / d1;
+            return n1 * t * t + 0.9375;
+        }
+        const double t = x - 2.625 / d1;
+        return n1 * t * t + 0.984375;
+    }
+    if (id == QLatin1String("elasticOut")) {
+        if (x <= 0.0)
+            return 0.0;
+        if (x >= 1.0)
+            return 1.0;
+        constexpr double kPi = 3.14159265358979323846;
+        const double c4 = (2.0 * kPi) / 3.0;
+        return qPow(2.0, -10.0 * x) * qSin((x * 10.0 - 0.75) * c4) + 1.0;
+    }
     return x;
 }
 
@@ -346,6 +382,20 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         out[QStringLiteral("radius")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
     } else if (preset == QLatin1String("customStroke")) {
         out[QStringLiteral("strokeWidth")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+    } else if (preset == QLatin1String("customStrokeColor")) {
+        const QString c = lerpColor(str(o, "from", QStringLiteral("#000000")), str(o, "to", QStringLiteral("#ff0000")), e);
+        if (!c.isEmpty())
+            out[QStringLiteral("stroke")] = c;
+    } else if (preset == QLatin1String("customFontSize")) {
+        out[QStringLiteral("fontSize")] = qMax(1.0, num(o, "from") + (num(o, "to") - num(o, "from")) * e);
+    } else if (preset == QLatin1String("customFlip")) {
+        // Stepped mirror flip about the base state (mirrors DocAnimSample).
+        if (str(o, "axis", QStringLiteral("h")) == QLatin1String("v"))
+            out[QStringLiteral("flipV")] = e < 0.5 ? base.value(QStringLiteral("flipV")).toBool()
+                                                   : !base.value(QStringLiteral("flipV")).toBool();
+        else
+            out[QStringLiteral("flipH")] = e < 0.5 ? base.value(QStringLiteral("flipH")).toBool()
+                                                   : !base.value(QStringLiteral("flipH")).toBool();
     } else if (preset == QLatin1String("customGradient")) {
         // Fill gradient from-to: stop colors lerp in sRGB, angle lerps
         // linearly. Mirrors DocAnimSample (which also flips fillType).
@@ -496,6 +546,9 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
         b[QStringLiteral("textContent")] = str(m, "textContent");
         b[QStringLiteral("shapeType")] = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
         b[QStringLiteral("fill")] = str(m, "fill", QStringLiteral("#d9d9d9"));
+        b[QStringLiteral("stroke")] = str(m, "stroke", QStringLiteral("#000000"));
+        b[QStringLiteral("flipH")] = m.value(QStringLiteral("flipH")).toBool();
+        b[QStringLiteral("flipV")] = m.value(QStringLiteral("flipV")).toBool();
         b[QStringLiteral("fillType")] = str(m, "fillType", QStringLiteral("solid"));
         b[QStringLiteral("fillGradient")] = m.value(QStringLiteral("fillGradient")).toMap();
         b[QStringLiteral("shadows")] = m.value(QStringLiteral("shadows")).toList();
@@ -571,6 +624,27 @@ bool isPositionPreset(const QString &preset) {
         || preset == QLatin1String("customResize") || preset == QLatin1String("customPath");
 }
 
+// Loop-aware linear progress: none holds at the end (clamped), loop
+// restarts each cycle, pingpong runs 0->1->0. Mirrors
+// DocAnimSample.loopProgress (old scenes miss the key and read none).
+double loopProgress(const QString &loop, double t, double t0, double dur) {
+    const double d = qMax(0.001, dur);
+    const double raw = (t - t0) / d;
+    if (loop == QLatin1String("loop")) {
+        double p = std::fmod(raw, 1.0);
+        if (p < 0.0)
+            p += 1.0;
+        return p;
+    }
+    if (loop == QLatin1String("pingpong")) {
+        double cyc = std::fmod(raw, 2.0);
+        if (cyc < 0.0)
+            cyc += 2.0;
+        return cyc <= 1.0 ? cyc : 2.0 - cyc;
+    }
+    return qBound(0.0, raw, 1.0);
+}
+
 struct PosClip {
     QVariantMap c;
     int idx = -1;
@@ -609,7 +683,8 @@ QPointF chainedOffsetAt(const QList<PosClip> &list, const QVariantMap &base, dou
         return {0.0, 0.0};
     const PosClip &cur = list.at(li);
     const double dur = qMax(0.001, cur.c.value(QStringLiteral("duration"), 0.8).toDouble());
-    const double p = qBound(0.0, (t - cur.c.value(QStringLiteral("t0"), 0.0).toDouble()) / dur, 1.0);
+    const double p = loopProgress(cur.c.value(QStringLiteral("loop"), QStringLiteral("none")).toString(), t,
+        cur.c.value(QStringLiteral("t0"), 0.0).toDouble(), dur);
     const QVariantMap ez = cur.c.value(QStringLiteral("easing")).toMap();
     const double e = Anims::easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
         ez.value(QStringLiteral("bezier")).toList(), p);
@@ -692,7 +767,8 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         if (!info.hasBox)
             continue;
         const double dur = qMax(0.001, c.value(QStringLiteral("duration"), 0.8).toDouble());
-        const double p = qBound(0.0, (t - c.value(QStringLiteral("t0"), 0.0).toDouble()) / dur, 1.0);
+        const double p = loopProgress(c.value(QStringLiteral("loop"), QStringLiteral("none")).toString(), t,
+            c.value(QStringLiteral("t0"), 0.0).toDouble(), dur);
         const QVariantMap ez = c.value(QStringLiteral("easing")).toMap();
         const double e = easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
             ez.value(QStringLiteral("bezier")).toList(), p);
@@ -810,6 +886,7 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
                  QStringLiteral("fillType"), QStringLiteral("fillGradient"), QStringLiteral("shadows"),
                  QStringLiteral("layerBlur"), QStringLiteral("backgroundBlur"), QStringLiteral("glows"),
                  QStringLiteral("grain"), QStringLiteral("visible"), QStringLiteral("radius"),
+                 QStringLiteral("stroke"), QStringLiteral("flipH"), QStringLiteral("flipV"),
                  QStringLiteral("strokeWidth"), QStringLiteral("textContent")}) {
             if (ov.contains(k))
                 m[k] = ov.value(k);
