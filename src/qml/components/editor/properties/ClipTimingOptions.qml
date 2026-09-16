@@ -25,13 +25,16 @@ ColumnLayout {
 
     spacing: 8
 
+    // Stepped clips are instants with a locked duration: no Duration row.
     Text {
+        visible: !section.isStepped()
         text: qsTr("Duration")
         font.pixelSize: 11
         color: AppTheme.muted
     }
 
     NumberField {
+        visible: !section.isStepped()
         Layout.fillWidth: true
         suffix: qsTr("s")
         scrubStep: 0.1
@@ -85,10 +88,90 @@ ColumnLayout {
         }
     }
 
+    Text {
+        text: qsTr("Loop")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        spacing: 8
+
+        SegmentedOption {
+            label: qsTr("Once")
+            active: section.loopMode() === "none"
+            onClicked: section.setLoop("none")
+        }
+
+        SegmentedOption {
+            label: qsTr("Loop")
+            active: section.loopMode() === "loop"
+            onClicked: section.setLoop("loop")
+        }
+
+        SegmentedOption {
+            label: qsTr("Ping-pong")
+            active: section.loopMode() === "pingpong"
+            onClicked: section.setLoop("pingpong")
+        }
+    }
+
+    // Copies this clip to the playhead (one undo entry, copy selected).
+    Rectangle {
+        Layout.fillWidth: true
+        Layout.preferredHeight: 32
+        radius: AppTheme.radiusSmall
+        color: dupMouse.containsMouse || dupMouse.pressed ? AppTheme.hover : AppTheme.surface
+        border.width: 1
+        border.color: AppTheme.fieldBorder
+
+        Text {
+            anchors.centerIn: parent
+            text: qsTr("Duplicate clip")
+            font.pixelSize: 12
+            color: AppTheme.foreground
+        }
+
+        MouseArea {
+            id: dupMouse
+
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton
+            cursorShape: Qt.PointingHandCursor
+            onClicked: section.duplicateClip()
+        }
+    }
+
     function easingName() {
         if (!section.clip || !section.doc)
             return "";
         return section.doc.anim.presets.easingName(section.clip.easing.id);
+    }
+
+    function isStepped() {
+        if (!section.clip || !section.doc)
+            return false;
+        return section.doc.anim.presets.isStepped(section.clip.preset);
+    }
+
+    // Loop reads through clipRev like timing above, so lane drags that
+    // retime in place never desync this row. Missing reads as once.
+    function loopMode() {
+        if (!section.clip)
+            return "none";
+        var l = section.clip.loop;
+        return l === "loop" || l === "pingpong" ? l : "none";
+    }
+
+    function setLoop(loop) {
+        if (section.doc)
+            section.doc.setClipLoop(section.clipId, loop);
+    }
+
+    function duplicateClip() {
+        if (section.doc)
+            section.doc.duplicateClips([section.clipId]);
     }
 
     function retime(v) {

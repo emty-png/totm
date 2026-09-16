@@ -13,6 +13,8 @@ ScrollView {
     required property var doc
 
     property var drawPolicy: null
+    // Cascade offset for multi-selections, like the preset gallery.
+    property real stagger: 0
 
     readonly property var defaults: DocCustomDefaults {}
 
@@ -39,6 +41,29 @@ ScrollView {
             font.pixelSize: 12
             wrapMode: Text.WordWrap
             color: AppTheme.muted
+        }
+
+        RowLayout {
+            visible: gallery.hasMultiSelection()
+            width: parent.width - 24
+            x: 12
+            spacing: 8
+
+            Text {
+                text: qsTr("Stagger")
+                font.pixelSize: 11
+                color: AppTheme.muted
+            }
+
+            NumberField {
+                Layout.fillWidth: true
+                suffix: qsTr("s")
+                scrubStep: 0.05
+                minimum: 0
+                maximum: 1
+                value: gallery.stagger
+                onCommitted: v => gallery.stagger = v
+            }
         }
 
         Repeater {
@@ -235,6 +260,11 @@ ScrollView {
                         id: "customMove",
                         name: qsTr("Move"),
                         icon: "cursor"
+                    },
+                    {
+                        id: "customFontSize",
+                        name: qsTr("Font size"),
+                        icon: "text"
                     }
                 ]
             },
@@ -255,6 +285,11 @@ ScrollView {
                         id: "customGradient",
                         name: qsTr("Gradient"),
                         icon: "circle"
+                    },
+                    {
+                        id: "customStrokeColor",
+                        name: qsTr("Stroke color"),
+                        icon: "pen"
                     }
                 ]
             },
@@ -280,6 +315,11 @@ ScrollView {
                         id: "customStroke",
                         name: qsTr("Stroke"),
                         icon: "minimize"
+                    },
+                    {
+                        id: "customFlip",
+                        name: qsTr("Flip"),
+                        icon: "flipH"
                     },
                     {
                         id: "customShadow",
@@ -342,7 +382,7 @@ ScrollView {
             uids.push(tops[i].uid);
         var options = gallery.defaults.seededOptions(d.anim.presets, d, tops, presetId);
         var t0 = d.anim.currentTime;
-        var made = d.applyPreset(presetId, uids, t0, 0.8, "in", options, null);
+        var made = d.applyPreset(presetId, uids, t0, 0.8, "in", options, null, "none", gallery.stagger);
         if (made.length > 0) {
             d.anim.currentTime = t0;
             d.anim.play();
@@ -366,10 +406,14 @@ ScrollView {
                 continue;
             if (!d.anim.presets.isCustom(clips[j].preset))
                 continue;
+            var loopSuffix = clips[j].loop === "loop" ? " · " + qsTr("Loop") : clips[j].loop === "pingpong" ? " · " + qsTr("Ping-pong") : "";
+            var detail = clips[j].t0.toFixed(1) + "s – " + (clips[j].t0 + clips[j].duration).toFixed(1) + "s · " + d.anim.presets.easingName(clips[j].easing.id) + loopSuffix;
+            if (d.anim.presets.isStepped(clips[j].preset))
+                detail = qsTr("at %1s · Instant").arg(clips[j].t0.toFixed(1)) + loopSuffix;
             out.push({
                 id: clips[j].id,
                 name: d.anim.presets.presetName(clips[j].preset),
-                detail: clips[j].t0.toFixed(1) + "s – " + (clips[j].t0 + clips[j].duration).toFixed(1) + "s · " + d.anim.presets.easingName(clips[j].easing.id)
+                detail: detail
             });
         }
         out.sort((a, b) => a.id - b.id);
@@ -382,5 +426,13 @@ ScrollView {
             return false;
         d.rev;
         return d.selectedTops().length > 0;
+    }
+
+    function hasMultiSelection() {
+        var d = gallery.doc;
+        if (!d)
+            return false;
+        d.rev;
+        return d.selectedTops().length > 1;
     }
 }

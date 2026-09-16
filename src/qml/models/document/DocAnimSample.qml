@@ -253,6 +253,19 @@ QtObject {
             out.radius = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
         } else if (preset === "customStroke") {
             out.strokeWidth = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+        } else if (preset === "customStrokeColor") {
+            var sc = lerpColor(o.from, o.to, e);
+            if (sc)
+                out.stroke = sc;
+        } else if (preset === "customFontSize") {
+            out.fontSize = Math.max(1, lerp(Number(o.from) || 0, Number(o.to) || 0, e));
+        } else if (preset === "customFlip") {
+            // Stepped mirror flip about the base state (bools can't
+            // ease): first half reads base, second half reads toggled.
+            if ((o.axis || "h") === "v")
+                out.flipV = e < 0.5 ? base.flipV === true : base.flipV !== true;
+            else
+                out.flipH = e < 0.5 ? base.flipH === true : base.flipH !== true;
         } else if (preset === "customGradient") {
             // Fill gradient from-to: stop colors ease in sRGB, angle
             // linearly. Ports to AnimSampler; also flips fillType so a
@@ -362,6 +375,25 @@ QtObject {
         return out;
     }
 
+    // Loop-aware linear progress: none holds at the end (clamped),
+    // loop restarts each cycle, pingpong runs 0->1->0. Times before
+    // the clip start stay silent (callers skip t < t0 first).
+    function loopProgress(loop, t, t0, duration) {
+        var dur = Math.max(0.001, Number(duration) || 0.8);
+        var raw = (t - t0) / dur;
+        if (loop === "loop") {
+            var p = raw % 1;
+            return p < 0 ? p + 1 : p;
+        }
+        if (loop === "pingpong") {
+            var cyc = raw % 2;
+            if (cyc < 0)
+                cyc += 2;
+            return cyc <= 1 ? cyc : 2 - cyc;
+        }
+        return Math.min(1, Math.max(0, raw));
+    }
+
     // Position presets output x/y (move, slide, scale-anchored shifts,
     // resize centering, drawn paths). Their x/y chain from the previous
     // end so sequential moves accumulate instead of snapping to origin;
@@ -411,7 +443,7 @@ QtObject {
             };
         var cur = list[li];
         var dur = Math.max(0.001, cur.c.duration);
-        var p = Math.min(1, Math.max(0, (t - cur.c.t0) / dur));
+        var p = loopProgress(cur.c.loop, t, cur.c.t0, dur);
         var ez = cur.c.easing || {};
         var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, p);
         var off = moveOffset(cur.c, base, cur.cx, cur.cy, e, p);
@@ -429,8 +461,9 @@ QtObject {
 
     // Full overlay map for time t: later clips win per property, so
     // stacked presets coexist (Slide owns x/y, Fade owns opacity) while
-    // same-property overlaps resolve to the topmost clip. Times outside
-    // a clip hold its end state; times before its start stay silent.
+    // same-property overlaps resolve to the topmost clip. Times past a
+    // clip hold its end state, unless loop repeats (loop/pingpong);
+    // times before its start stay silent.
     // Every frame derives from base (the playBase snapshot, or live
     // values only for nodes born mid-play): never from the live tree.
     // Movement x/y chains from the previous end (see above); w/h and all
@@ -469,7 +502,7 @@ QtObject {
             if (!info)
                 continue;
             var dur = Math.max(0.001, c.duration);
-            var p = Math.min(1, Math.max(0, (t - c.t0) / dur));
+            var p = loopProgress(c.loop, t, c.t0, dur);
             var ez = c.easing || {};
             var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, p);
             var skipXY = isPositionPreset(c.preset);
@@ -643,6 +676,8 @@ QtObject {
                 n.textContent = ov.textContent;
             if (ov.fill !== undefined)
                 n.fill = ov.fill;
+            if (ov.stroke !== undefined)
+                n.stroke = ov.stroke;
             if (ov.fillType !== undefined)
                 n.fillType = ov.fillType;
             if (ov.fillGradient !== undefined)
@@ -711,6 +746,10 @@ QtObject {
                 };
             if (ov.visible !== undefined)
                 n.visible = ov.visible;
+            if (ov.flipH !== undefined)
+                n.flipH = ov.flipH === true;
+            if (ov.flipV !== undefined)
+                n.flipV = ov.flipV === true;
             if (ov.radius !== undefined) {
                 var rv = Math.max(0, Number(ov.radius) || 0);
                 n.radius = rv;

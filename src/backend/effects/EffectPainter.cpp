@@ -29,6 +29,16 @@ Style Style::fromMap(const QVariantMap &m)
     st.strokeGradient = m.value(QStringLiteral("strokeGradient")).toMap();
     st.strokeWidth = qMax(0.0, m.value(QStringLiteral("strokeWidth"), 0.0).toDouble());
     st.radius = qMax(0.0, m.value(QStringLiteral("radius"), 0.0).toDouble());
+    st.penFill = m.value(QStringLiteral("penFill"), true).toBool();
+    // Unknown cap/join spellings fall back to round (matches QML).
+    const QString cap = m.value(QStringLiteral("strokeCap"), QStringLiteral("round")).toString();
+    st.strokeCap = (cap == QLatin1String("square") || cap == QLatin1String("flat"))
+        ? cap
+        : QStringLiteral("round");
+    const QString join = m.value(QStringLiteral("strokeJoin"), QStringLiteral("round")).toString();
+    st.strokeJoin = (join == QLatin1String("bevel") || join == QLatin1String("miter"))
+        ? join
+        : QStringLiteral("round");
     return st;
 }
 
@@ -550,8 +560,8 @@ void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillB
 void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double s,
     const QByteArray &geom, QCache<QByteArray, QImage> *cache);
 // Glow tail (centered halo, no offset term).
-void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const Style &st,
-    const Glow &glow, double s, double sw);
+void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
+    const Style &st, const Glow &glow, double s, double sw);
 void paintGlowInner(QPainter *pt, const QPainterPath &path, const Glow &glow, double s,
     const QByteArray &geom, QCache<QByteArray, QImage> *cache);
 
@@ -606,6 +616,32 @@ Outline outlineFor(const QString &kind, const QRectF &box, const PathOpts &opts,
         o.path.addRect(box);
     }
     return o;
+}
+
+// Pen line ends/bends from the stored spellings. Silhouette strokers
+// elsewhere stay round (they feed blurs); only visible strokes map.
+Qt::PenCapStyle penCapFor(const QString &cap)
+{
+    if (cap == QLatin1String("square"))
+        return Qt::SquareCap;
+    if (cap == QLatin1String("flat"))
+        return Qt::FlatCap;
+    return Qt::RoundCap;
+}
+
+Qt::PenJoinStyle penJoinFor(const QString &join)
+{
+    if (join == QLatin1String("bevel"))
+        return Qt::BevelJoin;
+    if (join == QLatin1String("miter"))
+        return Qt::MiterJoin;
+    return Qt::RoundJoin;
+}
+
+// Pen fill switch: open strokes usually want line-art only.
+bool fillsPath(const QString &kind, const Style &st)
+{
+    return kind != QLatin1String("pen") || st.penFill;
 }
 } // namespace
 
@@ -806,7 +842,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
         return;
     const double s = scale > 0 ? scale : 1.0;
     const Outline o = outlineFor(kind, box, opts, st, s);
-    paintPathGlow(pt, o.path, o.fillBox, st, glow, s, o.sw);
+    paintPathGlow(pt, o.path, o.fillBox, kind, st, glow, s, o.sw);
 }
 
 namespace {
@@ -817,7 +853,6 @@ void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillB
     const QRectF &box, const PathOpts &opts, const Style &st, const Shadow &sh, double s, double sw,
     double r, bool plainRect)
 {
-    Q_UNUSED(kind);
     Q_UNUSED(box);
     Q_UNUSED(opts);
     Q_UNUSED(r);
@@ -851,12 +886,13 @@ void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillB
         }
         pt->drawImage(area.topLeft() + QPointF(sh.x * s, sh.y * s), mask);
     }
-    pt->fillPath(path, paintBrush(fillBox, st.fillType, st.fillGradient, st.fill));
+    if (fillsPath(kind, st))
+        pt->fillPath(path, paintBrush(fillBox, st.fillType, st.fillGradient, st.fill));
     if (sh.enabled && sh.inner)
         paintInner(pt, path, sh, s, QByteArray(), nullptr);
     if (sw > 0.01) {
         const QBrush sb = paintBrush(fillBox, st.strokeType, st.strokeGradient, st.stroke);
-        pt->setPen(QPen(sb, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        pt->setPen(QPen(sb, sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin)));
         pt->setBrush(Qt::NoBrush);
         pt->drawPath(path);
     }
@@ -896,8 +932,8 @@ void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double
 // inner above the fill like Figma), then the stroke on top. Spread
 // dilates the silhouette before blur; with zero blur and spread the
 // halo hugs the edge exactly.
-void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const Style &st,
-    const Glow &glow, double s, double sw)
+void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
+    const Style &st, const Glow &glow, double s, double sw)
 {
     if (glow.enabled && !glow.inner) {
         QPainterPath silhouette = path;
@@ -928,12 +964,13 @@ void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox
         }
         pt->drawImage(area.topLeft(), mask);
     }
-    pt->fillPath(path, paintBrush(fillBox, st.fillType, st.fillGradient, st.fill));
+    if (fillsPath(kind, st))
+        pt->fillPath(path, paintBrush(fillBox, st.fillType, st.fillGradient, st.fill));
     if (glow.enabled && glow.inner)
         paintGlowInner(pt, path, glow, s, QByteArray(), nullptr);
     if (sw > 0.01) {
         const QBrush sb = paintBrush(fillBox, st.strokeType, st.strokeGradient, st.stroke);
-        pt->setPen(QPen(sb, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        pt->setPen(QPen(sb, sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin)));
         pt->setBrush(Qt::NoBrush);
         pt->drawPath(path);
     }
@@ -1033,7 +1070,8 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
         paintOuterShadow(pt, o.path, shadows.at(i), s, geom, maskCache);
     for (int i = glows.size() - 1; i >= 0; --i)
         paintOuterGlow(pt, o.path, glows.at(i), s, geom, maskCache);
-    pt->fillPath(o.path, paintBrush(o.fillBox, st.fillType, st.fillGradient, st.fill));
+    if (fillsPath(kind, st))
+        pt->fillPath(o.path, paintBrush(o.fillBox, st.fillType, st.fillGradient, st.fill));
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Shadow &sh = shadows.at(i);
         if (sh.enabled && sh.inner)
@@ -1046,7 +1084,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
     }
     if (o.sw > 0.01) {
         const QBrush sb = paintBrush(o.fillBox, st.strokeType, st.strokeGradient, st.stroke);
-        pt->setPen(QPen(sb, o.sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        pt->setPen(QPen(sb, o.sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin)));
         pt->setBrush(Qt::NoBrush);
         pt->drawPath(o.path);
     }

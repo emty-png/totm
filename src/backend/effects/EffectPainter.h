@@ -21,7 +21,10 @@
 // Rectangle borders stay solid, MultiEffect has no spread).
 namespace Effects {
 
-// Fill/stroke paint: solid colors or 2-stop linear gradients.
+// Fill/stroke paint: solid colors or 2-stop linear gradients. penFill
+// toggles the path fill (pen line-art); strokeCap/strokeJoin pick line
+// ends and bends ("round" default preserves the historic paint for
+// every other shape).
 struct Style {
     QColor fill = QColor(QStringLiteral("#d9d9d9"));
     QString fillType = QStringLiteral("solid");
@@ -31,6 +34,9 @@ struct Style {
     QVariantMap strokeGradient;
     double strokeWidth = 0.0;
     double radius = 0.0;
+    bool penFill = true;
+    QString strokeCap = QStringLiteral("round");
+    QString strokeJoin = QStringLiteral("round");
 
     static Style fromMap(const QVariantMap &m);
 };

@@ -13,6 +13,9 @@ ScrollView {
 
     required property var doc
     property bool playing: false
+    // Stagger between targets when applying to a multi-selection:
+    // each next shape starts this many seconds later (cascade).
+    property real stagger: 0
     // Text mode: Basic/Slide/Scale sections for text selections. Slide
     // cards share the slide preset with fixed directions (the clip
     // editor still lets users retarget after applying).
@@ -108,6 +111,31 @@ ScrollView {
             color: AppTheme.muted
         }
 
+        // Cascade offset for multi-selections. Hidden for single
+        // selections where it would do nothing.
+        RowLayout {
+            visible: gallery.hasMultiSelection()
+            width: parent.width - 24
+            x: 12
+            spacing: 8
+
+            Text {
+                text: qsTr("Stagger")
+                font.pixelSize: 11
+                color: AppTheme.muted
+            }
+
+            NumberField {
+                Layout.fillWidth: true
+                suffix: qsTr("s")
+                scrubStep: 0.05
+                minimum: 0
+                maximum: 1
+                value: gallery.stagger
+                onCommitted: v => gallery.stagger = v
+            }
+        }
+
         Repeater {
             model: gallery.sections()
 
@@ -143,8 +171,9 @@ ScrollView {
                             applyOptions: modelData.apply
                             textMode: gallery.textMode
                             easingId: modelData.easing
+                            loop: modelData.loop || "none"
                             driver: gallery
-                            clickPolicy: (presetId, apply) => gallery.applyPreset(presetId, apply)
+                            clickPolicy: (presetId, apply, easingId, loop) => gallery.applyPreset(presetId, apply, easingId, loop)
                         }
                     }
                 }
@@ -185,18 +214,26 @@ ScrollView {
                 },
                 {
                     title: qsTr("Expressive"),
-                    cards: [gallery.textBlurCard(), gallery.textWaveCard()]
+                    cards: [gallery.textBlurCard(), gallery.textWaveCard(), gallery.popCard()]
                 }
             ];
         }
         return [
             {
                 title: qsTr("Fade"),
-                cards: [gallery.cardFor("fade", qsTr("Fade")), gallery.cardFor("slide", qsTr("Slide"))]
+                cards: [gallery.cardFor("fade", qsTr("Fade")), gallery.cardFor("slide", qsTr("Slide")), gallery.wipeCard()]
             },
             {
                 title: qsTr("Scale"),
                 cards: [gallery.cardFor("grow", qsTr("Grow")), gallery.cardFor("shrink", qsTr("Shrink"))]
+            },
+            {
+                title: qsTr("Pop"),
+                cards: [gallery.popCard(), gallery.bounceCard(), gallery.elasticCard()]
+            },
+            {
+                title: qsTr("Soft"),
+                cards: [gallery.blurInCard(), gallery.pulseCard()]
             },
             {
                 title: "",
@@ -317,6 +354,98 @@ ScrollView {
         };
     }
 
+    // Logo/UI pack, all reusing the preset pipeline (no new sampler
+    // math): overshoot scales for pops, an unfaded slide for wipes, a
+    // relaxing blur and a ping-pong opacity pulse for loops.
+    function wipeCard() {
+        return {
+            id: "slide",
+            name: qsTr("Wipe"),
+            options: {
+                direction: "left",
+                distance: 34,
+                fade: false
+            },
+            apply: {
+                fade: false
+            },
+            easing: "easeOut"
+        };
+    }
+
+    function popCard() {
+        var o = {
+            from: 0.5,
+            to: 1
+        };
+        return {
+            id: "customScale",
+            name: qsTr("Pop"),
+            options: o,
+            apply: o,
+            easing: "backOut"
+        };
+    }
+
+    function bounceCard() {
+        var o = {
+            from: 0,
+            to: 1
+        };
+        return {
+            id: "customScale",
+            name: qsTr("Bounce"),
+            options: o,
+            apply: o,
+            easing: "bounceOut"
+        };
+    }
+
+    function elasticCard() {
+        var o = {
+            from: 0,
+            to: 1
+        };
+        return {
+            id: "customScale",
+            name: qsTr("Elastic"),
+            options: o,
+            apply: o,
+            easing: "elasticOut"
+        };
+    }
+
+    function blurInCard() {
+        var o = {
+            fromRadius: 12,
+            fromOpacity: 1,
+            toRadius: 0,
+            toOpacity: 1
+        };
+        return {
+            id: "customLayerBlur",
+            name: qsTr("Blur in"),
+            options: o,
+            apply: o,
+            easing: "easeOut"
+        };
+    }
+
+    function pulseCard() {
+        var o = {
+            from: 0.25,
+            to: 1
+        };
+        return {
+            id: "customOpacity",
+            name: qsTr("Pulse"),
+            options: o,
+            apply: o,
+            easing: "easeInOut",
+            loop: "pingpong"
+        };
+    }
+
     // Longest selected text length in chars (groups count their longest
     // leaf), for auto-sizing Type durations from chars/sec.
     function selectionTextLen() {
@@ -338,7 +467,7 @@ ScrollView {
         return best;
     }
 
-    function applyPreset(presetId, apply) {
+    function applyPreset(presetId, apply, easingId, loop) {
         var d = gallery.doc;
         if (!d)
             return;
@@ -359,7 +488,10 @@ ScrollView {
             var len = gallery.selectionTextLen();
             dur = len > 0 ? Math.min(60, Math.max(0.5, len / cps)) : 0.8;
         }
-        var made = d.applyPreset(presetId, uids, t0, dur, "in", apply || {}, null);
+        var easing = typeof easingId === "string" && easingId !== "" ? {
+            id: easingId
+        } : null;
+        var made = d.applyPreset(presetId, uids, t0, dur, "in", apply || {}, easing, loop || "none", gallery.stagger);
         if (made.length > 0) {
             d.anim.currentTime = t0;
             d.anim.play();
@@ -374,5 +506,13 @@ ScrollView {
             return false;
         d.rev;
         return d.selectedTops().length > 0;
+    }
+
+    function hasMultiSelection() {
+        var d = gallery.doc;
+        if (!d)
+            return false;
+        d.rev;
+        return d.selectedTops().length > 1;
     }
 }

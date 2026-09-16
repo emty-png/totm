@@ -60,8 +60,10 @@ QtObject {
     // Applies a preset to each valid target top (groups animate as one
     // unit about their bbox center at sample time). New clips start at
     // t0 (the playhead from the timeline) with the preset default
-    // duration unless given. Returns applied clip ids.
-    function applyPreset(presetId, targetUids, t0, duration, mode, options, easing) {
+    // duration unless given. Stagger offsets each next target by that
+    // many seconds (cascades), clamped inside the composition.
+    // Returns applied clip ids.
+    function applyPreset(presetId, targetUids, t0, duration, mode, options, easing, loop, stagger) {
         if (anim.presets.presetIds().indexOf(presetId) < 0)
             return [];
         var valid = [];
@@ -72,11 +74,14 @@ QtObject {
         }
         if (valid.length === 0)
             return [];
+        var st = Math.min(1, Math.max(0, Number(stagger) || 0));
+        var comp = Math.max(0.5, anim.duration);
         doc.history.checkpoint();
         var made = [];
         var list = anim.clips.slice();
         for (var j = 0; j < valid.length; j++) {
-            var clip = anim.presets.buildClip(presetId, anim.nextClipId++, valid[j], t0, duration, mode, options, easing);
+            var nt0 = Math.min(t0 + j * st, Math.max(0, comp - 0.1));
+            var clip = anim.presets.buildClip(presetId, anim.nextClipId++, valid[j], nt0, duration, mode, options, easing, loop);
             list.push(clip);
             made.push(clip.id);
         }
@@ -101,7 +106,7 @@ QtObject {
             merged[k] = old.options[k];
         for (var p in keys)
             merged[p] = keys[p];
-        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, merged, old.easing);
+        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, merged, old.easing, old.loop);
         doc.history.checkpoint();
         var list = anim.clips.slice();
         list[at] = fixed;
@@ -124,7 +129,7 @@ QtObject {
         nd = Math.min(nd, Math.max(0.1, anim.duration - nt0));
         if (isNaN(nt0) || isNaN(nd) || (nt0 === old.t0 && nd === old.duration))
             return false;
-        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, nt0, nd, old.mode, old.options, old.easing);
+        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, nt0, nd, old.mode, old.options, old.easing, old.loop);
         doc.history.checkpoint();
         var list = anim.clips.slice();
         list[at] = fixed;
@@ -169,7 +174,7 @@ QtObject {
         if (at < 0)
             return false;
         var old = anim.clips[at];
-        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, old.options, easing);
+        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, old.options, easing, old.loop);
         doc.history.checkpoint();
         var list = anim.clips.slice();
         list[at] = fixed;
@@ -190,7 +195,30 @@ QtObject {
         var nm = mode === "out" ? "out" : "in";
         if (nm === old.mode)
             return false;
-        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, nm, old.options, old.easing);
+        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, nm, old.options, old.easing, old.loop);
+        doc.history.checkpoint();
+        var list = anim.clips.slice();
+        list[at] = fixed;
+        anim.clips = list;
+        doc.touch();
+        return true;
+    }
+
+    // Loop mode is clip-level like mode (not in options): rebuilds the
+    // clip so stored data stays normalized, one undo entry per change.
+    function setClipLoop(id, loop) {
+        var at = -1;
+        for (var i = 0; i < anim.clips.length; i++) {
+            if (anim.clips[i].id === id)
+                at = i;
+        }
+        if (at < 0)
+            return false;
+        var old = anim.clips[at];
+        var nl = anim.presets.normalizeLoop(loop);
+        if (nl === anim.presets.normalizeLoop(old.loop))
+            return false;
+        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, old.options, old.easing, nl);
         doc.history.checkpoint();
         var list = anim.clips.slice();
         list[at] = fixed;
@@ -225,6 +253,46 @@ QtObject {
         return anim.deleteClips(anim.selectedClipIds);
     }
 
+    // Duplicates clips at the playhead, keeping their relative offsets
+    // (earliest lands on the playhead). New ids are selected. One undo
+    // entry; options deep-copy so later edits never alias the source.
+    function duplicateClips(ids) {
+        var asked = {};
+        var list = ids || [];
+        for (var i = 0; i < list.length; i++)
+            asked[list[i]] = true;
+        var src = [];
+        for (var j = 0; j < anim.clips.length; j++) {
+            if (asked[anim.clips[j].id])
+                src.push(anim.clips[j]);
+        }
+        if (src.length === 0)
+            return [];
+        var earliest = src[0].t0;
+        for (var k = 1; k < src.length; k++) {
+            if (src[k].t0 < earliest)
+                earliest = src[k].t0;
+        }
+        var comp = Math.max(0.5, anim.duration);
+        var base = Math.min(anim.currentTime, Math.max(0, comp - 0.1));
+        doc.history.checkpoint();
+        var out = anim.clips.slice();
+        var made = [];
+        for (var m = 0; m < src.length; m++) {
+            var s = src[m];
+            var nt0 = Math.min(s.t0 - earliest + base, Math.max(0, comp - 0.1));
+            var copy = anim.presets.buildClip(s.preset, anim.nextClipId++, s.targetUid, nt0, s.duration, s.mode, copyMap(s.options), s.easing, s.loop);
+            if (!doc.findNode(copy.targetUid))
+                continue;
+            out.push(copy);
+            made.push(copy.id);
+        }
+        anim.clips = out;
+        anim.selectedClipIds = made.slice();
+        doc.touch();
+        return made;
+    }
+
     function setDuration(v) {
         var nd = Math.min(60, Math.max(0.5, Number(v)));
         if (isNaN(nd) || nd === anim.duration)
@@ -253,7 +321,7 @@ QtObject {
                 out.push(c);
                 continue;
             }
-            out.push(anim.presets.buildClip(c.preset, c.id, c.targetUid, nt0, nd, c.mode, c.options, c.easing));
+            out.push(anim.presets.buildClip(c.preset, c.id, c.targetUid, nt0, nd, c.mode, c.options, c.easing, c.loop));
         }
         return out;
     }
@@ -336,6 +404,7 @@ QtObject {
                 t0: c.t0,
                 duration: c.duration,
                 mode: c.mode,
+                loop: anim.presets.normalizeLoop(c.loop),
                 options: copyMap(c.options),
                 easing: {
                     id: ez.id,

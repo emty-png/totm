@@ -111,6 +111,9 @@ Item {
             strokeType: modelData.strokeType ?? "solid"
             strokeGradient: modelData.strokeGradient
             strokeWidth: modelData.strokeWidth
+            penFill: modelData.penFill !== false
+            strokeCap: modelData.strokeCap || "round"
+            strokeJoin: modelData.strokeJoin || "round"
             shadows: modelData.shadows ?? []
             layerBlur: modelData.layerBlur
             backgroundBlur: modelData.backgroundBlur

@@ -55,6 +55,13 @@ QtObject {
         })
     property real strokeWidth: 0
     property real opacity: 1
+    // Pen-only paint switches. penFill toggles the path fill (open
+    // strokes usually want line-art only); strokeCap/strokeJoin pick the
+    // line ends and bends ("round" default matches the old hardcoded
+    // paint, so other shapes render identically).
+    property bool penFill: true
+    property string strokeCap: "round"
+    property string strokeJoin: "round"
     // Stacked effects: shadows and glows are lists (index 0 paints
     // topmost, like layers), blurs and grain are singletons. Render
     // order is fixed: backgroundBlur (backdrop) -> outer shadows ->

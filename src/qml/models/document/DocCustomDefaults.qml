@@ -134,6 +134,20 @@ QtObject {
                 to: sw === 0 ? 4 : 0
             };
         }
+        if (presetId === "customStrokeColor" && leaf) {
+            var sc = String(leaf.stroke || "#000000");
+            return {
+                from: sc,
+                to: "#ff0000"
+            };
+        }
+        if (presetId === "customFontSize" && leaf) {
+            var fs = Math.min(500, Math.max(1, Math.round(Number(leaf.fontSize) || 16)));
+            return {
+                from: fs,
+                to: Math.min(500, fs * 2)
+            };
+        }
         return presets.defaultsFor(presetId);
     }
 

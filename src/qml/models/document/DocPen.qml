@@ -147,4 +147,38 @@ QtObject {
         pen._sync(n, path);
         return true;
     }
+
+    // Closes (or opens) every subpath of each selected pen leaf.
+    // Closing only affects subpaths with 2+ points; bbox is unchanged
+    // (endpoints already bound it), so no resync is needed.
+    function setClosedSelected(closed) {
+        var want = closed === true;
+        var tops = doc.selectedTops();
+        var changed = false;
+        for (var i = 0; i < tops.length; i++) {
+            var leaves = tops[i].kind === "shape" ? [tops[i]] : doc._leavesUnder(tops[i]);
+            for (var j = 0; j < leaves.length; j++) {
+                var n = pen._node(leaves[j].uid);
+                if (!n)
+                    continue;
+                var path = doc.factory._copyPath(n.pathData);
+                var dirty = false;
+                for (var k = 0; k < path.length; k++) {
+                    if ((path[k].pts || []).length < 2)
+                        continue;
+                    if ((path[k].closed === true) !== want) {
+                        path[k].closed = want;
+                        dirty = true;
+                    }
+                }
+                if (!dirty)
+                    continue;
+                n.pathData = path;
+                changed = true;
+            }
+        }
+        if (changed)
+            doc.touch();
+        return changed;
+    }
 }

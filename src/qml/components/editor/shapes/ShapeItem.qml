@@ -36,6 +36,12 @@ Item {
     property string strokeType: "solid"
     property var strokeGradient: null
     property real strokeWidth: 0
+    // Pen-only paint switches (meaningful for pen): fill on/off plus
+    // line cap/join. Defaults match the old hardcoded paint (filled,
+    // round caps/joins), so every other shape renders identically.
+    property bool penFill: true
+    property string strokeCap: "round"
+    property string strokeJoin: "round"
     property var shadows: []
     property var layerBlur: null
     property var backgroundBlur: null
@@ -100,6 +106,28 @@ Item {
     // Vector path builders (pure geometry, mirrored by the C++ video
     // renderer).
     readonly property var geometry: ShapeGeometry {}
+
+    // Pen line ends/bends. Other shapes keep the historic round paint;
+    // unknown values fall back to round on both renderers.
+    function capFor() {
+        if (shape.shapeType !== "pen")
+            return ShapePath.RoundCap;
+        if (shape.strokeCap === "square")
+            return ShapePath.SquareCap;
+        if (shape.strokeCap === "flat")
+            return ShapePath.FlatCap;
+        return ShapePath.RoundCap;
+    }
+
+    function joinFor() {
+        if (shape.shapeType !== "pen")
+            return ShapePath.RoundJoin;
+        if (shape.strokeJoin === "bevel")
+            return ShapePath.BevelJoin;
+        if (shape.strokeJoin === "miter")
+            return ShapePath.MiterJoin;
+        return ShapePath.RoundJoin;
+    }
 
     // CPU paint path for effects the stock items cannot express
     // (ShapePath has fillGradient only, Rectangle borders stay solid,
@@ -207,6 +235,9 @@ Item {
                 ]
             })
         strokeWidth: shape.strokeWidth
+        penFill: shape.penFill !== false
+        strokeCap: shape.strokeCap || "round"
+        strokeJoin: shape.strokeJoin || "round"
         shadows: shape.shadows ?? []
         glows: shape.glows ?? []
         layerBlur: shape.layerBlur ?? ({
@@ -335,11 +366,11 @@ Item {
             origin.y: shape.sh / 2
         }
         ShapePath {
-            fillColor: shape.fill
+            fillColor: shape.shapeType === "pen" && shape.penFill !== true ? "transparent" : shape.fill
             strokeColor: shape.strokeWidth > 0 ? shape.strokeColor : "transparent"
             strokeWidth: shape.strokeWidth
-            joinStyle: ShapePath.RoundJoin
-            capStyle: ShapePath.RoundCap
+            joinStyle: shape.joinFor()
+            capStyle: shape.capFor()
             PathSvg {
                 path: shape.geometry.vectorPath(shape)
             }

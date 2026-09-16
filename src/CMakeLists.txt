@@ -152,6 +152,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ImageSection.qml
         qml/components/editor/properties/FillSection.qml
         qml/components/editor/properties/StrokeSection.qml
+        qml/components/editor/properties/PenSection.qml
         # Titlebar + window
         qml/components/titlebar/TitleBar.qml
         qml/components/titlebar/MacTrafficLights.qml
@@ -212,6 +213,8 @@ qt_add_qml_module(totm
         qml/components/home/DesignCard.qml
         qml/components/home/DesignCardPreview.qml
         qml/components/home/DesignContextMenu.qml
+        qml/components/home/TemplateLibrary.qml
+        qml/components/home/TemplateCard.qml
         # Plugins (permission-gated QML extensions)
         qml/components/plugins/PluginPermissionPopup.qml
         qml/components/plugins/PluginPermissionRow.qml

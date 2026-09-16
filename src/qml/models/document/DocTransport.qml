@@ -108,6 +108,9 @@ QtObject {
                 shapeType: n.shapeType,
                 textContent: n.textContent,
                 fill: String(n.fill),
+                stroke: String(n.stroke),
+                flipH: n.flipH === true,
+                flipV: n.flipV === true,
                 fillType: n.fillType ?? "solid",
                 fillGradient: doc.factory._copyGradient(n.fillGradient),
                 shadows: doc.factory._copyShadows(n.shadows),
@@ -118,6 +121,9 @@ QtObject {
                 visible: n.visible,
                 radius: n.radius,
                 strokeWidth: n.strokeWidth,
+                penFill: n.penFill !== false,
+                strokeCap: n.strokeCap ?? "round",
+                strokeJoin: n.strokeJoin ?? "round",
                 independentCorners: n.independentCorners
             };
             if (n.shapeType === "pen")
@@ -149,6 +155,12 @@ QtObject {
             n.opacity = b.opacity;
             if (b.fill !== undefined)
                 n.fill = b.fill;
+            if (b.stroke !== undefined)
+                n.stroke = b.stroke;
+            if (b.flipH !== undefined)
+                n.flipH = b.flipH === true;
+            if (b.flipV !== undefined)
+                n.flipV = b.flipV === true;
             if (b.fillType !== undefined)
                 n.fillType = b.fillType;
             if (b.fillGradient !== undefined)
@@ -169,6 +181,12 @@ QtObject {
                 n.radius = b.radius;
             if (b.strokeWidth !== undefined)
                 n.strokeWidth = b.strokeWidth;
+            if (b.penFill !== undefined)
+                n.penFill = b.penFill !== false;
+            if (b.strokeCap !== undefined)
+                n.strokeCap = b.strokeCap ?? "round";
+            if (b.strokeJoin !== undefined)
+                n.strokeJoin = b.strokeJoin ?? "round";
             if (b.fontSize !== undefined && n.shapeType === "text")
                 n.fontSize = b.fontSize;
             if (b.textContent !== undefined && n.shapeType === "text")

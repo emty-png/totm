@@ -41,6 +41,9 @@ class EffectItem : public QQuickPaintedItem {
     Q_PROPERTY(QString strokeType READ strokeType WRITE setStrokeType NOTIFY strokeChanged)
     Q_PROPERTY(QVariantMap strokeGradient READ strokeGradient WRITE setStrokeGradient NOTIFY strokeChanged)
     Q_PROPERTY(double strokeWidth READ strokeWidth WRITE setStrokeWidth NOTIFY strokeChanged)
+    Q_PROPERTY(bool penFill READ penFill WRITE setPenFill NOTIFY fillChanged)
+    Q_PROPERTY(QString strokeCap READ strokeCap WRITE setStrokeCap NOTIFY strokeChanged)
+    Q_PROPERTY(QString strokeJoin READ strokeJoin WRITE setStrokeJoin NOTIFY strokeChanged)
     Q_PROPERTY(QVariantList shadows READ shadows WRITE setShadows NOTIFY shadowChanged)
     Q_PROPERTY(QVariantMap layerBlur READ layerBlur WRITE setLayerBlur NOTIFY blurChanged)
     Q_PROPERTY(QVariantMap backgroundBlur READ backgroundBlur WRITE setBackgroundBlur NOTIFY blurChanged)
@@ -87,6 +90,12 @@ public:
     void setStrokeGradient(const QVariantMap &v);
     double strokeWidth() const;
     void setStrokeWidth(double v);
+    bool penFill() const;
+    void setPenFill(bool v);
+    QString strokeCap() const;
+    void setStrokeCap(const QString &v);
+    QString strokeJoin() const;
+    void setStrokeJoin(const QString &v);
     QVariantList shadows() const;
     void setShadows(const QVariantList &v);
     QVariantMap layerBlur() const;
@@ -129,6 +138,9 @@ private:
     QString m_strokeType = QStringLiteral("solid");
     QVariantMap m_strokeGradient;
     double m_strokeWidth = 0.0;
+    bool m_penFill = true;
+    QString m_strokeCap = QStringLiteral("round");
+    QString m_strokeJoin = QStringLiteral("round");
     QVariantList m_shadows;
     QVariantMap m_layerBlur;
     QVariantMap m_backgroundBlur;

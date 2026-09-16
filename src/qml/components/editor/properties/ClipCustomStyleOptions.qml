@@ -2,9 +2,10 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Custom Style editors: Opacity (absolute 0-1) and Color (fill hex
-// from-to). Absolute values give exact control; the gallery seeds From
-// from the live selection so new clips start jump-free.
+// Custom Style editors: Opacity (absolute 0-1), Color (fill hex
+// from-to) and Stroke color (stroke hex from-to). Absolute values give
+// exact control; the gallery seeds From from the live selection so new
+// clips start jump-free.
 ColumnLayout {
     id: section
 
@@ -18,7 +19,7 @@ ColumnLayout {
     spacing: 8
 
     Text {
-        visible: section.preset === "customOpacity" || section.preset === "customColor"
+        visible: section.preset === "customOpacity" || section.preset === "customColor" || section.preset === "customStrokeColor"
         text: qsTr("From")
         font.pixelSize: 11
         color: AppTheme.muted
@@ -57,8 +58,29 @@ ColumnLayout {
         }
     }
 
+    RowLayout {
+        visible: section.preset === "customStrokeColor"
+        spacing: 8
+
+        Rectangle {
+            Layout.preferredWidth: 28
+            Layout.preferredHeight: 28
+            Layout.alignment: Qt.AlignVCenter
+            radius: AppTheme.radiusSmall
+            color: String(section.opts.from || "#000000")
+            border.width: 1
+            border.color: AppTheme.border
+        }
+
+        HexField {
+            Layout.fillWidth: true
+            value: String(section.opts.from || "#000000")
+            onCommitted: c => section.setOption("from", c)
+        }
+    }
+
     Text {
-        visible: section.preset === "customOpacity" || section.preset === "customColor"
+        visible: section.preset === "customOpacity" || section.preset === "customColor" || section.preset === "customStrokeColor"
         text: qsTr("To")
         font.pixelSize: 11
         color: AppTheme.muted
@@ -78,6 +100,27 @@ ColumnLayout {
 
     RowLayout {
         visible: section.preset === "customColor"
+        spacing: 8
+
+        Rectangle {
+            Layout.preferredWidth: 28
+            Layout.preferredHeight: 28
+            Layout.alignment: Qt.AlignVCenter
+            radius: AppTheme.radiusSmall
+            color: String(section.opts.to || "#ff0000")
+            border.width: 1
+            border.color: AppTheme.border
+        }
+
+        HexField {
+            Layout.fillWidth: true
+            value: String(section.opts.to || "#ff0000")
+            onCommitted: c => section.setOption("to", c)
+        }
+    }
+
+    RowLayout {
+        visible: section.preset === "customStrokeColor"
         spacing: 8
 
         Rectangle {

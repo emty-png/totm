@@ -23,6 +23,10 @@ RowLayout {
     // per HomeView; ids reassign wholesale so card bindings update.
     property var selection: HomeSelection {}
 
+    // Starter templates (components/home/TemplateLibrary). One instance
+    // per HomeView, like the card selection above.
+    property var templateLib: TemplateLibrary {}
+
     // Designs of the selected workspace. Refreshed wholesale on change so
     // the model array identity stays stable for delegates (see Flow below).
     property var filteredDesigns: []
@@ -70,6 +74,21 @@ RowLayout {
         var id = LibraryStore.createDesign(ws, "Untitled");
         if (id)
             TabState.openDesign(id);
+    }
+
+    // Starts a design from a starter template: creates the design in
+    // the current workspace, opens it, then builds the template scene
+    // (one undo entry) and saves, so the card preview is alive at once.
+    function homeNewFromTemplate(templateId) {
+        var ws = homeView.selectedWorkspaceId || LibraryStore.defaultWorkspaceId;
+        var id = LibraryStore.createDesign(ws, homeView.templateLib.templateName(templateId));
+        if (!id)
+            return;
+        TabState.openDesign(id);
+        var doc = TabState.documentFor(TabState.modelIndexForDesign(id));
+        if (doc && homeView.templateLib.build(doc, templateId))
+            TabState.saveOpenDesign(id);
+        homeView.refreshFiltered();
     }
 
     function homeOpenSelected() {
@@ -238,6 +257,54 @@ RowLayout {
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
                 color: AppTheme.foreground
+            }
+        }
+
+        // Starter templates: fixed strip above the grid (never inside the
+        // marquee area), so it stays at hand even when the workspace is
+        // empty and never disturbs card hit-testing.
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            visible: !homeView.settingsSelected
+
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                text: qsTr("Start from a template")
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
+                color: AppTheme.foreground
+            }
+
+            Flickable {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 100
+                contentWidth: templateRow.implicitWidth + 32
+                clip: true
+                flickableDirection: Flickable.HorizontalFlick
+
+                Row {
+                    id: templateRow
+
+                    x: 16
+                    y: 4
+                    height: 92
+                    spacing: 12
+
+                    Repeater {
+                        model: homeView.templateLib.templates()
+
+                        TemplateCard {
+                            templateId: modelData.id
+                            templateName: modelData.name
+                            blurb: modelData.blurb
+                            usePolicy: id => homeView.homeNewFromTemplate(id)
+                        }
+                    }
+                }
             }
         }
 

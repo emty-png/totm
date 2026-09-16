@@ -4,7 +4,8 @@ import Totm
 // One preset tile: looping live thumbnail on a gray swatch plus name.
 // The thumbnail samples the real preset math (DocAnimSample) on a mini
 // model, so previews match canvas playback. Play phase streams from the
-// gallery's shared driver; clicks report through clickPolicy.
+// gallery's shared driver; clicks report preset, options, easing and
+// loop through clickPolicy.
 // Plain props with defaults (never required): Repeater delegates
 // evaluate required bindings before the model context attaches, which
 // breaks modelData reads. Same rule as LayersRow/TitleBarTab/DesignCard.
@@ -16,6 +17,9 @@ Item {
     property var thumbOptions: null
     property var applyOptions: null
     property string easingId: "easeOut"
+    // Loop for the applied clip (pulse cards repeat). Thumb plays one
+    // cycle like every other card; the canvas loops after applying.
+    property string loop: "none"
     // Text mode renders a "Text" glyph thumb instead of the rectangle;
     // the frame math (position/opacity/scale) is shared.
     property bool textMode: false
@@ -138,7 +142,7 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onClicked: {
             if (card.clickPolicy)
-                card.clickPolicy(card.presetId, card.applyOptions);
+                card.clickPolicy(card.presetId, card.applyOptions, card.easingId, card.loop);
         }
     }
 
