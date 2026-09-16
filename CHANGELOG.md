@@ -3,6 +3,14 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.1.1] - 2026-09-16
+
+### Added
+
+* Starter templates — a `Start from a template` strip above the home grid with four one-click designs (logo sting, hero loop, lower third, onboarding) built only from the public `Document`/`applyPreset` calls inside one undo entry, so the card preview is alive at once.
+* Pen styling — new Pen section for pen shapes: close/open every subpath, fill on/off for line-art, plus stroke cap (round/square/flat) and join (round/bevel/miter). The shared CPU painter honors them on canvas and export, other shapes render exactly as before.
+* Loopable animation kit — clips loop now (once/loop/ping-pong, sampled identically in preview and export, with lane badges), multi-selections cascade via a stagger offset in both galleries, new `customStrokeColor`/`customFontSize`/`customFlip` presets with seeded from-to editors, new pop/bounce/elastic/wipe/blur-in/pulse cards on back/bounce/elastic easings, instant stepped clips (appear/hide/flip) as single diamonds, duplicate-to-playhead, and one lane row per target with clip counts.
+
 ## [0.1.0] - 2026-09-15
 
 ### Added

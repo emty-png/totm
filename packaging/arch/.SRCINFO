@@ -1,6 +1,6 @@
 pkgbase = totm
 	pkgdesc = Cross-platform desktop motion-graphics editor
-	pkgver = 0.1.0
+	pkgver = 0.1.1
 	pkgrel = 1
 	url = https://github.com/emty-png/totm
 	arch = x86_64
@@ -16,7 +16,7 @@ pkgbase = totm
 	depends = qt6-multimedia-ffmpeg
 	depends = qt6-shadertools
 	depends = qt6-svg
-	source = totm-0.1.0.tar.gz::https://github.com/emty-png/totm/archive/refs/tags/0.1.0.tar.gz
+	source = totm-0.1.1.tar.gz::https://github.com/emty-png/totm/archive/refs/tags/0.1.1.tar.gz
 	sha256sums = SKIP
 
 pkgname = totm
