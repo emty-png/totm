@@ -153,17 +153,21 @@ Item {
             right: parent.right
             top: parent.top
             rightMargin: 16
-            topMargin: 16
+            topMargin: 22
         }
         width: 22
         height: 22
-        z: 2
+        z: 10
         visible: (cardMouse.containsMouse || starMouse.containsMouse) && !card.editing
 
         Rectangle {
             anchors.fill: parent
             radius: AppTheme.radiusSmall
-            color: starMouse.containsMouse || card.starred ? AppTheme.hover : AppTheme.surface
+            // Always opaque surface: the hover tint is a transparent
+            // overlay that vanishes over dark scenes, and this chip
+            // floats over scene content of any color. Hover/starred
+            // state reads through the filled glyph below instead.
+            color: AppTheme.surface
             border.width: 1
             border.color: AppTheme.border
         }
@@ -172,7 +176,7 @@ Item {
             anchors.centerIn: parent
             width: 13
             height: 13
-            kind: card.starred ? "starFill" : "star"
+            kind: card.starred || starMouse.containsMouse ? "starFill" : "star"
             iconColor: card.starred || starMouse.containsMouse ? AppTheme.foreground : AppTheme.muted
 
             Behavior on iconColor {
