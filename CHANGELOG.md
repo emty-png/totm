@@ -3,7 +3,7 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
-## [Unreleased]
+## [0.1.2] - 2026-09-17
 
 ### Added
 
@@ -11,6 +11,12 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 * Clip copy/paste — selected animation clips copy to an app-wide clipboard as relative-offset templates and paste onto the selected tops at the playhead, across shapes and designs, through the shortcuts and new Copy/Paste rows in the clip editor.
 * Canvas align and distribute — align unlocked tops to their union box (left/center/right, top/middle/bottom) and spread even center spacing across 3+ tops, from new Align/Distribute rows in the Position section.
 * Template picker — the header Template button opens a modal with a rendered scene preview for every starter (logo sting, hero loop, lower third, onboarding); the inline strip is gone and the previews build from the same one-undo-entry builders as new designs.
+* In-app file picker — every open/save now uses a native-feeling browser in the app language (places sidebar, breadcrumb, filtered rows with size · date, save-mode name field) backed by a read-only FileBrowser store, replacing the unthemeable stock dialog; Phosphor outline glyphs throughout.
+* Overwrite guards — `.totm` export and video save refuse existing destinations unless confirmed through a shared popup, with probes sharing each writer's suffix rule.
+
+### Fixed
+
+* Timeline top hairline buried under the opaque ruler block; render timeouts on slow machines (pipe/finish caps doubled, kills waited out).
 
 ## [0.1.1] - 2026-09-16
 
