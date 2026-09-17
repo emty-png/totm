@@ -6,12 +6,17 @@
 #include <QIcon>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QProcess>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QStandardPaths>
 #include <QUrl>
 
+#include "CrashHandler.h"
+#include "CrashReporter.h"
 #include "PluginNetworkGuard.h"
+
+static CrashReporter *g_crashReporter = nullptr;
 
 // Single-instance forwarding for .totm opens. The primary instance owns
 // a QLocalServer (socket name is per-user so two accounts never collide);
@@ -150,8 +155,12 @@ void totMessageHandler(QtMsgType type, const QMessageLogContext &context, const 
     }
     // Matches the default handler (bare message); aborts on fatal.
     fprintf(stderr, "%s\n", qPrintable(msg));
-    if (type == QtFatalMsg)
+    if (g_crashReporter)
+        g_crashReporter->appendLog(msg);
+    if (type == QtFatalMsg) {
+        CrashHandler::spawnReporter();
         abort();
+    }
 }
 
 int main(int argc, char *argv[])
@@ -175,9 +184,27 @@ int main(int argc, char *argv[])
         app.setDesktopFileName(QStringLiteral("totm"));
     }
 
+    if (CrashReporter::isReporterMode()) {
+        CrashReporter *report = CrashReporter::shared();
+        g_crashReporter = report;
+        if (!report->hasCrash() || report->anotherReporterShown())
+            return 0;
+        QQmlApplicationEngine engine;
+        engine.addImportPath(QStringLiteral("qrc:/"));
+        PluginNetworkFactory networkFactory;
+        engine.setNetworkAccessManagerFactory(&networkFactory);
+        QObject::connect(
+            &engine, &QQmlApplicationEngine::objectCreationFailed,
+            &app, []() { QCoreApplication::exit(-1); },
+            Qt::QueuedConnection);
+        engine.loadFromModule(QStringLiteral("Totm"), QStringLiteral("CrashWindow"));
+        return app.exec();
+    }
+
     // File association: the desktop entry passes dropped/opened .totm
     // bundles as argv (Exec=totm %F). Forward existing ones as file urls
     // for Main.qml to import + open on launch; anything else is ignored.
+    CrashHandler::install(QCoreApplication::applicationFilePath());
     QStringList openFiles;
     const QStringList args = QCoreApplication::arguments();
     for (int i = 1; i < args.size(); ++i) {
@@ -198,6 +225,17 @@ int main(int argc, char *argv[])
     }
 
     QQmlApplicationEngine engine;
+    CrashReporter *crashReporter = CrashReporter::shared();
+    g_crashReporter = crashReporter;
+    crashReporter->markRunning();
+    if (crashReporter->hasCrash()) {
+        qWarning() << "totm: previous run did not shut down cleanly; opening the crash reporter.";
+        crashReporter->writePendingReport();
+        QProcess::startDetached(QCoreApplication::applicationFilePath(),
+                                {QStringLiteral("--crash-report")});
+    }
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, crashReporter,
+                     &CrashReporter::markCleanExit);
     // Resolve the Totm module from embedded resources (:/Totm/qmldir), so
     // packaged builds need no module files beside the executable (a Totm/
     // dir would collide with the `totm` exe on case-insensitive filesystems).
