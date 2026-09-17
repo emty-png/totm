@@ -3,21 +3,38 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Totm
 
-// Template picker: centered modal listing every starter template.
-// Opens from the header Template button; picking builds a new design
-// through usePolicy (HomeView.homeNewFromTemplate) and closes.
+// Template picker: centered modal with a rendered scene preview per
+// starter template. Opens from the header Template button; picking
+// builds a new design through usePolicy (HomeView.homeNewFromTemplate)
+// and closes. Previews build once on first open from the same
+// one-undo-entry builders, so tiles match what a new design opens with.
 Popup {
     id: menu
 
     property var templateLib: null
     property var usePolicy: null
 
+    // Preview scenes by template id. Reassigned wholesale so card
+    // bindings update; temp documents are destroyed after snapshotting.
+    property var scenes: ({})
+
+    readonly property Component documentFactory: Component {
+        Document {}
+    }
+
     anchors.centerIn: parent
-    implicitWidth: 300
+    implicitWidth: 380
     padding: 12
     modal: true
     dim: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+    // Previews build lazily here (not onOpened) so the first paint
+    // already carries them and the popup never jumps size after opening.
+    function openPicker() {
+        menu.ensurePreviews();
+        menu.open();
+    }
 
     enter: Transition {
         NumberAnimation {
@@ -64,21 +81,53 @@ Popup {
             color: AppTheme.foreground
         }
 
-        Repeater {
-            model: menu.templateLib ? menu.templateLib.templates() : []
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            columnSpacing: 8
+            rowSpacing: 8
 
-            TemplateCard {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 92
-                templateId: modelData.id
-                templateName: modelData.name
-                blurb: modelData.blurb
-                usePolicy: id => {
-                    menu.close();
-                    if (menu.usePolicy)
-                        menu.usePolicy(id);
+            Repeater {
+                model: menu.templateLib ? menu.templateLib.templates() : []
+
+                TemplateCard {
+                    templateId: modelData.id
+                    templateName: modelData.name
+                    blurb: modelData.blurb
+                    scene: menu.scenes[modelData.id] ?? null
+                    usePolicy: id => {
+                        menu.close();
+                        if (menu.usePolicy)
+                            menu.usePolicy(id);
+                    }
                 }
             }
         }
+    }
+
+    // Builds each missing preview in a throwaway document (never in a
+    // tab, never saved): build, snapshot the base scene, destroy. A
+    // failed build keeps its text-only tile instead of blocking the rest.
+    function ensurePreviews() {
+        if (!menu.templateLib)
+            return;
+        var all = menu.templateLib.templates();
+        var next = Object.assign({}, menu.scenes);
+        var added = false;
+        for (var i = 0; i < all.length; i++) {
+            var id = all[i].id;
+            if (next[id] !== undefined)
+                continue;
+            var doc = menu.documentFactory.createObject(menu);
+            if (!doc)
+                continue;
+            if (menu.templateLib.build(doc, id))
+                next[id] = doc.snapshotScene();
+            doc.destroy();
+            if (next[id] !== undefined)
+                added = true;
+        }
+        if (added)
+            menu.scenes = next;
     }
 }

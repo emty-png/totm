@@ -386,7 +386,10 @@ QtObject {
         for (var i = 0; i < tops.length; i++) {
             var b = doc.bounds.bboxOfNode(tops[i]);
             if (b)
-                boxes.push({ top: tops[i], box: b });
+                boxes.push({
+                    top: tops[i],
+                    box: b
+                });
         }
         if (boxes.length < 3)
             return false;

@@ -306,7 +306,7 @@ RowLayout {
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: templateMenu.open()
+                    onClicked: templateMenu.openPicker()
                 }
             }
 

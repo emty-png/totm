@@ -6,15 +6,26 @@ import Totm
 // Purely visual: the card's own mouse area sits above and owns input.
 // Single ancestor scale keeps text/effects crisp; a hidden backdrop
 // duplicate feeds background-blur sampling like the canvas layers.
+// fitContent zooms to the union box of visible leaves (padded) instead
+// of the whole scene, so small tiles of sparse scenes stay legible;
+// the home grid keeps the full-scene fit.
 Item {
     id: preview
 
     required property var scene
+    property bool fitContent: false
 
     readonly property real sceneW: preview.scene && preview.scene.sceneWidth > 0 ? preview.scene.sceneWidth : 1920
     readonly property real sceneH: preview.scene && preview.scene.sceneHeight > 0 ? preview.scene.sceneHeight : 1080
-    readonly property real fit: Math.min(preview.width / preview.sceneW, preview.height / preview.sceneH)
     readonly property var leaves: preview.collectLeaves()
+    // Union box of visible leaves with a 6% pad, or null when it cannot
+    // apply (disabled, empty scene): callers fall back to full-scene fit.
+    readonly property var contentBox: preview.fitContent ? preview.unionBox() : null
+    readonly property real viewX: preview.contentBox ? preview.contentBox.x : 0
+    readonly property real viewY: preview.contentBox ? preview.contentBox.y : 0
+    readonly property real viewW: preview.contentBox ? preview.contentBox.w : preview.sceneW
+    readonly property real viewH: preview.contentBox ? preview.contentBox.h : preview.sceneH
+    readonly property real fit: Math.min(preview.width / preview.viewW, preview.height / preview.viewH)
     readonly property var backdropLeaves: preview.leaves.filter(n => !preview.isBackgroundBlurred(n))
     readonly property bool hasBackdrop: preview.backdropLeaves.length !== preview.leaves.length
 
@@ -24,16 +35,19 @@ Item {
         id: sceneBox
 
         anchors.centerIn: parent
-        width: preview.sceneW * preview.fit
-        height: preview.sceneH * preview.fit
+        width: preview.viewW * preview.fit
+        height: preview.viewH * preview.fit
         color: preview.scene && preview.scene.sceneColor !== undefined ? preview.scene.sceneColor : "#ffffff"
         clip: true
 
         // Scene-sized content scaled once: ShapeItems stay siblings so
-        // paintDepth orders them exactly like the canvas layer.
+        // paintDepth orders them exactly like the canvas layer. The
+        // content-box offset pans the cropped region into view.
         Item {
             id: scaleRoot
 
+            x: -preview.viewX * preview.fit
+            y: -preview.viewY * preview.fit
             width: preview.sceneW
             height: preview.sceneH
             scale: preview.fit
@@ -232,5 +246,35 @@ Item {
             return false;
         var b = n ? n.backgroundBlur : null;
         return !!b && b.enabled === true && Number(b.radius) > 0;
+    }
+
+    // Union box of the visible leaves (rotation ignored, like the
+    // selection bbox), padded 6% and floored at 1px. Null when empty so
+    // the empty-canvas placeholder keeps the full-scene fit.
+    function unionBox() {
+        var leaves = preview.leaves;
+        if (leaves.length === 0)
+            return null;
+        var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (var i = 0; i < leaves.length; i++) {
+            var n = leaves[i] || {};
+            var x = Number(n.x) || 0, y = Number(n.y) || 0;
+            var w = Math.max(1, Number(n.w) || 0), h = Math.max(1, Number(n.h) || 0);
+            if (x < x0)
+                x0 = x;
+            if (y < y0)
+                y0 = y;
+            if (x + w > x1)
+                x1 = x + w;
+            if (y + h > y1)
+                y1 = y + h;
+        }
+        var pad = Math.max((x1 - x0) * 0.06, (y1 - y0) * 0.06, 8);
+        return {
+            x: x0 - pad,
+            y: y0 - pad,
+            w: Math.max(1, (x1 - x0) + pad * 2),
+            h: Math.max(1, (y1 - y0) + pad * 2)
+        };
     }
 }
