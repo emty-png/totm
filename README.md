@@ -31,7 +31,7 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 
 ## Install
 
-Grab `0.1.0` from the [Releases page](https://github.com/emty-png/totm/releases):
+Grab the version you want from the [Releases page](https://github.com/emty-png/totm/releases):
 
 * **Ubuntu / Debian:** `totm-x86_64.AppImage` — `chmod +x` and run. On Ubuntu 24.04+ install FUSE first (`sudo apt install libfuse2t64`). `ffmpeg` is bundled inside, video export works out of the box.
 * **Arch:** build `packaging/arch/PKGBUILD` with `makepkg -si` (deps: `qt6-base qt6-declarative qt6-svg qt6-multimedia qt6-multimedia-ffmpeg qt6-shadertools ffmpeg`).

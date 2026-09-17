@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     // Identity drives QSettings (org "tot", app "totm") and QStandardPaths.
     app.setApplicationName(QStringLiteral("totm"));
-    app.setApplicationVersion(QStringLiteral("0.1.0"));
+    app.setApplicationVersion(QStringLiteral("0.1.2"));
     app.setOrganizationName(QStringLiteral("tot"));
     // Window/taskbar icon (X11, Wayland, Windows).
     app.setWindowIcon(QIcon(QStringLiteral(":/icons/totm.png")));
