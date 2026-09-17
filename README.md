@@ -95,7 +95,7 @@ No winget? Grab a build at <https://www.gyan.dev/ffmpeg/builds/>, unzip it and a
 
 ### Desktop integration (Linux)
 
-`cmake --install build/dev` installs `totm` with its hicolor icons and desktop entry, so it shows up in your launcher with the proper logo on both X11 and Wayland.
+`cmake --install build/dev` installs `totm` with its hicolor icons and desktop entry, so it shows up in your launcher with the proper logo on both X11 and Wayland. The install also registers the `.totm` bundle type (`application/x-totm-design`) and makes totm its default handler, so double-clicking a `.totm` file imports it into the running window instead of spawning a second one (same on Windows via the installer association and macOS via the bundle document type).
 
 ## Contributing
 

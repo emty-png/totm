@@ -170,6 +170,15 @@ QtObject {
     function duplicateClips(ids) {
         return anim.duplicateClips(ids);
     }
+    function copyClips(ids) {
+        return anim.copyClips(ids);
+    }
+    function copySelectedClips() {
+        return anim.copySelectedClips();
+    }
+    function pasteClips(templates, targetUids, baseTime) {
+        return anim.pasteClips(templates, targetUids, baseTime);
+    }
     function setAnimDuration(v) {
         return anim.setDuration(v);
     }
@@ -492,6 +501,24 @@ QtObject {
     function flipSelectedV() {
         history.checkpoint();
         edits.flipSelectedV();
+    }
+    function alignSelected(mode) {
+        // Pre-check before checkpoint so single selections never stage
+        // an empty undo entry; edits re-validates locks/bounds.
+        if (selectedTops().length < 2)
+            return false;
+        if (["hLeft", "hCenter", "hRight", "vTop", "vMiddle", "vBottom"].indexOf(mode) < 0)
+            return false;
+        history.checkpoint();
+        return edits.alignSelection(mode);
+    }
+    function distributeSelected(axis) {
+        if (selectedTops().length < 3)
+            return false;
+        if (axis !== "h" && axis !== "v")
+            return false;
+        history.checkpoint();
+        return edits.distributeSelected(axis);
     }
     function selectedLeafSnapshot() {
         return edits.selectedLeafSnapshot();

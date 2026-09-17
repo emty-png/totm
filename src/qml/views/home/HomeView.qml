@@ -1,4 +1,6 @@
+import QtCore
 import QtQuick
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import Totm
 
@@ -15,6 +17,8 @@ RowLayout {
 
     property string selectedWorkspaceId: ""
     property string editingDesignId: ""
+    // Pending design for the .totm export save dialog.
+    property string exportDesignId: ""
     // Placeholder settings view; true while the sidebar Settings entry
     // owns the content area instead of a workspace grid.
     property bool settingsSelected: false
@@ -117,6 +121,20 @@ RowLayout {
         if (made.length > 0)
             homeView.selection.selectedIds = made;
         homeView.refreshFiltered();
+    }
+
+    // .totm share: export writes name + scene + blobs via the store
+    // (errors surface in the global bar); import remaps blobs under
+    // fresh names and selects the new card.
+    function homeExportDesign(designId) {
+        if (!designId)
+            return;
+        LibraryStore.clearError();
+        homeView.exportDesignId = designId;
+        var info = LibraryStore.design(designId);
+        var base = (info && info.name) || "design";
+        exportDialog.currentFile = StandardPaths.writableLocation(StandardPaths.DocumentsLocation) + "/" + base + ".totm";
+        exportDialog.open();
     }
 
     function homeToggleStarSelected() {
@@ -258,52 +276,70 @@ RowLayout {
                 elide: Text.ElideRight
                 color: AppTheme.foreground
             }
-        }
 
-        // Starter templates: fixed strip above the grid (never inside the
-        // marquee area), so it stays at hand even when the workspace is
-        // empty and never disturbs card hit-testing.
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            visible: !homeView.settingsSelected
+            Rectangle {
+                Layout.preferredWidth: templateLabel.implicitWidth + 20
+                Layout.preferredHeight: 28
+                radius: AppTheme.radiusSmall
+                border.width: 1
+                border.color: AppTheme.fieldBorder
+                color: templateMouse.containsMouse || templateMouse.pressed ? AppTheme.hover : AppTheme.surface
 
-            Text {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                text: qsTr("Start from a template")
-                font.pixelSize: 13
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
-                color: AppTheme.foreground
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 100
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                Text {
+                    id: templateLabel
+                    anchors.centerIn: parent
+                    text: qsTr("Template")
+                    font.pixelSize: 12
+                    color: templateMouse.containsMouse || templateMouse.pressed ? AppTheme.foreground : AppTheme.muted
+                }
+
+                MouseArea {
+                    id: templateMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: templateMenu.open()
+                }
             }
 
-            Flickable {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 100
-                contentWidth: templateRow.implicitWidth + 32
-                clip: true
-                flickableDirection: Flickable.HorizontalFlick
+            Rectangle {
+                Layout.preferredWidth: importLabel.implicitWidth + 20
+                Layout.preferredHeight: 28
+                radius: AppTheme.radiusSmall
+                border.width: 1
+                border.color: AppTheme.fieldBorder
+                color: importMouse.containsMouse || importMouse.pressed ? AppTheme.hover : AppTheme.surface
 
-                Row {
-                    id: templateRow
-
-                    x: 16
-                    y: 4
-                    height: 92
-                    spacing: 12
-
-                    Repeater {
-                        model: homeView.templateLib.templates()
-
-                        TemplateCard {
-                            templateId: modelData.id
-                            templateName: modelData.name
-                            blurb: modelData.blurb
-                            usePolicy: id => homeView.homeNewFromTemplate(id)
-                        }
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 100
+                        easing.type: Easing.OutCubic
                     }
+                }
+
+                Text {
+                    id: importLabel
+                    anchors.centerIn: parent
+                    text: qsTr("Import")
+                    font.pixelSize: 12
+                    color: importMouse.containsMouse || importMouse.pressed ? AppTheme.foreground : AppTheme.muted
+                }
+
+                MouseArea {
+                    id: importMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: importDialog.open()
                 }
             }
         }
@@ -451,11 +487,50 @@ RowLayout {
                     homeView.editingDesignId = id;
                 }
                 starPolicy: id => LibraryStore.toggleStarred(id)
+                exportPolicy: id => homeView.homeExportDesign(id)
                 deletePolicy: id => {
                     homeView.selection.deleteDesignOrSelected(id);
                 }
             }
         }
+    }
+
+    FileDialog {
+        id: exportDialog
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("totm design (*.totm)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        onAccepted: {
+            if (homeView.exportDesignId !== "")
+                LibraryStore.exportDesign(homeView.exportDesignId, exportDialog.selectedFile);
+            homeView.exportDesignId = "";
+        }
+        onRejected: homeView.exportDesignId = ""
+    }
+
+    FileDialog {
+        id: importDialog
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("totm design (*.totm)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        onAccepted: {
+            LibraryStore.clearError();
+            var ws = homeView.selectedWorkspaceId || LibraryStore.defaultWorkspaceId;
+            var id = LibraryStore.importDesign(ws, importDialog.selectedFile);
+            if (id) {
+                homeView.refreshFiltered();
+                homeView.selection.selectOnly(id);
+            }
+        }
+    }
+
+    // Starter-template picker for the header Template button. Same
+    // templates as the strip below, modal so a pick or outside press
+    // resolves it.
+    TemplateMenu {
+        id: templateMenu
+        templateLib: homeView.templateLib
+        usePolicy: id => homeView.homeNewFromTemplate(id)
     }
 
     // The selected workspace can disappear (deleted elsewhere); fall back

@@ -23,6 +23,35 @@ ApplicationWindow {
     Component.onCompleted: {
         root.restoreWindow();
         PluginStore.scan();
+        // File association: import .totm bundles passed on the command
+        // line (double-click / Open With) into the default workspace and
+        // open each in its own tab. Failures surface in the error bar.
+        if (typeof totmOpenFiles !== "undefined")
+            root.openTotmFiles(totmOpenFiles);
+    }
+
+    // Shared by launch args and the single-instance signal below.
+    function openTotmFiles(urls) {
+        var list = urls || [];
+        if (list.length === 0)
+            return;
+        var ws = LibraryStore.defaultWorkspaceId;
+        for (var i = 0; i < list.length; i++) {
+            var id = LibraryStore.importDesign(ws, list[i]);
+            if (id)
+                TabState.openDesign(id);
+        }
+    }
+
+    // Single-instance forwards: later .totm opens land in this window
+    // (imported like launch args) and raise it. Empty means raise-only.
+    Connections {
+        target: totmSingleInstance
+        function onFilesRequested(urls) {
+            root.openTotmFiles(urls || []);
+            root.raise();
+            root.requestActivate();
+        }
     }
 
     ColumnLayout {

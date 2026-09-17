@@ -12,6 +12,7 @@
 #include <QStandardPaths>
 #include <QUrl>
 #include <QUuid>
+#include <functional>
 
 namespace {
 constexpr int kSchemaVersion = 2;
@@ -428,6 +429,228 @@ quint64 LibraryStore::audioDiskUsage() const {
 
 int LibraryStore::audioCount() const {
     return QDir(audioDir()).entryList(QDir::Files).size();
+}
+
+bool LibraryStore::exportDesign(const QString &id, const QUrl &destination) {
+    const int at = findDesign(id);
+    if (at < 0) {
+        setLastError(tr("Design not found."));
+        return false;
+    }
+    QString local = destination.isLocalFile() ? destination.toLocalFile() : destination.toString();
+    if (local.isEmpty()) {
+        setLastError(tr("Pick a destination file first."));
+        return false;
+    }
+    if (!local.endsWith(QStringLiteral(".totm"), Qt::CaseInsensitive))
+        local += QStringLiteral(".totm");
+    const QVariantMap scene = entryToScene(m_designEntries.at(at).scene);
+    // Referenced blobs for this scene only (groups included).
+    QSet<QString> images;
+    QList<QVariantList> stack;
+    stack.append(scene.value(QStringLiteral("nodes")).toList());
+    while (!stack.isEmpty()) {
+        const QVariantList nodes = stack.takeLast();
+        for (const QVariant &v : nodes) {
+            const QVariantMap n = v.toMap();
+            const QString src = n.value(QStringLiteral("imageSource")).toString();
+            if (!src.isEmpty())
+                images.insert(src);
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+                stack.append(n.value(QStringLiteral("children")).toList());
+        }
+    }
+    QSet<QString> audios;
+    const QVariantMap audio = scene.value(QStringLiteral("audio")).toMap();
+    for (const QVariant &v : audio.value(QStringLiteral("clips")).toList()) {
+        const QString src = v.toMap().value(QStringLiteral("source")).toString();
+        if (!src.isEmpty())
+            audios.insert(src);
+    }
+    // Missing blobs are skipped so one lost file never blocks sharing.
+    QJsonObject imageBlobs;
+    for (const QString &name : images) {
+        if (!isSafeImageName(name))
+            continue;
+        QFile f(imagesDir() + QStringLiteral("/") + name);
+        if (!f.open(QIODevice::ReadOnly))
+            continue;
+        const QByteArray raw = f.readAll();
+        if (!raw.isEmpty())
+            imageBlobs[name] = QString::fromLatin1(raw.toBase64());
+    }
+    QJsonObject audioBlobs;
+    for (const QString &name : audios) {
+        if (!isSafeAudioName(name))
+            continue;
+        QFile f(audioDir() + QStringLiteral("/") + name);
+        if (!f.open(QIODevice::ReadOnly))
+            continue;
+        const QByteArray raw = f.readAll();
+        if (!raw.isEmpty())
+            audioBlobs[name] = QString::fromLatin1(raw.toBase64());
+    }
+    const QJsonObject root{
+        {QStringLiteral("app"), QStringLiteral("totm")},
+        {QStringLiteral("kind"), QStringLiteral("totm-design")},
+        {QStringLiteral("version"), kSchemaVersion},
+        {QStringLiteral("name"), m_designEntries.at(at).name},
+        {QStringLiteral("scene"), QJsonObject::fromVariantMap(scene)},
+        {QStringLiteral("blobs"), QJsonObject{
+                                      {QStringLiteral("images"), imageBlobs},
+                                      {QStringLiteral("audio"), audioBlobs},
+                                  }},
+    };
+    QSaveFile out(local);
+    if (!out.open(QIODevice::WriteOnly)) {
+        setLastError(tr("Could not write that file: %1").arg(out.errorString()));
+        return false;
+    }
+    out.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    if (!out.commit()) {
+        setLastError(tr("Could not write that file: %1").arg(out.errorString()));
+        return false;
+    }
+    clearError();
+    return true;
+}
+
+QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &source) {
+    QString local = source.isLocalFile() ? source.toLocalFile() : source.toString();
+    if (local.isEmpty()) {
+        setLastError(tr("Pick a .totm file first."));
+        return {};
+    }
+    QFile f(local);
+    if (!f.open(QIODevice::ReadOnly)) {
+        setLastError(tr("Could not read that file."));
+        return {};
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &parseError);
+    const QJsonObject root = doc.object();
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()
+        || root.value(QStringLiteral("app")).toString() != QLatin1String("totm")
+        || root.value(QStringLiteral("kind")).toString() != QLatin1String("totm-design")
+        || !root.value(QStringLiteral("scene")).isObject()) {
+        setLastError(tr("That file is not a totm design."));
+        return {};
+    }
+    const QString target = findWorkspace(workspaceId) >= 0 ? workspaceId : m_defaultWorkspaceId;
+    QVariantMap scene = entryToScene(root.value(QStringLiteral("scene")).toObject().toVariantMap());
+    const QJsonObject blobs = root.value(QStringLiteral("blobs")).toObject();
+    const QJsonObject imageBlobs = blobs.value(QStringLiteral("images")).toObject();
+    const QJsonObject audioBlobs = blobs.value(QStringLiteral("audio")).toObject();
+    static const QSet<QString> imageOk{
+        QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
+        QStringLiteral("webp"), QStringLiteral("gif"), QStringLiteral("svg")};
+    static const QSet<QString> audioOk{
+        QStringLiteral("mp3"), QStringLiteral("wav"),
+        QStringLiteral("ogg"), QStringLiteral("flac")};
+    // Remap helper: store each referenced blob under a fresh uuid name so
+    // imports never collide with library files. Missing/invalid blobs
+    // keep their refs (canvas shows the neutral placeholder, export
+    // skips them) instead of failing the whole import.
+    QHash<QString, QString> imageMap;
+    {
+        QSet<QString> refs;
+        QList<QVariantList> stack;
+        stack.append(scene.value(QStringLiteral("nodes")).toList());
+        while (!stack.isEmpty()) {
+            const QVariantList nodes = stack.takeLast();
+            for (const QVariant &v : nodes) {
+                const QVariantMap n = v.toMap();
+                const QString src = n.value(QStringLiteral("imageSource")).toString();
+                if (!src.isEmpty())
+                    refs.insert(src);
+                if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+                    stack.append(n.value(QStringLiteral("children")).toList());
+            }
+        }
+        QDir().mkpath(imagesDir());
+        for (const QString &ref : refs) {
+            const QString b64 = imageBlobs.value(ref).toString();
+            if (b64.isEmpty())
+                continue;
+            const QByteArray raw = QByteArray::fromBase64(b64.toLatin1());
+            if (raw.isEmpty() || raw.size() > 100 * 1024 * 1024)
+                continue;
+            QString suffix = ref.section(QLatin1Char('.'), -1).toLower();
+            if (!imageOk.contains(suffix))
+                suffix = QStringLiteral("png");
+            const QString fresh = newId() + QStringLiteral(".") + suffix;
+            QFile out(imagesDir() + QStringLiteral("/") + fresh);
+            if (!out.open(QIODevice::WriteOnly) || out.write(raw) != raw.size())
+                continue;
+            imageMap.insert(ref, fresh);
+        }
+        if (!imageMap.isEmpty()) {
+            std::function<void(QVariantList &)> rewrite = [&](QVariantList &nodes) {
+                for (int i = 0; i < nodes.size(); ++i) {
+                    QVariantMap n = nodes.at(i).toMap();
+                    const QString src = n.value(QStringLiteral("imageSource")).toString();
+                    if (!src.isEmpty() && imageMap.contains(src))
+                        n[QStringLiteral("imageSource")] = imageMap.value(src);
+                    if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group")) {
+                        QVariantList kids = n.value(QStringLiteral("children")).toList();
+                        rewrite(kids);
+                        n[QStringLiteral("children")] = kids;
+                    }
+                    nodes[i] = n;
+                }
+            };
+            QVariantList nodes = scene.value(QStringLiteral("nodes")).toList();
+            rewrite(nodes);
+            scene[QStringLiteral("nodes")] = nodes;
+        }
+    }
+    {
+        QVariantMap audio = scene.value(QStringLiteral("audio")).toMap();
+        QVariantList clips = audio.value(QStringLiteral("clips")).toList();
+        bool changed = false;
+        QDir().mkpath(audioDir());
+        for (int i = 0; i < clips.size(); ++i) {
+            QVariantMap c = clips.at(i).toMap();
+            const QString ref = c.value(QStringLiteral("source")).toString();
+            if (ref.isEmpty())
+                continue;
+            const QString b64 = audioBlobs.value(ref).toString();
+            if (b64.isEmpty())
+                continue;
+            const QByteArray raw = QByteArray::fromBase64(b64.toLatin1());
+            if (raw.isEmpty() || raw.size() > 100 * 1024 * 1024)
+                continue;
+            QString suffix = ref.section(QLatin1Char('.'), -1).toLower();
+            if (!audioOk.contains(suffix))
+                continue;
+            const QString fresh = newId() + QStringLiteral(".") + suffix;
+            QFile out(audioDir() + QStringLiteral("/") + fresh);
+            if (!out.open(QIODevice::WriteOnly) || out.write(raw) != raw.size())
+                continue;
+            c[QStringLiteral("source")] = fresh;
+            clips[i] = c;
+            changed = true;
+        }
+        if (changed) {
+            audio[QStringLiteral("clips")] = clips;
+            scene[QStringLiteral("audio")] = audio;
+        }
+    }
+    DesignEntry entry;
+    entry.id = newId();
+    entry.workspaceId = target;
+    entry.name = trimmedName(root.value(QStringLiteral("name")).toString(), tr("Imported"));
+    entry.createdAt = nowIso();
+    entry.updatedAt = entry.createdAt;
+    entry.scene = entryToScene(scene);
+    m_designEntries.prepend(entry);
+    if (!writeDesignFile(entry.id, entry.scene) || !persist()) {
+        m_designEntries.removeAt(findDesign(entry.id));
+        return {};
+    }
+    rebuild();
+    clearError();
+    return entry.id;
 }
 
 QSet<QString> LibraryStore::referencedAudio() const {

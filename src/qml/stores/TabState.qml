@@ -20,6 +20,10 @@ QtObject {
     // Shape clipboard (plain snapshots, app-wide so paste works across
     // tabs). Reassigned wholesale so bindings update.
     property var clipboard: []
+    // Animation clipboard: copyClips templates (preset/duration/dt/mode/
+    // loop/options/easing, no ids or targets) app-wide so clips paste
+    // across shapes and designs. Reassigned wholesale like clipboard.
+    property var animClipboard: []
     readonly property Component documentFactory: Component {
         Document {}
     }

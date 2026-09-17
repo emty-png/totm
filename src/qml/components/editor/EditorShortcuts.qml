@@ -39,20 +39,59 @@ Item {
         return !!d && d.audio.selectedAudioIds.length > 0;
     }
 
-    function canPaste() {
+    function canPasteShapes() {
         return TabState.clipboard.length > 0;
+    }
+
+    function canPasteClips() {
+        var d = shortcuts.doc();
+        return TabState.animClipboard.length > 0 && !!d && d.selectedTops().length > 0;
+    }
+
+    function canPaste() {
+        return shortcuts.canPasteShapes() || shortcuts.canPasteClips();
     }
 
     function doCopy() {
         var d = shortcuts.doc();
-        if (d && shortcuts.hasShapes())
+        if (!d)
+            return;
+        // Copy whatever is selected: clips go to the animation clipboard
+        // (cross-shape/design templates), shapes to the shape clipboard.
+        // Both can fill on one press when both selections exist.
+        if (shortcuts.hasClips())
+            TabState.animClipboard = d.copySelectedClips();
+        if (shortcuts.hasShapes())
             TabState.clipboard = d.copySelected();
     }
 
     function doPaste() {
         var d = shortcuts.doc();
-        if (d && shortcuts.canPaste())
+        if (!d)
+            return;
+        // Animate mode pastes clips onto the selected tops (earliest at
+        // the playhead); design mode (or no clip targets) pastes shapes.
+        if (shortcuts.panel && shortcuts.panel.mode === "animate" && shortcuts.canPasteClips()) {
+            var tops = d.selectedTops();
+            var uids = [];
+            for (var i = 0; i < tops.length; i++)
+                uids.push(tops[i].uid);
+            d.pasteClips(TabState.animClipboard, uids);
+        } else if (shortcuts.canPasteShapes()) {
             d.insertCopies(TabState.clipboard);
+        }
+    }
+
+    function doDuplicate() {
+        var d = shortcuts.doc();
+        if (!d)
+            return;
+        // Animate mode with a clip selection duplicates clips at the
+        // playhead; otherwise duplicate the selected shapes.
+        if (shortcuts.panel && shortcuts.panel.mode === "animate" && shortcuts.hasClips())
+            d.duplicateClips(d.anim.selectedClipIds);
+        else if (shortcuts.hasShapes())
+            d.duplicateSelected();
     }
 
     function doNudge(dx, dy) {
@@ -114,7 +153,7 @@ Item {
 
     Shortcut {
         sequences: [ShortcutState.editCopy]
-        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && (shortcuts.hasShapes() || shortcuts.hasClips())
         onActivated: {
             if (shortcuts.guarded())
                 return;
@@ -124,7 +163,7 @@ Item {
 
     Shortcut {
         sequences: [ShortcutState.editPaste]
-        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.canPaste()
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && (shortcuts.canPasteShapes() || shortcuts.canPasteClips())
         onActivated: {
             if (shortcuts.guarded())
                 return;
@@ -134,13 +173,11 @@ Item {
 
     Shortcut {
         sequences: [ShortcutState.editDuplicate]
-        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && (shortcuts.hasShapes() || shortcuts.hasClips())
         onActivated: {
             if (shortcuts.guarded())
                 return;
-            var d = shortcuts.doc();
-            if (d)
-                d.duplicateSelected();
+            shortcuts.doDuplicate();
         }
     }
 

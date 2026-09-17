@@ -3,10 +3,10 @@ import QtQuick.Layouts
 import Totm
 
 // Position editors: X/Y plus rotation with quarter-turn and mirror
-// actions. Group selections edit the bbox (scales the subtree); shape
-// selections edit leaves via snapshot.setAll. Rotation row stays
-// shape-only; flips mirror paint, bbox untouched.
-// Alignment intentionally omitted: no canvas align model exists yet.
+// actions, plus canvas align/distribute for multi-selections. Group
+// selections edit the bbox (scales the subtree); shape selections edit
+// leaves via snapshot.setAll. Rotation row stays shape-only; flips
+// mirror paint, bbox untouched.
 PanelSection {
     id: section
 
@@ -115,6 +115,84 @@ PanelSection {
                     active: section.flipCommon("flipV")
                     onClicked: section.doc.flipSelectedV()
                 }
+            }
+        }
+    }
+
+    // Canvas align: unlocked tops to their union box. Needs 2+ tops;
+    // single selections have nothing to align against.
+    ColumnLayout {
+        visible: section.snapshot.tops.length > 1
+        spacing: 4
+
+        Text {
+            text: qsTr("Align")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            spacing: 8
+
+            AlignOption {
+                mode: "hLeft"
+                onClicked: section.doc.alignSelected("hLeft")
+            }
+
+            AlignOption {
+                mode: "hCenter"
+                onClicked: section.doc.alignSelected("hCenter")
+            }
+
+            AlignOption {
+                mode: "hRight"
+                onClicked: section.doc.alignSelected("hRight")
+            }
+        }
+
+        RowLayout {
+            spacing: 8
+
+            AlignOption {
+                mode: "vTop"
+                onClicked: section.doc.alignSelected("vTop")
+            }
+
+            AlignOption {
+                mode: "vMiddle"
+                onClicked: section.doc.alignSelected("vMiddle")
+            }
+
+            AlignOption {
+                mode: "vBottom"
+                onClicked: section.doc.alignSelected("vBottom")
+            }
+        }
+    }
+
+    // Even center spacing between the first and last tops. First/last
+    // stay put, middles spread; needs 3+ tops to have a middle.
+    ColumnLayout {
+        visible: section.snapshot.tops.length > 2
+        spacing: 4
+
+        Text {
+            text: qsTr("Distribute")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Horizontal")
+                onClicked: section.doc.distributeSelected("h")
+            }
+
+            SegmentedOption {
+                label: qsTr("Vertical")
+                onClicked: section.doc.distributeSelected("v")
             }
         }
     }

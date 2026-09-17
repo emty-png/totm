@@ -127,6 +127,14 @@ public:
     Q_INVOKABLE quint64 audioDiskUsage() const;
     Q_INVOKABLE int audioCount() const;
 
+    // Project share: single-file .totm bundle (JSON with base64 blobs).
+    // exportDesign writes name + normalized scene + referenced image/audio
+    // blobs; importDesign validates, stores blobs under fresh uuid names
+    // with scene refs remapped, creates the design, returns its id ("" on
+    // failure with lastError set). QML drives both via FileDialogs.
+    Q_INVOKABLE bool exportDesign(const QString &id, const QUrl &destination);
+    Q_INVOKABLE QString importDesign(const QString &workspaceId, const QUrl &source);
+
 signals:
     void libraryChanged();
     void lastErrorChanged();
