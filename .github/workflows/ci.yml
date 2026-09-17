@@ -31,6 +31,13 @@ jobs:
         run: |
           shopt -s globstar
           qmllint src/qml/**/*.qml
+      # .totm association files: the desktop entry must validate and the
+      # MIME XML must stay well-formed, or file managers drop the default.
+      - name: Validate desktop entry and MIME type
+        run: |
+          sudo apt-get update && sudo apt-get install -y desktop-file-utils libxml2-utils
+          desktop-file-validate packaging/totm.desktop
+          xmllint --noout packaging/mime/totm.xml
 
   build:
     strategy:
@@ -63,6 +70,14 @@ jobs:
         run: cmake --preset ci
       - name: Build
         run: cmake --build --preset ci
+      # macOS .totm association: the bundled plist must parse and carry
+      # the document type plus exported UTI, or Finder opens never arrive.
+      - name: Validate bundle document types (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          PLIST="build/ci/src/totm.app/Contents/Info.plist"
+          plutil -lint "$PLIST"
+          grep -q "com.tot.totm.design" "$PLIST"
 
   pkgbuild:
     runs-on: ubuntu-24.04

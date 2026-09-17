@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QFont>
 #include <QImage>
 #include <QImageReader>
@@ -281,6 +282,10 @@ protected:
 #endif
         proc.start();
         if (!proc.waitForStarted(10000)) {
+            // A half-started child outlives this scope otherwise (same
+            // Destroyed-while-running warning as the timeout paths).
+            proc.kill();
+            proc.waitForFinished(5000);
             emit renderError(tr("Could not start ffmpeg."));
             return;
         }
@@ -350,11 +355,13 @@ protected:
                 }
                 off += wrote;
                 left -= wrote;
-                // Bounded pipe waits (500ms polls, 30s cap) keep cancel
-                // responsive under ffmpeg backpressure.
+                // Bounded pipe waits (500ms polls, 60s cap) keep cancel
+                // responsive under ffmpeg backpressure. The cap is
+                // generous on purpose: a slow box on x264-slow at 4K can
+                // stall a 33MB frame for many seconds per poll.
                 if (left > 0 && !proc.waitForBytesWritten(500)) {
                     waitedMs += 500;
-                    if (waitedMs > 30000) {
+                    if (waitedMs > 60000) {
                         failMsg = tr("Timed out writing to ffmpeg.");
                         ok = false;
                         break;
@@ -371,9 +378,11 @@ protected:
         }
 
         proc.closeWriteChannel();
-        // Bounded finish wait with live cancel, same pattern as the pipe.
+        // Bounded finish wait with live cancel, same pattern as the pipe
+        // (500ms polls, 60s cap): draining delayed frames plus the
+        // faststart rewrite runs long on slow disks/encoders.
         bool finished = false;
-        for (int i = 0; i < 60; ++i) {
+        for (int i = 0; i < 120; ++i) {
             if (proc.waitForFinished(500)) {
                 finished = true;
                 break;
@@ -384,7 +393,11 @@ protected:
             }
         }
         if (!finished) {
+            // Wait out the kill: destroying a live QProcess warns
+            // ("Destroyed while process is still running") and can
+            // orphan the encoder.
             proc.kill();
+            proc.waitForFinished(5000);
             QFile::remove(m_tempPath);
             emit renderError(failMsg.isEmpty() ? tr("ffmpeg timed out.") : failMsg);
             return;
@@ -846,18 +859,37 @@ void VideoExporter::cancel() {
     m_thread->requestCancel();
 }
 
-bool VideoExporter::saveAs(const QUrl &destination) {
+namespace {
+// Resolved mp4 destination with the suffix appended when missing (""
+// when no usable path). Shared by the write and the QML overwrite
+// probe so the two can never disagree on the target file.
+QString saveLocalPath(const QUrl &destination)
+{
+    QString local = destination.isLocalFile() ? destination.toLocalFile() : destination.toString();
+    if (local.isEmpty()) {
+        return {};
+    }
+    if (!local.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive)) {
+        local += QStringLiteral(".mp4");
+    }
+    return local;
+}
+} // namespace
+
+bool VideoExporter::saveAs(const QUrl &destination, bool overwrite) {
     if (m_tempPath.isEmpty() || !QFile::exists(m_tempPath)) {
         setLastError(tr("No finished render to save."));
         return false;
     }
-    QString local = destination.isLocalFile() ? destination.toLocalFile() : destination.toString();
+    const QString local = saveLocalPath(destination);
     if (local.isEmpty()) {
         setLastError(tr("Pick a file to save to."));
         return false;
     }
-    if (!local.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive))
-        local += QStringLiteral(".mp4");
+    if (!overwrite && QFile::exists(local)) {
+        setLastError(tr("“%1” already exists. Confirm to replace it.").arg(QFileInfo(local).fileName()));
+        return false;
+    }
     if (QFile::exists(local) && !QFile::remove(local)) {
         setLastError(tr("Could not overwrite the chosen file."));
         return false;
@@ -867,6 +899,11 @@ bool VideoExporter::saveAs(const QUrl &destination) {
         return false;
     }
     return true;
+}
+
+bool VideoExporter::destinationExists(const QUrl &destination) const {
+    const QString local = saveLocalPath(destination);
+    return !local.isEmpty() && QFile::exists(local);
 }
 
 void VideoExporter::clearError() {

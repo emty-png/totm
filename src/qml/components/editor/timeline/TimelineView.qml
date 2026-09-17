@@ -1,7 +1,6 @@
 import QtCore
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtMultimedia
 import Totm
@@ -684,11 +683,10 @@ Item {
     // the duration before anything is copied. Only probed files get
     // imported and placed at the playhead; failures abort with nothing
     // stored (stray blobs, if any, sweep next boot).
-    FileDialog {
+    FilePicker {
         id: audioPicker
 
-        fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("Audio (*.mp3 *.wav *.ogg *.flac)")]
+        suffixes: ["mp3", "wav", "ogg", "flac"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.MusicLocation)
         onAccepted: timeline.probeAudio(selectedFile)
     }

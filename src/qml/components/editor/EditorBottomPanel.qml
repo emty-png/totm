@@ -30,6 +30,8 @@ Item {
         color: AppTheme.background
     }
 
+    // Top hairline above the timeline's opaque ruler block (which would
+    // otherwise cover it); the strip stays interactive through it.
     Rectangle {
         anchors {
             left: parent.left
@@ -39,6 +41,7 @@ Item {
         height: 1
         visible: bottomPanel.height > 1
         color: AppTheme.border
+        z: 10
     }
 
     // Timeline content. Fills to the panel top so the divider and the

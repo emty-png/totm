@@ -1,7 +1,6 @@
 import QtCore
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtMultimedia
 import Totm
@@ -287,11 +286,10 @@ ScrollView {
     // the duration before anything is copied (mirrors the timeline
     // import). The probe keeps its last file loaded: clearing the source
     // mid-demux tears down the backend pipeline under in-flight events.
-    FileDialog {
+    FilePicker {
         id: replacePicker
 
-        fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("Audio (*.mp3 *.wav *.ogg *.flac)")]
+        suffixes: ["mp3", "wav", "ogg", "flac"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.MusicLocation)
         onAccepted: panel.probeAudio(selectedFile)
     }

@@ -132,7 +132,12 @@ public:
     // blobs; importDesign validates, stores blobs under fresh uuid names
     // with scene refs remapped, creates the design, returns its id ("" on
     // failure with lastError set). QML drives both via FileDialogs.
-    Q_INVOKABLE bool exportDesign(const QString &id, const QUrl &destination);
+    // exportDesign refuses an existing destination unless overwrite is
+    // set (QML confirms first via exportDestinationExists, which applies
+    // the same .totm suffix rule so the probe never drifts from the write).
+    Q_INVOKABLE bool exportDesign(
+        const QString &id, const QUrl &destination, bool overwrite = false);
+    Q_INVOKABLE bool exportDestinationExists(const QUrl &destination) const;
     Q_INVOKABLE QString importDesign(const QString &workspaceId, const QUrl &source);
 
 signals:

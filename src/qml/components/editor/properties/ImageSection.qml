@@ -1,6 +1,5 @@
 import QtCore
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import Totm
 
@@ -72,11 +71,10 @@ PanelSection {
         }
     }
 
-    FileDialog {
+    FilePicker {
         id: replacePicker
 
-        fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("Images (*.png *.jpg *.jpeg *.webp *.gif *.svg)")]
+        suffixes: ["png", "jpg", "jpeg", "webp", "gif", "svg"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
         onAccepted: {
             var name = LibraryStore.importImage(selectedFile);
