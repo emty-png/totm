@@ -1,6 +1,5 @@
 import QtCore
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import Totm
 
@@ -19,6 +18,8 @@ RowLayout {
     property string editingDesignId: ""
     // Pending design for the .totm export save dialog.
     property string exportDesignId: ""
+    // Destination held while the overwrite confirm is up.
+    property url pendingExportUrl
     // Placeholder settings view; true while the sidebar Settings entry
     // owns the content area instead of a workspace grid.
     property bool settingsSelected: false
@@ -133,8 +134,21 @@ RowLayout {
         homeView.exportDesignId = designId;
         var info = LibraryStore.design(designId);
         var base = (info && info.name) || "design";
-        exportDialog.currentFile = StandardPaths.writableLocation(StandardPaths.DocumentsLocation) + "/" + base + ".totm";
-        exportDialog.open();
+        exportPicker.currentFolder = StandardPaths.writableLocation(StandardPaths.DocumentsLocation);
+        exportPicker.fileName = base + ".totm";
+        exportPicker.open();
+    }
+
+    // Overwrite path: existing destinations confirm through the shared
+    // popup before exportDesign runs with overwrite set.
+    function commitExport(dest, overwrite) {
+        if (homeView.exportDesignId !== "")
+            LibraryStore.exportDesign(homeView.exportDesignId, dest, overwrite);
+        homeView.exportDesignId = "";
+    }
+
+    function fileName(url) {
+        return String(url).split("/").pop();
     }
 
     function homeToggleStarSelected() {
@@ -339,7 +353,10 @@ RowLayout {
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: importDialog.open()
+                    onClicked: {
+                        importPicker.currentFolder = StandardPaths.writableLocation(StandardPaths.DocumentsLocation);
+                        importPicker.open();
+                    }
                 }
             }
         }
@@ -495,28 +512,30 @@ RowLayout {
         }
     }
 
-    FileDialog {
-        id: exportDialog
-        fileMode: FileDialog.SaveFile
-        nameFilters: [qsTr("totm design (*.totm)")]
-        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+    FilePicker {
+        id: exportPicker
+        saveMode: true
+        suffixes: ["totm"]
         onAccepted: {
-            if (homeView.exportDesignId !== "")
-                LibraryStore.exportDesign(homeView.exportDesignId, exportDialog.selectedFile);
-            homeView.exportDesignId = "";
+            var dest = exportPicker.selectedFile;
+            if (homeView.exportDesignId !== "" && LibraryStore.exportDestinationExists(dest)) {
+                homeView.pendingExportUrl = dest;
+                overwritePopup.ask(qsTr("Overwrite design?"), qsTr("“%1” already exists. Overwriting replaces it.").arg(homeView.fileName(dest)), qsTr("Overwrite"));
+            } else {
+                homeView.commitExport(dest, false);
+            }
         }
         onRejected: homeView.exportDesignId = ""
     }
 
-    FileDialog {
-        id: importDialog
-        fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("totm design (*.totm)")]
+    FilePicker {
+        id: importPicker
+        suffixes: ["totm"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
         onAccepted: {
             LibraryStore.clearError();
             var ws = homeView.selectedWorkspaceId || LibraryStore.defaultWorkspaceId;
-            var id = LibraryStore.importDesign(ws, importDialog.selectedFile);
+            var id = LibraryStore.importDesign(ws, importPicker.selectedFile);
             if (id) {
                 homeView.refreshFiltered();
                 homeView.selection.selectOnly(id);
@@ -531,6 +550,13 @@ RowLayout {
         id: templateMenu
         templateLib: homeView.templateLib
         usePolicy: id => homeView.homeNewFromTemplate(id)
+    }
+
+    // Overwrite guard for .totm exports: existing destinations resolve
+    // here before commitExport runs with overwrite set.
+    ConfirmPopup {
+        id: overwritePopup
+        onConfirmed: homeView.commitExport(homeView.pendingExportUrl, true)
     }
 
     // The selected workspace can disappear (deleted elsewhere); fall back

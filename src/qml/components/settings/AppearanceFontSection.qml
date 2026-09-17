@@ -1,6 +1,5 @@
 import QtCore
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import Totm
 
@@ -125,11 +124,10 @@ Rectangle {
         }
     }
 
-    FileDialog {
+    FilePicker {
         id: fontPicker
 
-        fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("Fonts (*.ttf *.otf *.ttc *.woff *.woff2)")]
+        suffixes: ["ttf", "otf", "ttc", "woff", "woff2"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.DownloadLocation)
         onAccepted: {
             var family = SettingsStore.importFont(fontPicker.selectedFile);

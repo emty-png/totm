@@ -56,8 +56,11 @@ public:
     // Requests cancellation; the worker deletes the partial and emits cancelled().
     Q_INVOKABLE void cancel();
     // Copies the finished temp file to destination (appends .mp4 when
-    // missing). Returns false when no finished render exists.
-    Q_INVOKABLE bool saveAs(const QUrl &destination);
+    // missing). Refuses an existing destination unless overwrite is set
+    // (QML confirms first via destinationExists, which applies the same
+    // suffix rule). Returns false when no finished render exists.
+    Q_INVOKABLE bool saveAs(const QUrl &destination, bool overwrite = false);
+    Q_INVOKABLE bool destinationExists(const QUrl &destination) const;
     Q_INVOKABLE void clearError();
     // Empty when no ffmpeg binary is on PATH.
     Q_INVOKABLE static QString ffmpegPath();

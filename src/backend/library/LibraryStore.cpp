@@ -31,6 +31,20 @@ QString newId() {
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
+// Resolved .totm destination: local path with the suffix appended when
+// missing ("", when no usable path). Shared by the write and the QML
+// overwrite probe so the two can never disagree on the target file.
+QString exportLocalPath(const QUrl &destination) {
+    QString local = destination.isLocalFile() ? destination.toLocalFile() : destination.toString();
+    if (local.isEmpty()) {
+        return {};
+    }
+    if (!local.endsWith(QStringLiteral(".totm"), Qt::CaseInsensitive)) {
+        local += QStringLiteral(".totm");
+    }
+    return local;
+}
+
 QVariantMap entryToScene(const QVariantMap &scene) {
     // Contract: persist only the keys the loader understands. Extra QML
     // keys are dropped; missing keys get defaults so older documents stay
@@ -431,19 +445,21 @@ int LibraryStore::audioCount() const {
     return QDir(audioDir()).entryList(QDir::Files).size();
 }
 
-bool LibraryStore::exportDesign(const QString &id, const QUrl &destination) {
+bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool overwrite) {
     const int at = findDesign(id);
     if (at < 0) {
         setLastError(tr("Design not found."));
         return false;
     }
-    QString local = destination.isLocalFile() ? destination.toLocalFile() : destination.toString();
+    const QString local = exportLocalPath(destination);
     if (local.isEmpty()) {
         setLastError(tr("Pick a destination file first."));
         return false;
     }
-    if (!local.endsWith(QStringLiteral(".totm"), Qt::CaseInsensitive))
-        local += QStringLiteral(".totm");
+    if (!overwrite && QFile::exists(local)) {
+        setLastError(tr("“%1” already exists. Confirm to replace it.").arg(QFileInfo(local).fileName()));
+        return false;
+    }
     const QVariantMap scene = entryToScene(m_designEntries.at(at).scene);
     // Referenced blobs for this scene only (groups included).
     QSet<QString> images;
@@ -513,6 +529,11 @@ bool LibraryStore::exportDesign(const QString &id, const QUrl &destination) {
     }
     clearError();
     return true;
+}
+
+bool LibraryStore::exportDestinationExists(const QUrl &destination) const {
+    const QString local = exportLocalPath(destination);
+    return !local.isEmpty() && QFile::exists(local);
 }
 
 QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &source) {

@@ -43,6 +43,8 @@ qt_add_qml_module(totm
         backend/plugins/PluginStore.h
         backend/plugins/PluginStore.cpp
         backend/plugins/PluginNetworkGuard.h
+        backend/files/FileBrowser.h
+        backend/files/FileBrowser.cpp
     QML_FILES
         # Shell
         qml/Main.qml
@@ -165,6 +167,7 @@ qt_add_qml_module(totm
         qml/components/window/WindowResizeHandles.qml
         # Icons (global glyph set)
         qml/components/icons/AppIcon.qml
+        qml/components/icons/PickerIcons.qml
         # Selection
         qml/components/selection/DragSelection.qml
         # Editor shell
@@ -199,6 +202,9 @@ qt_add_qml_module(totm
         # Menu (shared rows)
         qml/components/menu/MenuItem.qml
         qml/components/menu/ToolbarMenuItem.qml
+        # Dialogs (shared modals)
+        qml/components/dialogs/ConfirmPopup.qml
+        qml/components/dialogs/FilePicker.qml
         # Toolbar
         qml/components/toolbar/CanvasToolbar.qml
         qml/components/toolbar/ToolbarButton.qml
@@ -256,6 +262,7 @@ target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia Qt6::Netw
 # qmltyperegistrations.cpp), so each backend dir must be on the include path.
 target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/effects
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/files
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/library
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/settings
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/video

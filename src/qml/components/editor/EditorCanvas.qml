@@ -1,6 +1,5 @@
 import QtCore
 import QtQuick
-import QtQuick.Dialogs
 import Totm
 
 // Canvas. Wheel pans, Ctrl-wheel zooms to cursor, Space-drag pans.
@@ -506,11 +505,10 @@ Item {
     // Image file picker (picker-then-place). Accepts the chosen file by
     // importing a copy into the library; cancel without a pending blob
     // falls back to select so the dead tool never sticks.
-    FileDialog {
+    FilePicker {
         id: imagePicker
 
-        fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("Images (*.png *.jpg *.jpeg *.webp *.gif *.svg)"), qsTr("PNG (*.png)"), qsTr("JPEG (*.jpg *.jpeg)"), qsTr("WebP (*.webp)"), qsTr("GIF (*.gif)"), qsTr("SVG (*.svg)")]
+        suffixes: ["png", "jpg", "jpeg", "webp", "gif", "svg"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
         onAccepted: canvas.acceptImageFile(selectedFile)
         onRejected: {
@@ -924,19 +922,34 @@ Item {
 
     // Save destination picked after a successful render (temp-then-save
     // so a dismissed dialog never leaves a stray file behind).
-    FileDialog {
-        id: saveDialog
+    // Existing destinations confirm through the shared popup before
+    // saveAs runs with overwrite set.
+    property url pendingSaveUrl
 
-        fileMode: FileDialog.SaveFile
-        nameFilters: [qsTr("MP4 video (*.mp4)")]
-        // Only the folder is preset: pointing currentFile at a
-        // non-existent path warns, the typed name comes back via
-        // selectedFile (saveAs appends .mp4 when missing).
+    FilePicker {
+        id: savePicker
+
+        saveMode: true
+        suffixes: ["mp4"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.MoviesLocation)
         onAccepted: {
-            // A failed copy must not vanish silently: the progress popup
-            // is closed on this path, so reopen it to show lastError.
-            if (!VideoExporter.saveAs(saveDialog.selectedFile))
+            var dest = savePicker.selectedFile;
+            if (VideoExporter.destinationExists(dest)) {
+                canvas.pendingSaveUrl = dest;
+                overwritePopup.ask(qsTr("Overwrite video?"), qsTr("“%1” already exists. Overwriting replaces it.").arg(canvas.fileName(dest)), qsTr("Overwrite"));
+            } else if (!VideoExporter.saveAs(dest, false)) {
+                // A failed copy must not vanish silently: the progress
+                // popup is closed on this path, so reopen it to show
+                // lastError.
+                progressPopup.open();
+            }
+        }
+    }
+
+    ConfirmPopup {
+        id: overwritePopup
+        onConfirmed: {
+            if (!VideoExporter.saveAs(canvas.pendingSaveUrl, true))
                 progressPopup.open();
         }
     }
@@ -945,7 +958,9 @@ Item {
         target: VideoExporter
         function onSucceeded() {
             progressPopup.close();
-            saveDialog.open();
+            savePicker.currentFolder = StandardPaths.writableLocation(StandardPaths.MoviesLocation);
+            savePicker.fileName = "";
+            savePicker.open();
         }
         function onFailed() {
             // Progress popup stays open showing lastError with Close.
@@ -966,5 +981,9 @@ Item {
         // Opens in both cases: live bar on success, backend error text
         // on rejection (e.g. ffmpeg missing, already rendering).
         progressPopup.open();
+    }
+
+    function fileName(url) {
+        return String(url).split("/").pop();
     }
 }
