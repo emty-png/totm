@@ -2,7 +2,10 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Starter-template card: name plus blurb, click builds a new design.
+// Starter-template card: rendered scene preview plus name and blurb,
+// click builds a new design. The scene is optional (null keeps the old
+// text-only tile); the picker fills it from one-undo-entry builder
+// snapshots so tiles match what a new design opens with.
 // Plain props with defaults (never required): Repeater delegates
 // evaluate required bindings before model context attaches, like
 // DesignCard and LayersRow.
@@ -12,10 +15,17 @@ Item {
     property string templateId: ""
     property string templateName: ""
     property string blurb: ""
+    property var scene: null
     property var usePolicy: null
 
+    readonly property bool hasPreview: card.scene !== null && card.scene !== undefined
+
     width: 220
-    height: 92
+    height: card.hasPreview ? 208 : 92
+    // Layout-friendly mirror of the explicit size, so grid/column
+    // parents size rows without delegate-side props (ignored in Rows).
+    Layout.fillWidth: true
+    Layout.preferredHeight: card.height
 
     Rectangle {
         anchors.fill: parent
@@ -32,14 +42,40 @@ Item {
         }
 
         ColumnLayout {
-            anchors {
-                left: parent.left
-                right: parent.right
-                verticalCenter: parent.verticalCenter
-                leftMargin: 12
-                rightMargin: 12
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 6
+
+            // Preview tile in the home-card language: canvas wash with
+            // a hairline overlay (children paint over the base border).
+            // Content-box fit zooms to the shapes, not the empty scene.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 104
+                visible: card.hasPreview
+                radius: AppTheme.radiusSmall
+                color: AppTheme.canvas
+
+                Item {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    clip: true
+
+                    DesignCardPreview {
+                        anchors.fill: parent
+                        scene: card.scene
+                        fitContent: true
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: AppTheme.radiusSmall
+                    color: "transparent"
+                    border.width: 1
+                    border.color: AppTheme.border
+                }
             }
-            spacing: 4
 
             Text {
                 Layout.fillWidth: true
@@ -58,6 +94,12 @@ Item {
                 maximumLineCount: 2
                 elide: Text.ElideRight
                 color: AppTheme.muted
+            }
+
+            // Absorbs layout slack so rows read top-down in both modes.
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
             }
         }
 
