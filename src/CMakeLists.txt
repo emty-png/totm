@@ -43,11 +43,16 @@ qt_add_qml_module(totm
         backend/plugins/PluginStore.h
         backend/plugins/PluginStore.cpp
         backend/plugins/PluginNetworkGuard.h
+        backend/crash/CrashReporter.h
+        backend/crash/CrashReporter.cpp
+        backend/crash/CrashHandler.h
+        backend/crash/CrashHandler.cpp
         backend/files/FileBrowser.h
         backend/files/FileBrowser.cpp
     QML_FILES
         # Shell
         qml/Main.qml
+        qml/CrashWindow.qml
         # Theme + stores (singletons)
         qml/theme/AppTheme.qml
         qml/stores/TabState.qml
@@ -267,6 +272,7 @@ target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/settings
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/video
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/plugins
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/crash
 )
 
 # Cross-platform desktop bundle settings.
