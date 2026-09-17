@@ -29,6 +29,24 @@ if(WIN32)
     set(CPACK_NSIS_PACKAGE_NAME "totm ${PROJECT_VERSION}")
     set(CPACK_NSIS_MUI_ICON "${PROJECT_SOURCE_DIR}/packaging/icons/totm.ico")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    # .totm file association: ProgId registry keys plus a shell refresh.
+    # The exe already handles argv files and single-instance forwarding,
+    # so double-click lands in the running window. Uninstall removes the
+    # keys only if they still point at totm (never steal a reassignment).
+    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
+        WriteRegStr HKCR '.totm' '' 'totm.design'
+        WriteRegStr HKCR 'totm.design' '' 'totm design'
+        WriteRegStr HKCR 'totm.design\\\\DefaultIcon' '' '$INSTDIR\\\\bin\\\\totm.exe,0'
+        WriteRegStr HKCR 'totm.design\\\\shell\\\\open\\\\command' '' '\\\"$INSTDIR\\\\bin\\\\totm.exe\\\" \\\"%1\\\"'
+        System::Call 'Shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
+    ")
+    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
+        DeleteRegKey HKCR 'totm.design'
+        ReadRegStr $0 HKCR '.totm' ''
+        StrCmp $0 'totm.design' 0 +2
+            DeleteRegValue HKCR '.totm' ''
+        System::Call 'Shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
+    ")
     configure_file(
         "${PROJECT_SOURCE_DIR}/packaging/nsis-deploy.cmake.in"
         "${PROJECT_BINARY_DIR}/nsis-deploy.cmake"

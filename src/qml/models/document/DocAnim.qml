@@ -293,6 +293,96 @@ QtObject {
         return made;
     }
 
+    // Clip copy/paste templates: plain data without ids or targets, so
+    // they survive across shapes and documents (TabState holds them
+    // app-wide). dt preserves relative offsets (earliest = 0); paste
+    // re-anchors earliest at the playhead. Options/easing deep-copy so
+    // later edits never alias the source.
+    function copyClips(ids) {
+        var asked = {};
+        var list = ids || [];
+        for (var i = 0; i < list.length; i++)
+            asked[list[i]] = true;
+        var src = [];
+        for (var j = 0; j < anim.clips.length; j++) {
+            if (asked[anim.clips[j].id])
+                src.push(anim.clips[j]);
+        }
+        if (src.length === 0)
+            return [];
+        src.sort((a, b) => (a.t0 - b.t0) || (a.id - b.id));
+        var earliest = src[0].t0;
+        var out = [];
+        for (var k = 0; k < src.length; k++) {
+            var s = src[k];
+            var ez = s.easing || {};
+            out.push({
+                preset: s.preset,
+                duration: s.duration,
+                dt: Math.max(0, s.t0 - earliest),
+                mode: s.mode,
+                loop: anim.presets.normalizeLoop(s.loop),
+                options: copyMap(s.options),
+                easing: {
+                    id: ez.id,
+                    bezier: ez.bezier ? ez.bezier.slice() : ez.bezier
+                }
+            });
+        }
+        return out;
+    }
+
+    function copySelectedClips() {
+        return anim.copyClips(anim.selectedClipIds);
+    }
+
+    // Pastes templates onto each valid target top, earliest at baseTime
+    // (default: playhead). Later clips win per property like presets.
+    // One undo entry; new ids are selected. Returns made clip ids.
+    function pasteClips(templates, targetUids, baseTime) {
+        var tmpl = templates || [];
+        if (tmpl.length === 0)
+            return [];
+        var valid = [];
+        var asked = targetUids || [];
+        for (var i = 0; i < asked.length; i++) {
+            if (doc.findNode(asked[i]))
+                valid.push(asked[i]);
+        }
+        if (valid.length === 0)
+            return [];
+        var comp = Math.max(0.5, anim.duration);
+        var base = baseTime !== undefined ? Number(baseTime) : anim.currentTime;
+        if (isNaN(base))
+            base = anim.currentTime;
+        base = Math.min(Math.max(0, base), Math.max(0, comp - 0.1));
+        var ordered = tmpl.slice().sort((a, b) => (Number(a.dt) || 0) - (Number(b.dt) || 0));
+        doc.history.checkpoint();
+        var out = anim.clips.slice();
+        var made = [];
+        for (var t = 0; t < valid.length; t++) {
+            for (var m = 0; m < ordered.length; m++) {
+                var s = ordered[m] || {};
+                if (anim.presets.presetIds().indexOf(s.preset) < 0)
+                    continue;
+                var nt0 = Math.min((Number(s.dt) || 0) + base, Math.max(0, comp - 0.1));
+                var ez = s.easing || {};
+                var clip = anim.presets.buildClip(s.preset, anim.nextClipId++, valid[t], nt0, s.duration, s.mode, copyMap(s.options), {
+                    id: ez.id,
+                    bezier: ez.bezier ? ez.bezier.slice() : ez.bezier
+                }, s.loop);
+                if (!doc.findNode(clip.targetUid))
+                    continue;
+                out.push(clip);
+                made.push(clip.id);
+            }
+        }
+        anim.clips = out;
+        anim.selectedClipIds = made.slice();
+        doc.touch();
+        return made;
+    }
+
     function setDuration(v) {
         var nd = Math.min(60, Math.max(0.5, Number(v)));
         if (isNaN(nd) || nd === anim.duration)

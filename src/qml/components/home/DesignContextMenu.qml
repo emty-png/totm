@@ -4,9 +4,9 @@ import QtQuick.Effects
 import QtQuick.Layouts
 import Totm
 
-// Design card context menu: Rename / Star-Unstar / Delete. Same card
-// language as the layers context menu. Delete covers the whole card
-// selection when the menu opened inside it.
+// Design card context menu: Rename / Star-Unstar / Export / Delete.
+// Same card language as the layers context menu. Delete covers the
+// whole card selection when the menu opened inside it.
 Item {
     id: menu
 
@@ -16,13 +16,14 @@ Item {
 
     property var renamePolicy: null
     property var starPolicy: null
+    property var exportPolicy: null
     property var deletePolicy: null
 
     function openFor(designId, starred, selectedCount, px, py) {
         menu.contextId = designId;
         menu.contextStarred = starred;
         menu.contextCount = Math.max(1, selectedCount);
-        var w = 170, h = 134;
+        var w = 170, h = 168;
         main.x = Math.min(Math.max(0, px), Math.max(0, menu.parent.width - w));
         main.y = Math.min(Math.max(0, py), Math.max(0, menu.parent.height - h));
         main.open();
@@ -104,6 +105,14 @@ Item {
                 onClicked: {
                     if (menu.starPolicy)
                         menu.starPolicy(menu.contextId);
+                    menu.closeAll();
+                }
+            }
+            MenuItem {
+                label: qsTr("Export .totm")
+                onClicked: {
+                    if (menu.exportPolicy)
+                        menu.exportPolicy(menu.contextId);
                     menu.closeAll();
                 }
             }

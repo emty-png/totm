@@ -1,10 +1,137 @@
 #include <QDebug>
+#include <QFileInfo>
+#include <QFileOpenEvent>
 #include <QGuiApplication>
+#include <QHash>
 #include <QIcon>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QStandardPaths>
+#include <QUrl>
 
 #include "PluginNetworkGuard.h"
+
+// Single-instance forwarding for .totm opens. The primary instance owns
+// a QLocalServer (socket name is per-user so two accounts never collide);
+// later launches send their file urls there and exit, so a double-click
+// lands in the running window instead of spawning a second one. macOS
+// Finder opens arrive as QFileOpenEvent instead of argv and go through
+// the same submit() path. Messages arriving before QML is ready queue
+// in m_pending and flush on setReady(); an empty request only raises.
+class SingleInstance : public QObject
+{
+    Q_OBJECT
+public:
+    explicit SingleInstance(const QString &serverName, QObject *parent = nullptr)
+        : QObject(parent)
+        , m_serverName(serverName)
+    {
+    }
+
+    void setInitialFiles(const QStringList &files)
+    {
+        m_initial = files;
+    }
+
+    // True when this process is the primary. A secondary forwards its
+    // files and the caller should exit(0) immediately.
+    bool ensurePrimary()
+    {
+        QLocalSocket probe;
+        probe.connectToServer(m_serverName);
+        if (probe.waitForConnected(500)) {
+            const QByteArray out = m_initial.join(u'\n').toUtf8();
+            if (!out.isEmpty()) {
+                probe.write(out);
+                probe.waitForBytesWritten(2000);
+            }
+            probe.disconnectFromServer();
+            return false;
+        }
+        // A crashed run can leave the socket behind; take it over.
+        QLocalServer::removeServer(m_serverName);
+        m_server = new QLocalServer(this);
+        connect(m_server, &QLocalServer::newConnection, this, &SingleInstance::acceptConnection);
+        if (!m_server->listen(m_serverName)) {
+            qWarning() << "totm: single-instance server failed:" << m_server->errorString();
+        }
+        return true;
+    }
+
+    void setReady()
+    {
+        m_ready = true;
+        if (!m_pending.isEmpty()) {
+            emit filesRequested(m_pending);
+            m_pending.clear();
+        }
+    }
+
+    void submitFiles(const QStringList &files)
+    {
+        if (m_ready) {
+            emit filesRequested(files);
+        } else {
+            m_pending += files;
+        }
+    }
+
+signals:
+    void filesRequested(const QStringList &files);
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::FileOpen) {
+            const QUrl url = static_cast<QFileOpenEvent *>(event)->url();
+            const QString path = url.isLocalFile() ? url.toLocalFile() : url.path();
+            if (!url.isEmpty() && path.endsWith(QStringLiteral(".totm"), Qt::CaseInsensitive)) {
+                submitFiles({url.toString()});
+            }
+            return true;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private slots:
+    void acceptConnection()
+    {
+        QLocalSocket *client = m_server ? m_server->nextPendingConnection() : nullptr;
+        if (!client) {
+            return;
+        }
+        connect(client, &QLocalSocket::readyRead, this, [this, client]() {
+            m_buffers[client] += client->readAll();
+        });
+        connect(client, &QLocalSocket::disconnected, this, [this, client]() {
+            m_buffers[client] += client->readAll();
+            const QStringList files = QString::fromUtf8(m_buffers.take(client))
+                                          .split(u'\n', Qt::SkipEmptyParts);
+            client->deleteLater();
+            emit filesRequested(files);
+        });
+    }
+
+private:
+    QString m_serverName;
+    QStringList m_initial;
+    QStringList m_pending;
+    bool m_ready = false;
+    QLocalServer *m_server = nullptr;
+    QHash<QLocalSocket *, QByteArray> m_buffers;
+};
+
+QString singleInstanceServerName()
+{
+    QString user = QString::fromUtf8(qgetenv("USER"));
+    if (user.isEmpty()) {
+        user = QString::fromUtf8(qgetenv("USERNAME"));
+    }
+    const QString base = QStringLiteral("totm-single-instance");
+    return user.isEmpty() ? base : base + u'-' + user;
+}
 
 // Message filter for known-benign third-party noise: KDE Breeze styling
 // of stock FileDialogs, missing desktop icon themes, the QtMultimedia
@@ -48,6 +175,28 @@ int main(int argc, char *argv[])
         app.setDesktopFileName(QStringLiteral("totm"));
     }
 
+    // File association: the desktop entry passes dropped/opened .totm
+    // bundles as argv (Exec=totm %F). Forward existing ones as file urls
+    // for Main.qml to import + open on launch; anything else is ignored.
+    QStringList openFiles;
+    const QStringList args = QCoreApplication::arguments();
+    for (int i = 1; i < args.size(); ++i) {
+        const QFileInfo info(args.at(i));
+        if (!info.suffix().compare(QStringLiteral("totm"), Qt::CaseInsensitive)
+            && info.exists()) {
+            openFiles.append(QUrl::fromLocalFile(info.absoluteFilePath()).toString());
+        }
+    }
+
+    // A running instance owns .totm opens: forward and exit instead of
+    // spawning a second window.
+    SingleInstance single(singleInstanceServerName());
+    single.setInitialFiles(openFiles);
+    app.installEventFilter(&single);
+    if (!single.ensurePrimary()) {
+        return 0;
+    }
+
     QQmlApplicationEngine engine;
     // Resolve the Totm module from embedded resources (:/Totm/qmldir), so
     // packaged builds need no module files beside the executable (a Totm/
@@ -63,7 +212,14 @@ int main(int argc, char *argv[])
         &app, []() { QCoreApplication::exit(-1); },
         Qt::QueuedConnection);
 
+    engine.rootContext()->setContextProperty(QStringLiteral("totmSingleInstance"), &single);
+    engine.rootContext()->setContextProperty(QStringLiteral("totmOpenFiles"), openFiles);
+
     engine.loadFromModule(QStringLiteral("Totm"), QStringLiteral("Main"));
+    // QML is up: flush any file opens that arrived during startup.
+    single.setReady();
 
     return app.exec();
 }
+
+#include "main.moc"

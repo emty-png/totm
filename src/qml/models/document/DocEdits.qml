@@ -312,4 +312,101 @@ QtObject {
         }
         doc.touch();
     }
+
+    function shiftTop(top, dx, dy) {
+        if (dx === 0 && dy === 0)
+            return;
+        var leaves = top.kind === "group" ? doc._leavesUnder(top) : [top];
+        for (var i = 0; i < leaves.length; i++) {
+            if (doc.isEffectivelyLocked(leaves[i]))
+                continue;
+            leaves[i].x += dx;
+            leaves[i].y += dy;
+            if (leaves[i].shapeType === "pen")
+                leaves[i].pathData = shiftPath(leaves[i], dx, dy);
+        }
+    }
+
+    function unlockedTops() {
+        var out = [];
+        var every = doc.selectedTops();
+        for (var i = 0; i < every.length; i++) {
+            if (!doc.isEffectivelyLocked(every[i]))
+                out.push(every[i]);
+        }
+        return out;
+    }
+
+    // Align unlocked tops to their union box. Single gesture: the
+    // Document wrapper checkpoints once, this only moves + touches.
+    function alignSelection(mode) {
+        var tops = unlockedTops();
+        if (tops.length < 2)
+            return false;
+        var ref = doc._selectionBBox();
+        if (!ref)
+            return false;
+        var done = false;
+        for (var i = 0; i < tops.length; i++) {
+            var b = doc.bounds.bboxOfNode(tops[i]);
+            if (!b)
+                continue;
+            var dx = 0, dy = 0;
+            if (mode === "hLeft")
+                dx = ref.x - b.x;
+            else if (mode === "hCenter")
+                dx = (ref.x + ref.w / 2) - (b.x + b.w / 2);
+            else if (mode === "hRight")
+                dx = (ref.x + ref.w) - (b.x + b.w);
+            else if (mode === "vTop")
+                dy = ref.y - b.y;
+            else if (mode === "vMiddle")
+                dy = (ref.y + ref.h / 2) - (b.y + b.h / 2);
+            else if (mode === "vBottom")
+                dy = (ref.y + ref.h) - (b.y + b.h);
+            else
+                return false;
+            if (dx !== 0 || dy !== 0) {
+                shiftTop(tops[i], dx, dy);
+                done = true;
+            }
+        }
+        if (done)
+            doc.touch();
+        return done;
+    }
+
+    // Even center spacing between the first and last tops on one axis.
+    // First/last (by center) stay put, middles spread between them.
+    function distributeSelection(axis) {
+        var tops = unlockedTops();
+        if (tops.length < 3)
+            return false;
+        var boxes = [];
+        for (var i = 0; i < tops.length; i++) {
+            var b = doc.bounds.bboxOfNode(tops[i]);
+            if (b)
+                boxes.push({ top: tops[i], box: b });
+        }
+        if (boxes.length < 3)
+            return false;
+        var horiz = axis === "h";
+        boxes.sort((a, b) => horiz ? (a.box.x + a.box.w / 2) - (b.box.x + b.box.w / 2) : (a.box.y + a.box.h / 2) - (b.box.y + b.box.h / 2));
+        var first = horiz ? boxes[0].box.x + boxes[0].box.w / 2 : boxes[0].box.y + boxes[0].box.h / 2;
+        var last = horiz ? boxes[boxes.length - 1].box.x + boxes[boxes.length - 1].box.w / 2 : boxes[boxes.length - 1].box.y + boxes[boxes.length - 1].box.h / 2;
+        var step = (last - first) / (boxes.length - 1);
+        var done = false;
+        for (var j = 1; j < boxes.length - 1; j++) {
+            var target = first + j * step;
+            var cur = horiz ? boxes[j].box.x + boxes[j].box.w / 2 : boxes[j].box.y + boxes[j].box.h / 2;
+            var d = target - cur;
+            if (d !== 0) {
+                shiftTop(boxes[j].top, horiz ? d : 0, horiz ? 0 : d);
+                done = true;
+            }
+        }
+        if (done)
+            doc.touch();
+        return done;
+    }
 }

@@ -215,6 +215,7 @@ qt_add_qml_module(totm
         qml/components/home/DesignContextMenu.qml
         qml/components/home/TemplateLibrary.qml
         qml/components/home/TemplateCard.qml
+        qml/components/home/TemplateMenu.qml
         # Plugins (permission-gated QML extensions)
         qml/components/plugins/PluginPermissionPopup.qml
         qml/components/plugins/PluginPermissionRow.qml
@@ -271,6 +272,17 @@ set_target_properties(totm PROPERTIES
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
 )
 
+# macOS .totm association: custom plist carrying CFBundleDocumentTypes
+# plus the exported UTI, so Finder opens route to the app (delivered as
+# QFileOpenEvent). The stable bundle id matters for Launch Services.
+if(APPLE)
+    set_target_properties(totm PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.tot.totm"
+        MACOSX_BUNDLE_BUNDLE_NAME "totm"
+        MACOSX_BUNDLE_INFO_PLIST "${PROJECT_SOURCE_DIR}/packaging/macos/Info.plist.in"
+    )
+endif()
+
 # Linux desktop integration (X11 + Wayland): hicolor icons, desktop
 # entry. `cmake --install` picks these up; no prebuilt packages ship.
 if(UNIX AND NOT APPLE)
@@ -283,6 +295,14 @@ if(UNIX AND NOT APPLE)
     install(
         FILES "${PROJECT_SOURCE_DIR}/packaging/totm.desktop"
         DESTINATION "share/applications"
+    )
+    # Shared MIME definition for .totm design bundles, so file managers
+    # offer totm in Open With (and it can become the default). Distro
+    # hooks refresh the databases on package install; `cmake --install`
+    # to ~/.local needs manual update-mime-database/update-desktop-database.
+    install(
+        FILES "${PROJECT_SOURCE_DIR}/packaging/mime/totm.xml"
+        DESTINATION "share/mime/packages"
     )
     # Maker guide for plug-ins, opened from Settings -> Plugin.
     # Credits page, opened from the sidebar Credits row above Settings.

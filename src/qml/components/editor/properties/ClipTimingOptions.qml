@@ -143,6 +143,67 @@ ColumnLayout {
         }
     }
 
+    // Cross-shape/design copy: templates live app-wide in
+    // TabState.animClipboard (same store the shortcuts use), paste
+    // re-anchors earliest at the playhead onto the selected tops.
+    RowLayout {
+        spacing: 8
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+            radius: AppTheme.radiusSmall
+            border.width: 1
+            border.color: AppTheme.fieldBorder
+            color: copyMouse.containsMouse || copyMouse.pressed ? AppTheme.hover : AppTheme.surface
+            opacity: section.clip !== null ? 1 : 0.4
+
+            Text {
+                anchors.centerIn: parent
+                text: qsTr("Copy clip")
+                font.pixelSize: 12
+                color: AppTheme.foreground
+            }
+
+            MouseArea {
+                id: copyMouse
+
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: section.copyClip()
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+            radius: AppTheme.radiusSmall
+            border.width: 1
+            border.color: AppTheme.fieldBorder
+            color: pasteMouse.containsMouse || pasteMouse.pressed ? AppTheme.hover : AppTheme.surface
+            opacity: section.canPasteClips() ? 1 : 0.4
+
+            Text {
+                anchors.centerIn: parent
+                text: qsTr("Paste clips")
+                font.pixelSize: 12
+                color: AppTheme.foreground
+            }
+
+            MouseArea {
+                id: pasteMouse
+
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                cursorShape: section.canPasteClips() ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: section.pasteClips()
+            }
+        }
+    }
+
     function easingName() {
         if (!section.clip || !section.doc)
             return "";
@@ -172,6 +233,28 @@ ColumnLayout {
     function duplicateClip() {
         if (section.doc)
             section.doc.duplicateClips([section.clipId]);
+    }
+
+    function canPasteClips() {
+        if (!section.doc)
+            return false;
+        section.doc.rev;
+        return TabState.animClipboard.length > 0 && section.doc.selectedTops().length > 0;
+    }
+
+    function copyClip() {
+        if (section.doc && section.clip)
+            TabState.animClipboard = section.doc.copyClips([section.clipId]);
+    }
+
+    function pasteClips() {
+        if (!section.doc || !section.canPasteClips())
+            return;
+        var tops = section.doc.selectedTops();
+        var uids = [];
+        for (var i = 0; i < tops.length; i++)
+            uids.push(tops[i].uid);
+        section.doc.pasteClips(TabState.animClipboard, uids);
     }
 
     function retime(v) {
