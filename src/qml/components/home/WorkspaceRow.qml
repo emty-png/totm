@@ -3,8 +3,8 @@ import QtQuick.Layouts
 import Totm
 
 // One workspace row in the home sidebar. Click selects, double-click
-// renames, hover reveals delete (never for Default). Accepts design
-// card drops to move designs in.
+// renames, hover reveals reorder + delete (delete never for Default).
+// Accepts design card drops to move designs in.
 Item {
     id: rowRoot
 
@@ -16,6 +16,8 @@ Item {
     property bool isDefault: false
     property bool selected: false
     property bool editing: false
+    property bool canMoveUp: false
+    property bool canMoveDown: false
 
     property var selectPolicy: null
     property var beginRenamePolicy: null
@@ -23,8 +25,10 @@ Item {
     property var cancelPolicy: null
     property var deletePolicy: null
     property var movePolicy: null
+    property var moveUpPolicy: null
+    property var moveDownPolicy: null
 
-    readonly property bool hovered: rowMouse.containsMouse || deleteMouse.containsMouse
+    readonly property bool hovered: rowMouse.containsMouse || deleteMouse.containsMouse || upMouse.containsMouse || downMouse.containsMouse
 
     Layout.fillWidth: true
     Layout.preferredHeight: 32
@@ -67,7 +71,7 @@ Item {
         anchors.fill: parent
         anchors.leftMargin: 16
         anchors.rightMargin: 8
-        spacing: 8
+        spacing: 4
 
         Text {
             Layout.fillWidth: true
@@ -99,6 +103,62 @@ Item {
             onCancelled: {
                 if (rowRoot.cancelPolicy)
                     rowRoot.cancelPolicy(rowRoot.workspaceId);
+            }
+        }
+
+        Item {
+            Layout.preferredWidth: 22
+            Layout.preferredHeight: 22
+            Layout.alignment: Qt.AlignVCenter
+            visible: !rowRoot.editing && (rowRoot.hovered || rowRoot.selected) && rowRoot.canMoveUp
+            opacity: rowRoot.canMoveUp ? 1 : 0.35
+
+            Text {
+                anchors.centerIn: parent
+                text: "↑"
+                font.pixelSize: 12
+                color: upMouse.containsMouse ? AppTheme.foreground : AppTheme.muted
+            }
+
+            MouseArea {
+                id: upMouse
+
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (rowRoot.moveUpPolicy)
+                        rowRoot.moveUpPolicy(rowRoot.workspaceId);
+                }
+            }
+        }
+
+        Item {
+            Layout.preferredWidth: 22
+            Layout.preferredHeight: 22
+            Layout.alignment: Qt.AlignVCenter
+            visible: !rowRoot.editing && (rowRoot.hovered || rowRoot.selected) && rowRoot.canMoveDown
+            opacity: rowRoot.canMoveDown ? 1 : 0.35
+
+            Text {
+                anchors.centerIn: parent
+                text: "↓"
+                font.pixelSize: 12
+                color: downMouse.containsMouse ? AppTheme.foreground : AppTheme.muted
+            }
+
+            MouseArea {
+                id: downMouse
+
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (rowRoot.moveDownPolicy)
+                        rowRoot.moveDownPolicy(rowRoot.workspaceId);
+                }
             }
         }
 

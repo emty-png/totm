@@ -4,26 +4,36 @@ import QtQuick.Effects
 import QtQuick.Layouts
 import Totm
 
-// Design card context menu: Rename / Star-Unstar / Export / Delete.
-// Same card language as the layers context menu. Delete covers the
-// whole card selection when the menu opened inside it.
+// Design card context menu: Rename / Star-Unstar / Move-to / Export /
+// Delete. Same card language as the layers context menu. Delete and
+// Move cover the whole card selection when the menu opened inside it.
 Item {
     id: menu
 
     property string contextId: ""
+    property string contextWorkspaceId: ""
     property bool contextStarred: false
     property int contextCount: 1
 
     property var renamePolicy: null
     property var starPolicy: null
+    property var movePolicy: null
     property var exportPolicy: null
     property var deletePolicy: null
 
-    function openFor(designId, starred, selectedCount, px, py) {
+    function openFor(designId, starred, selectedCount, px, py, workspaceId) {
         menu.contextId = designId;
         menu.contextStarred = starred;
         menu.contextCount = Math.max(1, selectedCount);
-        var w = 170, h = 168;
+        menu.contextWorkspaceId = workspaceId || "";
+        var targets = 0;
+        try {
+            targets = LibraryStore.workspaceList.length;
+        } catch (e) {
+            targets = 0;
+        }
+        // Base rows + move section header/separator + one row per target.
+        var w = 200, h = 200 + Math.max(0, targets) * 32;
         main.x = Math.min(Math.max(0, px), Math.max(0, menu.parent.width - w));
         main.y = Math.min(Math.max(0, py), Math.max(0, menu.parent.height - h));
         main.open();
@@ -56,7 +66,7 @@ Item {
 
     Popup {
         id: main
-        implicitWidth: 170
+        implicitWidth: 200
         padding: 16
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         transformOrigin: Item.TopLeft
@@ -107,6 +117,40 @@ Item {
                         menu.starPolicy(menu.contextId);
                     menu.closeAll();
                 }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                Layout.topMargin: 6
+                Layout.bottomMargin: 2
+                color: AppTheme.border
+            }
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 10
+                text: menu.contextCount > 1 ? qsTr("Move %1 to").arg(menu.contextCount) : qsTr("Move to")
+                font.pixelSize: 11
+                color: AppTheme.muted
+            }
+            Repeater {
+                model: LibraryStore.workspaceList
+                MenuItem {
+                    label: modelData.name
+                    hint: modelData.designCount !== undefined ? String(modelData.designCount) : ""
+                    enabled: modelData.workspaceId !== menu.contextWorkspaceId
+                    onClicked: {
+                        if (menu.movePolicy)
+                            menu.movePolicy(modelData.workspaceId);
+                        menu.closeAll();
+                    }
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                Layout.topMargin: 2
+                Layout.bottomMargin: 6
+                color: AppTheme.border
             }
             MenuItem {
                 label: qsTr("Export .totm")

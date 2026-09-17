@@ -4,9 +4,9 @@ import Totm
 
 // Tab state: pinned home tab first, then document tabs. Model index 0 is
 // always home; doc tabs start at 1. Each doc tab is backed by a design in
-// the library: new tabs create their design in the Default workspace,
-// closing a tab saves its scene first, and opening a design focuses its
-// tab or restores the saved scene.
+// the library: Home creates designs in the selected workspace while the
+// global + button falls back to Default, closing a tab saves its scene
+// first, and opening a design focuses its tab or restores the saved scene.
 QtObject {
     id: tabState
 
@@ -58,8 +58,9 @@ QtObject {
         return -1;
     }
 
-    function addUntitled() {
-        var designId = LibraryStore.createDesign(LibraryStore.defaultWorkspaceId, "Untitled");
+    function addUntitled(workspaceId) {
+        var target = workspaceId || LibraryStore.defaultWorkspaceId;
+        var designId = LibraryStore.createDesign(target, "Untitled");
         if (!designId)
             return;
         tabState.openDesign(designId);

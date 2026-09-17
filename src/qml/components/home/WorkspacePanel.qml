@@ -16,6 +16,11 @@ Item {
     property var openPolicy: null
     property var settingsPolicy: null
     property var creditsPolicy: null
+    // HomeView owns workspace delete confirms (move vs delete designs)
+    // and creation (select + auto-rename); the panel falls back to
+    // direct store calls when the host leaves these unset.
+    property var deleteRequestPolicy: null
+    property var newWorkspacePolicy: null
 
     // Starred designs, newest first. Cached stable for the Repeater
     // (fresh arrays every read churn delegates).
@@ -41,6 +46,38 @@ Item {
                 out.push(all[i]);
         }
         panel.starredDesigns = out;
+    }
+
+    function createWorkspaceFallback() {
+        var base = qsTr("Untitled workspace");
+        var taken = {};
+        var all = LibraryStore.workspaceList;
+        for (var i = 0; i < all.length; i++)
+            taken[all[i].name] = true;
+        var name = base;
+        var n = 2;
+        while (taken[name])
+            name = base + " " + (n++);
+        var id = LibraryStore.createWorkspace(name);
+        if (!id)
+            return "";
+        panel.refreshWorkspaces();
+        if (panel.selectPolicy)
+            panel.selectPolicy(id);
+        return id;
+    }
+
+    function moveWorkspaceBy(id, delta) {
+        var at = -1;
+        for (var i = 0; i < panel.workspaces.length; i++) {
+            if (panel.workspaces[i].workspaceId === id) {
+                at = i;
+                break;
+            }
+        }
+        if (at < 0)
+            return;
+        LibraryStore.moveWorkspace(id, at + delta);
     }
 
     Component.onCompleted: {
@@ -90,6 +127,8 @@ Item {
                 isDefault: modelData.isDefault
                 selected: !panel.settingsSelected && modelData.workspaceId === panel.selectedWorkspaceId
                 editing: modelData.workspaceId === panel.editingWorkspaceId
+                canMoveUp: index > 0
+                canMoveDown: index < panel.workspaces.length - 1
                 selectPolicy: id => {
                     if (panel.selectPolicy)
                         panel.selectPolicy(id);
@@ -100,6 +139,9 @@ Item {
                 commitPolicy: (id, text) => {
                     if (panel.editingWorkspaceId !== id)
                         return;
+                    // A fresh workspace rename-cancelled while still
+                    // untitled keeps the row; empty text falls back to
+                    // the stored name via the backend guard.
                     LibraryStore.renameWorkspace(id, text);
                     panel.editingWorkspaceId = "";
                     panel.refreshWorkspaces();
@@ -111,6 +153,10 @@ Item {
                     panel.refreshWorkspaces();
                 }
                 deletePolicy: id => {
+                    if (panel.deleteRequestPolicy) {
+                        panel.deleteRequestPolicy(id);
+                        return;
+                    }
                     if (id === panel.selectedWorkspaceId && panel.selectPolicy)
                         panel.selectPolicy(LibraryStore.defaultWorkspaceId);
                     LibraryStore.deleteWorkspace(id);
@@ -118,6 +164,64 @@ Item {
                 movePolicy: (idsJson, wsId) => {
                     if (panel.movePolicy)
                         panel.movePolicy(idsJson, wsId);
+                }
+                moveUpPolicy: id => panel.moveWorkspaceBy(id, -1)
+                moveDownPolicy: id => panel.moveWorkspaceBy(id, 1)
+            }
+        }
+
+        // New workspace entry. Same row language as settings/credits so
+        // creation is discoverable without a separate toolbar.
+        Item {
+            id: newWorkspaceRow
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+
+            readonly property bool hovered: newWorkspaceMouse.containsMouse
+
+            LayerHighlight {
+                selected: false
+                hovered: newWorkspaceRow.hovered
+                lifted: false
+            }
+
+            MouseArea {
+                id: newWorkspaceMouse
+
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (panel.newWorkspacePolicy)
+                        panel.newWorkspacePolicy();
+                    else
+                        panel.createWorkspaceFallback();
+                }
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 8
+                spacing: 8
+
+                AppIcon {
+                    Layout.preferredWidth: 14
+                    Layout.preferredHeight: 14
+                    Layout.alignment: Qt.AlignVCenter
+                    kind: "plus"
+                    iconColor: newWorkspaceRow.hovered ? AppTheme.foreground : AppTheme.muted
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    text: qsTr("New workspace")
+                    font.pixelSize: 12
+                    elide: Text.ElideRight
+                    color: newWorkspaceRow.hovered ? AppTheme.foreground : AppTheme.muted
                 }
             }
         }

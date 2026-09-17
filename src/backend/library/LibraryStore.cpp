@@ -139,6 +139,45 @@ bool LibraryStore::deleteWorkspace(const QString &id) {
     return true;
 }
 
+bool LibraryStore::deleteWorkspaceAndDesigns(const QString &id) {
+    const int at = findWorkspace(id);
+    if (at < 0 || m_workspaceEntries.at(at).isDefault)
+        return false;
+    // Collect-then-remove so index math stays simple; scene files are
+    // best-effort (a leftover is swept next boot and never blocks).
+    QList<QString> doomed;
+    for (const DesignEntry &design : m_designEntries) {
+        if (design.workspaceId == id)
+            doomed.append(design.id);
+    }
+    for (const QString &designId : doomed) {
+        const int dat = findDesign(designId);
+        if (dat >= 0)
+            m_designEntries.removeAt(dat);
+        QFile::remove(designsDir() + QStringLiteral("/") + designId + QStringLiteral(".json"));
+    }
+    m_workspaceEntries.removeAt(at);
+    if (!persist())
+        return false;
+    rebuild();
+    return true;
+}
+
+bool LibraryStore::moveWorkspace(const QString &id, int toIndex) {
+    const int from = findWorkspace(id);
+    if (from < 0 || m_workspaceEntries.isEmpty())
+        return false;
+    const int clamped = qBound(0, toIndex, m_workspaceEntries.size() - 1);
+    if (clamped == from)
+        return true;
+    WorkspaceEntry entry = m_workspaceEntries.takeAt(from);
+    m_workspaceEntries.insert(clamped, entry);
+    if (!persist())
+        return false;
+    rebuild();
+    return true;
+}
+
 QString LibraryStore::createDesign(const QString &workspaceId, const QString &name) {
     const QString target = findWorkspace(workspaceId) >= 0 ? workspaceId : m_defaultWorkspaceId;
     DesignEntry entry;

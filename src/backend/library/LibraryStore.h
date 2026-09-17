@@ -83,9 +83,16 @@ public:
     // Workspaces. Names are trimmed to 120 chars with fallback applied.
     // deleteWorkspace rejects the Default workspace and re-homes its
     // designs to Default instead of deleting them.
+    // deleteWorkspaceAndDesigns rejects Default and deletes the
+    // workspace together with all designs inside it (scene files
+    // removed best-effort). QML closes open tabs first.
     Q_INVOKABLE QString createWorkspace(const QString &name);
     Q_INVOKABLE bool renameWorkspace(const QString &id, const QString &name);
     Q_INVOKABLE bool deleteWorkspace(const QString &id);
+    Q_INVOKABLE bool deleteWorkspaceAndDesigns(const QString &id);
+    // Reorder: moves the workspace to toIndex (clamped). Order is
+    // insertion/persisted array order; Default is not pinned.
+    Q_INVOKABLE bool moveWorkspace(const QString &id, int toIndex);
 
     // Designs. createDesign falls back to the Default workspace when the
     // target is unknown. saveScene normalizes keys via entryToScene and
