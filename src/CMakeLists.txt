@@ -238,12 +238,16 @@ qt_add_qml_module(totm
         qml/views/settings/SettingsView.qml
         qml/views/settings/SettingsTabBar.qml
         qml/views/settings/SettingsTab.qml
+        qml/views/settings/GeneralSettingsView.qml
         qml/views/settings/PluginSettingsView.qml
         qml/views/settings/ShortcutSettingsView.qml
         qml/views/settings/AppearanceSettingsView.qml
         qml/views/editor/EditorView.qml
         # Settings rows
         qml/components/settings/ShortcutRow.qml
+        qml/components/settings/GeneralNewDesignSection.qml
+        qml/components/settings/GeneralExportSection.qml
+        qml/components/settings/GeneralStorageSection.qml
         qml/components/settings/AppearanceThemeSection.qml
         qml/components/settings/AppearanceColorRow.qml
         qml/components/settings/AppearanceColorsSection.qml

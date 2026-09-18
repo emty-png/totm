@@ -3,6 +3,12 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [Unreleased]
+
+### Added
+
+* General settings tab — the Settings strip grew a General tab (now the default) with new-design defaults (canvas size with 16:9 / 9:16 / 1:1 / 4:3 presets, scene background, timeline length), video-export defaults (quality, frame rate, encode effort) and a storage card (image/audio counts plus disk use, library path). Untitled designs start from the new-design defaults, the export picker opens from the export defaults and saves the used choice back on Render, and everything persists with a Reset all.
+
 ## [0.1.2] - 2026-09-17
 
 ### Added
