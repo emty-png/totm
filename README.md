@@ -25,6 +25,7 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 * Smart snapping: edges, centers, scene, equal gaps (Alt suspends)
 * Design panel with mixed-value handling, typography controls and a Figma-style color picker
 * Dark / light theme, custom frameless titlebar with draggable tabs (titles follow design names)
+* General settings: new-design defaults (canvas size presets, background, timeline length), video-export defaults and storage footprint
 * Animate with presets plus custom from-to properties (scale, rotate, move, opacity, color, hide/show, resize, corner radius, stroke) and drawable motion paths with full point editing, easing graphs and a timeline.
 * Audio: import MP3 / WAV / OGG / FLAC onto timeline lanes with live preview, mixed into the export
 * Video export: SD / HD / 4K at 30 / 60fps mp4 through system ffmpeg, with progress + cancel

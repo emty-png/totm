@@ -36,7 +36,14 @@ Popup {
         return value === "sd" ? qsTr("SD") : value === "4k" ? qsTr("4K") : qsTr("HD");
     }
 
-    onOpened: qualityPopup.refreshSuggestion()
+    onOpened: {
+        // Start from the General-tab defaults (Render saves back, so
+        // the picker reopens where the last export left off).
+        qualityPopup.quality = SettingsStore.defaultQuality;
+        qualityPopup.fps = SettingsStore.defaultFps;
+        qualityPopup.performance = SettingsStore.defaultPerformance;
+        qualityPopup.refreshSuggestion();
+    }
 
     anchors.centerIn: parent
     implicitWidth: 300
@@ -273,7 +280,12 @@ Popup {
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: qualityPopup.renderClicked(qualityPopup.quality, qualityPopup.fps, qualityPopup.performance)
+                    onClicked: {
+                        SettingsStore.defaultQuality = qualityPopup.quality;
+                        SettingsStore.defaultFps = qualityPopup.fps;
+                        SettingsStore.defaultPerformance = qualityPopup.performance;
+                        qualityPopup.renderClicked(qualityPopup.quality, qualityPopup.fps, qualityPopup.performance);
+                    }
                 }
             }
         }

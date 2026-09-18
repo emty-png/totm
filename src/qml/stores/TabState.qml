@@ -63,6 +63,19 @@ QtObject {
         var designId = LibraryStore.createDesign(target, "Untitled");
         if (!designId)
             return;
+        // Fresh designs start from the General-tab defaults (canvas
+        // size, background, timeline length); templates keep their own
+        // curated scenes.
+        LibraryStore.saveScene(designId, {
+            sceneWidth: SettingsStore.defaultSceneWidth,
+            sceneHeight: SettingsStore.defaultSceneHeight,
+            sceneColor: SettingsStore.defaultSceneColor,
+            nodes: [],
+            anim: {
+                duration: SettingsStore.defaultDuration
+            },
+            audio: {}
+        });
         tabState.openDesign(designId);
     }
 

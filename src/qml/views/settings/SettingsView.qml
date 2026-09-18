@@ -7,7 +7,7 @@ import Totm
 ColumnLayout {
     id: settingsView
 
-    property string activeTab: "plugin"
+    property string activeTab: "general"
 
     spacing: 0
 
@@ -18,6 +18,12 @@ ColumnLayout {
         onTabClicked: id => {
             settingsView.activeTab = id;
         }
+    }
+
+    GeneralSettingsView {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        visible: settingsView.activeTab === "general"
     }
 
     PluginSettingsView {

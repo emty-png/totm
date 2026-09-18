@@ -43,6 +43,19 @@ constexpr char kRadiusLargeKey[] = "appearance/radiusLarge";
 constexpr char kRadiusXLargeKey[] = "appearance/radiusXLarge";
 constexpr char kFontFamilyKey[] = "appearance/fontFamily";
 
+constexpr char kGenSceneWKey[] = "general/sceneWidth";
+constexpr char kGenSceneHKey[] = "general/sceneHeight";
+constexpr char kGenSceneColorKey[] = "general/sceneColor";
+constexpr char kGenDurationKey[] = "general/duration";
+constexpr char kGenQualityKey[] = "general/quality";
+constexpr char kGenFpsKey[] = "general/fps";
+constexpr char kGenPerformanceKey[] = "general/performance";
+
+constexpr int kSceneMin = 16;
+constexpr int kSceneMax = 7680;
+constexpr double kDurationMin = 0.5;
+constexpr double kDurationMax = 60.0;
+
 constexpr int kRadiusMin = 0;
 constexpr int kRadiusMax = 28;
 
@@ -170,6 +183,23 @@ int clampedRadius(int v) {
     return qBound(kRadiusMin, v, kRadiusMax);
 }
 
+int clampedSceneSize(int v) {
+    return qBound(kSceneMin, v, kSceneMax);
+}
+
+double clampedDuration(double v) {
+    return qBound(kDurationMin, v, kDurationMax);
+}
+
+bool isKnownQuality(const QString &quality) {
+    return quality == QStringLiteral("sd") || quality == QStringLiteral("hd") || quality == QStringLiteral("4k");
+}
+
+bool isKnownPerformance(const QString &performance) {
+    return performance == QStringLiteral("slow") || performance == QStringLiteral("normal")
+        || performance == QStringLiteral("fast");
+}
+
 bool isSafeFontName(const QString &name) {
     if (name.isEmpty() || name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
         || name.contains(QStringLiteral("..")))
@@ -257,6 +287,7 @@ void SettingsStore::load() {
     m_windowMaximized = settings.value(QString::fromLatin1(kWinMaxKey), false).toBool();
     loadShortcuts();
     loadAppearance();
+    loadGeneral();
 }
 
 void SettingsStore::loadShortcuts() {
@@ -669,6 +700,164 @@ void SettingsStore::resetAppearance() {
     persistAppearance();
     applyFontFamily();
     emit appearanceChanged();
+}
+
+void SettingsStore::loadGeneral() {
+    QSettings settings;
+    m_defaultSceneWidth = clampedSceneSize(settings.value(QString::fromLatin1(kGenSceneWKey), 1920).toInt());
+    m_defaultSceneHeight = clampedSceneSize(settings.value(QString::fromLatin1(kGenSceneHKey), 1080).toInt());
+    const auto color = canonicalAppearanceColor(settings.value(QString::fromLatin1(kGenSceneColorKey), QStringLiteral("#ffffff")).toString());
+    m_defaultSceneColor = (color.has_value() && !color->isEmpty()) ? *color : QStringLiteral("#ffffff");
+    m_defaultDuration = clampedDuration(settings.value(QString::fromLatin1(kGenDurationKey), 4.0).toDouble());
+    const QString quality = settings.value(QString::fromLatin1(kGenQualityKey), QStringLiteral("hd")).toString().trimmed().toLower();
+    m_defaultQuality = isKnownQuality(quality) ? quality : QStringLiteral("hd");
+    const int fps = settings.value(QString::fromLatin1(kGenFpsKey), 30).toInt();
+    m_defaultFps = (fps == 60) ? 60 : 30;
+    const QString performance = settings.value(QString::fromLatin1(kGenPerformanceKey), QStringLiteral("normal")).toString().trimmed().toLower();
+    m_defaultPerformance = isKnownPerformance(performance) ? performance : QStringLiteral("normal");
+}
+
+void SettingsStore::persistGeneral() {
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kGenSceneWKey), m_defaultSceneWidth);
+    settings.setValue(QString::fromLatin1(kGenSceneHKey), m_defaultSceneHeight);
+    settings.setValue(QString::fromLatin1(kGenSceneColorKey), m_defaultSceneColor);
+    settings.setValue(QString::fromLatin1(kGenDurationKey), m_defaultDuration);
+    settings.setValue(QString::fromLatin1(kGenQualityKey), m_defaultQuality);
+    settings.setValue(QString::fromLatin1(kGenFpsKey), m_defaultFps);
+    settings.setValue(QString::fromLatin1(kGenPerformanceKey), m_defaultPerformance);
+    settings.sync();
+}
+
+int SettingsStore::defaultSceneWidth() const {
+    return m_defaultSceneWidth;
+}
+
+void SettingsStore::setDefaultSceneWidth(int v) {
+    v = clampedSceneSize(v);
+    if (m_defaultSceneWidth == v)
+        return;
+    m_defaultSceneWidth = v;
+    persistGeneral();
+    emit generalChanged();
+}
+
+int SettingsStore::defaultSceneHeight() const {
+    return m_defaultSceneHeight;
+}
+
+void SettingsStore::setDefaultSceneHeight(int v) {
+    v = clampedSceneSize(v);
+    if (m_defaultSceneHeight == v)
+        return;
+    m_defaultSceneHeight = v;
+    persistGeneral();
+    emit generalChanged();
+}
+
+QString SettingsStore::defaultSceneColor() const {
+    return m_defaultSceneColor;
+}
+
+void SettingsStore::setDefaultSceneColor(const QString &color) {
+    const auto canon = canonicalAppearanceColor(color);
+    if (!canon.has_value() || canon->isEmpty())
+        return;
+    if (m_defaultSceneColor == *canon)
+        return;
+    m_defaultSceneColor = *canon;
+    persistGeneral();
+    emit generalChanged();
+}
+
+double SettingsStore::defaultDuration() const {
+    return m_defaultDuration;
+}
+
+void SettingsStore::setDefaultDuration(double v) {
+    v = clampedDuration(v);
+    if (qFuzzyCompare(m_defaultDuration, v))
+        return;
+    m_defaultDuration = v;
+    persistGeneral();
+    emit generalChanged();
+}
+
+QString SettingsStore::defaultQuality() const {
+    return m_defaultQuality;
+}
+
+void SettingsStore::setDefaultQuality(const QString &quality) {
+    const QString q = quality.trimmed().toLower();
+    if (!isKnownQuality(q) || m_defaultQuality == q)
+        return;
+    m_defaultQuality = q;
+    persistGeneral();
+    emit generalChanged();
+}
+
+int SettingsStore::defaultFps() const {
+    return m_defaultFps;
+}
+
+void SettingsStore::setDefaultFps(int v) {
+    v = (v == 60) ? 60 : 30;
+    if (m_defaultFps == v)
+        return;
+    m_defaultFps = v;
+    persistGeneral();
+    emit generalChanged();
+}
+
+QString SettingsStore::defaultPerformance() const {
+    return m_defaultPerformance;
+}
+
+void SettingsStore::setDefaultPerformance(const QString &performance) {
+    const QString p = performance.trimmed().toLower();
+    if (!isKnownPerformance(p) || m_defaultPerformance == p)
+        return;
+    m_defaultPerformance = p;
+    persistGeneral();
+    emit generalChanged();
+}
+
+void SettingsStore::applyScenePreset(const QString &name) {
+    const QString n = name.trimmed().toLower();
+    int w = m_defaultSceneWidth;
+    int h = m_defaultSceneHeight;
+    if (n == QStringLiteral("16:9"))
+        w = 1920, h = 1080;
+    else if (n == QStringLiteral("9:16"))
+        w = 1080, h = 1920;
+    else if (n == QStringLiteral("1:1"))
+        w = 1080, h = 1080;
+    else if (n == QStringLiteral("4:3"))
+        w = 1600, h = 1200;
+    else
+        return;
+    if (w == m_defaultSceneWidth && h == m_defaultSceneHeight)
+        return;
+    m_defaultSceneWidth = w;
+    m_defaultSceneHeight = h;
+    persistGeneral();
+    emit generalChanged();
+}
+
+void SettingsStore::resetGeneral() {
+    if (m_defaultSceneWidth == 1920 && m_defaultSceneHeight == 1080 && m_defaultSceneColor == QStringLiteral("#ffffff")
+        && qFuzzyCompare(m_defaultDuration, 4.0) && m_defaultQuality == QStringLiteral("hd") && m_defaultFps == 30
+        && m_defaultPerformance == QStringLiteral("normal"))
+        return;
+    m_defaultSceneWidth = 1920;
+    m_defaultSceneHeight = 1080;
+    m_defaultSceneColor = QStringLiteral("#ffffff");
+    m_defaultDuration = 4.0;
+    m_defaultQuality = QStringLiteral("hd");
+    m_defaultFps = 30;
+    m_defaultPerformance = QStringLiteral("normal");
+    persistGeneral();
+    emit generalChanged();
 }
 
 void SettingsStore::persist() {

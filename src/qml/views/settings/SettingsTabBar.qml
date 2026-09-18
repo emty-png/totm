@@ -11,6 +11,10 @@ Item {
 
     property var tabs: [
         {
+            id: "general",
+            title: qsTr("General")
+        },
+        {
             id: "plugin",
             title: qsTr("Plugin")
         },
@@ -23,7 +27,7 @@ Item {
             title: qsTr("Appearance")
         }
     ]
-    property string activeTab: "plugin"
+    property string activeTab: "general"
 
     signal tabClicked(string id)
 

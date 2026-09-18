@@ -58,6 +58,18 @@ class SettingsStore : public QObject {
     // deleted): the app falls back to the system font and the UI shows
     // a "Font not found" error until another font is picked or reset.
     Q_PROPERTY(bool fontMissing READ fontMissing NOTIFY appearanceChanged)
+    // General: defaults for new designs (canvas size, background, timeline
+    // length) plus the video-export picker defaults. Only non-default
+    // values are stored; the export popup loads these on open and writes
+    // back the used choice on Render. Reassigned wholesale via the
+    // generalChanged signal so QML bindings update.
+    Q_PROPERTY(int defaultSceneWidth READ defaultSceneWidth WRITE setDefaultSceneWidth NOTIFY generalChanged)
+    Q_PROPERTY(int defaultSceneHeight READ defaultSceneHeight WRITE setDefaultSceneHeight NOTIFY generalChanged)
+    Q_PROPERTY(QString defaultSceneColor READ defaultSceneColor WRITE setDefaultSceneColor NOTIFY generalChanged)
+    Q_PROPERTY(double defaultDuration READ defaultDuration WRITE setDefaultDuration NOTIFY generalChanged)
+    Q_PROPERTY(QString defaultQuality READ defaultQuality WRITE setDefaultQuality NOTIFY generalChanged)
+    Q_PROPERTY(int defaultFps READ defaultFps WRITE setDefaultFps NOTIFY generalChanged)
+    Q_PROPERTY(QString defaultPerformance READ defaultPerformance WRITE setDefaultPerformance NOTIFY generalChanged)
 
 public:
     static SettingsStore *create(QQmlEngine *engine, QJSEngine *scriptEngine);
@@ -147,6 +159,31 @@ public:
     // Clears all appearance overrides (colors, radius, font) to defaults.
     Q_INVOKABLE void resetAppearance();
 
+    // General defaults (persisted under QSettings group "general/").
+    // Scene sizes clamp to 16..7680px, duration to 0.5..60s; unknown
+    // quality/performance fall back to "hd"/"normal", fps to 30; invalid
+    // colors are ignored. Setters are Q_INVOKABLE so QML can call them
+    // directly as well as assign the properties.
+    Q_INVOKABLE int defaultSceneWidth() const;
+    Q_INVOKABLE void setDefaultSceneWidth(int v);
+    Q_INVOKABLE int defaultSceneHeight() const;
+    Q_INVOKABLE void setDefaultSceneHeight(int v);
+    Q_INVOKABLE QString defaultSceneColor() const;
+    Q_INVOKABLE void setDefaultSceneColor(const QString &color);
+    Q_INVOKABLE double defaultDuration() const;
+    Q_INVOKABLE void setDefaultDuration(double v);
+    Q_INVOKABLE QString defaultQuality() const;
+    Q_INVOKABLE void setDefaultQuality(const QString &quality);
+    Q_INVOKABLE int defaultFps() const;
+    Q_INVOKABLE void setDefaultFps(int v);
+    Q_INVOKABLE QString defaultPerformance() const;
+    Q_INVOKABLE void setDefaultPerformance(const QString &performance);
+    // Applies one canvas preset (16:9, 9:16, 1:1, 4:3) to both defaults
+    // in a single change; unknown names are ignored.
+    Q_INVOKABLE void applyScenePreset(const QString &name);
+    // Clears all general overrides to defaults.
+    Q_INVOKABLE void resetGeneral();
+
 signals:
     void isDarkChanged();
     void followSystemChanged();
@@ -154,6 +191,7 @@ signals:
     void windowGeometryChanged();
     void shortcutsChanged();
     void appearanceChanged();
+    void generalChanged();
 
 private:
     void load();
@@ -162,6 +200,8 @@ private:
     void loadShortcuts();
     void loadAppearance();
     void persistAppearance();
+    void loadGeneral();
+    void persistGeneral();
     void loadImportedFonts();
     void applyFontFamily();
     void refreshFontMissing();
@@ -196,4 +236,12 @@ private:
     // from the QFontDatabase id so QML never needs per-row FontLoaders.
     QMap<QString, QString> m_importedFontFamily;
     bool m_fontMissing = false;
+    // General defaults for new designs + video export.
+    int m_defaultSceneWidth = 1920;
+    int m_defaultSceneHeight = 1080;
+    QString m_defaultSceneColor = QStringLiteral("#ffffff");
+    double m_defaultDuration = 4.0;
+    QString m_defaultQuality = QStringLiteral("hd");
+    int m_defaultFps = 30;
+    QString m_defaultPerformance = QStringLiteral("normal");
 };
