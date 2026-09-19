@@ -29,6 +29,7 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 * Animate with presets plus custom from-to properties (scale, rotate, move, opacity, color, hide/show, resize, corner radius, stroke) and drawable motion paths with full point editing, easing graphs and a timeline.
 * Audio: import MP3 / WAV / OGG / FLAC onto timeline lanes with live preview, mixed into the export
 * Video export: SD / HD / 4K at 30 / 60fps mp4 through system ffmpeg, with progress + cancel
+* Component export: per-selection PNGs at 1x / 2x / 3x plus resolution-independent SVG vectors on transparency from the design panel, multi-file packs as `{Design}.zip`
 
 ## Install
 
