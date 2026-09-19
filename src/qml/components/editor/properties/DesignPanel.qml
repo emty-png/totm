@@ -99,6 +99,11 @@ ScrollView {
             snapshot: panel.snapshot
         }
 
+        ExportSection {
+            Layout.fillWidth: true
+            doc: panel.doc
+        }
+
         // Plugin sections (ui.slots). Each entry gets doc + snapshot +
         // pluginId when it declares them; failures show a muted row.
         Repeater {

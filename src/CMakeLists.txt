@@ -40,6 +40,12 @@ qt_add_qml_module(totm
         backend/video/VideoExporter.cpp
         backend/video/AnimSampler.h
         backend/video/AnimSampler.cpp
+        backend/video/FramePaint.h
+        backend/video/FramePaint.cpp
+        backend/export/ComponentExporter.h
+        backend/export/ComponentExporter.cpp
+        backend/export/SvgPaint.h
+        backend/export/SvgPaint.cpp
         backend/plugins/PluginStore.h
         backend/plugins/PluginStore.cpp
         backend/plugins/PluginNetworkGuard.h
@@ -191,6 +197,7 @@ qt_add_qml_module(totm
         qml/components/editor/EditorBottomPanel.qml
         qml/components/editor/EditorCanvas.qml
         qml/components/editor/properties/DesignPanel.qml
+        qml/components/editor/properties/ExportSection.qml
         # Fields
         qml/components/fields/NumberField.qml
         qml/components/fields/HexField.qml
@@ -275,6 +282,7 @@ target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/library
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/settings
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/video
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/export
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/plugins
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/crash
 )

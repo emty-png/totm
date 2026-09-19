@@ -10,9 +10,13 @@ import Totm
 // Modes mirror FileDialog: open picks an existing file (double-click
 // accepts), save types a name (Save confirms). Emits accepted with
 // selectedFile set, or rejected on dismiss. Callers preset
-// currentFolder (and fileName for save) before open().
+// currentFolder (and fileName for save) before open(). Always centered
+// in the app: parented to the window overlay, so the declaring panel
+// or canvas never pulls it off-center.
 Popup {
     id: picker
+
+    parent: Overlay.overlay
 
     property bool saveMode: false
     property var suffixes: []
