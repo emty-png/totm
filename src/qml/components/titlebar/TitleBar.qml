@@ -30,7 +30,7 @@ Item {
 
                 MacTrafficLights {
                     id: macLights
-                    visible: titleBar.isMac
+                    visible: titleBar.isMac && SettingsStore.showWindowControls
                     window: titleBar.window
                 }
 
@@ -51,7 +51,7 @@ Item {
 
                 TitleBarControls {
                     id: controls
-                    visible: !titleBar.isMac
+                    visible: !titleBar.isMac && SettingsStore.showWindowControls
                     Layout.fillHeight: true
                     window: titleBar.window
                 }

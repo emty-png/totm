@@ -58,6 +58,13 @@ class SettingsStore : public QObject {
     // deleted): the app falls back to the system font and the UI shows
     // a "Font not found" error until another font is picked or reset.
     Q_PROPERTY(bool fontMissing READ fontMissing NOTIFY appearanceChanged)
+    // Canvas zoom pill visibility (out, percent, in, fit). On by
+    // default; toggled from the Appearance tab.
+    Q_PROPERTY(bool showZoomPill READ showZoomPill WRITE setShowZoomPill NOTIFY appearanceChanged)
+    // Native-feeling window buttons (traffic lights on mac, min/max +
+    // close elsewhere). Tiling-WM users can hide them so the app
+    // matches their environment. On by default; Appearance tab.
+    Q_PROPERTY(bool showWindowControls READ showWindowControls WRITE setShowWindowControls NOTIFY appearanceChanged)
     // General: defaults for new designs (canvas size, background, timeline
     // length) plus the video-export picker defaults. Only non-default
     // values are stored; the export popup loads these on open and writes
@@ -145,6 +152,10 @@ public:
     QStringList importedFonts() const;
     QVariantMap importedFontFamilyMap() const;
     bool fontMissing() const;
+    bool showZoomPill() const;
+    void setShowZoomPill(bool show);
+    bool showWindowControls() const;
+    void setShowWindowControls(bool show);
     Q_INVOKABLE QStringList importedFontFamilies() const;
     Q_INVOKABLE QString importFont(const QUrl &fileUrl);
     Q_INVOKABLE void removeImportedFont(const QString &fileName);
@@ -231,6 +242,8 @@ private:
     int m_customRadiusLarge = 10;
     int m_customRadiusXLarge = 12;
     QString m_fontFamily;
+    bool m_showZoomPill = true;
+    bool m_showWindowControls = true;
     QStringList m_importedFonts;
     // Detected family per imported file name. Populated at load/import
     // from the QFontDatabase id so QML never needs per-row FontLoaders.

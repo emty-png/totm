@@ -470,6 +470,40 @@ Item {
         }
     }
 
+    // Canvas zoom (keys for the wheel path).
+    Shortcut {
+        sequences: [ShortcutState.canvasZoomIn]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            if (shortcuts.view && shortcuts.view.canvasView)
+                shortcuts.view.canvasView.zoomStep(120);
+        }
+    }
+
+    Shortcut {
+        sequences: [ShortcutState.canvasZoomOut]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            if (shortcuts.view && shortcuts.view.canvasView)
+                shortcuts.view.canvasView.zoomStep(-120);
+        }
+    }
+
+    Shortcut {
+        sequences: [ShortcutState.canvasZoomFit]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            if (shortcuts.view && shortcuts.view.canvasView)
+                shortcuts.view.canvasView.fitView();
+        }
+    }
+
     // Timeline transport.
     Shortcut {
         sequences: [ShortcutState.transportPlay]
@@ -524,6 +558,29 @@ Item {
             var d = shortcuts.doc();
             if (d)
                 shortcuts.doSeek(d.anim.duration);
+        }
+    }
+
+    // Timeline zoom (keys for the wheel/slider path).
+    Shortcut {
+        sequences: [ShortcutState.timelineZoomIn]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.panel.mode === "animate"
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            if (shortcuts.view && shortcuts.view.bottomPanel && shortcuts.view.bottomPanel.timelineView)
+                shortcuts.view.bottomPanel.timelineView.zoomStep(120);
+        }
+    }
+
+    Shortcut {
+        sequences: [ShortcutState.timelineZoomOut]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.panel.mode === "animate"
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            if (shortcuts.view && shortcuts.view.bottomPanel && shortcuts.view.bottomPanel.timelineView)
+                shortcuts.view.bottomPanel.timelineView.zoomStep(-120);
         }
     }
 

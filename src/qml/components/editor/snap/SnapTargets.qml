@@ -27,6 +27,17 @@ QtObject {
         if (doc) {
             xs.push(0, doc.sceneWidth / 2, doc.sceneWidth);
             ys.push(0, doc.sceneHeight / 2, doc.sceneHeight);
+            // Ruler guides snap like edges (plain content-px arrays,
+            // length-checked like every round-tripped list).
+            var gx = doc.guideX, gy = doc.guideY;
+            if (gx && typeof gx.length === "number") {
+                for (var g = 0; g < gx.length; g++)
+                    xs.push(Number(gx[g]) || 0);
+            }
+            if (gy && typeof gy.length === "number") {
+                for (var h = 0; h < gy.length; h++)
+                    ys.push(Number(gy[h]) || 0);
+            }
         }
         return {
             xs: xs,

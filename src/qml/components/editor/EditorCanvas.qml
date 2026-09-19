@@ -1,5 +1,6 @@
 import QtCore
 import QtQuick
+import QtQuick.Layouts
 import Totm
 
 // Canvas. Wheel pans, Ctrl-wheel zooms to cursor, Space-drag pans.
@@ -425,6 +426,15 @@ Item {
         }
     }
 
+    // Guides above the tools (edges only) but below the breadcrumb
+    // and export pill, so those keep their input.
+    CanvasGuides {
+        doc: canvas.doc
+        zoom: canvas.zoom
+        offsetX: canvas.offsetX
+        offsetY: canvas.offsetY
+    }
+
     DrillBreadcrumb {
         anchors {
             left: parent.left
@@ -612,6 +622,14 @@ Item {
     }
     function tryCenter() {
         return camera.tryCenter();
+    }
+    function fitView() {
+        return camera.fitView();
+    }
+    // Keyboard zoom around the viewport center (same exponential feel
+    // as the wheel path).
+    function zoomStep(dy) {
+        camera.zoomAt(canvas.width / 2, canvas.height / 2, dy);
     }
     function saveCamera(d) {
         camera.saveCamera(d);
@@ -897,6 +915,66 @@ Item {
             horizontalCenter: parent.horizontalCenter
             bottom: parent.bottom
             bottomMargin: 16
+        }
+    }
+
+    // Zoom pill, bottom-right: out, percent, in, fit. Mirrors the
+    // toolbar pill language; wheel zoom stays the fine control.
+    // Hiding lives in the Appearance tab (showZoomPill).
+    Rectangle {
+        visible: SettingsStore.showZoomPill
+        anchors {
+            right: parent.right
+            bottom: parent.bottom
+            rightMargin: 12
+            bottomMargin: 16
+        }
+        implicitWidth: zoomRow.implicitWidth + 16
+        implicitHeight: 44
+        radius: AppTheme.radiusXLarge
+        color: AppTheme.surface
+        border.width: 1
+        border.color: AppTheme.border
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+        }
+
+        RowLayout {
+            id: zoomRow
+
+            anchors {
+                left: parent.left
+                right: parent.right
+                verticalCenter: parent.verticalCenter
+                leftMargin: 8
+                rightMargin: 8
+            }
+            spacing: 4
+
+            ToolbarButton {
+                iconKind: "minimize"
+                onClicked: canvas.zoomStep(-120)
+            }
+
+            Text {
+                Layout.preferredWidth: 52
+                horizontalAlignment: Text.AlignHCenter
+                text: Math.round(canvas.zoom * 100) + "%"
+                font.pixelSize: 12
+                color: AppTheme.muted
+            }
+
+            ToolbarButton {
+                iconKind: "plus"
+                onClicked: canvas.zoomStep(120)
+            }
+
+            ToolbarButton {
+                iconKind: "fit"
+                onClicked: canvas.fitView()
+            }
         }
     }
 

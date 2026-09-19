@@ -18,6 +18,12 @@ QtObject {
     property real camX: 0
     property real camY: 0
 
+    // Persistent ruler guides in content px (vertical x positions and
+    // horizontal y positions). Plain session chrome like the camera:
+    // saved with the scene, but never in undo history.
+    property var guideX: []
+    property var guideY: []
+
     property int rev: 0
     property int nextNodeUid: 1
     property int structRev: 0
@@ -87,6 +93,61 @@ QtObject {
 
     function touch() {
         root.rev++;
+    }
+
+    // Ruler guides: wholesale reassigns so bindings fire (same rule as
+    // the node tree). Positions round to whole content px; duplicates
+    // within half a px collapse onto the existing index. No history
+    // entries by design. addGuide returns the guide index for drags.
+    function addGuide(axis, pos) {
+        var p = Math.round(Number(pos) || 0);
+        if (axis === "x") {
+            for (var i = 0; i < root.guideX.length; i++) {
+                if (Math.abs(root.guideX[i] - p) < 0.5)
+                    return i;
+            }
+            root.guideX = root.guideX.concat([p]);
+            return root.guideX.length - 1;
+        }
+        for (var j = 0; j < root.guideY.length; j++) {
+            if (Math.abs(root.guideY[j] - p) < 0.5)
+                return j;
+        }
+        root.guideY = root.guideY.concat([p]);
+        return root.guideY.length - 1;
+    }
+
+    function moveGuide(axis, index, pos) {
+        var p = Math.round(Number(pos) || 0);
+        if (axis === "x") {
+            if (index < 0 || index >= root.guideX.length)
+                return;
+            var xs = root.guideX.slice();
+            xs[index] = p;
+            root.guideX = xs;
+        } else {
+            if (index < 0 || index >= root.guideY.length)
+                return;
+            var ys = root.guideY.slice();
+            ys[index] = p;
+            root.guideY = ys;
+        }
+    }
+
+    function removeGuide(axis, index) {
+        if (axis === "x") {
+            if (index < 0 || index >= root.guideX.length)
+                return;
+            var xs = root.guideX.slice();
+            xs.splice(index, 1);
+            root.guideX = xs;
+        } else {
+            if (index < 0 || index >= root.guideY.length)
+                return;
+            var ys = root.guideY.slice();
+            ys.splice(index, 1);
+            root.guideY = ys;
+        }
     }
 
     function shapeLabel(type) {

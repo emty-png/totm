@@ -245,6 +245,17 @@ QtObject {
     // self-contained document for the video renderer. While a preview
     // frame is on screen, nodes snapshot from base values so saves and
     // undo capture the document, never the frame.
+    // Number-array copy that survives library round trips (C++
+    // sequences lose Array methods, same rule as factory._copyRadii).
+    function _copyNumbers(src) {
+        var out = [];
+        if (!src || typeof src.length !== "number")
+            return out;
+        for (var i = 0; i < src.length; i++)
+            out.push(Number(src[i]) || 0);
+        return out;
+    }
+
     function snapshotScene() {
         var nodes = [];
         var base = doc.anim ? doc.anim.playBase : null;
@@ -259,6 +270,8 @@ QtObject {
             sceneWidth: doc.sceneWidth,
             sceneHeight: doc.sceneHeight,
             sceneColor: String(doc.sceneColor),
+            guideX: clipboard._copyNumbers(doc.guideX),
+            guideY: clipboard._copyNumbers(doc.guideY),
             nodes: nodes,
             anim: doc.anim.snapshotData(),
             audio: doc.audio.snapshotData()
@@ -330,6 +343,8 @@ QtObject {
             doc.sceneHeight = s.sceneHeight;
         if (s.sceneColor !== undefined)
             doc.sceneColor = s.sceneColor;
+        doc.guideX = clipboard._copyNumbers(s.guideX);
+        doc.guideY = clipboard._copyNumbers(s.guideY);
         var nodes = s.nodes || [];
         var list = [];
         for (var j = 0; j < nodes.length; j++)

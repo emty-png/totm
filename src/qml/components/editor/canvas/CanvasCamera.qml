@@ -34,6 +34,22 @@ QtObject {
         return true;
     }
 
+    // On-demand zoom-to-fit (tryCenter only runs once per tab): fits
+    // the whole scene with the same 5% margin and parks the camera so
+    // tab switches keep it.
+    function fitView() {
+        var d = canvas.doc;
+        if (!d || canvas.width < 10 || canvas.height < 10)
+            return false;
+        var fit = Math.min(canvas.width / d.sceneWidth, canvas.height / d.sceneHeight) * 0.95;
+        canvas.zoom = canvas.clampZoom(fit);
+        canvas.offsetX = (canvas.width - d.sceneWidth * canvas.zoom) / 2;
+        canvas.offsetY = (canvas.height - d.sceneHeight * canvas.zoom) / 2;
+        d.centered = true;
+        canvas.saveCamera(d);
+        return true;
+    }
+
     function saveCamera(d) {
         d.camZoom = canvas.zoom;
         d.camX = canvas.offsetX;

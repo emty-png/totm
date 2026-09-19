@@ -22,11 +22,12 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 * Effects: stackable outer / inner shadows and glows, layer + background blur, animated film grain (canvas and video export share one painter, so they match)
 * Home library: workspaces, starring, drag-move between workspaces, live card previews, inline rename
 * Layers: groups, drill-in, reorder, rename, eye / lock, context menu (copy / paste / duplicate / group / arrange / delete)
-* Smart snapping: edges, centers, scene, equal gaps (Alt suspends)
+* Smart snapping: edges, centers, scene, ruler guides, equal gaps (Alt suspends)
+* Persistent guides (drag from the canvas edges to create, drag to move, release home or double-click to remove) with a zoom pill and zoom-to-fit (Ctrl+0)
 * Design panel with mixed-value handling, typography controls and a Figma-style color picker
 * Dark / light theme, custom frameless titlebar with draggable tabs (titles follow design names)
 * General settings: new-design defaults (canvas size presets, background, timeline length), video-export defaults and storage footprint
-* Animate with presets plus custom from-to properties (scale, rotate, move, opacity, color, hide/show, resize, corner radius, stroke) and drawable motion paths with full point editing, easing graphs and a timeline.
+* Animate with presets plus custom from-to properties (scale, rotate, move, opacity, color, hide/show, resize, corner radius, stroke) and drawable motion paths with full point editing, easing graphs and a timeline (zoom slider + fit, multi-clip joint drag).
 * Audio: import MP3 / WAV / OGG / FLAC onto timeline lanes with live preview, mixed into the export
 * Video export: SD / HD / 4K at 30 / 60fps mp4 through system ffmpeg, with progress + cancel
 * Component export: per-selection PNGs at 1x / 2x / 3x plus resolution-independent SVG vectors on transparency from the design panel, multi-file packs as `{Design}.zip`

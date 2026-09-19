@@ -20,6 +20,7 @@ ColumnLayout {
         }
 
         EditorCanvas {
+            id: canvasView
             Layout.fillWidth: true
             Layout.fillHeight: true
             doc: TabState.documentFor(TabState.currentIndex)
@@ -32,6 +33,7 @@ ColumnLayout {
     }
 
     EditorBottomPanel {
+        id: bottomPanel
         Layout.fillWidth: true
         doc: TabState.documentFor(TabState.currentIndex)
         open: rightPanel.mode === "animate"

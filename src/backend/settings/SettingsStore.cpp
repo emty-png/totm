@@ -42,6 +42,8 @@ constexpr char kRadiusMediumKey[] = "appearance/radiusMedium";
 constexpr char kRadiusLargeKey[] = "appearance/radiusLarge";
 constexpr char kRadiusXLargeKey[] = "appearance/radiusXLarge";
 constexpr char kFontFamilyKey[] = "appearance/fontFamily";
+constexpr char kZoomPillKey[] = "appearance/showZoomPill";
+constexpr char kWindowControlsKey[] = "appearance/showWindowControls";
 
 constexpr char kGenSceneWKey[] = "general/sceneWidth";
 constexpr char kGenSceneHKey[] = "general/sceneHeight";
@@ -72,9 +74,10 @@ bool isKnownShortcutId(const QString &id) {
         QStringLiteral("arrangeForward"), QStringLiteral("arrangeBackward"), QStringLiteral("layersRename"),
         QStringLiteral("nudgeLeft"), QStringLiteral("nudgeRight"), QStringLiteral("nudgeUp"), QStringLiteral("nudgeDown"),
         QStringLiteral("nudgeLeftBig"), QStringLiteral("nudgeRightBig"), QStringLiteral("nudgeUpBig"), QStringLiteral("nudgeDownBig"),
+        QStringLiteral("canvasZoomIn"), QStringLiteral("canvasZoomOut"), QStringLiteral("canvasZoomFit"),
         QStringLiteral("modeToggle"), QStringLiteral("modeDesign"), QStringLiteral("modeAnimate"), QStringLiteral("transportPlay"),
         QStringLiteral("transportStepBack"), QStringLiteral("transportStepFwd"), QStringLiteral("transportStart"),
-        QStringLiteral("transportEnd"),
+        QStringLiteral("transportEnd"), QStringLiteral("timelineZoomIn"), QStringLiteral("timelineZoomOut"),
     };
     return known.contains(id);
 }
@@ -391,6 +394,8 @@ void SettingsStore::loadAppearance() {
     m_customRadiusLarge = clampedRadius(settings.value(QString::fromLatin1(kRadiusLargeKey), 10).toInt());
     m_customRadiusXLarge = clampedRadius(settings.value(QString::fromLatin1(kRadiusXLargeKey), 12).toInt());
     m_fontFamily = settings.value(QString::fromLatin1(kFontFamilyKey), QString()).toString().trimmed();
+    m_showZoomPill = settings.value(QString::fromLatin1(kZoomPillKey), true).toBool();
+    m_showWindowControls = settings.value(QString::fromLatin1(kWindowControlsKey), true).toBool();
 }
 
 void SettingsStore::persistAppearance() {
@@ -401,6 +406,8 @@ void SettingsStore::persistAppearance() {
     settings.setValue(QString::fromLatin1(kRadiusLargeKey), m_customRadiusLarge);
     settings.setValue(QString::fromLatin1(kRadiusXLargeKey), m_customRadiusXLarge);
     settings.setValue(QString::fromLatin1(kFontFamilyKey), m_fontFamily);
+    settings.setValue(QString::fromLatin1(kZoomPillKey), m_showZoomPill);
+    settings.setValue(QString::fromLatin1(kWindowControlsKey), m_showWindowControls);
     settings.sync();
 }
 
@@ -561,6 +568,30 @@ bool SettingsStore::fontMissing() const {
     return m_fontMissing;
 }
 
+bool SettingsStore::showZoomPill() const {
+    return m_showZoomPill;
+}
+
+void SettingsStore::setShowZoomPill(bool show) {
+    if (m_showZoomPill == show)
+        return;
+    m_showZoomPill = show;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
+bool SettingsStore::showWindowControls() const {
+    return m_showWindowControls;
+}
+
+void SettingsStore::setShowWindowControls(bool show) {
+    if (m_showWindowControls == show)
+        return;
+    m_showWindowControls = show;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
 void SettingsStore::refreshFontMissing() {
     // Empty means system default, always available. Otherwise the family
     // must exist in QFontDatabase (system or imported); anything else
@@ -690,6 +721,8 @@ void SettingsStore::resetAppearance() {
     m_customRadiusXLarge = 12;
     m_fontFamily.clear();
     m_fontMissing = false;
+    m_showZoomPill = true;
+    m_showWindowControls = true;
     QSettings settings;
     settings.beginGroup(QStringLiteral("appearanceColorsLight"));
     settings.remove(QString());
