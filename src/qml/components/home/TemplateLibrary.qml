@@ -1,34 +1,26 @@
 import QtQuick
 
-// Starter templates: one-click designs for logo stings, product hero
-// loops, lower thirds and onboarding carousels. Builders use only the
-// public Document API (factory + applyPreset with the pop/loop easings),
-// so template scenes stay valid by construction; each build runs inside
-// one transaction, so a template lands as a single undo entry.
+// Starter templates: full-blown motion graphics, not sketches — a dark
+// product-launch teaser, a vertical story promo, and a three-tier
+// pricing scene, each with in/out beats across its whole duration.
+// Builders use only the public Document API (factory + applyPreset
+// with the named easings), so template scenes stay valid by
+// construction; each build runs inside one transaction, so a template
+// lands as a single undo entry.
 QtObject {
     id: library
 
     function templates() {
         return [
             {
-                id: "logoSting",
-                name: qsTr("Logo sting"),
-                blurb: qsTr("3s dark reveal with a looping pulse")
+                id: "storyPromo",
+                name: qsTr("Story promo"),
+                blurb: qsTr("6s clean vertical offer for stories")
             },
             {
-                id: "heroLoop",
-                name: qsTr("Hero loop"),
-                blurb: qsTr("4s app card cascade with CTA pulse")
-            },
-            {
-                id: "lowerThird",
-                name: qsTr("Lower third"),
-                blurb: qsTr("4s name bar with in/out animation")
-            },
-            {
-                id: "onboarding",
-                name: qsTr("Onboarding"),
-                blurb: qsTr("4s three-card picker cascade")
+                id: "pricingTiers",
+                name: qsTr("Pricing tiers"),
+                blurb: qsTr("7s three-plan pricing with highlight")
             }
         ];
     }
@@ -45,241 +37,204 @@ QtObject {
     function build(doc, templateId) {
         if (!doc)
             return false;
-        if (templateId === "logoSting")
-            return library.buildLogoSting(doc);
-        if (templateId === "heroLoop")
-            return library.buildHeroLoop(doc);
-        if (templateId === "lowerThird")
-            return library.buildLowerThird(doc);
-        if (templateId === "onboarding")
-            return library.buildOnboarding(doc);
+        if (templateId === "storyPromo")
+            return library.buildStoryPromo(doc);
+        if (templateId === "pricingTiers")
+            return library.buildPricingTiers(doc);
         return false;
     }
 
-    // Dark scene, overshoot pop on the dot, typewriter wordmark, and a
-    // ping-pong opacity pulse that loops till the composition ends.
-    function buildLogoSting(doc) {
-        doc.beginTransaction();
-        doc.sceneColor = "#101010";
-        doc.setAnimDuration(3.0);
-        var dot = doc.addShape("ellipse", 860, 360, 200, 200);
-        var word = doc.addText(660, 610, 600, 140, false);
-        var n = doc.findNode(dot);
-        if (n) {
-            n.name = "Logo dot";
-            n.fill = "#0d99ff";
-        }
-        var w = doc.findNode(word);
-        if (w) {
-            w.name = "Wordmark";
-            w.textContent = "totm";
-            w.fontSize = 110;
-            w.fontWeight = 600;
-            w.fill = "#f6f6f6";
-            w.hAlign = "center";
-        }
-        doc.applyPreset("customScale", [dot], 0, 0.6, "in", {
-            from: 0,
-            to: 1
-        }, {
-            id: "backOut"
-        }, "none", 0);
-        doc.applyPreset("type", [word], 0.35, 0.9, "in", {
-            unit: "letters",
-            cps: 12,
-            cursor: false
-        }, {
-            id: "linear"
-        }, "none", 0);
-        doc.applyPreset("customOpacity", [dot], 1.4, 0.8, "in", {
-            from: 1,
-            to: 0.55
-        }, {
-            id: "easeInOut"
-        }, "pingpong", 0);
-        doc.endTransaction();
-        return true;
+    function styleNode(doc, uid, name, props) {
+        var n = doc.findNode(uid);
+        if (!n)
+            return null;
+        n.name = name;
+        for (var key in props)
+            n[key] = props[key];
+        return n;
     }
 
-    // Light scene, card + copy rising in one staggered cascade, CTA pill
-    // breathing on a loop for that live product feel.
-    function buildHeroLoop(doc) {
+    function styleText(doc, uid, name, content, size, weight, fill, align) {
+        return library.styleNode(doc, uid, name, {
+            textContent: content,
+            fontSize: size,
+            fontWeight: weight,
+            fill: fill,
+            hAlign: align || "center"
+        });
+    }
+
+    // Light vertical 9:16 offer in five beats: eyebrow fades, the
+    // headline slides up, a rule draws itself, the card rises with a
+    // checklist cascade, the CTA pops and breathes, then everything
+    // fades for the loop point. Pricing-scene restraint, portrait.
+    function buildStoryPromo(doc) {
         doc.beginTransaction();
+        doc.sceneWidth = 1080;
+        doc.sceneHeight = 1920;
         doc.sceneColor = "#ffffff";
-        doc.setAnimDuration(4.0);
-        var card = doc.addShape("rectangle", 650, 220, 620, 460);
-        var headline = doc.addText(710, 280, 500, 110, false);
-        var sub = doc.addText(710, 400, 500, 60, false);
-        var cta = doc.addShape("rectangle", 710, 520, 250, 76);
-        var label = doc.addText(710, 520, 250, 76, false);
-        var c = doc.findNode(card);
-        if (c) {
-            c.name = "Card";
-            c.fill = "#f2f2f2";
-            c.radius = 28;
+        doc.setAnimDuration(6.0);
+        var brow = doc.addText(240, 300, 600, 54, false);
+        var head = doc.addText(140, 380, 800, 230, false);
+        var rule = doc.addShape("rectangle", 490, 660, 100, 4);
+        var sub = doc.addText(290, 700, 500, 60, false);
+        var card = doc.addShape("rectangle", 190, 820, 700, 420);
+        var dots = [doc.addShape("ellipse", 250, 888, 20, 20), doc.addShape("ellipse", 250, 978, 20, 20), doc.addShape("ellipse", 250, 1068, 20, 20)];
+        var rows = [doc.addText(290, 872, 560, 52, false), doc.addText(290, 962, 560, 52, false), doc.addText(290, 1052, 560, 52, false)];
+        var cta = doc.addShape("rectangle", 290, 1300, 500, 110);
+        var ctaLabel = doc.addText(290, 1300, 500, 110, false);
+        var foot = doc.addText(390, 1450, 300, 50, false);
+        library.styleText(doc, brow, "Eyebrow", "LIMITED TIME", 32, 600, "#0d99ff", "center");
+        var ew = doc.findNode(brow);
+        if (ew)
+            ew.letterSpacing = 5;
+        library.styleText(doc, head, "Headline", "50% off", 190, 800, "#0f0f0f", "center");
+        library.styleNode(doc, rule, "Rule", {
+            fill: "#0d99ff",
+            radius: 2
+        });
+        library.styleText(doc, sub, "Subhead", "All annual plans", 36, 400, "#555555", "center");
+        library.styleNode(doc, card, "Card", {
+            fill: "#f2f2f2",
+            radius: 28
+        });
+        var rowWords = ["Unlimited designs", "4K video export", "Priority support"];
+        for (var i = 0; i < dots.length; i++) {
+            library.styleNode(doc, dots[i], "Check " + (i + 1), {
+                fill: "#0d99ff"
+            });
+            library.styleText(doc, rows[i], "Row " + (i + 1), rowWords[i], 30, 400, "#333333", "left");
         }
-        var h = doc.findNode(headline);
-        if (h) {
-            h.name = "Headline";
-            h.textContent = "Ship it";
-            h.fontSize = 76;
-            h.fontWeight = 600;
-            h.fill = "#0f0f0f";
-        }
-        var s = doc.findNode(sub);
-        if (s) {
-            s.name = "Subhead";
-            s.textContent = "Motion in minutes";
-            s.fontSize = 32;
-            s.fill = "#555555";
-        }
-        var b = doc.findNode(cta);
-        if (b) {
-            b.name = "CTA";
-            b.fill = "#0d99ff";
-            b.radius = 38;
-        }
-        var l = doc.findNode(label);
-        if (l) {
-            l.name = "CTA label";
-            l.textContent = "Get started";
-            l.fontSize = 28;
-            l.fill = "#ffffff";
-            l.hAlign = "center";
-            l.vAlign = "middle";
-        }
-        doc.applyPreset("slide", [card, headline, sub, cta, label], 0.2, 0.7, "in", {
+        library.styleNode(doc, cta, "CTA", {
+            fill: "#0d99ff",
+            radius: 55
+        });
+        library.styleText(doc, ctaLabel, "CTA label", "Claim offer", 40, 600, "#ffffff", "center");
+        var sl = doc.findNode(ctaLabel);
+        if (sl)
+            sl.vAlign = "middle";
+        library.styleText(doc, foot, "Footnote", "Ends Sunday", 28, 400, "#888888", "center");
+        doc.applyPreset("fade", [brow], 0.1, 0.4, "in", {}, null, "none", 0);
+        doc.applyPreset("slide", [head], 0.3, 0.6, "in", {
+            direction: "up",
+            distance: 110,
+            fade: true
+        }, {
+            id: "easeOut"
+        }, "none", 0);
+        doc.applyPreset("customResize", [rule], 0.8, 0.5, "in", {
+            fromW: 8,
+            fromH: 4,
+            toW: 100,
+            toH: 4
+        }, {
+            id: "easeOut"
+        }, "none", 0);
+        doc.applyPreset("fade", [sub], 1.0, 0.4, "in", {}, null, "none", 0);
+        doc.applyPreset("slide", [card], 1.2, 0.55, "in", {
             direction: "up",
             distance: 90,
             fade: true
         }, {
             id: "easeOut"
-        }, "none", 0.12);
-        doc.applyPreset("customOpacity", [cta], 1.6, 0.7, "in", {
-            from: 1,
-            to: 0.7
-        }, {
-            id: "easeInOut"
-        }, "pingpong", 0);
-        doc.endTransaction();
-        return true;
-    }
-
-    // Name bar that slides in with its stripe and copy, holds, then
-    // fades out together before the composition ends.
-    function buildLowerThird(doc) {
-        doc.beginTransaction();
-        doc.sceneColor = "#ffffff";
-        doc.setAnimDuration(4.0);
-        var bar = doc.addShape("rectangle", 120, 800, 560, 120);
-        var stripe = doc.addShape("rectangle", 120, 800, 12, 120);
-        var name = doc.addText(160, 816, 480, 62, false);
-        var role = doc.addText(160, 878, 480, 44, false);
-        var r = doc.findNode(bar);
-        if (r) {
-            r.name = "Bar";
-            r.fill = "#101010";
-            r.radius = 16;
-        }
-        var t = doc.findNode(stripe);
-        if (t) {
-            t.name = "Stripe";
-            t.fill = "#0d99ff";
-        }
-        var m = doc.findNode(name);
-        if (m) {
-            m.name = "Name";
-            m.textContent = "Jane Doe";
-            m.fontSize = 44;
-            m.fontWeight = 600;
-            m.fill = "#f6f6f6";
-        }
-        var o = doc.findNode(role);
-        if (o) {
-            o.name = "Role";
-            o.textContent = "Motion designer";
-            o.fontSize = 28;
-            o.fill = "#9a9a9a";
-        }
-        doc.applyPreset("slide", [bar, stripe, name, role], 0.2, 0.6, "in", {
+        }, "none", 0);
+        doc.applyPreset("slide", dots.concat(rows), 1.4, 0.45, "in", {
             direction: "left",
-            distance: 260,
-            fade: true
-        }, {
-            id: "easeOut"
-        }, "none", 0.08);
-        doc.applyPreset("fade", [bar, stripe, name, role], 3.0, 0.7, "out", {}, null, "none", 0);
-        doc.endTransaction();
-        return true;
-    }
-
-    // Title plus three tinted cards whose numbers and labels cascade in
-    // card order: one staggered slide-up carries the whole picker.
-    function buildOnboarding(doc) {
-        doc.beginTransaction();
-        doc.sceneColor = "#ffffff";
-        doc.setAnimDuration(4.0);
-        var title = doc.addText(560, 140, 800, 100, false);
-        var c1 = doc.addShape("rectangle", 240, 380, 360, 300);
-        var c2 = doc.addShape("rectangle", 780, 380, 360, 300);
-        var c3 = doc.addShape("rectangle", 1320, 380, 360, 300);
-        var n1 = doc.addText(240, 420, 360, 130, false);
-        var n2 = doc.addText(780, 420, 360, 130, false);
-        var n3 = doc.addText(1320, 420, 360, 130, false);
-        var l1 = doc.addText(240, 560, 360, 60, false);
-        var l2 = doc.addText(780, 560, 360, 60, false);
-        var l3 = doc.addText(1320, 560, 360, 60, false);
-        var v = doc.findNode(title);
-        if (v) {
-            v.name = "Title";
-            v.textContent = "Pick a path";
-            v.fontSize = 64;
-            v.fontWeight = 600;
-            v.fill = "#0f0f0f";
-            v.hAlign = "center";
-        }
-        var cards = [c1, c2, c3];
-        var fills = ["#e3efff", "#ece5ff", "#ddf5ea"];
-        for (var i = 0; i < cards.length; i++) {
-            var cn = doc.findNode(cards[i]);
-            if (cn) {
-                cn.name = "Card " + (i + 1);
-                cn.fill = fills[i];
-                cn.radius = 24;
-            }
-        }
-        var nums = [n1, n2, n3];
-        for (var j = 0; j < nums.length; j++) {
-            var nn = doc.findNode(nums[j]);
-            if (nn) {
-                nn.name = "Number " + (j + 1);
-                nn.textContent = String(j + 1);
-                nn.fontSize = 110;
-                nn.fontWeight = 600;
-                nn.fill = "#0f0f0f";
-                nn.hAlign = "center";
-            }
-        }
-        var labels = [l1, l2, l3];
-        var words = ["Design", "Animate", "Export"];
-        for (var k = 0; k < labels.length; k++) {
-            var ln = doc.findNode(labels[k]);
-            if (ln) {
-                ln.name = words[k];
-                ln.textContent = words[k];
-                ln.fontSize = 34;
-                ln.fill = "#0f0f0f";
-                ln.hAlign = "center";
-            }
-        }
-        doc.applyPreset("fade", [title], 0.1, 0.5, "in", {}, null, "none", 0);
-        doc.applyPreset("slide", [c1, n1, l1, c2, n2, l2, c3, n3, l3], 0.25, 0.6, "in", {
-            direction: "up",
             distance: 80,
             fade: true
         }, {
             id: "easeOut"
         }, "none", 0.09);
+        doc.applyPreset("customScale", [cta, ctaLabel], 1.9, 0.5, "in", {
+            from: 0,
+            to: 1
+        }, {
+            id: "backOut"
+        }, "none", 0);
+        doc.applyPreset("customOpacity", [cta], 2.5, 2.7, "in", {
+            from: 1,
+            to: 0.75
+        }, {
+            id: "easeInOut"
+        }, "pingpong", 0);
+        doc.applyPreset("fade", [foot], 2.2, 0.4, "in", {}, null, "none", 0);
+        doc.applyPreset("fade", [brow, head, rule, sub, card, cta, ctaLabel, foot].concat(dots, rows), 5.2, 0.6, "out", {}, null, "none", 0);
+        doc.endTransaction();
+        return true;
+    }
+
+    // Light 16:9 pricing in four beats: title fades, three tier cards
+    // cascade up, prices pop, CTAs follow, the footnote lands, then the
+    // board fades. The middle plan carries a brand glow.
+    function buildPricingTiers(doc) {
+        doc.beginTransaction();
+        doc.sceneWidth = 1920;
+        doc.sceneHeight = 1080;
+        doc.sceneColor = "#ffffff";
+        doc.setAnimDuration(7.0);
+        var title = doc.addText(560, 90, 800, 90, false);
+        var sub = doc.addText(660, 180, 600, 50, false);
+        var foot = doc.addText(660, 940, 600, 44, false);
+        library.styleText(doc, title, "Title", "Simple pricing", 64, 600, "#0f0f0f", "center");
+        library.styleText(doc, sub, "Subhead", "Pick your plan", 30, 400, "#666666", "center");
+        library.styleText(doc, foot, "Footnote", "Cancel anytime", 26, 400, "#888888", "center");
+        var cards = [doc.addShape("rectangle", 270, 300, 420, 560), doc.addShape("rectangle", 750, 270, 420, 620), doc.addShape("rectangle", 1230, 300, 420, 560)];
+        var names = [doc.addText(270, 340, 420, 50, false), doc.addText(750, 310, 420, 50, false), doc.addText(1230, 340, 420, 50, false)];
+        var prices = [doc.addText(270, 400, 420, 110, false), doc.addText(750, 370, 420, 110, false), doc.addText(1230, 400, 420, 110, false)];
+        var pers = [doc.addText(270, 505, 420, 40, false), doc.addText(750, 475, 420, 40, false), doc.addText(1230, 505, 420, 40, false)];
+        var feats = [doc.addText(270, 570, 420, 40, false), doc.addText(270, 615, 420, 40, false), doc.addText(270, 660, 420, 40, false), doc.addText(750, 540, 420, 40, false), doc.addText(750, 585, 420, 40, false), doc.addText(750, 630, 420, 40, false), doc.addText(1230, 570, 420, 40, false), doc.addText(1230, 615, 420, 40, false), doc.addText(1230, 660, 420, 40, false)];
+        var ctas = [doc.addShape("rectangle", 340, 740, 280, 64), doc.addShape("rectangle", 820, 790, 280, 64), doc.addShape("rectangle", 1300, 740, 280, 64)];
+        var ctaLabels = [doc.addText(340, 740, 280, 64, false), doc.addText(820, 790, 280, 64, false), doc.addText(1300, 740, 280, 64, false)];
+        var planNames = ["Starter", "Pro", "Team"];
+        var planPrices = ["$0", "$12", "$29"];
+        var featWords = ["3 designs", "720p export", "Community", "Unlimited designs", "4K + SVG export", "Priority support", "Everything in Pro", "Shared workspaces", "SSO login"];
+        var fills = ["#f2f2f2", "#0d99ff", "#f2f2f2"];
+        var inks = ["#0f0f0f", "#ffffff", "#0f0f0f"];
+        var subInks = ["#555555", "#d6ecff", "#555555"];
+        for (var i = 0; i < 3; i++) {
+            library.styleNode(doc, cards[i], "Card " + planNames[i], {
+                fill: fills[i],
+                radius: 24
+            });
+            library.styleText(doc, names[i], planNames[i], planNames[i], 34, 600, inks[i], "center");
+            library.styleText(doc, prices[i], planNames[i] + " price", planPrices[i], 84, 800, inks[i], "center");
+            library.styleText(doc, pers[i], planNames[i] + " per", "per month", 24, 400, subInks[i], "center");
+            for (var f = 0; f < 3; f++)
+                library.styleText(doc, feats[i * 3 + f], planNames[i] + " feature " + (f + 1), featWords[i * 3 + f], 24, 400, subInks[i], "center");
+            var ctaFill = i === 1 ? "#ffffff" : "#0f0f0f";
+            var ctaInk = i === 1 ? "#0d99ff" : "#ffffff";
+            library.styleNode(doc, ctas[i], planNames[i] + " CTA", {
+                fill: ctaFill,
+                radius: 32
+            });
+            library.styleText(doc, ctaLabels[i], planNames[i] + " CTA label", "Choose", 26, 600, ctaInk, "center");
+            var ll = doc.findNode(ctaLabels[i]);
+            if (ll)
+                ll.vAlign = "middle";
+        }
+        var glow = doc.factory.defaultGlow(false);
+        glow.color = "#800d99ff";
+        var hl = doc.findNode(cards[1]);
+        if (hl)
+            hl.glows = [glow];
+        var board = [title, sub].concat(cards, names, prices, pers, feats, ctas, ctaLabels);
+        doc.applyPreset("fade", [title], 0.1, 0.5, "in", {}, null, "none", 0);
+        doc.applyPreset("fade", [sub], 0.25, 0.5, "in", {}, null, "none", 0);
+        doc.applyPreset("slide", cards.concat(names, prices, pers, feats, ctas, ctaLabels), 0.4, 0.7, "in", {
+            direction: "up",
+            distance: 90,
+            fade: true
+        }, {
+            id: "easeOut"
+        }, "none", 0.06);
+        doc.applyPreset("customScale", prices, 1.6, 0.5, "in", {
+            from: 0.5,
+            to: 1
+        }, {
+            id: "backOut"
+        }, "none", 0.15);
+        doc.applyPreset("fade", [foot], 2.4, 0.5, "in", {}, null, "none", 0);
+        doc.applyPreset("fade", board.concat([foot]), 6.0, 0.8, "out", {}, null, "none", 0);
         doc.endTransaction();
         return true;
     }
