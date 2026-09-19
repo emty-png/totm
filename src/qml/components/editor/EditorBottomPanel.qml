@@ -15,6 +15,10 @@ Item {
     readonly property int maxPanelHeight: 400
     property var doc: null
 
+    // Timeline instance for keyboard zoom (EditorShortcuts reaches it
+    // through the view's bottomPanel).
+    readonly property alias timelineView: timeline
+
     Layout.preferredHeight: bottomPanel.open ? bottomPanel.panelHeight : 0
     Layout.fillWidth: true
 
@@ -52,6 +56,7 @@ Item {
     // the timeline would swallow every transport, ruler and keyframe
     // press; timeline marquee stays dead by design.
     TimelineView {
+        id: timeline
         anchors.fill: parent
         visible: bottomPanel.height > 8
         doc: bottomPanel.doc

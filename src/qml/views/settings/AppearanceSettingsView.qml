@@ -3,9 +3,9 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Totm
 
-// Appearance settings panel: theme mode, per-theme colors, corner
-// presets + custom radii, UI font with custom file imports. Same
-// centered 640px card rhythm as the Shortcut tab.
+// Appearance settings panel: theme mode, canvas chrome, per-theme
+// colors, corner presets + custom radii, UI font with custom file
+// imports. Same centered 640px card rhythm as the Shortcut tab.
 ColumnLayout {
     id: appearancePanel
 
@@ -83,6 +83,10 @@ ColumnLayout {
             spacing: 12
 
             AppearanceThemeSection {}
+
+            AppearanceCanvasSection {}
+
+            AppearanceWindowSection {}
 
             AppearanceColorsSection {}
 

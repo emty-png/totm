@@ -101,6 +101,7 @@ qt_add_qml_module(totm
         qml/components/editor/canvas/ImageTool.qml
         qml/components/editor/canvas/TextEditor.qml
         qml/components/editor/canvas/CanvasCamera.qml
+        qml/components/editor/canvas/CanvasGuides.qml
         qml/components/editor/canvas/CanvasSelectPolicy.qml
         qml/components/editor/canvas/CanvasResizePolicy.qml
         qml/components/editor/canvas/PenTool.qml
@@ -256,6 +257,8 @@ qt_add_qml_module(totm
         qml/components/settings/GeneralExportSection.qml
         qml/components/settings/GeneralStorageSection.qml
         qml/components/settings/AppearanceThemeSection.qml
+        qml/components/settings/AppearanceCanvasSection.qml
+        qml/components/settings/AppearanceWindowSection.qml
         qml/components/settings/AppearanceColorRow.qml
         qml/components/settings/AppearanceColorsSection.qml
         qml/components/settings/AppearanceRadiusSection.qml

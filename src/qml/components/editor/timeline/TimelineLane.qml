@@ -29,6 +29,13 @@ Item {
     property var doc: null
 
     property var diamondPolicy: null
+    // Joint-move state, owned by the view and shared across lanes
+    // (selections span rows): press-time t0/dur per selected id, the
+    // live delta in seconds, and whether a joint drag is showing.
+    property var jointPolicy: null
+    property var jointOrig: ({})
+    property real jointDx: 0
+    property bool jointActive: false
 
     // Active drag: press-time snapshot plus applied times. Visuals follow
     // these (not the model, which carries no mid-drag notifications).
@@ -186,9 +193,13 @@ Item {
     }
 
     // Bar geometry, following the drag while one is active on its clip.
+    // Joint clips ride the shared delta off their press-time snapshot
+    // (the model mutates silently, so only these scalars stay stable).
     function barX(snap) {
         if (lane.dragging && snap.id === lane.dragClipId)
             return lane.laneX(lane.dragT0);
+        if (lane.jointActive && lane.jointOrig[snap.id] !== undefined)
+            return lane.laneX(lane.jointOrig[snap.id].t0 + lane.jointDx);
         return lane.laneX(snap.t0);
     }
 
@@ -201,6 +212,9 @@ Item {
     function endX(end) {
         if (lane.dragging && end.clipId === lane.dragClipId)
             return lane.laneX(end.end === "end" ? lane.dragT0 + lane.dragDur : lane.dragT0);
+        var o = lane.jointActive ? lane.jointOrig[end.clipId] : undefined;
+        if (o !== undefined)
+            return lane.laneX(o.t0 + lane.jointDx + (end.end === "end" ? o.dur : 0));
         return lane.laneX(end.x);
     }
 
@@ -279,7 +293,36 @@ Item {
         lane.storeOrig(c);
         lane.pressLx = lx;
         lane.dragging = false;
+        // Joint-move press snapshot: every selected clip anywhere in the
+        // document rides the same delta when this drag moves. Published
+        // to the view (shared across lanes); visuals stay still until
+        // the first move flips jointActive on.
+        var orig = {};
+        var ids = [];
+        if (mode === "move" && lane.doc.anim.isClipSelected(clipId)) {
+            var sel = lane.doc.anim.selectedClipIds;
+            var all = lane.doc.anim.clips;
+            for (var i = 0; i < all.length; i++) {
+                if (sel.indexOf(all[i].id) >= 0) {
+                    orig[all[i].id] = {
+                        t0: all[i].t0,
+                        dur: all[i].duration
+                    };
+                    ids.push(all[i].id);
+                }
+            }
+        }
+        lane.jointIds = ids;
+        lane.jointSnap = orig;
+        if (lane.jointPolicy)
+            lane.jointPolicy("begin", orig);
     }
+
+    // Ids riding the active joint drag (press-time snapshot above).
+    property var jointIds: []
+    // Local press-time snapshot (bindings to the view copy exist for
+    // the other lanes' visuals; the drag itself reads this).
+    property var jointSnap: ({})
 
     // Press-time snapshot kept as plain props (the model object mutates
     // silently underneath, so only scalars are stable).
@@ -301,22 +344,48 @@ Item {
         if (!lane.dragging)
             lane.doc.anim.settlePreview();
         lane.dragging = true;
-        var dx = (lx - lane.pressLx) / lane.pxPerSec;
-        // Both ends stay inside the composition: move keeps the whole
-        // clip in range, stretch pins its end to the duration.
         var comp = Math.max(0.5, lane.doc.anim.duration);
         if (lane.dragMode === "stretch") {
-            var end = Math.min(comp, lane.snapTime(lane.snapT0 + lane.snapDur + dx));
+            var end = Math.min(comp, lane.snapTime(lane.snapT0 + lane.snapDur + (lx - lane.pressLx) / lane.pxPerSec));
             lane.dragT0 = lane.snapT0;
             lane.dragDur = Math.min(60, Math.max(0.1, end - lane.snapT0));
-        } else {
-            var cap = Math.max(0, comp - lane.snapDur);
-            lane.dragT0 = Math.min(cap, Math.max(0, lane.snapTime(lane.snapT0 + dx)));
+            lane.doc.nudgeClip(lane.dragClipId, lane.dragT0, lane.dragDur);
+        } else if (lane.jointIds.length > 1) {
+            // Joint move: the dragged clip snaps, everyone rides the
+            // same delta, clamped so the whole formation stays inside
+            // the composition. Silent nudges + one touch on release =
+            // a single undo entry for the formation.
+            var want = lane.snapTime(lane.snapT0 + (lx - lane.pressLx) / lane.pxPerSec);
+            var dx = lane.clampJointDx(lane.jointIds, want - lane.snapT0, comp);
+            for (var i = 0; i < lane.jointIds.length; i++) {
+                var o = lane.jointSnap[lane.jointIds[i]];
+                lane.doc.nudgeClip(lane.jointIds[i], o.t0 + dx, o.dur);
+            }
+            lane.dragT0 = lane.snapT0 + dx;
             lane.dragDur = lane.snapDur;
+            if (lane.jointPolicy)
+                lane.jointPolicy("move", dx);
+        } else {
+            // Both ends stay inside the composition: move keeps the whole
+            // clip in range, stretch pins its end to the duration.
+            var cap = Math.max(0, comp - lane.snapDur);
+            lane.dragT0 = Math.min(cap, Math.max(0, lane.snapTime(lane.snapT0 + (lx - lane.pressLx) / lane.pxPerSec)));
+            lane.dragDur = lane.snapDur;
+            lane.doc.nudgeClip(lane.dragClipId, lane.dragT0, lane.dragDur);
         }
-        lane.doc.nudgeClip(lane.dragClipId, lane.dragT0, lane.dragDur);
         if (!lane.doc.anim.playing)
             lane.doc.seekPlayhead(lane.doc.anim.currentTime);
+    }
+
+    // Widest delta keeping every joint clip inside [0, comp].
+    function clampJointDx(ids, dx, comp) {
+        var lo = -Infinity, hi = Infinity;
+        for (var i = 0; i < ids.length; i++) {
+            var o = lane.jointSnap[ids[i]];
+            lo = Math.max(lo, 0 - o.t0);
+            hi = Math.min(hi, comp - o.dur - o.t0);
+        }
+        return Math.min(hi, Math.max(lo, dx));
     }
 
     function dragRelease() {
@@ -324,14 +393,27 @@ Item {
         var id = lane.dragClipId;
         var moved = lane.dragging;
         var t0 = lane.dragT0, dur = lane.dragDur;
+        var joint = lane.jointIds.length > 1 ? lane.jointIds.slice() : [];
         lane.dragging = false;
         lane.dragClipId = -1;
+        lane.jointIds = [];
+        lane.jointSnap = {};
+        if (lane.jointPolicy)
+            lane.jointPolicy("end", 0);
         if (!d)
             return;
         if (moved) {
             // Values already sit final via nudges: one touch stages the
-            // single undo entry that end() commits.
-            d.nudgeClip(id, t0, dur);
+            // single undo entry that end() commits (formation included).
+            if (joint.length > 1) {
+                for (var i = 0; i < joint.length; i++) {
+                    var o = d.anim.clipById(joint[i]);
+                    if (o)
+                        d.nudgeClip(joint[i], o.t0, o.duration);
+                }
+            } else {
+                d.nudgeClip(id, t0, dur);
+            }
             d.touch();
         }
         d.endTransaction();

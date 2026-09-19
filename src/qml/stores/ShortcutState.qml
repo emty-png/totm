@@ -60,6 +60,11 @@ QtObject {
     property string nudgeUpBig: SettingsStore.shortcutOverrides["nudgeUpBig"] || "Shift+Up"
     property string nudgeDownBig: SettingsStore.shortcutOverrides["nudgeDownBig"] || "Shift+Down"
 
+    // Canvas zoom (wheel path exists; these are its keys).
+    property string canvasZoomIn: SettingsStore.shortcutOverrides["canvasZoomIn"] || "Ctrl+="
+    property string canvasZoomOut: SettingsStore.shortcutOverrides["canvasZoomOut"] || "Ctrl+-"
+    property string canvasZoomFit: SettingsStore.shortcutOverrides["canvasZoomFit"] || "Ctrl+0"
+
     // Design / Animate.
     property string modeToggle: SettingsStore.shortcutOverrides["modeToggle"] || "Tab"
     property string modeDesign: SettingsStore.shortcutOverrides["modeDesign"] || "Ctrl+1"
@@ -71,9 +76,12 @@ QtObject {
     property string transportStepFwd: SettingsStore.shortcutOverrides["transportStepFwd"] || "Ctrl+Right"
     property string transportStart: SettingsStore.shortcutOverrides["transportStart"] || "Home"
     property string transportEnd: SettingsStore.shortcutOverrides["transportEnd"] || "End"
+    // Timeline zoom (ctrl+wheel exists; these are its keys).
+    property string timelineZoomIn: SettingsStore.shortcutOverrides["timelineZoomIn"] || "="
+    property string timelineZoomOut: SettingsStore.shortcutOverrides["timelineZoomOut"] || "-"
 
     // All editable ids in stable order (matches groups below).
-    readonly property var allIds: ["homeNew", "homeOpen", "homeRename", "homeDelete", "homeDuplicate", "homeStar", "toolSelect", "toolRect", "toolEllipse", "toolTriangle", "toolStar", "toolPen", "toolText", "toolImage", "editUndo", "editRedo", "editCopy", "editPaste", "editDuplicate", "editDelete", "editGroup", "editUngroup", "arrangeFront", "arrangeBack", "arrangeForward", "arrangeBackward", "layersRename", "nudgeLeft", "nudgeRight", "nudgeUp", "nudgeDown", "nudgeLeftBig", "nudgeRightBig", "nudgeUpBig", "nudgeDownBig", "modeToggle", "modeDesign", "modeAnimate", "transportPlay", "transportStepBack", "transportStepFwd", "transportStart", "transportEnd"]
+    readonly property var allIds: ["homeNew", "homeOpen", "homeRename", "homeDelete", "homeDuplicate", "homeStar", "toolSelect", "toolRect", "toolEllipse", "toolTriangle", "toolStar", "toolPen", "toolText", "toolImage", "editUndo", "editRedo", "editCopy", "editPaste", "editDuplicate", "editDelete", "editGroup", "editUngroup", "arrangeFront", "arrangeBack", "arrangeForward", "arrangeBackward", "layersRename", "nudgeLeft", "nudgeRight", "nudgeUp", "nudgeDown", "nudgeLeftBig", "nudgeRightBig", "nudgeUpBig", "nudgeDownBig", "canvasZoomIn", "canvasZoomOut", "canvasZoomFit", "modeToggle", "modeDesign", "modeAnimate", "transportPlay", "transportStepBack", "transportStepFwd", "transportStart", "transportEnd", "timelineZoomIn", "timelineZoomOut"]
 
     function defaultFor(id) {
         switch (id) {
@@ -147,6 +155,12 @@ QtObject {
             return "Shift+Up";
         case "nudgeDownBig":
             return "Shift+Down";
+        case "canvasZoomIn":
+            return "Ctrl+=";
+        case "canvasZoomOut":
+            return "Ctrl+-";
+        case "canvasZoomFit":
+            return "Ctrl+0";
         case "modeToggle":
             return "Tab";
         case "modeDesign":
@@ -163,6 +177,10 @@ QtObject {
             return "Home";
         case "transportEnd":
             return "End";
+        case "timelineZoomIn":
+            return "=";
+        case "timelineZoomOut":
+            return "-";
         default:
             return "";
         }
@@ -240,6 +258,12 @@ QtObject {
             return qsTr("Nudge up 10px");
         case "nudgeDownBig":
             return qsTr("Nudge down 10px");
+        case "canvasZoomIn":
+            return qsTr("Zoom canvas in");
+        case "canvasZoomOut":
+            return qsTr("Zoom canvas out");
+        case "canvasZoomFit":
+            return qsTr("Fit canvas to view");
         case "modeToggle":
             return qsTr("Toggle Design / Animate");
         case "modeDesign":
@@ -256,6 +280,10 @@ QtObject {
             return qsTr("Jump to start");
         case "transportEnd":
             return qsTr("Jump to end");
+        case "timelineZoomIn":
+            return qsTr("Zoom timeline in");
+        case "timelineZoomOut":
+            return qsTr("Zoom timeline out");
         default:
             return id;
         }
@@ -333,6 +361,12 @@ QtObject {
             return shortcutState.nudgeUpBig;
         case "nudgeDownBig":
             return shortcutState.nudgeDownBig;
+        case "canvasZoomIn":
+            return shortcutState.canvasZoomIn;
+        case "canvasZoomOut":
+            return shortcutState.canvasZoomOut;
+        case "canvasZoomFit":
+            return shortcutState.canvasZoomFit;
         case "modeToggle":
             return shortcutState.modeToggle;
         case "modeDesign":
@@ -349,6 +383,10 @@ QtObject {
             return shortcutState.transportStart;
         case "transportEnd":
             return shortcutState.transportEnd;
+        case "timelineZoomIn":
+            return shortcutState.timelineZoomIn;
+        case "timelineZoomOut":
+            return shortcutState.timelineZoomOut;
         default:
             return "";
         }
@@ -616,6 +654,21 @@ QtObject {
                         sequence: shortcutState.nudgeDownBig
                     },
                     {
+                        id: "canvasZoomIn",
+                        label: shortcutState.labelFor("canvasZoomIn"),
+                        sequence: shortcutState.canvasZoomIn
+                    },
+                    {
+                        id: "canvasZoomOut",
+                        label: shortcutState.labelFor("canvasZoomOut"),
+                        sequence: shortcutState.canvasZoomOut
+                    },
+                    {
+                        id: "canvasZoomFit",
+                        label: shortcutState.labelFor("canvasZoomFit"),
+                        sequence: shortcutState.canvasZoomFit
+                    },
+                    {
                         id: "modeToggle",
                         label: shortcutState.labelFor("modeToggle"),
                         sequence: shortcutState.modeToggle
@@ -659,6 +712,16 @@ QtObject {
                         id: "transportEnd",
                         label: shortcutState.labelFor("transportEnd"),
                         sequence: shortcutState.transportEnd
+                    },
+                    {
+                        id: "timelineZoomIn",
+                        label: shortcutState.labelFor("timelineZoomIn"),
+                        sequence: shortcutState.timelineZoomIn
+                    },
+                    {
+                        id: "timelineZoomOut",
+                        label: shortcutState.labelFor("timelineZoomOut"),
+                        sequence: shortcutState.timelineZoomOut
                     }
                 ]
             }

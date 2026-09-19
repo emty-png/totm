@@ -22,6 +22,13 @@ Item {
     property real pxPerSec: 120
     readonly property real minZoom: 30
     readonly property real maxZoom: 600
+    // Joint clip-drag state, shared across lanes (selections span
+    // rows): press-time t0/dur per riding id, the live delta, and
+    // whether the formation is showing. Lanes publish through
+    // setJoint and read back through bound delegate props.
+    property var jointOrig: ({})
+    property real jointDx: 0
+    property bool clipDragging: false
     property bool marqueeDragged: false
     readonly property real originX: 8
     readonly property real gutterWidth: 200
@@ -365,6 +372,7 @@ Item {
                         // (delegate-safe: assigned here where outer scope
                         // is visible, like LayersView).
                         item.diamondPolicy = (id, additive) => timeline.onDiamond(id, additive);
+                        item.jointPolicy = (op, payload) => timeline.setJoint(op, payload);
                     }
 
                     TimelineLane {
@@ -376,6 +384,9 @@ Item {
                         pxPerSec: timeline.pxPerSec
                         originX: timeline.originX
                         selectedIds: modelData.selected
+                        jointOrig: timeline.jointOrig
+                        jointDx: timeline.jointDx
+                        jointActive: timeline.clipDragging
                         doc: timeline.doc
                     }
                 }
@@ -568,6 +579,22 @@ Item {
             d.selectClip(id, additive);
     }
 
+    // Joint-drag publisher for the lanes: begin stores the press-time
+    // snapshot, move streams the live delta (flipping visuals on),
+    // end clears. One transaction still covers the formation.
+    function setJoint(op, payload) {
+        if (op === "begin") {
+            timeline.jointOrig = payload || {};
+        } else if (op === "move") {
+            timeline.jointDx = Number(payload) || 0;
+            timeline.clipDragging = true;
+        } else if (op === "end") {
+            timeline.jointOrig = {};
+            timeline.jointDx = 0;
+            timeline.clipDragging = false;
+        }
+    }
+
     function onAudioClip(id, additive) {
         var d = timeline.doc;
         if (!d)
@@ -664,11 +691,32 @@ Item {
     function zoomAt(viewX, deltaY) {
         var old = timeline.pxPerSec;
         var next = Math.min(timeline.maxZoom, Math.max(timeline.minZoom, old * Math.pow(1.2, deltaY / 120)));
+        timeline.zoomSet(next, viewX);
+    }
+
+    // Zoom keeping the time under viewX stable (defaults to the
+    // viewport center, e.g. for the slider and keyboard steps).
+    function zoomSet(next, viewX) {
+        var old = timeline.pxPerSec;
+        next = Math.min(timeline.maxZoom, Math.max(timeline.minZoom, next));
         if (next === old)
             return;
-        var t = (tracks.contentX + viewX - timeline.originX) / old;
+        var vx = viewX === undefined ? tracks.width / 2 : viewX;
+        var t = (tracks.contentX + vx - timeline.originX) / old;
         timeline.pxPerSec = next;
-        tracks.contentX = timeline.clampX(t * next + timeline.originX - viewX);
+        tracks.contentX = timeline.clampX(t * next + timeline.originX - vx);
+    }
+
+    function zoomStep(dy) {
+        timeline.zoomAt(tracks.width / 2, dy);
+    }
+
+    // Fit the whole composition in the viewport width.
+    function zoomToFit() {
+        var d = timeline.doc;
+        var dur = d ? Math.max(0.5, d.anim.duration) : 4.0;
+        timeline.pxPerSec = Math.min(timeline.maxZoom, Math.max(timeline.minZoom, (tracks.width - timeline.originX - 64) / dur));
+        tracks.contentX = 0;
     }
 
     function clampX(x) {
