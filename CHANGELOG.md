@@ -3,7 +3,7 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
-## [Unreleased]
+## [0.2.1] - 2026-09-21
 
 ### Added
 
