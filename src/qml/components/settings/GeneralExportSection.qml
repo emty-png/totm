@@ -2,9 +2,9 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Export defaults card: starting quality, frame rate and encode effort
-// for the video picker. Render saves the used choice back here, so the
-// next export opens where the last one left off.
+// Export defaults card: starting quality, frame rate, encode effort and
+// container for the video picker. Render saves the used choice back here,
+// so the next export opens where the last one left off.
 Rectangle {
     id: exportCard
 
@@ -115,6 +115,36 @@ Rectangle {
                 label: qsTr("Fast")
                 active: SettingsStore.defaultPerformance === "fast"
                 onClicked: SettingsStore.defaultPerformance = "fast"
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Format")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("MP4")
+                active: SettingsStore.defaultFormat === "mp4"
+                onClicked: SettingsStore.defaultFormat = "mp4"
+            }
+
+            SegmentedOption {
+                label: qsTr("WebM")
+                active: SettingsStore.defaultFormat === "webm"
+                onClicked: SettingsStore.defaultFormat = "webm"
+            }
+
+            SegmentedOption {
+                label: qsTr("GIF")
+                active: SettingsStore.defaultFormat === "gif"
+                onClicked: SettingsStore.defaultFormat = "gif"
             }
         }
     }

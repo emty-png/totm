@@ -162,6 +162,38 @@ void resolvePerformance(const QString &performance, QString &preset, int &crf, Q
     crf = 18;
     label = QStringLiteral("Normal");
 }
+// Maps performance choice to VP9 speed + quality. VP9 CRF runs 0..63
+// (lower is better); cpu-used 1..4 trades encode time for compression.
+void resolveWebmEffort(const QString &performance, int &cpuUsed, int &crf) {
+    const QString p = performance.trimmed().toLower();
+    if (p == QLatin1String("slow")) {
+        cpuUsed = 1;
+        crf = 28;
+        return;
+    }
+    if (p == QLatin1String("fast")) {
+        cpuUsed = 4;
+        crf = 34;
+        return;
+    }
+    cpuUsed = 2;
+    crf = 31;
+}
+// Container coercion: only the picker's own options are real, everything
+// else falls back to mp4 so corrupt callers can't break the pipe.
+QString normalizeFormat(const QString &format) {
+    const QString f = format.trimmed().toLower();
+    if (f == QLatin1String("webm") || f == QLatin1String("gif"))
+        return f;
+    return QStringLiteral("mp4");
+}
+QString suffixForFormat(const QString &format) {
+    if (format == QLatin1String("webm"))
+        return QStringLiteral(".webm");
+    if (format == QLatin1String("gif"))
+        return QStringLiteral(".gif");
+    return QStringLiteral(".mp4");
+}
 // User-facing install hint per OS when no ffmpeg binary is on PATH.
 QString ffmpegMissingMessage() {
 #if defined(Q_OS_WIN)
@@ -184,7 +216,7 @@ class VideoExporter::RenderThread : public QThread {
     Q_OBJECT
 public:
     RenderThread(QVariantMap scene, int outW, int outH, int fps, QString preset, int crf, QString effort,
-        QString tempPath, QObject *parent = nullptr)
+        QString tempPath, QString format, int vp9Cpu, int vp9Crf, QObject *parent = nullptr)
         : QThread(parent)
         , m_scene(std::move(scene))
         , m_outW(outW)
@@ -193,7 +225,10 @@ public:
         , m_preset(std::move(preset))
         , m_crf(crf)
         , m_effort(std::move(effort))
-        , m_tempPath(std::move(tempPath)) {}
+        , m_tempPath(std::move(tempPath))
+        , m_format(std::move(format))
+        , m_vp9Cpu(vp9Cpu)
+        , m_vp9Crf(vp9Crf) {}
 
     void requestCancel() { m_cancelled.storeRelaxed(1); }
 
@@ -233,8 +268,11 @@ protected:
         const int encThreads = qBound(2, QThread::idealThreadCount() / 2, 6);
         // Timeline audio rides as extra inputs, each trimmed to its
         // audible window and delayed to its start, then mixed down.
-        // No clips keeps the historical video-only path untouched.
-        const QList<AudioInput> audio = collectAudio(m_scene, duration);
+        // GIF is silent by design (no audio inputs at all); no clips
+        // keeps the historical video-only path untouched.
+        const bool isGif = m_format == QStringLiteral("gif");
+        const bool isWebm = m_format == QStringLiteral("webm");
+        const QList<AudioInput> audio = isGif ? QList<AudioInput>() : collectAudio(m_scene, duration);
         QProcess proc;
         QStringList encArgs = {QStringLiteral("-y"), QStringLiteral("-f"), QStringLiteral("rawvideo"),
             QStringLiteral("-pix_fmt"), QStringLiteral("rgba"), QStringLiteral("-s"),
@@ -244,20 +282,46 @@ protected:
             encArgs += {QStringLiteral("-ss"), QString::number(in.seek, 'f', 3), QStringLiteral("-t"),
                 QString::number(in.take, 'f', 3), QStringLiteral("-i"), in.path};
         }
-        if (audio.isEmpty()) {
-            encArgs += {QStringLiteral("-an"), QStringLiteral("-c:v")};
+        if (isGif) {
+            // Single-pass palette: split the stream, build a 256-color
+            // palette on the fly and dither into it. Two-pass palettegen
+            // would need the whole file up front, which a live pipe
+            // never has. -loop 0 loops forever, the GIF default people
+            // expect from a motion tool. -f gif is explicit: a bare
+            // "gif" token would parse as a second output URL.
+            encArgs += {QStringLiteral("-loop"), QStringLiteral("0"), QStringLiteral("-vf"),
+                QStringLiteral("split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5"),
+                QStringLiteral("-f"), QStringLiteral("gif"), m_tempPath};
         } else {
-            // No -shortest: audio is trimmed to <= duration, so the mix
-            // never outruns the video. -shortest would truncate the video
-            // to a short effect and close the pipe mid-render (broken pipe).
-            encArgs += {QStringLiteral("-filter_complex"), audioFilter(audio), QStringLiteral("-map"),
-                QStringLiteral("0:v"), QStringLiteral("-map"), QStringLiteral("[a]"), QStringLiteral("-c:a"),
-                QStringLiteral("aac"), QStringLiteral("-b:a"), QStringLiteral("160k"), QStringLiteral("-c:v")};
+            // WebM rides Opus, mp4 rides AAC; both trim/mix identically.
+            const QString audioCodec = isWebm ? QStringLiteral("libopus") : QStringLiteral("aac");
+            const QString audioRate = isWebm ? QStringLiteral("128k") : QStringLiteral("160k");
+            if (audio.isEmpty()) {
+                encArgs += {QStringLiteral("-an"), QStringLiteral("-c:v")};
+            } else {
+                // No -shortest: audio is trimmed to <= duration, so the mix
+                // never outruns the video. -shortest would truncate the video
+                // to a short effect and close the pipe mid-render (broken pipe).
+                encArgs += {QStringLiteral("-filter_complex"), audioFilter(audio), QStringLiteral("-map"),
+                    QStringLiteral("0:v"), QStringLiteral("-map"), QStringLiteral("[a]"), QStringLiteral("-c:a"),
+                    audioCodec, QStringLiteral("-b:a"), audioRate, QStringLiteral("-c:v")};
+            }
+            if (isWebm) {
+                // -b:v 0 selects constant-quality mode; -deadline good
+                // keeps encodes near realtime without tanking quality.
+                encArgs += {QStringLiteral("libvpx-vp9"), QStringLiteral("-pix_fmt"),
+                    QStringLiteral("yuv420p"), QStringLiteral("-b:v"), QStringLiteral("0"),
+                    QStringLiteral("-crf"), QString::number(m_vp9Crf), QStringLiteral("-cpu-used"),
+                    QString::number(m_vp9Cpu), QStringLiteral("-deadline"), QStringLiteral("good"),
+                    QStringLiteral("-row-mt"), QStringLiteral("1"), QStringLiteral("-threads"),
+                    QString::number(encThreads), m_tempPath};
+            } else {
+                encArgs += {QStringLiteral("libx264"), QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
+                    QStringLiteral("-crf"), QString::number(m_crf), QStringLiteral("-preset"), m_preset,
+                    QStringLiteral("-threads"), QString::number(encThreads), QStringLiteral("-movflags"),
+                    QStringLiteral("+faststart"), m_tempPath};
+            }
         }
-        encArgs += {QStringLiteral("libx264"), QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
-            QStringLiteral("-crf"), QString::number(m_crf), QStringLiteral("-preset"), m_preset,
-            QStringLiteral("-threads"), QString::number(encThreads), QStringLiteral("-movflags"),
-            QStringLiteral("+faststart"), m_tempPath};
 #if defined(Q_OS_UNIX)
         // Thread priority does not propagate to the encoder process, so
         // nice it separately. Falls back to a direct spawn without nice.
@@ -411,6 +475,9 @@ protected:
     int m_crf = 18;
     QString m_effort = QStringLiteral("Normal");
     QString m_tempPath;
+    QString m_format = QStringLiteral("mp4");
+    int m_vp9Cpu = 2;
+    int m_vp9Crf = 31;
     QAtomicInteger<int> m_cancelled{0};
 };
 
@@ -427,7 +494,9 @@ VideoExporter::VideoExporter(QObject *parent)
     : QObject(parent) {
     // Remove temps orphaned by crashes or quit-without-save runs.
     const QDir tmp = QDir::temp();
-    for (const QString &f : tmp.entryList({QStringLiteral("totm-export-*.mp4")}, QDir::Files))
+    for (const QString &f : tmp.entryList({QStringLiteral("totm-export-*.mp4"),
+                 QStringLiteral("totm-export-*.webm"), QStringLiteral("totm-export-*.gif")},
+             QDir::Files))
         QFile::remove(tmp.filePath(f));
 }
 
@@ -452,6 +521,7 @@ int VideoExporter::totalFrames() const { return m_totalFrames; }
 QString VideoExporter::qualityLabel() const { return m_qualityLabel; }
 QString VideoExporter::tempPath() const { return m_tempPath; }
 QString VideoExporter::lastError() const { return m_lastError; }
+QString VideoExporter::format() const { return m_format; }
 
 QString VideoExporter::ffmpegPath() {
 #ifdef Q_OS_WIN
@@ -463,7 +533,7 @@ QString VideoExporter::ffmpegPath() {
 }
 
 bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality, int fps,
-    const QString &performance, const QString &designName) {
+    const QString &performance, const QString &designName, const QString &format) {
     if (m_rendering) {
         setLastError(tr("Already rendering. Wait or cancel first."));
         return false;
@@ -478,10 +548,13 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
     Q_UNUSED(resolvedLabel); // Dimensions drive the render; the title uses shortQ below.
     if (fps != 60)
         fps = 30;
+    const QString outFormat = normalizeFormat(format);
     QString preset;
     int crf = 18;
     QString perfLabel;
     resolvePerformance(performance, preset, crf, perfLabel);
+    int vp9Cpu = 2, vp9Crf = 31;
+    resolveWebmEffort(performance, vp9Cpu, vp9Crf);
     const QVariantMap anim = scene.value(QStringLiteral("anim")).toMap();
     const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 60.0);
     const int total = qMax(1, qRound(duration * fps));
@@ -494,25 +567,27 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
         QFile::remove(m_tempPath);
     m_tempPath.clear();
     const QString temp = QDir::temp().filePath(
-        QStringLiteral("totm-export-%1-%2.mp4").arg(QCoreApplication::applicationPid()).arg(QDateTime::currentMSecsSinceEpoch()));
+        QStringLiteral("totm-export-%1-%2%3").arg(QCoreApplication::applicationPid()).arg(QDateTime::currentMSecsSinceEpoch()).arg(suffixForFormat(outFormat)));
     QFile::remove(temp);
 
     clearError();
-    // Progress title format: "Rendering <design> 4k60". Effort is omitted;
-    // see the completion log.
+    // Progress title format: "Rendering <design> 4k60 MP4". Effort is
+    // omitted; see the completion log.
     QString shortQ = quality.trimmed().toLower();
     if (shortQ != QLatin1String("sd") && shortQ != QLatin1String("4k"))
         shortQ = QStringLiteral("hd");
     QString name = designName.trimmed();
     if (name.isEmpty())
         name = tr("Untitled");
-    m_qualityLabel = QStringLiteral("Rendering %1 %2%3").arg(name).arg(shortQ).arg(fps);
+    m_format = outFormat;
+    m_qualityLabel = QStringLiteral("Rendering %1 %2%3 %4").arg(name).arg(shortQ).arg(fps).arg(outFormat.toUpper());
     m_currentFrame = 0;
     m_totalFrames = total;
     setRendering(true);
+    emit finishedChanged();
     emit progressChanged();
 
-    auto *thread = new RenderThread(scene, outW, outH, fps, preset, crf, perfLabel, temp);
+    auto *thread = new RenderThread(scene, outW, outH, fps, preset, crf, perfLabel, temp, outFormat, vp9Cpu, vp9Crf);
     m_thread = thread;
     connect(thread, &RenderThread::frameProgress, this, [this](int cur, int total) {
         m_currentFrame = cur;
@@ -535,17 +610,17 @@ void VideoExporter::cancel() {
 }
 
 namespace {
-// Resolved mp4 destination with the suffix appended when missing (""
-// when no usable path). Shared by the write and the QML overwrite
+// Resolved destination with the container suffix appended when missing
+// ("" when no usable path). Shared by the write and the QML overwrite
 // probe so the two can never disagree on the target file.
-QString saveLocalPath(const QUrl &destination)
+QString saveLocalPath(const QUrl &destination, const QString &suffix)
 {
     QString local = destination.isLocalFile() ? destination.toLocalFile() : destination.toString();
     if (local.isEmpty()) {
         return {};
     }
-    if (!local.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive)) {
-        local += QStringLiteral(".mp4");
+    if (!local.endsWith(suffix, Qt::CaseInsensitive)) {
+        local += suffix;
     }
     return local;
 }
@@ -556,7 +631,7 @@ bool VideoExporter::saveAs(const QUrl &destination, bool overwrite) {
         setLastError(tr("No finished render to save."));
         return false;
     }
-    const QString local = saveLocalPath(destination);
+    const QString local = saveLocalPath(destination, suffixForFormat(m_format));
     if (local.isEmpty()) {
         setLastError(tr("Pick a file to save to."));
         return false;
@@ -577,7 +652,7 @@ bool VideoExporter::saveAs(const QUrl &destination, bool overwrite) {
 }
 
 bool VideoExporter::destinationExists(const QUrl &destination) const {
-    const QString local = saveLocalPath(destination);
+    const QString local = saveLocalPath(destination, suffixForFormat(m_format));
     return !local.isEmpty() && QFile::exists(local);
 }
 

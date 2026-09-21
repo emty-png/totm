@@ -296,7 +296,11 @@ Item {
                 autoPaddingEnabled: false
                 blurEnabled: true
                 blurMax: 64
-                blur: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).radius || 0) * shape.zoom / 64))
+                // Content-space radius: the scaled ancestor already maps
+                // local px to screen px, so no zoom factor here (it would
+                // grow screen blur as zoom-squared and pin blur at 1.0
+                // deep in, stalling weak GPUs on scene-sized tiles).
+                blur: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).radius || 0) / 64))
                 opacity: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).opacity ?? 0.7)))
                 maskEnabled: backdropRoot.needsMask
                 maskSource: rigMask
@@ -556,7 +560,9 @@ Item {
                 layer.effect: MultiEffect {
                     blurEnabled: true
                     blurMax: 64
-                    blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) * shape.zoom / 64))
+                    // Same content-space rule as the backdrop rig above:
+                    // no zoom factor (ancestor scale already applies it).
+                    blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) / 64))
                 }
             }
         }
@@ -663,7 +669,8 @@ Item {
                         layer.effect: MultiEffect {
                             blurEnabled: true
                             blurMax: 64
-                            blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) * shape.zoom / 64))
+                            // Content-space radius, no zoom factor (see above).
+                            blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) / 64))
                         }
                     }
                 }

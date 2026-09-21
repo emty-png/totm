@@ -77,6 +77,7 @@ class SettingsStore : public QObject {
     Q_PROPERTY(QString defaultQuality READ defaultQuality WRITE setDefaultQuality NOTIFY generalChanged)
     Q_PROPERTY(int defaultFps READ defaultFps WRITE setDefaultFps NOTIFY generalChanged)
     Q_PROPERTY(QString defaultPerformance READ defaultPerformance WRITE setDefaultPerformance NOTIFY generalChanged)
+    Q_PROPERTY(QString defaultFormat READ defaultFormat WRITE setDefaultFormat NOTIFY generalChanged)
 
 public:
     static SettingsStore *create(QQmlEngine *engine, QJSEngine *scriptEngine);
@@ -172,9 +173,9 @@ public:
 
     // General defaults (persisted under QSettings group "general/").
     // Scene sizes clamp to 16..7680px, duration to 0.5..60s; unknown
-    // quality/performance fall back to "hd"/"normal", fps to 30; invalid
-    // colors are ignored. Setters are Q_INVOKABLE so QML can call them
-    // directly as well as assign the properties.
+    // quality/performance/format fall back to "hd"/"normal"/"mp4", fps to
+    // 30; invalid colors are ignored. Setters are Q_INVOKABLE so QML can
+    // call them directly as well as assign the properties.
     Q_INVOKABLE int defaultSceneWidth() const;
     Q_INVOKABLE void setDefaultSceneWidth(int v);
     Q_INVOKABLE int defaultSceneHeight() const;
@@ -189,6 +190,8 @@ public:
     Q_INVOKABLE void setDefaultFps(int v);
     Q_INVOKABLE QString defaultPerformance() const;
     Q_INVOKABLE void setDefaultPerformance(const QString &performance);
+    Q_INVOKABLE QString defaultFormat() const;
+    Q_INVOKABLE void setDefaultFormat(const QString &format);
     // Applies one canvas preset (16:9, 9:16, 1:1, 4:3) to both defaults
     // in a single change; unknown names are ignored.
     Q_INVOKABLE void applyScenePreset(const QString &name);
@@ -257,4 +260,5 @@ private:
     QString m_defaultQuality = QStringLiteral("hd");
     int m_defaultFps = 30;
     QString m_defaultPerformance = QStringLiteral("normal");
+    QString m_defaultFormat = QStringLiteral("mp4");
 };

@@ -4,18 +4,20 @@ import QtQuick.Layouts
 import Totm
 
 // Export quality picker: SD/HD/4K plus 30/60fps plus Slow/Normal/Fast
-// encode effort, then Render. Centered modal; Render snapshots the scene
-// fresh so later edits only affect the next export. Styling mirrors the
-// panel popups (r10 surface, 1px hairline, 120ms transitions).
+// encode effort plus MP4/WebM/GIF container, then Render. Centered modal;
+// Render snapshots the scene fresh so later edits only affect the next
+// export. Styling mirrors the panel popups (r10 surface, 1px hairline,
+// 120ms transitions).
 Popup {
     id: qualityPopup
 
     property string quality: "hd"
     property int fps: 30
     property string performance: "normal"
+    property string format: "mp4"
     property var suggestion: ({})
 
-    signal renderClicked(string quality, int fps, string performance)
+    signal renderClicked(string quality, int fps, string performance, string format)
 
     // First enabled export.hook suggestion wins; refreshed whenever the
     // popup opens or grants change.
@@ -42,6 +44,7 @@ Popup {
         qualityPopup.quality = SettingsStore.defaultQuality;
         qualityPopup.fps = SettingsStore.defaultFps;
         qualityPopup.performance = SettingsStore.defaultPerformance;
+        qualityPopup.format = SettingsStore.defaultFormat;
         qualityPopup.refreshSuggestion();
     }
 
@@ -172,6 +175,36 @@ Popup {
             }
         }
 
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Format")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("MP4")
+                active: qualityPopup.format === "mp4"
+                onClicked: qualityPopup.format = "mp4"
+            }
+
+            SegmentedOption {
+                label: qsTr("WebM")
+                active: qualityPopup.format === "webm"
+                onClicked: qualityPopup.format = "webm"
+            }
+
+            SegmentedOption {
+                label: qsTr("GIF")
+                active: qualityPopup.format === "gif"
+                onClicked: qualityPopup.format = "gif"
+            }
+        }
+
         // Plugin suggestion (export.hook): one-tap apply, never automatic.
         RowLayout {
             Layout.fillWidth: true
@@ -284,7 +317,8 @@ Popup {
                         SettingsStore.defaultQuality = qualityPopup.quality;
                         SettingsStore.defaultFps = qualityPopup.fps;
                         SettingsStore.defaultPerformance = qualityPopup.performance;
-                        qualityPopup.renderClicked(qualityPopup.quality, qualityPopup.fps, qualityPopup.performance);
+                        SettingsStore.defaultFormat = qualityPopup.format;
+                        qualityPopup.renderClicked(qualityPopup.quality, qualityPopup.fps, qualityPopup.performance, qualityPopup.format);
                     }
                 }
             }

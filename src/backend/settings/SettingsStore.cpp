@@ -52,6 +52,7 @@ constexpr char kGenDurationKey[] = "general/duration";
 constexpr char kGenQualityKey[] = "general/quality";
 constexpr char kGenFpsKey[] = "general/fps";
 constexpr char kGenPerformanceKey[] = "general/performance";
+constexpr char kGenFormatKey[] = "general/format";
 
 constexpr int kSceneMin = 16;
 constexpr int kSceneMax = 7680;
@@ -201,6 +202,10 @@ bool isKnownQuality(const QString &quality) {
 bool isKnownPerformance(const QString &performance) {
     return performance == QStringLiteral("slow") || performance == QStringLiteral("normal")
         || performance == QStringLiteral("fast");
+}
+
+bool isKnownFormat(const QString &format) {
+    return format == QStringLiteral("mp4") || format == QStringLiteral("webm") || format == QStringLiteral("gif");
 }
 
 bool isSafeFontName(const QString &name) {
@@ -748,6 +753,8 @@ void SettingsStore::loadGeneral() {
     m_defaultFps = (fps == 60) ? 60 : 30;
     const QString performance = settings.value(QString::fromLatin1(kGenPerformanceKey), QStringLiteral("normal")).toString().trimmed().toLower();
     m_defaultPerformance = isKnownPerformance(performance) ? performance : QStringLiteral("normal");
+    const QString format = settings.value(QString::fromLatin1(kGenFormatKey), QStringLiteral("mp4")).toString().trimmed().toLower();
+    m_defaultFormat = isKnownFormat(format) ? format : QStringLiteral("mp4");
 }
 
 void SettingsStore::persistGeneral() {
@@ -759,6 +766,7 @@ void SettingsStore::persistGeneral() {
     settings.setValue(QString::fromLatin1(kGenQualityKey), m_defaultQuality);
     settings.setValue(QString::fromLatin1(kGenFpsKey), m_defaultFps);
     settings.setValue(QString::fromLatin1(kGenPerformanceKey), m_defaultPerformance);
+    settings.setValue(QString::fromLatin1(kGenFormatKey), m_defaultFormat);
     settings.sync();
 }
 
@@ -855,6 +863,19 @@ void SettingsStore::setDefaultPerformance(const QString &performance) {
     emit generalChanged();
 }
 
+QString SettingsStore::defaultFormat() const {
+    return m_defaultFormat;
+}
+
+void SettingsStore::setDefaultFormat(const QString &format) {
+    const QString f = format.trimmed().toLower();
+    if (!isKnownFormat(f) || m_defaultFormat == f)
+        return;
+    m_defaultFormat = f;
+    persistGeneral();
+    emit generalChanged();
+}
+
 void SettingsStore::applyScenePreset(const QString &name) {
     const QString n = name.trimmed().toLower();
     int w = m_defaultSceneWidth;
@@ -880,7 +901,7 @@ void SettingsStore::applyScenePreset(const QString &name) {
 void SettingsStore::resetGeneral() {
     if (m_defaultSceneWidth == 1920 && m_defaultSceneHeight == 1080 && m_defaultSceneColor == QStringLiteral("#ffffff")
         && qFuzzyCompare(m_defaultDuration, 4.0) && m_defaultQuality == QStringLiteral("hd") && m_defaultFps == 30
-        && m_defaultPerformance == QStringLiteral("normal"))
+        && m_defaultPerformance == QStringLiteral("normal") && m_defaultFormat == QStringLiteral("mp4"))
         return;
     m_defaultSceneWidth = 1920;
     m_defaultSceneHeight = 1080;
@@ -889,6 +910,7 @@ void SettingsStore::resetGeneral() {
     m_defaultQuality = QStringLiteral("hd");
     m_defaultFps = 30;
     m_defaultPerformance = QStringLiteral("normal");
+    m_defaultFormat = QStringLiteral("mp4");
     persistGeneral();
     emit generalChanged();
 }

@@ -7,7 +7,7 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
-// VideoExporter: scene snapshot to mp4 via a system ffmpeg binary.
+// VideoExporter: scene snapshot to mp4/webm/gif via a system ffmpeg binary.
 //
 // Ownership: QML snapshots the scene and calls startExport; this class owns
 // the worker thread, the ffmpeg process and the temp file. QML performs no
@@ -15,12 +15,16 @@
 // Pipeline: worker thread samples with AnimSampler, rasterizes with
 // QPainter, and streams raw RGBA to ffmpeg stdin. Progress streams via
 // progressChanged; completion via succeeded/failed/cancelled.
+// Formats: "mp4" (libx264 + AAC, audio mixed in), "webm" (libvpx-vp9 +
+// Opus, audio mixed in), "gif" (palettegen/paletteuse single pass, silent
+// and looping). Unknown formats fall back to mp4.
 // Threading: startExport/cancel/saveAs run on the main thread. Rendering
 // happens on a low-priority RenderThread; cancel is an atomic flag polled
 // per frame and during pipe/finish waits, so no blocking call exceeds 500ms.
-// Temp lifecycle: render writes totm-export-*.mp4 in the OS temp dir.
+// Temp lifecycle: render writes totm-export-*.<ext> in the OS temp dir.
 // Cancel/failure deletes the partial; saveAs copies the finished file to
-// the user destination. Orphaned temps are swept at construction.
+// the user destination (with the matching suffix). Orphaned temps of every
+// format are swept at construction.
 class VideoExporter : public QObject {
     Q_OBJECT
     QML_ELEMENT
@@ -33,6 +37,9 @@ class VideoExporter : public QObject {
     Q_PROPERTY(QString qualityLabel READ qualityLabel NOTIFY progressChanged)
     Q_PROPERTY(QString tempPath READ tempPath NOTIFY finishedChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    // Container of the finished render ("mp4"|"webm"|"gif"); empty when
+    // no finished render exists. QML uses it for the save suffix.
+    Q_PROPERTY(QString format READ format NOTIFY finishedChanged)
 
 public:
     static VideoExporter *create(QQmlEngine *engine, QJSEngine *scriptEngine);
@@ -46,19 +53,23 @@ public:
     QString qualityLabel() const;
     QString tempPath() const;
     QString lastError() const;
+    QString format() const;
 
     // Starts a render. quality: "sd"|"hd"|"4k" (default hd); fps: 30|60
-    // (other values coerce to 30); performance: "slow"|"normal"|"fast".
-    // qualityLabel reads "Rendering <design> <quality><fps>". Returns false
-    // when already rendering, the scene is empty, or ffmpeg is missing.
+    // (other values coerce to 30); performance: "slow"|"normal"|"fast";
+    // format: "mp4"|"webm"|"gif" (other values coerce to mp4).
+    // qualityLabel reads "Rendering <design> <quality><fps> <format>".
+    // Returns false when already rendering, the scene is empty, or ffmpeg
+    // is missing.
     Q_INVOKABLE bool startExport(const QVariantMap &scene, const QString &quality, int fps,
-        const QString &performance, const QString &designName);
+        const QString &performance, const QString &designName, const QString &format = QStringLiteral("mp4"));
     // Requests cancellation; the worker deletes the partial and emits cancelled().
     Q_INVOKABLE void cancel();
-    // Copies the finished temp file to destination (appends .mp4 when
-    // missing). Refuses an existing destination unless overwrite is set
-    // (QML confirms first via destinationExists, which applies the same
-    // suffix rule). Returns false when no finished render exists.
+    // Copies the finished temp file to destination (appends the matching
+    // container suffix — .mp4/.webm/.gif — when missing). Refuses an
+    // existing destination unless overwrite is set (QML confirms first via
+    // destinationExists, which applies the same suffix rule). Returns false
+    // when no finished render exists.
     Q_INVOKABLE bool saveAs(const QUrl &destination, bool overwrite = false);
     Q_INVOKABLE bool destinationExists(const QUrl &destination) const;
     Q_INVOKABLE void clearError();
@@ -86,6 +97,9 @@ private:
     QString m_qualityLabel;
     QString m_tempPath;
     QString m_lastError;
+    // Container of the finished render; drives the saveAs suffix rule.
+    // "mp4" until the first render of another format finishes.
+    QString m_format = QStringLiteral("mp4");
 
     class RenderThread;
     RenderThread *m_thread = nullptr;

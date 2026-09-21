@@ -982,7 +982,7 @@ Item {
     ExportQualityPopup {
         id: qualityPopup
 
-        onRenderClicked: (quality, fps, performance) => canvas.startExport(quality, fps, performance)
+        onRenderClicked: (quality, fps, performance, format) => canvas.startExport(quality, fps, performance, format)
     }
 
     // Live render progress with Cancel. Stays open on failure to show
@@ -1008,13 +1008,13 @@ Item {
         id: savePicker
 
         saveMode: true
-        suffixes: ["mp4"]
+        suffixes: [VideoExporter.format]
         currentFolder: StandardPaths.writableLocation(StandardPaths.MoviesLocation)
         onAccepted: {
             var dest = savePicker.selectedFile;
             if (VideoExporter.destinationExists(dest)) {
                 canvas.pendingSaveUrl = dest;
-                overwritePopup.ask(qsTr("Overwrite video?"), qsTr("“%1” already exists. Overwriting replaces it.").arg(canvas.fileName(dest)), qsTr("Overwrite"));
+                overwritePopup.ask(canvas.overwriteTitle(), qsTr("“%1” already exists. Overwriting replaces it.").arg(canvas.fileName(dest)), qsTr("Overwrite"));
             } else if (!VideoExporter.saveAs(dest, false)) {
                 // A failed copy must not vanish silently: the progress
                 // popup is closed on this path, so reopen it to show
@@ -1050,15 +1050,23 @@ Item {
 
     // Snapshot fresh and hand to the backend; the progress modal opens
     // only when the worker actually accepted the job.
-    function startExport(quality, fps, performance) {
+    function startExport(quality, fps, performance, format) {
         if (!canvas.doc)
             return;
         qualityPopup.close();
         var scene = canvas.doc.snapshotScene();
-        VideoExporter.startExport(scene, quality, fps, performance, TabState.titleAt(TabState.currentIndex));
+        if (format === undefined || format === null)
+            format = "mp4";
+        VideoExporter.startExport(scene, quality, fps, performance, TabState.titleAt(TabState.currentIndex), format);
         // Opens in both cases: live bar on success, backend error text
         // on rejection (e.g. ffmpeg missing, already rendering).
         progressPopup.open();
+    }
+
+    function overwriteTitle() {
+        if (VideoExporter.format === "gif")
+            return qsTr("Overwrite image?");
+        return qsTr("Overwrite video?");
     }
 
     function fileName(url) {
