@@ -3,6 +3,18 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [Unreleased]
+
+### Added
+
+* WebM and GIF video export — the export picker grew an MP4/WebM/GIF row: WebM renders through libvpx-vp9 + Opus (audio mixed like MP4) with the encode effort mapped to VP9 cpu-used + CRF, GIF renders silent and looping through a single-pass palettegen/paletteuse filter (two passes would need the whole file up front, which a live pipe never has). Unknown formats coerce to MP4, temp files carry the matching suffix, and the choice persists as a new `defaultFormat` alongside the other export defaults in the General tab (covered by Reset all). The save picker filters on the finished format with a matching overwrite title.
+
+### Fixed
+
+* GIF renders failed every time (`Invalid argument`): a bare `gif` token in the ffmpeg args parsed as a second output URL instead of a format flag — now explicit `-f gif`.
+* Video save probe ignored the finished format: `destinationExists` used the old MP4-only suffix rule while `saveAs` had moved on, so WebM/GIF saves could disagree with the overwrite guard — both share one rule now.
+* Background-blur and image-glow blurs scaled with canvas zoom: the scaled ancestor already maps local px to screen px, so the extra factor grew screen blur as zoom-squared and pinned blur at max deep in — all blur sites use plain radius/64 like export now.
+
 ## [0.2.0] - 2026-09-19
 
 ### Added

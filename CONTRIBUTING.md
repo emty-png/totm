@@ -15,8 +15,8 @@ Cross-platform motion-graphics editor: vector shapes (rectangle, ellipse,
 triangle, star, pen paths, text, images) with gradients / shadows / glows
 / blur / grain, layers + groups + drill-in, smart snapping, Figma-style
 design panel, presets + custom from-to animation + motion paths + easing
-graphs + timeline with audio lanes, SD/HD/4K mp4 export through system
-`ffmpeg`, home library (workspaces, starring, templates, live previews,
+graphs + timeline with audio lanes, SD/HD/4K MP4/WebM/GIF export through
+system `ffmpeg`, home library (workspaces, starring, templates, live previews,
 `.totm` share bundles), QML-only plugin system, editable shortcuts,
 dark/light theme with appearance settings, and an in-app file picker.
 
@@ -174,7 +174,7 @@ CHANGELOG.md             # Keep a Changelog, SemVer once 1.0 ships
    eye/lock + context menu → design panel edits → animate (preset +
    custom + path + audio lane + transport) → templates → `.totm`
    export/import → file picker + overwrite guard → shortcuts + theme /
-   appearance → plugins enable/review → mp4 export + cancel. CI's build
+   appearance → plugins enable/review → video export (MP4/WebM/GIF) + cancel. CI's build
    matrix is Ubuntu 24.04 / Windows 2022 / macOS 15 — call out anything
    platform-specific.
 6. **Update the CHANGELOG** under Unreleased/`Added`/`Fixed` (Keep a
