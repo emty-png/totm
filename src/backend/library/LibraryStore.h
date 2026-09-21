@@ -11,6 +11,8 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
+#include "AudioPeaks.h"
+
 // LibraryStore: persistent workspace/design library.
 //
 // Ownership: all file IO lives here. QML must not read/write files
@@ -128,11 +130,17 @@ public:
     // Audio blobs. Same sidecar pattern as images: files copied into
     // <libraryDir>/audio/, clips store the file name only. Import
     // allowlist is MP3/WAV/OGG/FLAC; anything else is rejected loudly.
+    // audioPeaks returns 0..1 waveform magnitudes over the clip window
+    // (exactly `buckets` entries for zoom-adaptive lanes, [] when
+    // unknown); dense peaks decode once via ffmpeg and persist as a
+    // `<blob>.peaks` sidecar owned by the orphan sweep, never packed
+    // into .totm bundles.
     Q_INVOKABLE QString importAudio(const QUrl &source);
     Q_INVOKABLE QUrl audioUrl(const QString &name) const;
     Q_INVOKABLE bool hasAudio(const QString &name) const;
     Q_INVOKABLE quint64 audioDiskUsage() const;
     Q_INVOKABLE int audioCount() const;
+    Q_INVOKABLE QVariantList audioPeaks(const QString &name, int buckets, double offset, double window);
 
     // Project share: single-file .totm bundle (JSON with base64 blobs).
     // exportDesign writes name + normalized scene + referenced image/audio
@@ -186,8 +194,9 @@ private:
     void sweepOrphanImages();
     // Blob names referenced by any in-memory scene's audio clips.
     QSet<QString> referencedAudio() const;
-    // Delete audio blobs no scene references. Startup only, same
-    // reasoning as the image sweep.
+    // Delete audio blobs no scene references (plus their .peaks
+    // sidecars, and orphan sidecars whose blob is gone). Startup only,
+    // same reasoning as the image sweep.
     void sweepOrphanAudio();
     // Audio blob directory (<libraryDir>/audio). Created on demand.
     QString audioDir() const;
@@ -207,4 +216,6 @@ private:
     // Held for the process lifetime; warns on contention, last-writer-wins.
     QLockFile m_lock;
     bool m_loaded = false;
+    // Waveform peaks for timeline lanes (memoized dense decode).
+    AudioPeaks m_peaks;
 };

@@ -7,6 +7,7 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ### Added
 
+* Timeline audio waveforms — every audio lane bar paints filled mini-bars over its clip file window, so beats and silence stay visible while trimming and arranging. Buckets follow the bar pixel width (~2px per bar), so timeline zoom re-slices the wave instead of stretching it; selection tints the bars red, muted clips dim. Peaks decode once per blob through system ffmpeg (mono 8kHz) and persist as a `<blob>.peaks` sidecar owned by the startup orphan sweep (never packed into `.totm` bundles, recomputed lazily on import); missing ffmpeg or undecodable files keep the plain bar. The audio clip count skips sidecars while disk use keeps counting them.
 * WebM and GIF video export — the export picker grew an MP4/WebM/GIF row: WebM renders through libvpx-vp9 + Opus (audio mixed like MP4) with the encode effort mapped to VP9 cpu-used + CRF, GIF renders silent and looping through a single-pass palettegen/paletteuse filter (two passes would need the whole file up front, which a live pipe never has). Unknown formats coerce to MP4, temp files carry the matching suffix, and the choice persists as a new `defaultFormat` alongside the other export defaults in the General tab (covered by Reset all). The save picker filters on the finished format with a matching overwrite title.
 
 ### Fixed

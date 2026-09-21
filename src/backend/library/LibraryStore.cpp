@@ -481,7 +481,21 @@ quint64 LibraryStore::audioDiskUsage() const {
 }
 
 int LibraryStore::audioCount() const {
-    return QDir(audioDir()).entryList(QDir::Files).size();
+    // Peaks sidecars (<blob>.peaks) share the dir but are not clips.
+    int n = 0;
+    for (const QString &f : QDir(audioDir()).entryList(QDir::Files)) {
+        if (f.endsWith(QStringLiteral(".peaks"), Qt::CaseInsensitive))
+            continue;
+        if (isSafeAudioName(f))
+            n++;
+    }
+    return n;
+}
+
+QVariantList LibraryStore::audioPeaks(const QString &name, int buckets, double offset, double window) {
+    if (!isSafeAudioName(name) || !hasAudio(name))
+        return {};
+    return m_peaks.peaksFor(audioDir(), name, buckets, offset, window);
 }
 
 bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool overwrite) {
@@ -730,8 +744,13 @@ void LibraryStore::sweepOrphanAudio() {
     const QSet<QString> keep = referencedAudio();
     const QDir dir(audioDir());
     for (const QFileInfo &info : dir.entryInfoList(QDir::Files)) {
-        if (!keep.contains(info.fileName()))
-            QFile::remove(info.absoluteFilePath());
+        const QString f = info.fileName();
+        if (keep.contains(f))
+            continue;
+        // Sidecars live only while their blob does.
+        if (f.endsWith(QStringLiteral(".peaks")) && keep.contains(f.left(f.size() - 6)))
+            continue;
+        QFile::remove(info.absoluteFilePath());
     }
 }
 

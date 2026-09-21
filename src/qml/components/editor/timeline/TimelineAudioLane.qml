@@ -1,12 +1,13 @@
 import QtQuick
 import Totm
 
-// One audio lane row: a span bar with diamond keyframes at both ends,
-// all in the animation-lane language. Diamonds rest ghost-filled
-// (surface) instead of solid white so music reads apart from regular
-// keyframes; selection stays the universal red wash + rim. Both ends
-// move the whole clip (no stretch in v1). Clicks select, Delete
+// One audio lane row: a tape-style span bar (not animation diamonds:
+// audio has no keyframes, both ends move the whole clip and it never
+// stretches) with slim end-cap grips marking the grabbable ends.
+// Selection stays the universal red wash + rim. Clicks select, Delete
 // removes. Empty lane space falls through to the view marquee below.
+// The bar carries a zoom-adaptive waveform (filled mini-bars over the
+// clip file window, silent when undecodable) so beats stay visible.
 // Drag state lives here while the bar stays model-bound: the doc clip
 // updates silently in place (no rebuild) and release touches once for
 // a single undo entry, like TimelineLane.
@@ -36,6 +37,14 @@ Item {
     property real snapT0: 0
     property real pressLx: 0
 
+    // Zoom-adaptive waveform over the clip file window
+    // [offset, offset + duration]: buckets follow the bar pixel width
+    // (~2px per bar) so zooming re-slices instead of stretching. Empty
+    // (no ffmpeg, undecodable, missing blob) keeps the plain bar below.
+    // Move drags only shift t0, so peaks never recompute mid-drag.
+    readonly property int waveBuckets: Math.min(512, Math.max(1, Math.floor(lane.barW() / 2)))
+    readonly property var wavePeaks: lane.clip ? LibraryStore.audioPeaks(lane.clip.source || "", lane.waveBuckets, Number(lane.clip.offset) || 0, Math.max(0.05, Number(lane.clip.duration) || 0)) : []
+
     implicitHeight: 30
 
     // Bottom hairline pairing with the gutter label's own line so the
@@ -60,38 +69,18 @@ Item {
         return Math.max(14, d * lane.pxPerSec);
     }
 
-    // Both ends of the clip for the diamonds. Duration never stretches,
-    // so the end rides the start while dragging.
-    function keyEnds() {
-        if (!lane.clip)
-            return [];
-        return [
-            {
-                end: "start"
-            },
-            {
-                end: "end"
-            }
-        ];
-    }
-
-    function endX(end) {
-        var base = lane.dragging ? lane.dragT0 : (lane.clip ? lane.clip.t0 : 0);
-        var d = lane.clip ? lane.clip.duration : 0;
-        return lane.originX + (base + (end.end === "end" ? d : 0)) * lane.pxPerSec;
-    }
-
-    // Span bar for the clip, full end-to-end under the diamonds so it
-    // reads as one connected unit like animation lanes. Dragging the
-    // bar moves the whole clip; end overflow is fine (use sites
-    // intersect with the composition end). (Empty lane space falls
-    // through to the view marquee below.)
+    // Tape bar for the clip: squared ends and grip caps instead of
+    // keyframe diamonds, so audio never reads as animatable. The wave
+    // spans edge to edge between the caps. Dragging the bar moves the
+    // whole clip; end overflow is fine (use sites intersect with the
+    // composition end). (Empty lane space falls through to the view
+    // marquee below.)
     Rectangle {
         x: lane.barX()
-        y: (parent.height - 10) / 2
+        y: (parent.height - 18) / 2
         width: lane.barW()
-        height: 10
-        radius: 5
+        height: 18
+        radius: 4
         color: lane.selected ? AppTheme.snapGuide : AppTheme.hover
         opacity: lane.selected ? 0.3 : 1
         border.width: 1
@@ -126,54 +115,78 @@ Item {
                     lane.clipPolicy(lane.clip.id, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)));
             }
         }
-    }
 
-    // Diamond keyframes at both clip ends, same geometry as animation
-    // diamonds. Both move (audio never stretches); the ghost fill sets
-    // them apart from regular keyframes.
-    Repeater {
-        model: lane.keyEnds()
+        // End-cap grips: visual drag affordance (input rides the bar
+        // area above). Hidden on nub bars where caps would collide.
+        Rectangle {
+            x: 4
+            y: (parent.height - height) / 2
+            width: 3
+            height: parent.height - 8
+            radius: 1.5
+            visible: lane.barW() > 30
+            color: lane.selected ? AppTheme.background : AppTheme.muted
+            opacity: lane.selected ? 0.9 : 0.6
+        }
 
         Rectangle {
-            x: lane.endX(modelData) - width / 2
+            x: parent.width - 7
             y: (parent.height - height) / 2
-            width: 12
-            height: 12
-            rotation: 45
-            radius: 2.5
-            scale: lane.selected ? 1.18 : 1
-            color: lane.selected ? AppTheme.snapGuide : AppTheme.surface
-            border.width: 1.25
-            border.color: lane.selected ? "#ffffff" : AppTheme.fieldBorder
+            width: 3
+            height: parent.height - 8
+            radius: 1.5
+            visible: lane.barW() > 30
+            color: lane.selected ? AppTheme.background : AppTheme.muted
+            opacity: lane.selected ? 0.9 : 0.6
+        }
 
-            Behavior on scale {
-                NumberAnimation {
-                    duration: 120
-                    easing.type: Easing.OutCubic
-                }
+        // Filled mini-bars over the clip window, running between the
+        // caps; silence still draws a 1px flatline so presence reads
+        // apart from undecodable.
+        Canvas {
+            id: waves
+
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            anchors.topMargin: 2
+            anchors.bottomMargin: 2
+            visible: lane.wavePeaks.length > 0 && lane.barW() > 34
+            property var peaks: lane.wavePeaks
+            onPeaksChanged: waves.requestPaint()
+            onWidthChanged: waves.requestPaint()
+            onHeightChanged: waves.requestPaint()
+            onAvailableChanged: {
+                if (waves.available)
+                    waves.requestPaint();
             }
-            Behavior on color {
-                ColorAnimation {
-                    duration: 120
-                    easing.type: Easing.OutCubic
-                }
-            }
 
-            MouseArea {
-                id: endMouse
-
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                hoverEnabled: true
-                cursorShape: lane.dragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
-                preventStealing: true
-                onPressed: mouse => lane.dragPress(lane.clip ? lane.clip.id : -1, lane.mapFromItem(endMouse, mouse.x, mouse.y).x)
-                onPositionChanged: mouse => lane.dragMove(lane.mapFromItem(endMouse, mouse.x, mouse.y).x)
-                onReleased: lane.dragRelease()
-                onClicked: mouse => {
-                    if (lane.clipPolicy && lane.clip)
-                        lane.clipPolicy(lane.clip.id, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)));
+            onPaint: {
+                var ctx = waves.getContext("2d");
+                // clearRect, not reset(): Qt's 2d context never
+                // implemented reset(), so it throws and aborts the
+                // paint leaving only the bare bar behind.
+                ctx.globalAlpha = 1;
+                ctx.clearRect(0, 0, waves.width, waves.height);
+                var p = waves.peaks;
+                if (!p || p.length === 0 || waves.width <= 0 || waves.height <= 0)
+                    return;
+                var n = p.length;
+                var bw = waves.width / n;
+                var muted = lane.clip && lane.clip.muted === true;
+                ctx.fillStyle = String(lane.selected ? AppTheme.background : AppTheme.foreground);
+                ctx.globalAlpha = muted ? 0.3 : (lane.selected ? 0.95 : 0.85);
+                for (var i = 0; i < n; i++) {
+                    var v = Math.min(1, Math.max(0, Number(p[i]) || 0));
+                    // Display gamma: raw RMS sits low in the strip, so
+                    // lift it (beats stay distinct, quiet lifts legible).
+                    // Backend magnitudes stay honest 0..1 energy.
+                    var g = Math.pow(v, 0.5);
+                    var h = Math.max(1, Math.min(waves.height, g * waves.height));
+                    var w = Math.max(1, bw - 0.5);
+                    ctx.fillRect(i * bw, (waves.height - h) / 2, w, h);
                 }
+                ctx.globalAlpha = 1;
             }
         }
     }

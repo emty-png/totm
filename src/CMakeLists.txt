@@ -34,6 +34,8 @@ qt_add_qml_module(totm
         backend/effects/EffectItem.cpp
         backend/library/LibraryStore.h
         backend/library/LibraryStore.cpp
+        backend/library/AudioPeaks.h
+        backend/library/AudioPeaks.cpp
         backend/settings/SettingsStore.h
         backend/settings/SettingsStore.cpp
         backend/video/VideoExporter.h
