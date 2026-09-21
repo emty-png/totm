@@ -1,0 +1,19 @@
+{
+  "id": "tot.official.themes",
+  "name": "Official Themes",
+  "version": "1.1.0",
+  "author": "tot",
+  "description": "Eighteen popular theme presets for the Appearance tab. One click fills the light and dark colors; tweak or reset after.",
+  "entry": "main.qml",
+  "tier": "standard",
+  "contributions": {
+    "appearanceSections": ["ui/ThemesSection.qml"]
+  },
+  "permissions": ["settings.read", "ui.slots", "plugin.storage", "appearance.write"],
+  "permissionReasons": {
+    "settings.read": "Follows the dark/light theme so previews match.",
+    "ui.slots": "Adds the theme gallery to Settings → Appearance.",
+    "plugin.storage": "Remembers the last applied theme.",
+    "appearance.write": "Applies the picked preset to the Appearance colors."
+  }
+}

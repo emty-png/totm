@@ -1,0 +1,10 @@
+<RCC version="1.0">
+    <!-- Bundled (official) plugins. PluginStore seeds these into the
+         plugins dir on first run; the seal only holds while the disk
+         copy matches these bytes. -->
+    <qresource prefix="/official-plugins">
+        <file alias="tot.official.themes/manifest.json">../src/plugins/tot.official.themes/manifest.json</file>
+        <file alias="tot.official.themes/main.qml">../src/plugins/tot.official.themes/main.qml</file>
+        <file alias="tot.official.themes/ui/ThemesSection.qml">../src/plugins/tot.official.themes/ui/ThemesSection.qml</file>
+    </qresource>
+</RCC>

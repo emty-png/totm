@@ -39,6 +39,7 @@ struct PluginManifest {
     QString tier = QStringLiteral("standard");
     QVariantList toolbarTools;
     QVariantList designSections;
+    QVariantList appearanceSections;
     QVariantList canvasOverlays;
     QString fullOverlay;
     QStringList permissions;
@@ -52,10 +53,13 @@ class PluginStore : public QObject {
 
     // Each row: {id, name, version, author, description, tier, enabled,
     // granted:[...], requested:[...], error, hasToolbar, hasSections,
-    // hasOverlay, hasFullOverlay}.
+    // hasAppearance, hasOverlay, hasFullOverlay, official:bool}.
+    // official is true only for bundled plugins whose on-disk files still
+    // match the shipped copies byte-for-byte; edited copies lose the seal.
     Q_PROPERTY(QVariantList pluginList READ pluginList NOTIFY pluginsChanged)
     // Pending approval: {id, name, version, author, description,
-    // requested:[{id, title, reason}], granted:[...]} or {} when none.
+    // requested:[{id, title, reason}], granted:[...], official:bool}
+    // or {} when none.
     Q_PROPERTY(QVariantMap pendingPlugin READ pendingPlugin NOTIFY pendingChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 
@@ -103,11 +107,28 @@ public:
 
     // Slot models for Repeaters. Rows: {pluginId, pluginName, path, url}.
     // Only enabled plugins with ui.slots granted (fullOverlay rows need
-    // ui.fullOverlay instead).
+    // ui.fullOverlay instead). appearanceSections() feeds the Appearance
+    // settings tab; designSections() feeds the Design panel.
     Q_INVOKABLE QVariantList toolbarTools() const;
     Q_INVOKABLE QVariantList designSections() const;
+    Q_INVOKABLE QVariantList appearanceSections() const;
     Q_INVOKABLE QVariantList canvasOverlays() const;
     Q_INVOKABLE QVariantList fullOverlays() const;
+
+    // Theme presets (appearance.write). Merges the given light/dark color
+    // maps into the Appearance overrides in one change (unknown keys and
+    // invalid colors are skipped). Returns false unless the plugin is
+    // enabled with the appearance.write grant and at least one color
+    // applied. Merge semantics: only the keys present are overwritten, so
+    // a full 15-key map per side replaces the theme while a partial map
+    // tweaks it. The host stays on Light/Dark mode; presets just fill the
+    // colors, and the user can tweak or reset after.
+    Q_INVOKABLE bool applyAppearanceTheme(const QString &id, const QVariantMap &light, const QVariantMap &dark);
+
+    // Official (bundled) plugins: shipped with the app, seeded into the
+    // plugins dir on first run, still approved like any other plugin.
+    // True only when the on-disk files match the shipped copies.
+    Q_INVOKABLE bool isOfficial(const QString &id) const;
 
     // Scoped per-plugin KV storage (1MB cap per plugin). Lives in
     // plugins.json so plugins never touch QSettings or the filesystem.
@@ -150,6 +171,21 @@ private:
     void load();
     bool persist();
     void rebuild();
+    void seedOfficialPlugins();
+    // Copies one bundled plugin from resources to the plugins dir.
+    // Refreshes missing, broken, or older shipped copies; a copy edited
+    // since seeding is left alone and simply loses the seal. A fingerprint
+    // of the last-seeded bytes tells older copies (safe to refresh) apart
+    // from edited ones; legacy seeds without a fingerprint fall back to
+    // the manifest version.
+    bool seedOneOfficial(const QString &id, const QStringList &files);
+    QString officialResourcePath(const QString &id, const QString &relativePath) const;
+    bool officialMatchesDisk(const QString &id) const;
+    // SHA256 over the official files in order ({} when any is missing).
+    QString resourceHash(const QString &id) const;
+    QString diskHash(const QString &id) const;
+    // Installed manifest version ({} when missing or broken).
+    QString diskManifestVersion(const QString &id) const;
     void setLastError(const QString &message);
     void setPending(const QVariantMap &pending);
     QString pluginsPath() const;

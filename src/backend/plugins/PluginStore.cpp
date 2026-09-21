@@ -1,6 +1,9 @@
 #include "PluginStore.h"
 
+#include "SettingsStore.h"
+
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -26,6 +29,7 @@ QStringList kKnownPermissions = {
     QStringLiteral("images.use"),
     QStringLiteral("audio.use"),
     QStringLiteral("settings.read"),
+    QStringLiteral("appearance.write"),
     QStringLiteral("export.hook"),
     QStringLiteral("ui.slots"),
     QStringLiteral("ui.fullOverlay"),
@@ -48,6 +52,7 @@ QVariantMap permissionMeta(const QString &id) {
         {QStringLiteral("images.use"), {{"title", QObject::tr("Use images")}, {"description", QObject::tr("Ask you to pick images; never sees file paths.")}}},
         {QStringLiteral("audio.use"), {{"title", QObject::tr("Use audio")}, {"description", QObject::tr("Ask you to pick audio; never sees file paths.")}}},
         {QStringLiteral("settings.read"), {{"title", QObject::tr("Read theme")}, {"description", QObject::tr("Follow dark/light theme only.")}}},
+        {QStringLiteral("appearance.write"), {{"title", QObject::tr("Apply themes")}, {"description", QObject::tr("Apply theme presets to Appearance colors. You can tweak or reset after.")}}},
         {QStringLiteral("export.hook"), {{"title", QObject::tr("Suggest export")}, {"description", QObject::tr("Suggest quality/fps; cannot run ffmpeg itself.")}}},
         {QStringLiteral("ui.slots"), {{"title", QObject::tr("Add UI sections")}, {"description", QObject::tr("Add toolbar buttons and panel sections.")}}},
         {QStringLiteral("ui.fullOverlay"), {{"title", QObject::tr("Full overlay")}, {"description", QObject::tr("Draw over the whole editor. May break on updates.")}}},
@@ -69,6 +74,51 @@ QStringList toStringList(const QVariantList &list) {
 
 qint64 storageBytes(const QVariantMap &storage) {
     return QJsonDocument(QJsonObject::fromVariantMap(storage)).toJson(QJsonDocument::Compact).size();
+}
+
+// Bundled (official) plugins: shipped with the app under resources at
+// :/official-plugins/<id>/, seeded into the plugins dir on first run.
+// The seal is checksum-based: only a byte-identical disk copy counts.
+QStringList officialIds() {
+    return {QStringLiteral("tot.official.themes")};
+}
+
+QStringList officialFiles(const QString &id) {
+    if (id == QStringLiteral("tot.official.themes"))
+        return {QStringLiteral("manifest.json"), QStringLiteral("main.qml"), QStringLiteral("ui/ThemesSection.qml")};
+    return {};
+}
+
+QString embeddedManifestVersion(const QString &id) {
+    QFile file(QStringLiteral(":/official-plugins/") + id + QStringLiteral("/manifest.json"));
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+        return {};
+    return doc.object().value(QStringLiteral("version")).toString().trimmed();
+}
+
+// Numeric dotted-version compare ("1.10.0" sorts after "1.9.0").
+// Unknown tails compare lexically; missing parts count as zero.
+int compareVersions(const QString &a, const QString &b) {
+    const QStringList ap = a.split(QLatin1Char('.'));
+    const QStringList bp = b.split(QLatin1Char('.'));
+    for (int i = 0; i < qMax(ap.size(), bp.size()); ++i) {
+        bool okA = false, okB = false;
+        const int av = i < ap.size() ? ap.at(i).toInt(&okA) : 0;
+        const int bv = i < bp.size() ? bp.at(i).toInt(&okB) : 0;
+        if (!okA || !okB) {
+            const int cmp = QString::compare(i < ap.size() ? ap.at(i) : QString(), i < bp.size() ? bp.at(i) : QString());
+            if (cmp != 0)
+                return cmp < 0 ? -1 : 1;
+            continue;
+        }
+        if (av != bv)
+            return av < bv ? -1 : 1;
+    }
+    return 0;
 }
 } // namespace
 
@@ -105,6 +155,7 @@ void PluginStore::clearError() {
 
 void PluginStore::scan() {
     QDir().mkpath(pluginsPath());
+    seedOfficialPlugins();
     if (!m_watcher.directories().contains(pluginsPath()))
         m_watcher.addPath(pluginsPath());
 
@@ -142,6 +193,8 @@ void PluginStore::scan() {
             manifest.toolbarTools.append(v.toString());
         for (const QVariant &v : contributions.value(QStringLiteral("designSections")).toArray().toVariantList())
             manifest.designSections.append(v.toString());
+        for (const QVariant &v : contributions.value(QStringLiteral("appearanceSections")).toArray().toVariantList())
+            manifest.appearanceSections.append(v.toString());
         for (const QVariant &v : contributions.value(QStringLiteral("canvasOverlays")).toArray().toVariantList())
             manifest.canvasOverlays.append(v.toString());
         manifest.fullOverlay = contributions.value(QStringLiteral("fullOverlay")).toString().trimmed();
@@ -180,6 +233,8 @@ void PluginStore::scan() {
             for (const QVariant &v : manifest.toolbarTools)
                 allFiles.append(v.toString());
             for (const QVariant &v : manifest.designSections)
+                allFiles.append(v.toString());
+            for (const QVariant &v : manifest.appearanceSections)
                 allFiles.append(v.toString());
             for (const QVariant &v : manifest.canvasOverlays)
                 allFiles.append(v.toString());
@@ -395,6 +450,189 @@ QVariantList PluginStore::designSections() const {
     return out;
 }
 
+QVariantList PluginStore::appearanceSections() const {
+    QVariantList out;
+    for (const PluginManifest &manifest : m_manifests) {
+        if (!hasPermission(manifest.id, QStringLiteral("ui.slots")))
+            continue;
+        for (const QVariant &v : manifest.appearanceSections) {
+            const QString rel = v.toString();
+            const QUrl url = pluginFileUrl(manifest.id, rel);
+            if (url.isEmpty())
+                continue;
+            out.append(QVariantMap{
+                {QStringLiteral("pluginId"), manifest.id},
+                {QStringLiteral("pluginName"), manifest.name},
+                {QStringLiteral("path"), rel},
+                {QStringLiteral("url"), url},
+            });
+        }
+    }
+    return out;
+}
+
+bool PluginStore::applyAppearanceTheme(const QString &id, const QVariantMap &light, const QVariantMap &dark) {
+    if (findManifest(id) < 0 || !hasPermission(id, QStringLiteral("appearance.write"))) {
+        setLastError(tr("Plugin \"%1\" needs the appearance permission to apply themes.").arg(id));
+        return false;
+    }
+    if (light.isEmpty() && dark.isEmpty()) {
+        setLastError(tr("Plugin \"%1\" theme had no colors to apply.").arg(id));
+        return false;
+    }
+    SettingsStore *settings = SettingsStore::instance();
+    if (!settings) {
+        setLastError(tr("Theme settings are not ready yet."));
+        return false;
+    }
+    const int applied = settings->applyThemeMaps(light, dark);
+    if (applied <= 0) {
+        setLastError(tr("Plugin \"%1\" theme had no valid colors.").arg(id));
+        return false;
+    }
+    return true;
+}
+
+bool PluginStore::isOfficial(const QString &id) const {
+    return officialMatchesDisk(id);
+}
+
+void PluginStore::seedOfficialPlugins() {
+    bool changed = false;
+    for (const QString &id : officialIds()) {
+        if (seedOneOfficial(id, officialFiles(id)))
+            changed = true;
+    }
+    if (changed)
+        persist();
+}
+
+bool PluginStore::seedOneOfficial(const QString &id, const QStringList &files) {
+    if (files.isEmpty())
+        return false;
+    // Fast path: already seeded at the shipped version.
+    const QString embeddedVersion = embeddedManifestVersion(id);
+    if (embeddedVersion.isEmpty())
+        return false;
+    const QString versionKey = id + QStringLiteral(".seededVersion");
+    const QString hashKey = id + QStringLiteral(".seededHash");
+    const QString shipped = resourceHash(id);
+    if (shipped.isEmpty())
+        return false;
+    const QString current = diskHash(id);
+    bool changed = false;
+    auto mark = [&](const QString &hash) {
+        if (m_states.value(versionKey).toString() != embeddedVersion) {
+            m_states[versionKey] = embeddedVersion;
+            changed = true;
+        }
+        if (m_states.value(hashKey).toString() != hash) {
+            m_states[hashKey] = hash;
+            changed = true;
+        }
+    };
+    // Pristine current copy: nothing to install.
+    if (!current.isEmpty() && current == shipped) {
+        mark(current);
+        return changed;
+    }
+    const QDir dir(pluginsPath() + QStringLiteral("/") + id);
+    const QString stored = m_states.value(hashKey).toString();
+    bool refresh = false;
+    if (!dir.exists() || current.isEmpty()) {
+        // Missing or incomplete copy: (re)install.
+        refresh = true;
+    } else if (!stored.isEmpty() && current == stored) {
+        // Untouched since we seeded it, so this is an older shipped
+        // copy rather than user edits: updating is safe.
+        refresh = true;
+    } else if (stored.isEmpty()) {
+        // Legacy seeds left no fingerprint: fall back to the manifest
+        // version. Older or broken copies refresh; a current copy that
+        // differs was edited by the user and stays.
+        const QString diskVersion = diskManifestVersion(id);
+        refresh = diskVersion.isEmpty() || compareVersions(diskVersion, embeddedVersion) < 0;
+    }
+    // Else: edited since seeding — keep the user's files; the seal stays
+    // dropped until they reinstall the folder. The fingerprint is left
+    // alone on purpose: recording the edited bytes as "seeded" would make
+    // the next scan mistake them for a pristine copy and refresh.
+    if (!refresh) {
+        if (m_states.value(versionKey).toString() != embeddedVersion) {
+            m_states[versionKey] = embeddedVersion;
+            changed = true;
+        }
+        return changed;
+    }
+    for (const QString &rel : files) {
+        QFile src(officialResourcePath(id, rel));
+        if (!src.open(QIODevice::ReadOnly))
+            return changed;
+        const QByteArray bytes = src.readAll();
+        const QString dest = pluginsPath() + QStringLiteral("/") + id + QStringLiteral("/") + rel;
+        QDir().mkpath(QFileInfo(dest).absolutePath());
+        QFile out(dest);
+        if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate))
+            return changed;
+        if (out.write(bytes) != bytes.size())
+            return changed;
+    }
+    mark(shipped);
+    return true;
+}
+
+QString PluginStore::officialResourcePath(const QString &id, const QString &relativePath) const {
+    return QStringLiteral(":/official-plugins/") + id + QStringLiteral("/") + relativePath;
+}
+
+QString PluginStore::resourceHash(const QString &id) const {
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    for (const QString &rel : officialFiles(id)) {
+        QFile file(officialResourcePath(id, rel));
+        if (!file.open(QIODevice::ReadOnly))
+            return {};
+        hash.addData(file.readAll());
+    }
+    return QString::fromLatin1(hash.result().toHex());
+}
+
+QString PluginStore::diskHash(const QString &id) const {
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    for (const QString &rel : officialFiles(id)) {
+        QFile file(pluginsPath() + QStringLiteral("/") + id + QStringLiteral("/") + rel);
+        if (!file.open(QIODevice::ReadOnly))
+            return {};
+        hash.addData(file.readAll());
+    }
+    return QString::fromLatin1(hash.result().toHex());
+}
+
+QString PluginStore::diskManifestVersion(const QString &id) const {
+    QFile file(pluginsPath() + QStringLiteral("/") + id + QStringLiteral("/manifest.json"));
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+        return {};
+    return doc.object().value(QStringLiteral("version")).toString().trimmed();
+}
+
+bool PluginStore::officialMatchesDisk(const QString &id) const {
+    const QStringList files = officialFiles(id);
+    if (files.isEmpty())
+        return false;
+    for (const QString &rel : files) {
+        QFile src(officialResourcePath(id, rel));
+        QFile disk(pluginsPath() + QStringLiteral("/") + id + QStringLiteral("/") + rel);
+        if (!src.open(QIODevice::ReadOnly) || !disk.open(QIODevice::ReadOnly))
+            return false;
+        if (src.readAll() != disk.readAll())
+            return false;
+    }
+    return true;
+}
+
 QVariantList PluginStore::canvasOverlays() const {
     QVariantList out;
     for (const PluginManifest &manifest : m_manifests) {
@@ -588,6 +826,8 @@ bool PluginStore::checkSandbox(const QString &dir, const PluginManifest &manifes
         files.append(v.toString());
     for (const QVariant &v : manifest.designSections)
         files.append(v.toString());
+    for (const QVariant &v : manifest.appearanceSections)
+        files.append(v.toString());
     for (const QVariant &v : manifest.canvasOverlays)
         files.append(v.toString());
     if (!manifest.fullOverlay.isEmpty())
@@ -666,8 +906,10 @@ QVariantMap PluginStore::manifestToRow(const PluginManifest &manifest, const QSt
             {QStringLiteral("error"), error},
             {QStringLiteral("hasToolbar"), false},
             {QStringLiteral("hasSections"), false},
+            {QStringLiteral("hasAppearance"), false},
             {QStringLiteral("hasOverlay"), false},
             {QStringLiteral("hasFullOverlay"), false},
+            {QStringLiteral("official"), false},
         };
     }
     const QVariantMap state = m_states.value(manifest.id).toMap();
@@ -692,8 +934,10 @@ QVariantMap PluginStore::manifestToRow(const PluginManifest &manifest, const QSt
         {QStringLiteral("error"), error},
         {QStringLiteral("hasToolbar"), !manifest.toolbarTools.isEmpty()},
         {QStringLiteral("hasSections"), !manifest.designSections.isEmpty()},
+        {QStringLiteral("hasAppearance"), !manifest.appearanceSections.isEmpty()},
         {QStringLiteral("hasOverlay"), !manifest.canvasOverlays.isEmpty()},
         {QStringLiteral("hasFullOverlay"), !manifest.fullOverlay.isEmpty()},
+        {QStringLiteral("official"), officialMatchesDisk(manifest.id)},
     };
 }
 
@@ -725,6 +969,7 @@ QVariantMap PluginStore::buildPending(const PluginManifest &manifest) const {
         {QStringLiteral("description"), manifest.description},
         {QStringLiteral("tier"), manifest.tier},
         {QStringLiteral("requested"), requested},
+        {QStringLiteral("official"), officialMatchesDisk(manifest.id)},
     };
 }
 

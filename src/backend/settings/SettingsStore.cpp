@@ -226,8 +226,15 @@ SettingsStore *SettingsStore::create(QQmlEngine *engine, QJSEngine *scriptEngine
     return store;
 }
 
+SettingsStore *SettingsStore::s_instance = nullptr;
+
+SettingsStore *SettingsStore::instance() {
+    return s_instance;
+}
+
 SettingsStore::SettingsStore(QObject *parent)
     : QObject(parent) {
+    s_instance = this;
     refreshSystemDark();
     load();
     loadImportedFonts();
@@ -238,6 +245,11 @@ SettingsStore::SettingsStore(QObject *parent)
     if (hints) {
         connect(hints, &QStyleHints::colorSchemeChanged, this, &SettingsStore::onSystemSchemeChanged);
     }
+}
+
+SettingsStore::~SettingsStore() {
+    if (s_instance == this)
+        s_instance = nullptr;
 }
 
 bool SettingsStore::isDark() const {
@@ -738,6 +750,37 @@ void SettingsStore::resetAppearance() {
     persistAppearance();
     applyFontFamily();
     emit appearanceChanged();
+}
+
+int SettingsStore::applyThemeMaps(const QVariantMap &light, const QVariantMap &dark) {
+    // Merge semantics: only known keys with valid colors apply, anything
+    // else is skipped. Present-but-equal values count as applied (the
+    // caller asked for them); unknown keys and invalid colors do not.
+    int applied = 0;
+    bool changed = false;
+    QSettings settings;
+    auto applyOne = [&](const QVariantMap &map, QVariantMap &target, const QString &group) {
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+            if (!isKnownAppearanceColor(it.key()))
+                continue;
+            const auto canon = canonicalAppearanceColor(it.value().toString());
+            if (!canon.has_value() || canon->isEmpty())
+                continue;
+            applied++;
+            if (target.value(it.key()).toString() == *canon)
+                continue;
+            target.insert(it.key(), *canon);
+            settings.setValue(group + it.key(), *canon);
+            changed = true;
+        }
+    };
+    applyOne(light, m_lightColors, QStringLiteral("appearanceColorsLight/"));
+    applyOne(dark, m_darkColors, QStringLiteral("appearanceColorsDark/"));
+    if (changed) {
+        settings.sync();
+        emit appearanceChanged();
+    }
+    return applied;
 }
 
 void SettingsStore::loadGeneral() {

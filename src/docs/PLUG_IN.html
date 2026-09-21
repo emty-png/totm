@@ -314,7 +314,8 @@
           <li><a href="#sandbox">6 · Sandbox rules</a></li>
           <li><a href="#style">7 · UI style rules</a></li>
           <li><a href="#sample">8 · Full sample</a></li>
-          <li><a href="#testing">9 · Testing &amp; troubleshooting</a></li>
+          <li><a href="#official">9 · Official plug-ins</a></li>
+          <li><a href="#testing">10 · Testing &amp; troubleshooting</a></li>
         </ul>
       </nav>
     </header>
@@ -369,8 +370,8 @@
         <tr><td><code>author</code>, <code>description</code></td><td>no</td><td>Shown on the manager card.</td></tr>
         <tr><td><code>entry</code></td><td>no</td><td>Defaults to <code>main.qml</code>. Must exist. (totm loads contribution files directly; the entry marks the root.)</td></tr>
         <tr><td><code>tier</code></td><td>no</td><td><code>standard</code> (default) or <code>advanced</code>. Advanced is required for <code>fullOverlay</code> and shows a stronger trust warning.</td></tr>
-        <tr><td><code>contributions</code></td><td>no</td><td><code>toolbarTools[]</code>, <code>designSections[]</code>, <code>canvasOverlays[]</code>, <code>fullOverlay</code>. Relative <code>.qml</code> paths inside your folder; every file must exist.</td></tr>
-        <tr><td><code>permissions</code></td><td>no</td><td>Subset of the 11 known ids (§3). Unknown ids reject the plug-in.</td></tr>
+        <tr><td><code>contributions</code></td><td>no</td><td><code>toolbarTools[]</code>, <code>designSections[]</code>, <code>appearanceSections[]</code>, <code>canvasOverlays[]</code>, <code>fullOverlay</code>. Relative <code>.qml</code> paths inside your folder; every file must exist.</td></tr>
+        <tr><td><code>permissions</code></td><td>no</td><td>Subset of the 12 known ids (§3). Unknown ids reject the plug-in.</td></tr>
         <tr><td><code>permissionReasons</code></td><td>no</td><td>One short “why” per permission, shown in the approval popup. Write these well — they are your install screen.</td></tr>
         <tr><td><code>totmVersion</code></td><td>no</td><td>Informational compatibility hint (e.g. <code>&gt;=0.1.0</code>).</td></tr>
       </tbody>
@@ -390,6 +391,7 @@
         <tr><td class="perm">images.use</td><td>Mediated image picks (§5). You only ever see the picked blob name, never a path.</td></tr>
         <tr><td class="perm">audio.use</td><td>Mediated audio picks, same pattern as images.</td></tr>
         <tr><td class="perm">settings.read</td><td>Follow the theme via <code>AppTheme.isDark</code>. Nothing else is exposed.</td></tr>
+        <tr><td class="perm">appearance.write</td><td>Applying theme presets via <code>PluginStore.applyAppearanceTheme(id, light, dark)</code>. Only known color keys with valid colors apply; the user stays on Light/Dark mode and can tweak or reset after.</td></tr>
         <tr><td class="perm">export.hook</td><td>Suggesting quality/fps shown in the export popup. You never drive the exporter.</td></tr>
         <tr><td class="perm">ui.slots</td><td>Toolbar tools, design sections and canvas overlays.</td></tr>
         <tr><td class="perm">ui.fullOverlay</td><td>Full-window overlay (needs the <code>advanced</code> tier). Keep it non-blocking: no full-fill MouseArea.</td></tr>
@@ -405,6 +407,7 @@
       <tbody>
         <tr><td><code>toolbarTools[]</code></td><td>Floating canvas toolbar, after the image tool</td><td><code>doc</code>, <code>pluginId</code> (doc stays live on tab/switch)</td></tr>
         <tr><td><code>designSections[]</code></td><td>Design panel, after Effects</td><td><code>doc</code>, <code>snapshot</code> (selection with mixed-value helpers), <code>pluginId</code></td></tr>
+        <tr><td><code>appearanceSections[]</code></td><td>Settings → Appearance, after the Theme card</td><td><code>pluginId</code> (declare only what you need; <code>doc</code> is absent here)</td></tr>
         <tr><td><code>canvasOverlays[]</code></td><td>Over the scene, under the chrome</td><td><code>doc</code>, <code>zoom</code>, <code>offsetX</code>, <code>offsetY</code>, <code>pluginId</code></td></tr>
         <tr><td><code>fullOverlay</code></td><td>Whole window, above views</td><td><code>pluginId</code> (read <code>TabState</code>/<code>ToolState</code> yourself)</td></tr>
       </tbody>
@@ -426,6 +429,9 @@
       <tbody>
         <tr><td><code>hasPermission(id, perm)</code></td><td>Gate every action on this.</td></tr>
         <tr><td><code>getValue(id, key, fallback)</code> · <code>setValue(id, key, value)</code> · <code>removeValue(id, key)</code></td><td>Scoped storage (<code>plugin.storage</code>).</td></tr>
+        <tr><td><code>applyAppearanceTheme(id, light, dark)</code></td><td>Merge <code>light</code>/<code>dark</code> color maps into the Appearance overrides (<code>appearance.write</code>). Returns <code>false</code> unless at least one valid color applied.</td></tr>
+        <tr><td><code>appearanceSections()</code></td><td>Enabled <code>ui.slots</code> appearance sections for the Settings → Appearance tab.</td></tr>
+        <tr><td><code>isOfficial(id)</code></td><td>Whether the plug-in is a pristine bundled copy (carries the Official seal).</td></tr>
         <tr><td><code>requestImage(id)</code> · <code>requestAudio(id)</code></td><td>Opens the host picker; listen for <code>onPicked(pluginId, kind, name)</code>.</td></tr>
         <tr><td><code>imageUrlFor(id, name)</code> · <code>audioUrlFor(id, name)</code> · <code>imageInfoFor(id, name)</code></td><td>Resolve only names <em>you</em> picked; anything else returns empty.</td></tr>
         <tr><td><code>suggestExport(id, quality, fps)</code> · <code>exportSuggestion(id)</code> · <code>clearExportSuggestion(id)</code></td><td><code>quality</code> is <code>sd|hd|4k</code>, <code>fps</code> is <code>30|60</code>. The export popup offers it with Apply — never automatic.</td></tr>
@@ -511,7 +517,17 @@ PanelSection {
     }
 }</code></pre>
 
-    <h2 id="testing">9 · Testing &amp; troubleshooting</h2>
+    <h2 id="official">9 · Official plug-ins</h2>
+    <p>A new class of plug-in that ships with the app (e.g. the built-in theme pack). Official plug-ins seed into the plug-in directory on first run and still go through the normal approval popup — but they carry a verified-badge <strong>Official</strong> seal in the manager and the approval dialog.</p>
+    <div class="card">
+      <ul>
+        <li><strong>Seal rule:</strong> the seal holds only while the on-disk files match the shipped copies byte-for-byte. Edit the files and the seal drops (the plug-in keeps working as a normal third-party one).</li>
+        <li><strong>Updates:</strong> a newer shipped version refreshes missing, broken, or older copies (each seeding fingerprints the bytes, so an older copy reads as updatable while user edits read as edited); copies edited since seeding are never overwritten.</li>
+        <li><strong>Theme packs:</strong> contribute <code>appearanceSections[]</code> and request <code>appearance.write</code> to offer one-click presets via <code>applyAppearanceTheme</code>. Presets fill the Light/Dark colors; users tweak or reset after.</li>
+      </ul>
+    </div>
+
+    <h2 id="testing">10 · Testing &amp; troubleshooting</h2>
     <div class="card">
       <ol>
         <li>Copy the folder into the plug-in directory and press <strong>Rescan</strong> in <em>Settings → Plugin</em>.</li>

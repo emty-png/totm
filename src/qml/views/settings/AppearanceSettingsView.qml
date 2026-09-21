@@ -6,12 +6,28 @@ import Totm
 // Appearance settings panel: theme mode, canvas chrome, per-theme
 // colors, corner presets + custom radii, UI font with custom file
 // imports. Same centered 640px card rhythm as the Shortcut tab.
+// Official/bundled theme packs render their gallery right after the
+// Theme card via the appearanceSections slot.
 ColumnLayout {
     id: appearancePanel
 
     spacing: 0
 
     property real centerMargin: Math.max(16, (appearancePanel.width - 640) / 2)
+    property var pluginSections: []
+
+    function refreshPlugins() {
+        appearancePanel.pluginSections = PluginStore.appearanceSections();
+    }
+
+    Component.onCompleted: appearancePanel.refreshPlugins()
+
+    Connections {
+        target: PluginStore
+        function onPluginsChanged() {
+            appearancePanel.refreshPlugins();
+        }
+    }
 
     RowLayout {
         Layout.fillWidth: true
@@ -83,6 +99,17 @@ ColumnLayout {
             spacing: 12
 
             AppearanceThemeSection {}
+
+            // Plugin theme galleries (ui.slots). Each entry gets pluginId
+            // when it declares it; failures show a muted row.
+            Repeater {
+                model: appearancePanel.pluginSections
+
+                delegate: PluginSlot {
+                    Layout.fillWidth: true
+                    entry: modelData
+                }
+            }
 
             AppearanceCanvasSection {}
 

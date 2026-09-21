@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Changelog</title>
+
+  <!-- Prevent theme flash (FOUC) by applying saved preference before first paint -->
+  <script>
+    (function () {
+      try {
+        const saved = localStorage.getItem("totm-changelog-theme");
+        if (saved === "light" || saved === "dark") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <style>
+    /* ==========================================================================
+       Design Tokens & Theme Variables
+       ========================================================================== */
+    :root {
+      color-scheme: dark light;
+      --background: #1e1e1e;
+      --foreground: #f6f6f6;
+      --surface: #2e2e2e;
+      --border: #3e3e46;
+      --muted: #9a9a9a;
+      --hover: #3e3e46;
+      --canvas: #101010;
+      --accent: #0d99ff;
+      --radius: 12px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        color-scheme: light;
+        --background: #ffffff;
+        --foreground: #0f0f0f;
+        --surface: #fffde0;
+        --border: #000000;
+        --muted: #5a5a5a;
+        --hover: #f0ead0;
+        --canvas: #ececec;
+      }
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --background: #ffffff;
+      --foreground: #0f0f0f;
+      --surface: #fffde0;
+      --border: #000000;
+      --muted: #5a5a5a;
+      --hover: #f0ead0;
+      --canvas: #ececec;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+    }
+
+    /* ==========================================================================
+       Reset & Base Styles
+       ========================================================================== */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font: 16px/1.65 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    p,
+    li {
+      color: var(--foreground);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    /* ==========================================================================
+       Layout
+       ========================================================================== */
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+    }
+
+    /* ==========================================================================
+       Theme Toggle Button
+       ========================================================================== */
+    .theme-toggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 10;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--foreground);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .theme-toggle:hover {
+      background: var(--hover);
+    }
+
+    .theme-toggle:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      display: block;
+    }
+
+    /* ==========================================================================
+       Hero Section & Headings
+       ========================================================================== */
+    header.hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+
+    header.hero p {
+      color: var(--muted);
+      margin: 8px 0 0;
+    }
+
+    h1 {
+      font-size: 32px;
+      margin: 0;
+      letter-spacing: -0.5px;
+    }
+
+    h1 .accent {
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      margin: 40px 0 12px;
+      letter-spacing: -0.3px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 17px;
+      margin: 24px 0 8px;
+    }
+
+    /* ==========================================================================
+       Table of Contents
+       ========================================================================== */
+    .toc {
+      list-style: none;
+      padding: 0;
+      margin: 16px 0 0;
+      columns: 2;
+      font-size: 14.5px;
+    }
+
+    .toc li {
+      margin: 4px 0;
+      break-inside: avoid;
+    }
+
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       Cards, Tables & Code
+       ========================================================================== */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      margin: 16px 0;
+    }
+
+    .card > :first-child {
+      margin-top: 0;
+    }
+
+    .card > :last-child {
+      margin-bottom: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 14.5px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    }
+
+    code {
+      font-size: 0.86em;
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1px 6px;
+    }
+
+    pre {
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .perm {
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    .warn {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 14.5px;
+    }
+
+    kbd {
+      font-family: inherit;
+      font-size: 0.86em;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0 6px;
+      background: var(--surface);
+    }
+  
+    .tag {
+      font-size: 12.5px;
+      font-weight: 400;
+      letter-spacing: 0.2px;
+    }
+
+    h2 {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .card ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .card li {
+      margin: 8px 0;
+    }
+
+    .card li:first-child {
+      margin-top: 0;
+    }
+
+    .card li:last-child {
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+  <button class="theme-toggle" id="themeToggle" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+
+  <main class="wrap">
+    <header class="hero">
+      <h1>Changelog for <span class="accent">totm</span></h1>
+      <p>Every notable change, newest first. Format follows Keep a Changelog.</p>
+      <nav aria-label="Table of contents">
+        <ul class="toc">
+          <li><a href="#v021">1 · 0.2.1</a></li><li><a href="#v020">2 · 0.2.0</a></li><li><a href="#v012">3 · 0.1.2</a></li><li><a href="#v011">4 · 0.1.1</a></li><li><a href="#v010">5 · 0.1.0</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <h2 id="v021">0.2.1 <span class="muted tag">2026-09-21</span></h2><h3>Added</h3>
+<div class="card">
+<ul><li>Official plug-ins + theme pack — a new bundled plug-in class carrying a verified-badge <code>Official</code> seal (checksum-verified: edited copies keep working but lose the seal, and still go through the normal permission approval). The first official pack ships eighteen popular theme presets with light + dark variants (Tokyo Night, Catppuccin, Dracula, Nord, GitHub, Gruvbox, One Dark, Solarized, Rosé Pine, Everforest, Monokai, Night Owl, Kanagawa, Ayu, SynthWave &#x27;84, Palenight, Cobalt2, Horizon, plus the built-in Default for reset) as a gallery in Settings → Appearance via a new <code>appearanceSections</code> slot. One click fills the Light/Dark colors through a new mediated <code>appearance.write</code> permission (<code>PluginStore.applyAppearanceTheme</code>), so themes stay tweakable in the Colors card after.</li><li>Timeline audio waveforms — every audio lane bar paints filled mini-bars over its clip file window, so beats and silence stay visible while trimming and arranging. Buckets follow the bar pixel width (~2px per bar), so timeline zoom re-slices the wave instead of stretching it; selection tints the bars red, muted clips dim. Peaks decode once per blob through system ffmpeg (mono 8kHz) and persist as a <code>&lt;blob&gt;.peaks</code> sidecar owned by the startup orphan sweep (never packed into <code>.totm</code> bundles, recomputed lazily on import); missing ffmpeg or undecodable files keep the plain bar. The audio clip count skips sidecars while disk use keeps counting them.</li><li>WebM and GIF video export — the export picker grew an MP4/WebM/GIF row: WebM renders through libvpx-vp9 + Opus (audio mixed like MP4) with the encode effort mapped to VP9 cpu-used + CRF, GIF renders silent and looping through a single-pass palettegen/paletteuse filter (two passes would need the whole file up front, which a live pipe never has). Unknown formats coerce to MP4, temp files carry the matching suffix, and the choice persists as a new <code>defaultFormat</code> alongside the other export defaults in the General tab (covered by Reset all). The save picker filters on the finished format with a matching overwrite title.</li></ul></div><h3>Fixed</h3>
+<div class="card">
+<ul><li>GIF renders failed every time (<code>Invalid argument</code>): a bare <code>gif</code> token in the ffmpeg args parsed as a second output URL instead of a format flag — now explicit <code>-f gif</code>.</li><li>Video save probe ignored the finished format: <code>destinationExists</code> used the old MP4-only suffix rule while <code>saveAs</code> had moved on, so WebM/GIF saves could disagree with the overwrite guard — both share one rule now.</li><li>Background-blur and image-glow blurs scaled with canvas zoom: the scaled ancestor already maps local px to screen px, so the extra factor grew screen blur as zoom-squared and pinned blur at max deep in — all blur sites use plain radius/64 like export now.</li></ul></div><h2 id="v020">0.2.0 <span class="muted tag">2026-09-19</span></h2><h3>Added</h3>
+<div class="card">
+<ul><li>Component export — the design panel grew a Figma-style Export section: one PNG row per setting at 1x/2x/3x (rows add/remove, duplicate scales swap), rendering every selected top through the shared CPU painter on transparency at base values with playhead-frozen grain. A single file saves directly; several pack into a <code>{Design}.zip</code> of layer-named PNGs (<code>Name@2x.png</code>, <code>-1</code>/<code>-2</code> dedupe) through the in-app save picker with overwrite guards. The video rasterizer moved verbatim into a shared <code>FramePaint</code> unit first, so canvas, video and stills paint one path.</li><li>SVG vector export — the Export section grew a PNG/SVG switch: SVG writes one resolution-independent <code>.svg</code> per selected top (scales don&#x27;t apply) through a vector-native <code>SvgPaint</code> unit that shares the PNG scene handling and reuses the canvas outline builder, so silhouettes match. Solid/linear-gradient fills and strokes, rotation/flip/opacity, text (<code>&lt;text&gt;</code> with alignment and escaping) and images (base64 <code>&lt;image&gt;</code>, rounded-corner clip, neutral box when the blob is missing) all carry over, and effects render as per-leaf SVG filters in the PNG stack order (outer shadows/glows with spread, inner bands, whole-stack layer blur mixed by opacity, silhouette-confined grain; box radii map to sigma/2, grain is turbulence noise). Background blur has no standalone-SVG equivalent (no backdrop to sample) and is skipped. Multi-component picks pack into a <code>{Design}.zip</code> like PNG.</li><li>Timeline zoom keys and joint clip drag — the timeline zooms with <code>=</code>/<code>-</code> keys on top of the existing ctrl+wheel path (all keeping the cursor/center time stable), and dragging a selected bar/diamond now moves the whole multi-selection as one formation (snapped off the dragged clip, clamped inside the composition, one undo entry). Also fixed <code>zoomAt</code> referencing an undefined <code>vx</code>, which threw on every ctrl+wheel zoom.</li><li>Canvas guides and zoom-to-fit — the canvas grew persistent guides without ruler chrome: hover the top/left edges for a split cursor, drag out to create a guide, drag to move, release home or double-click to remove. Guides save with the scene and feed the snap targets, so moves, resizes and draws snap to them like edges. A bottom-right zoom pill (out, percent, in, fit) plus <code>Ctrl+=</code> / <code>Ctrl+-</code> / <code>Ctrl+0</code> keys cover the existing wheel path; the fit buttons use a new Phosphor <code>fit</code> (corners-out) glyph, and all five zoom chords are remappable in the Shortcut tab. The Appearance tab grew Canvas and Window cards with zoom-pill and window-controls Shown/Hidden switches (persisted, covered by Reset all).</li><li>Starter templates replaced — the four sketch templates (logo sting, hero loop, lower third, onboarding) are out; two full-blown motion pieces are in, each with in/out beats across its whole duration: a 6s clean vertical 9:16 offer (headline, rule, checklist card cascade, breathing CTA) and a 7s 16:9 pricing scene (three cascading tiers with a glow-highlighted plan, price pops, outro fade). Builders still use only the public <code>Document</code>/<code>applyPreset</code> calls inside one undo entry, so previews match new designs by construction.</li><li>General settings tab — the Settings strip grew a General tab (now the default) with new-design defaults (canvas size with 16:9 / 9:16 / 1:1 / 4:3 presets, scene background, timeline length), video-export defaults (quality, frame rate, encode effort) and a storage card (image/audio counts plus disk use, library path). Untitled designs start from the new-design defaults, the export picker opens from the export defaults and saves the used choice back on Render, and everything persists with a Reset all.</li></ul></div><h2 id="v012">0.1.2 <span class="muted tag">2026-09-17</span></h2><h3>Added</h3>
+<div class="card">
+<ul><li>Design sharing — export any design to a single-file <code>.totm</code> bundle (scene plus image/audio blobs) from the card menu and import it back through the header Import button, with blobs remapped under fresh names so imports never collide and errors surfacing in the global bar. <code>.totm</code> files open in the app by default on Linux (shared-mime-info type plus desktop entry) with single-instance forwarding so repeat opens land in the running window, plus installer/bundle associations on Windows and macOS.</li><li>Clip copy/paste — selected animation clips copy to an app-wide clipboard as relative-offset templates and paste onto the selected tops at the playhead, across shapes and designs, through the shortcuts and new Copy/Paste rows in the clip editor.</li><li>Canvas align and distribute — align unlocked tops to their union box (left/center/right, top/middle/bottom) and spread even center spacing across 3+ tops, from new Align/Distribute rows in the Position section.</li><li>Template picker — the header Template button opens a modal with a rendered scene preview for every starter (logo sting, hero loop, lower third, onboarding); the inline strip is gone and the previews build from the same one-undo-entry builders as new designs.</li><li>In-app file picker — every open/save now uses a native-feeling browser in the app language (places sidebar, breadcrumb, filtered rows with size · date, save-mode name field) backed by a read-only FileBrowser store, replacing the unthemeable stock dialog; Phosphor outline glyphs throughout.</li><li>Overwrite guards — <code>.totm</code> export and video save refuse existing destinations unless confirmed through a shared popup, with probes sharing each writer&#x27;s suffix rule.</li></ul></div><h3>Fixed</h3>
+<div class="card">
+<ul><li>Timeline top hairline buried under the opaque ruler block; render timeouts on slow machines (pipe/finish caps doubled, kills waited out).</li></ul></div><h2 id="v011">0.1.1 <span class="muted tag">2026-09-16</span></h2><h3>Added</h3>
+<div class="card">
+<ul><li>Starter templates — a <code>Start from a template</code> strip above the home grid with four one-click designs (logo sting, hero loop, lower third, onboarding) built only from the public <code>Document</code>/<code>applyPreset</code> calls inside one undo entry, so the card preview is alive at once.</li><li>Pen styling — new Pen section for pen shapes: close/open every subpath, fill on/off for line-art, plus stroke cap (round/square/flat) and join (round/bevel/miter). The shared CPU painter honors them on canvas and export, other shapes render exactly as before.</li><li>Loopable animation kit — clips loop now (once/loop/ping-pong, sampled identically in preview and export, with lane badges), multi-selections cascade via a stagger offset in both galleries, new <code>customStrokeColor</code>/<code>customFontSize</code>/<code>customFlip</code> presets with seeded from-to editors, new pop/bounce/elastic/wipe/blur-in/pulse cards on back/bounce/elastic easings, instant stepped clips (appear/hide/flip) as single diamonds, duplicate-to-playhead, and one lane row per target with clip counts.</li></ul></div><h2 id="v010">0.1.0 <span class="muted tag">2026-09-15</span></h2><h3>Added</h3>
+<div class="card">
+<ul><li>Initial launch: canvas, shapes, layers/groups, snapping, design panel, tabs, theme.</li><li>Credits page — a <code>CREDITS.html</code> sibling to the plug-in guide (hero, numbered sections, theme toggle with saved choice) with the full Phosphor Icons (MIT) and Google Sans (OFL-1.1) license texts, plus a linked <code>CONTRIBUTORS.html</code> table (contributor, one-line contribution, version — v0.1.0 so far). A Credits row above Settings in the home sidebar opens it in the default browser via a new <code>SettingsStore.openCredits()</code> (both pages install to <code>share/doc/totm</code> alongside the guide).</li><li>Text typing kit — the animate tab&#x27;s text gallery grew Type (letters/words/lines with chars-per-second pacing and an optional <code>|</code> cursor), Blur (layer-blur relax to sharp) and Wave (rotation wobble) cards with live thumbnails. Type durations auto-size from the selection at the card speed and the clip editor retimes on cps edits. The <code>type</code> preset reuses the whole preset pipeline (timeline lanes, easing, undo, video-safe plain data) with one sampler in QML preview and C++ export so both reveal identical chunks.</li><li>Editable shortcuts — every shortcut remaps from the Shortcut settings tab: click a badge and press keys (Esc cancels, duplicates blocked with a notice naming the owner), per-row undo plus Reset all, search filter, and a centered card layout. Overrides persist in the backend (<code>SettingsStore</code>, native <code>QSettings</code> group <code>shortcuts/</code>, canonical portable text, modifier-only/unknown ids rejected) and apply live to editor + home.</li><li>Plugin system — QML-only plugins via folder drop-in (<code>&lt;libraryDir&gt;/plugins/&lt;id&gt;/</code> with <code>manifest.json</code> + QML). New <code>PluginStore</code> backend validates manifests, persists per-permission grants in <code>plugins.json</code>, and gates everything: toolbar tools, design-panel sections, canvas overlays, full-window advanced overlays, scoped KV storage, host-mediated image/audio picks (plugins only see blob names, never paths), and export quality suggestions surfaced in the quality popup. First launch shows a permission popup listing each request with the maker&#x27;s reason. The home sidebar grew a Settings entry with an unclosable tab strip (starting with a Plugin tab that manages enable/disable, review, and rescan, plus a book button opening the <code>PLUG_IN.html</code> maker guide in the default browser). Sandboxed by a static import/identifier scan plus an engine-wide block on remote (http/https/ftp) transport.</li><li>App icon — the &quot;totm&quot; wordmark ships in every size a desktop needs: hicolor PNGs (16–256) + desktop entry on Linux (X11 + Wayland via <code>cmake --install</code>), multi-size <code>.ico</code> wired into the Windows exe, <code>.icns</code> in the macOS bundle, and the window/taskbar icon set at runtime.</li><li>Card previews + rename hardening — home thumbnails reuse the canvas <code>ShapeItem</code> through one shared mapping (real uids, paint-depth order, hidden-branch pruning, fixed-box wrapping, frosted-glass backdrop sampling), so they match the canvas for every tool and effect; blank designs show an &quot;Empty canvas&quot; placeholder. Renaming got sturdier too: double-click renames in place (single-click open waits out the double-click interval), Enter commits exactly once, fast re-targets can&#x27;t clobber the live edit, and grid rebuilds no longer eat typed text.</li><li>Draggable tabs — doc tabs drag to reorder with a live gap preview, selection follows the dragged tab.</li><li>Audio properties — design-panel section for the audio selection (per-clip controls with mixed-value handling and undo-coalesced scrubs) plus timeline lane scrolling.</li><li>Image tool — picker-then-place (click stamps natural size, drag stretches), PNG/JPG/WEBP/GIF/SVG blobs under <code>LibraryStore</code>, replaceable from the Image section, radius + stroke + glow aware, with a neutral placeholder when the blob goes missing.</li><li>Effects engine — linear-gradient fill/stroke, stackable outer/inner shadows and glows in a fixed Figma-style render order, layer blur, frosted-glass background blur, and animated film grain. One CPU painter serves canvas preview and video export so they match by construction; text paints the full stack (shadows, glows, gradient fill, outline ring, layer blur, glyph-confined grain) through a shared glyph path.</li><li>Custom animations — the animate tab&#x27;s Custom mode is real now: grouped Add list (Transform: Scale/Rotate/Move, Style: Opacity/Color, Other: Hide-Show/Resize/Corner Radius/Stroke) creating from-to clips that reuse the whole preset pipeline (timeline lanes, clip editor with per-type from-to fields, easing graph, undo, video-safe plain data). New clips seed From from your live selection so they start jump-free, and overlapping customs resolve later-wins-per-property like Figma.</li><li>Motion path animation — draw a trajectory on the canvas (pen-like: click points, drag to bend, snapping, Alt frees), the shape follows it by arc length with optional follow-rotation and closed loops. Selected paths preview right on the canvas, and Edit path loads the trajectory for full point surgery (drag anchors/handles, double-click to smooth/sharpen, click an edge to insert, Delete to remove, wipe clean to start over). Enter commits once, Esc bails with nothing lost.</li><li>Pen tool — vector path drawing (click to add points, drag for symmetric bezier handles, close by clicking first point, double-click/Enter to part, Esc to finish) plus point editing (double-click a pen shape, drag anchors/handles with snapping, click a segment to insert, Delete to remove, double-click anchor to toggle smooth/corner).</li><li>Text shapes — click for auto-size / drag for fixed box, double-click inline WYSIWYG edit on the canvas in one undo entry, typography section (family, size, weight, letter spacing, h/v align). Icons centralized as <code>icons/AppIcon.qml</code>.</li><li>Figma-style color picker — SV pad + hue slider + hex input with live preview, wired into fill/stroke with undo-coalesced scrubs.</li><li>Text animation presets + <code>appear</code> preset — Basic/Slide/Scale galleries for text with live thumbnails, fontSize-aware slide/movescale so text reflows, no auto-resize during playback.</li><li>Animation editing, the big one — preset gallery with live thumbnails, per-shape clips, clip editor (timing, easing, slide/spin options), bezier graph editor popup, and a timeline with lanes + ruler + playback transport. Scenes now carry an <code>anim</code> blob (library schema v2) that the video exporter reads.</li><li>Undo/redo — full per-tab history, drag gestures coalesce into single entries, toolbar buttons + shortcuts. Text fields keep their own native undo so typing never eats your history.</li><li>Persistent theme — new <code>SettingsStore</code> backend (<code>QSettings</code>, separate from <code>library.json</code>). First run follows your OS, the first toggle pins your choice forever.</li><li>Window state manager — remembers size, position and maximized across restarts, clamps to your actual screens so a disconnected monitor never eats the window, resize handles hide while maximized, and mac gets proper traffic lights (red/yellow/green on the left) instead of windows-style controls.</li><li>Design library — workspaces + designs backed by <code>library.json</code>, starring, move between workspaces, live card previews, inline rename. Corrupt files get archived aside with a timestamp (not deleted!) and a fresh default workspace is installed so you never boot into nothing. A lockfile stops two totms from stomping each other.</li><li>Properties panel revamp — position / layout / appearance / fill / stroke sections, mixed-value handling when the selection disagrees, scrub-to-adjust number fields, add/remove fills and strokes.</li><li>Canvas goodies — live measure readout while drawing, equal-gap spacing snaps, per-tab camera memory.</li><li>Star shape (replaces diamond/polygon, rip).</li><li>Video export — render any design to mp4 from the canvas export button (top-right): SD/HD/4K at 30/60fps picker, backend <code>VideoExporter</code> rasterizes a fresh scene snapshot with a 1:1 port of the animation sampler and pipes frames to system ffmpeg, live progress modal with Cancel, then a Save dialog copies the temp file out. Encoder threads are capped and the worker runs low-priority so the UI stays responsive mid-render.</li><li>Timeline audio — import MP3/WAV/OGG/FLAC onto dedicated lane rows (one row per clip, free overlap), click to select, drag to move with snapping, Delete removes. Live preview through QtMultimedia players conducted by the transport clock, and exports mix every audible clip (delay + mix, AAC). Clips longer than the composition trim at its end.</li></ul></div><h3>Changed</h3>
+<div class="card">
+<ul><li>Home cards: click selects just that card, double-click opens the design (single click no longer navigates away, so selection — and the shortcuts driven by it — stays put). Rename stays on F2 and the card menu.</li><li>App icon restyle — the mark now sits on a padded squircle (12.5% inset, ~23.5% corner radius) instead of a full-bleed square, so it no longer reads oversized on taskbars/docks. All sizes regenerated from a new <code>packaging/icons/totm.svg</code> source: hicolor PNGs (16–256), multi-size <code>.ico</code>, <code>.icns</code>, plus the runtime <code>:/icons/totm.png</code>.</li><li>Library storage — scenes moved out of <code>library.json</code> into one file per design (<code>designs/&lt;id&gt;.json</code>), so an autosave writes a single scene instead of rewriting the whole library. Unreferenced image blobs are swept at startup, and the store reports blob count + bytes for a future storage UI. A corrupt design file is archived aside with a timestamp and starts fresh instead of blocking the library.</li><li>Bottom panel now hosts the timeline (taller than before, 300px).</li><li>Right panel got an animate mode with a preset/custom switcher.</li><li><code>Document.qml</code> and <code>EditorCanvas.qml</code> god files got split into focused helpers under <code>models/document/</code>, <code>canvas/</code>, <code>snap/</code>, <code>layers/</code>, <code>properties/</code> — cuz they were getting scary.</li></ul></div><h3>Fixed</h3>
+<div class="card">
+<ul><li>Home &quot;Open selected&quot; never fired from the main keyboard: the sequence was keypad <code>Enter</code>, not <code>Return</code>. Default is <code>Return</code> now (keypad <code>Enter</code> kept as alias), and the shortcut recorder distinguishes the two keys.</li><li>Home shortcuts now follow their settings tab values: undo/copy/paste/redo bind the editable sequences (redo keeps a native fallback for macOS Cmd+Shift+Z, deletes keep the Backspace alias), nudge 10px variants are separately remappable, and all shortcuts suspend while capturing a new sequence.</li><li>Double-clicking a design card opened it before renaming — single-click open now waits out the double-click interval, and layer renames no longer write no-op undo entries on blank or identical commits.</li><li>Typography panel warnings (<code>Unable to assign [undefined]</code>) when selecting groups — group snapshots carry geometry only, so <code>commonOf</code> now reports missing roles as mixed instead of leaking undefined into number fields.</li><li>Layer eye/lock toggles show on row hover like a normal app.</li><li>Corrupt library no longer nukes your stuff, it gets archived and you get a fresh default workspace.</li><li>Second instance can&#x27;t silently corrupt the library anymore (lockfile + warning banner).</li><li>Custom Color clips threw <code>TypeError</code> (a param shadowed the <code>toHex</code> helper) which aborted whole-frame sampling — color animations never previewed and one color clip froze all preview motion; renamed, preview animates again.</li><li>Failed video saves no longer vanish silently — the progress popup reopens showing the backend error.</li></ul></div><h3>Removed</h3>
+<div class="card">
+<ul><li>Sampler conformance rig (<code>tests/samplerconf/</code>) — dropped, export now relies on the shared <code>AnimSampler</code> matching the canvas preview.</li><li>Dead <code>_isEffectively</code> helper and flat-list compat shims (<code>moveRow</code>, <code>rowOf</code>, <code>snapshotAt</code>).</li><li>Diamond and polygon shapes (star took their place).</li></ul></div>
+  </main>
+
+  <script>
+    (function () {
+      const STORAGE_KEY = "totm-changelog-theme";
+      const root = document.documentElement;
+      const btn = document.getElementById("themeToggle");
+
+      // Phosphor fill glyphs (moon in dark, sun in light)
+      const SUN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z"/></svg>';
+      const MOON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z"/></svg>';
+
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: light)");
+
+      function getEffectiveTheme() {
+        return root.getAttribute("data-theme") || (mediaQuery.matches ? "light" : "dark");
+      }
+
+      function paintButton() {
+        btn.innerHTML = getEffectiveTheme() === "light" ? SUN : MOON;
+      }
+
+      function setTheme(theme) {
+        root.setAttribute("data-theme", theme);
+        try {
+          localStorage.setItem(STORAGE_KEY, theme);
+        } catch (e) {}
+        paintButton();
+      }
+
+      btn.addEventListener("click", function () {
+        const nextTheme = getEffectiveTheme() === "light" ? "dark" : "light";
+        setTheme(nextTheme);
+      });
+
+      // Synchronize button icon if OS theme changes without explicit override
+      mediaQuery.addEventListener("change", function () {
+        if (!root.hasAttribute("data-theme")) {
+          paintButton();
+        }
+      });
+
+      paintButton();
+    })();
+  </script>
+</body>
+</html>

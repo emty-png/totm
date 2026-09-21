@@ -82,6 +82,8 @@ class SettingsStore : public QObject {
 public:
     static SettingsStore *create(QQmlEngine *engine, QJSEngine *scriptEngine);
     explicit SettingsStore(QObject *parent = nullptr);
+    ~SettingsStore() override;
+    static SettingsStore *instance();
 
     bool isDark() const;
     // Pins an explicit choice: sets followSystem to false.
@@ -171,6 +173,14 @@ public:
     // Clears all appearance overrides (colors, radius, font) to defaults.
     Q_INVOKABLE void resetAppearance();
 
+    // Batch theme apply for official/theme plugins (called via the
+    // mediated PluginStore.applyAppearanceTheme, never directly from
+    // plugin QML). Merges the given maps into the light/dark overrides:
+    // only known AppTheme keys with valid colors apply, anything else is
+    // skipped. Returns the number of colors applied. One change signal
+    // for the whole batch so the UI repaints once.
+    Q_INVOKABLE int applyThemeMaps(const QVariantMap &light, const QVariantMap &dark);
+
     // General defaults (persisted under QSettings group "general/").
     // Scene sizes clamp to 16..7680px, duration to 0.5..60s; unknown
     // quality/performance/format fall back to "hd"/"normal"/"mp4", fps to
@@ -208,6 +218,7 @@ signals:
     void generalChanged();
 
 private:
+    static SettingsStore *s_instance;
     void load();
     void persist();
     void persistWindow();

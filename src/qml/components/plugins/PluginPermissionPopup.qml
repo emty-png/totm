@@ -97,6 +97,27 @@ Popup {
             elide: Text.ElideRight
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            visible: !!(permissionPopup.pending && permissionPopup.pending.official)
+            spacing: 6
+
+            OfficialBadge {
+                Layout.alignment: Qt.AlignVCenter
+                badgeSize: 14
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: qsTr("Official plugin — shipped with totm.")
+                font.pixelSize: 11
+                font.weight: Font.DemiBold
+                color: AppTheme.selection
+                elide: Text.ElideRight
+            }
+        }
+
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1

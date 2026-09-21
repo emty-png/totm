@@ -1,6 +1,7 @@
 qt_add_executable(totm
     main.cpp
     "${PROJECT_SOURCE_DIR}/packaging/icons.qrc"
+    "${PROJECT_SOURCE_DIR}/packaging/official-plugins.qrc"
 )
 
 # Platform icons: macOS bundle icon, Windows exe icon. The Linux
@@ -240,6 +241,7 @@ qt_add_qml_module(totm
         # Plugins (permission-gated QML extensions)
         qml/components/plugins/PluginPermissionPopup.qml
         qml/components/plugins/PluginPermissionRow.qml
+        qml/components/plugins/OfficialBadge.qml
         qml/components/plugins/PluginManagerRow.qml
         qml/components/plugins/PluginFilePicker.qml
         qml/components/plugins/PluginSlot.qml
@@ -342,6 +344,7 @@ if(UNIX AND NOT APPLE)
             "${PROJECT_SOURCE_DIR}/src/docs/PLUG_IN.html"
             "${PROJECT_SOURCE_DIR}/src/docs/CREDITS.html"
             "${PROJECT_SOURCE_DIR}/src/docs/CONTRIBUTORS.html"
+            "${PROJECT_SOURCE_DIR}/src/docs/CHANGELOG.html"
         DESTINATION "share/doc/totm"
     )
 endif()
