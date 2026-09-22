@@ -111,6 +111,7 @@ Item {
             strokeType: modelData.strokeType ?? "solid"
             strokeGradient: modelData.strokeGradient
             strokeWidth: modelData.strokeWidth
+            strokeDash: modelData.strokeDash ?? []
             penFill: modelData.penFill !== false
             strokeCap: modelData.strokeCap || "round"
             strokeJoin: modelData.strokeJoin || "round"

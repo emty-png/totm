@@ -222,6 +222,18 @@ QString joinFor(const QString &join) {
     return QStringLiteral("round");
 }
 
+// Dash pattern in stroke-width units, scaled to SVG user units by the
+// stroke width. Empty when the stroke paints solid.
+QString dashAttr(const Effects::Style &st, double sw)
+{
+    if (st.strokeDash.isEmpty() || sw <= 0.01)
+        return QString();
+    QStringList parts;
+    for (const qreal d : st.strokeDash)
+        parts.append(fmtNum(d * sw));
+    return QStringLiteral(" stroke-dasharray=\"%1\"").arg(parts.join(QLatin1Char(' ')));
+}
+
 QString imageMime(const QString &name) {
     const QString lower = name.toLower();
     if (lower.endsWith(QStringLiteral(".png")))
@@ -774,21 +786,23 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                 GradientOut g = gradientFill(m.value(QStringLiteral("strokeGradient")).toMap(), QRectF(x, y, w, h),
                     QStringLiteral("svgsg%1").arg(gradSeq++), false);
                 defs.append(g.def);
-                strokeAttr = QStringLiteral("%1 stroke-width=\"%2\" stroke-linecap=\"%3\" stroke-linejoin=\"%4\"")
+                strokeAttr = QStringLiteral("%1 stroke-width=\"%2\" stroke-linecap=\"%3\" stroke-linejoin=\"%4\"%5")
                                  .arg(g.attr)
                                  .arg(fmtNum(sw))
                                  .arg(capFor(st.strokeCap))
-                                 .arg(joinFor(st.strokeJoin));
+                                 .arg(joinFor(st.strokeJoin))
+                                 .arg(dashAttr(st, sw));
             } else {
                 const QColor sc = st.stroke;
                 if (sc.isValid() && sc.alpha() > 0) {
                     strokeAttr = QStringLiteral("stroke=\"%1\"").arg(colorHex(sc));
                     if (sc.alpha() < 255)
                         strokeAttr += QStringLiteral(" stroke-opacity=\"%1\"").arg(fmtNum(colorAlpha01(sc)));
-                    strokeAttr += QStringLiteral(" stroke-width=\"%1\" stroke-linecap=\"%2\" stroke-linejoin=\"%3\"")
+                    strokeAttr += QStringLiteral(" stroke-width=\"%1\" stroke-linecap=\"%2\" stroke-linejoin=\"%3\"%4")
                                       .arg(fmtNum(sw))
                                       .arg(capFor(st.strokeCap))
-                                      .arg(joinFor(st.strokeJoin));
+                                      .arg(joinFor(st.strokeJoin))
+                                      .arg(dashAttr(st, sw));
                 }
             }
         }

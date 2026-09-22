@@ -11,6 +11,7 @@
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QVector>
 
 #include <cstdint>
 
@@ -33,6 +34,9 @@ struct Style {
     QString strokeType = QStringLiteral("solid");
     QVariantMap strokeGradient;
     double strokeWidth = 0.0;
+    // Dash pair in stroke-width units ([dash, gap]); empty paints solid.
+    // Both entries must be positive, otherwise the stroke stays solid.
+    QVector<qreal> strokeDash;
     double radius = 0.0;
     bool penFill = true;
     QString strokeCap = QStringLiteral("round");
@@ -54,6 +58,11 @@ struct PathOpts {
 
     static PathOpts fromMap(const QVariantMap &m);
 };
+
+// Dash pair in stroke-width units ([dash, gap]); empty paints solid.
+// Both entries must be positive, otherwise the stroke stays solid.
+QVector<qreal> dashFrom(const QVariant &v);
+void applyDashToPen(QPen &pen, const QVector<qreal> &dash);
 
 // Single outer shadow. Color alpha carries opacity; spread dilates the
 // silhouette before blur. inner paints the same shadow inside the shape

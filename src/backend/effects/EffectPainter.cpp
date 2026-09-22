@@ -18,6 +18,28 @@
 
 namespace Effects {
 
+QVector<qreal> dashFrom(const QVariant &v)
+{
+    const QVariantList raw = v.toList();
+    if (raw.size() < 2)
+        return {};
+    bool okD = false, okG = false;
+    const double d = raw.at(0).toDouble(&okD);
+    const double g = raw.at(1).toDouble(&okG);
+    if (!okD || !okG || d <= 0.01 || g <= 0.01)
+        return {};
+    return {qreal(d), qreal(g)};
+}
+
+void applyDashToPen(QPen &pen, const QVector<qreal> &dash)
+{
+    if (dash.isEmpty())
+        return;
+    pen.setStyle(Qt::CustomDashLine);
+    pen.setDashPattern(dash);
+    pen.setDashOffset(0.0);
+}
+
 Style Style::fromMap(const QVariantMap &m)
 {
     Style st;
@@ -28,6 +50,7 @@ Style Style::fromMap(const QVariantMap &m)
     st.strokeType = m.value(QStringLiteral("strokeType"), QStringLiteral("solid")).toString();
     st.strokeGradient = m.value(QStringLiteral("strokeGradient")).toMap();
     st.strokeWidth = qMax(0.0, m.value(QStringLiteral("strokeWidth"), 0.0).toDouble());
+    st.strokeDash = dashFrom(m.value(QStringLiteral("strokeDash")));
     st.radius = qMax(0.0, m.value(QStringLiteral("radius"), 0.0).toDouble());
     st.penFill = m.value(QStringLiteral("penFill"), true).toBool();
     // Unknown cap/join spellings fall back to round (matches QML).
@@ -892,7 +915,9 @@ void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillB
         paintInner(pt, path, sh, s, QByteArray(), nullptr);
     if (sw > 0.01) {
         const QBrush sb = paintBrush(fillBox, st.strokeType, st.strokeGradient, st.stroke);
-        pt->setPen(QPen(sb, sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin)));
+        QPen pen(sb, sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin));
+        applyDashToPen(pen, st.strokeDash);
+        pt->setPen(pen);
         pt->setBrush(Qt::NoBrush);
         pt->drawPath(path);
     }
@@ -970,7 +995,9 @@ void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox
         paintGlowInner(pt, path, glow, s, QByteArray(), nullptr);
     if (sw > 0.01) {
         const QBrush sb = paintBrush(fillBox, st.strokeType, st.strokeGradient, st.stroke);
-        pt->setPen(QPen(sb, sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin)));
+        QPen pen(sb, sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin));
+        applyDashToPen(pen, st.strokeDash);
+        pt->setPen(pen);
         pt->setBrush(Qt::NoBrush);
         pt->drawPath(path);
     }
@@ -1084,7 +1111,9 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
     }
     if (o.sw > 0.01) {
         const QBrush sb = paintBrush(o.fillBox, st.strokeType, st.strokeGradient, st.stroke);
-        pt->setPen(QPen(sb, o.sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin)));
+        QPen pen(sb, o.sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin));
+        applyDashToPen(pen, st.strokeDash);
+        pt->setPen(pen);
         pt->setBrush(Qt::NoBrush);
         pt->drawPath(o.path);
     }

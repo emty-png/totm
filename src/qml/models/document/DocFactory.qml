@@ -27,6 +27,7 @@ QtObject {
             strokeType: s.strokeType ?? "solid",
             strokeGradient: factory._copyGradient(s.strokeGradient),
             strokeWidth: s.strokeWidth ?? 0,
+            strokeDash: factory._copyDash(s.strokeDash),
             penFill: s.penFill !== false,
             strokeCap: s.strokeCap ?? "round",
             strokeJoin: s.strokeJoin ?? "round",
@@ -72,6 +73,16 @@ QtObject {
         if (!src || typeof src.length !== "number")
             return out;
         for (var i = 0; i < src.length; i++)
+            out.push(Math.max(0, Number(src[i]) || 0));
+        return out;
+    }
+
+    // Dash pair copy (same sequence caveat as radii, capped at 2).
+    function _copyDash(src) {
+        var out = [];
+        if (!src || typeof src.length !== "number")
+            return out;
+        for (var i = 0; i < src.length && i < 2; i++)
             out.push(Math.max(0, Number(src[i]) || 0));
         return out;
     }

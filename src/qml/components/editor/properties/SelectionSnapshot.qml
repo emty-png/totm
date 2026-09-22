@@ -53,6 +53,7 @@ QtObject {
                     strokeType: s.strokeType ?? "solid",
                     strokeGradient: snapshot.doc.factory._copyGradient(s.strokeGradient),
                     strokeWidth: s.strokeWidth,
+                    strokeDash: snapshot.doc.factory._copyDash(s.strokeDash),
                     penFill: s.penFill !== false,
                     strokeCap: s.strokeCap ?? "round",
                     strokeJoin: s.strokeJoin ?? "round",

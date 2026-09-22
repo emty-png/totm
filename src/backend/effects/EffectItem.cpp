@@ -23,6 +23,7 @@ void EffectItem::paint(QPainter *painter)
     st.strokeType = m_strokeType;
     st.strokeGradient = m_strokeGradient;
     st.strokeWidth = m_strokeWidth;
+    st.strokeDash = Effects::dashFrom(m_strokeDash);
     st.radius = m_radius;
     st.penFill = m_penFill;
     st.strokeCap = m_strokeCap;
@@ -302,6 +303,20 @@ void EffectItem::setStrokeGradient(const QVariantMap &v)
 double EffectItem::strokeWidth() const
 {
     return m_strokeWidth;
+}
+
+QVariantList EffectItem::strokeDash() const
+{
+    return m_strokeDash;
+}
+
+void EffectItem::setStrokeDash(const QVariantList &v)
+{
+    if (m_strokeDash == v)
+        return;
+    m_strokeDash = v;
+    emit strokeChanged();
+    update();
 }
 
 void EffectItem::setStrokeWidth(double v)

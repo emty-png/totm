@@ -17,6 +17,7 @@ PanelSection {
     property var typeCommon: section.snapshot.commonOf("strokeType")
     property bool isLinear: !section.typeCommon.mixed && section.typeCommon.value === "linear"
     property var gradCommon: section.collectGrad()
+    property var dashCommon: section.collectDash()
 
     title: qsTr("Stroke")
     visible: section.snapshot.sel.length > 0 && !section.snapshot.hasGroup && !section.snapshot.allOfType("image")
@@ -87,8 +88,8 @@ PanelSection {
         onScrubFinished: section.snapshot.endScrub()
     }
 
-    // Linear stroke row: gradient swatch plus angle field. Colors edit
-    // through the picker's Gradient tab.
+    // Linear stroke row: gradient swatch plus angle and width fields.
+    // Colors edit through the picker's Gradient tab.
     RowLayout {
         visible: section.hasStroke && section.isLinear
         Layout.fillWidth: true
@@ -135,12 +136,92 @@ PanelSection {
             onScrubFinished: section.snapshot.endScrub()
         }
 
+        NumberField {
+            Layout.preferredWidth: 76
+            // Same width control as the solid row: without it gradient
+            // strokes could only change the angle.
+            visible: !section.snapshot.allOfType("text")
+            prefix: "S"
+            value: section.widthCommon.value
+            mixed: section.widthCommon.mixed
+            minimum: 0
+            onCommitted: v => section.snapshot.setAll("strokeWidth", v)
+            onScrubStarted: section.snapshot.beginScrub()
+            onScrubFinished: section.snapshot.endScrub()
+        }
+
         PanelIconButton {
             iconKind: "minimize"
             filled: false
             strong: true
             iconSize: 16
             onClicked: section.snapshot.setAll("strokeType", "solid")
+        }
+    }
+
+    // Dash style: solid/dashed/dotted presets plus dash/gap lengths in
+    // stroke-width units (both must be positive, else solid). Applies
+    // to solid and gradient strokes alike; native text outlines stay
+    // solid so the rows hide for text.
+    Text {
+        visible: section.hasStroke && !section.snapshot.allOfType("text")
+        Layout.fillWidth: true
+        text: qsTr("Dash style")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        visible: section.hasStroke && !section.snapshot.allOfType("text")
+        Layout.fillWidth: true
+        spacing: 8
+
+        SegmentedOption {
+            label: qsTr("Solid")
+            active: !section.dashCommon.mixed && section.dashCommon.dash <= 0 && section.dashCommon.gap <= 0
+            onClicked: section.setDashStyle("solid")
+        }
+
+        SegmentedOption {
+            label: qsTr("Dashed")
+            active: !section.dashCommon.mixed && (section.dashCommon.dash > 0 || section.dashCommon.gap > 0) && section.dashCommon.dash > 1
+            onClicked: section.setDashStyle("dashed")
+        }
+
+        SegmentedOption {
+            label: qsTr("Dotted")
+            active: !section.dashCommon.mixed && (section.dashCommon.dash > 0 || section.dashCommon.gap > 0) && section.dashCommon.dash <= 1
+            onClicked: section.setDashStyle("dotted")
+        }
+    }
+
+    RowLayout {
+        visible: section.hasStroke && !section.snapshot.allOfType("text") && !section.dashCommon.mixed && (section.dashCommon.dash > 0 || section.dashCommon.gap > 0)
+        Layout.fillWidth: true
+        spacing: 8
+
+        NumberField {
+            Layout.fillWidth: true
+            prefix: qsTr("D")
+            minimum: 0
+            scrubStep: 0.5
+            value: section.dashCommon.dash
+            mixed: section.dashCommon.mixed
+            onCommitted: v => section.setDashLen(v)
+            onScrubStarted: section.snapshot.beginScrub()
+            onScrubFinished: section.snapshot.endScrub()
+        }
+
+        NumberField {
+            Layout.fillWidth: true
+            prefix: qsTr("G")
+            minimum: 0
+            scrubStep: 0.5
+            value: section.dashCommon.gap
+            mixed: section.dashCommon.mixed
+            onCommitted: v => section.setDashGap(v)
+            onScrubStarted: section.snapshot.beginScrub()
+            onScrubFinished: section.snapshot.endScrub()
         }
     }
 
@@ -241,5 +322,70 @@ PanelSection {
             ]
         };
         section.snapshot.setAll("strokeGradient", next);
+    }
+
+    // Common dash pair by value; mixed unless every leaf agrees. A dash
+    // at or below one line-width reads as dots with round caps/joins,
+    // which is how the Dotted preset (dash 1, gap 2) is defined.
+    function collectDash() {
+        var leaves = section.snapshot.selLeaves;
+        if (leaves.length === 0)
+            return {
+                mixed: true,
+                dash: 0,
+                gap: 0
+            };
+        var norm = d => {
+            var a = (d && typeof d.length === "number") ? d : [];
+            return {
+                dash: a.length > 0 ? Math.max(0, Number(a[0]) || 0) : 0,
+                gap: a.length > 1 ? Math.max(0, Number(a[1]) || 0) : 0
+            };
+        };
+        var first = norm(leaves[0].strokeDash);
+        for (var i = 1; i < leaves.length; i++) {
+            var cur = norm(leaves[i].strokeDash);
+            if (cur.dash !== first.dash || cur.gap !== first.gap)
+                return {
+                    mixed: true,
+                    dash: first.dash,
+                    gap: first.gap
+                };
+        }
+        return {
+            mixed: false,
+            dash: first.dash,
+            gap: first.gap
+        };
+    }
+
+    // Presets keep the current gap when it is positive; dashed keeps a
+    // current dash above one line-width, otherwise both fall back to
+    // the canonical pairs.
+    function setDashStyle(style) {
+        if (style === "solid") {
+            section.snapshot.setAll("strokeDash", []);
+            return;
+        }
+        var cur = section.dashCommon;
+        var gap = !cur.mixed && Number(cur.gap) > 0 ? Number(cur.gap) : 2;
+        var dash = 4;
+        if (style === "dotted")
+            dash = 1;
+        else if (!cur.mixed && Number(cur.dash) > 1)
+            dash = Number(cur.dash);
+        section.snapshot.setAll("strokeDash", [dash, gap]);
+    }
+
+    function setDashLen(v) {
+        var cur = section.dashCommon;
+        var gap = cur.mixed ? 2 : Math.max(0, Number(cur.gap) || 0);
+        section.snapshot.setAll("strokeDash", [Math.max(0, Number(v) || 0), gap]);
+    }
+
+    function setDashGap(v) {
+        var cur = section.dashCommon;
+        var dash = cur.mixed ? 4 : Math.max(0, Number(cur.dash) || 0);
+        section.snapshot.setAll("strokeDash", [dash, Math.max(0, Number(v) || 0)]);
     }
 }

@@ -41,6 +41,7 @@ class EffectItem : public QQuickPaintedItem {
     Q_PROPERTY(QString strokeType READ strokeType WRITE setStrokeType NOTIFY strokeChanged)
     Q_PROPERTY(QVariantMap strokeGradient READ strokeGradient WRITE setStrokeGradient NOTIFY strokeChanged)
     Q_PROPERTY(double strokeWidth READ strokeWidth WRITE setStrokeWidth NOTIFY strokeChanged)
+    Q_PROPERTY(QVariantList strokeDash READ strokeDash WRITE setStrokeDash NOTIFY strokeChanged)
     Q_PROPERTY(bool penFill READ penFill WRITE setPenFill NOTIFY fillChanged)
     Q_PROPERTY(QString strokeCap READ strokeCap WRITE setStrokeCap NOTIFY strokeChanged)
     Q_PROPERTY(QString strokeJoin READ strokeJoin WRITE setStrokeJoin NOTIFY strokeChanged)
@@ -90,6 +91,8 @@ public:
     void setStrokeGradient(const QVariantMap &v);
     double strokeWidth() const;
     void setStrokeWidth(double v);
+    QVariantList strokeDash() const;
+    void setStrokeDash(const QVariantList &v);
     bool penFill() const;
     void setPenFill(bool v);
     QString strokeCap() const;
@@ -138,6 +141,7 @@ private:
     QString m_strokeType = QStringLiteral("solid");
     QVariantMap m_strokeGradient;
     double m_strokeWidth = 0.0;
+    QVariantList m_strokeDash;
     bool m_penFill = true;
     QString m_strokeCap = QStringLiteral("round");
     QString m_strokeJoin = QStringLiteral("round");

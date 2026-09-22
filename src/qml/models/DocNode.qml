@@ -54,6 +54,9 @@ QtObject {
             ]
         })
     property real strokeWidth: 0
+    // Dash pair in stroke-width units ([dash, gap]); empty paints solid.
+    // Plain list so scenes stay backend-readable for video rendering.
+    property var strokeDash: []
     property real opacity: 1
     // Pen-only paint switches. penFill toggles the path fill (open
     // strokes usually want line-art only); strokeCap/strokeJoin pick the

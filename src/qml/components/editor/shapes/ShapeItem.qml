@@ -36,6 +36,8 @@ Item {
     property string strokeType: "solid"
     property var strokeGradient: null
     property real strokeWidth: 0
+    // Dash pair in stroke-width units ([dash, gap]); empty paints solid.
+    property var strokeDash: []
     // Pen-only paint switches (meaningful for pen): fill on/off plus
     // line cap/join. Defaults match the old hardcoded paint (filled,
     // round caps/joins), so every other shape renders identically.
@@ -130,10 +132,10 @@ Item {
     }
 
     // CPU paint path for effects the stock items cannot express
-    // (ShapePath has fillGradient only, Rectangle borders stay solid,
-    // MultiEffect has no spread). Vectors stack shadows and glows here;
-    // text and images stack glows in their native branches (shadows
-    // stay vector-only, like export).
+    // (ShapePath has fillGradient only, Rectangle borders stay solid
+    // and dashless, MultiEffect has no spread). Vectors stack shadows
+    // and glows here; text and images stack glows in their native
+    // branches (shadows stay vector-only, like export).
     readonly property bool isVectorPaint: shape.shapeType === "rectangle" || shape.shapeType === "ellipse" || shape.shapeType === "triangle" || shape.shapeType === "star" || shape.shapeType === "pen"
     readonly property var enabledShadows: (shape.shadows || []).filter(s => s && s.enabled !== false)
     readonly property bool hasShadow: shape.enabledShadows.length > 0
@@ -144,7 +146,16 @@ Item {
     readonly property var innerGlows: shape.enabledGlows.filter(g => g.inner === true)
     readonly property bool hasGlow: shape.enabledGlows.length > 0
     readonly property bool hasGrain: shape.grain !== null && shape.grain !== undefined && shape.grain.enabled === true && Number((shape.grain ?? {}).amount || 0) > 0
-    readonly property bool useEffectPaint: shape.isVectorPaint && (shape.fillType === "linear" || shape.strokeType === "linear" || shape.hasShadow || shape.hasLayerBlur || shape.hasGlow)
+    // Dashed strokes route through the CPU painter too: stock borders
+    // and ShapePaths cannot dash. Both entries must be positive,
+    // mirroring the backend rule, so half-cleared pairs stay solid.
+    readonly property bool hasStrokeDash: {
+        var d = shape.strokeDash;
+        if (!d || typeof d.length !== "number" || d.length < 2)
+            return false;
+        return Number(d[0]) > 0 && Number(d[1]) > 0;
+    }
+    readonly property bool useEffectPaint: shape.isVectorPaint && (shape.fillType === "linear" || shape.strokeType === "linear" || shape.hasShadow || shape.hasLayerBlur || shape.hasGlow || shape.hasStrokeDash)
     // Effected text paints the glyph stack on the CPU (same code export
     // calls); plain text stays on the fast GPU glyphs. Grain rides its
     // own overlay either way; background blur stays off for text.
@@ -235,6 +246,7 @@ Item {
                 ]
             })
         strokeWidth: shape.strokeWidth
+        strokeDash: shape.strokeDash ?? []
         penFill: shape.penFill !== false
         strokeCap: shape.strokeCap || "round"
         strokeJoin: shape.strokeJoin || "round"
