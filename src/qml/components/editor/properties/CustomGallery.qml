@@ -385,9 +385,17 @@ ScrollView {
         var uids = [];
         for (var i = 0; i < tops.length; i++)
             uids.push(tops[i].uid);
-        var options = gallery.defaults.seededOptions(d.anim.presets, d, tops, presetId);
+        // Route solid rows to their gradient sibling when the target's
+        // top entry is linear: a gradient fill/stroke would otherwise
+        // land in a solid hex editor whose output stays invisible.
+        var pid = presetId;
+        if (pid === "customColor" && gallery.defaults.topFillType(d, tops) === "linear")
+            pid = "customGradient";
+        else if (pid === "customStrokeColor" && gallery.defaults.topStrokeType(d, tops) === "linear")
+            pid = "customStrokeGradient";
+        var options = gallery.defaults.seededOptions(d.anim.presets, d, tops, pid);
         var t0 = d.anim.currentTime;
-        var made = d.applyPreset(presetId, uids, t0, 0.8, "in", options, null, "none", gallery.stagger);
+        var made = d.applyPreset(pid, uids, t0, 0.8, "in", options, null, "none", gallery.stagger);
         if (made.length > 0) {
             d.anim.currentTime = t0;
             d.anim.play();

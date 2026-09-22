@@ -20,8 +20,55 @@ ColumnLayout {
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property var opts: section.clip ? section.clip.options || {} : ({})
     readonly property string preset: section.clip ? section.clip.preset : ""
+    // Top entry of the clip target (reactive to doc edits): a solid
+    // color clip on a linear top entry animates an unused color field,
+    // so the section auto-swaps to the gradient sibling on open.
+    readonly property var targetTop: {
+        if (section.doc)
+            section.doc.rev;
+        if (!section.doc || !section.clip)
+            return null;
+        var n = section.doc.findNode(section.clip.targetUid);
+        if (!n)
+            return null;
+        if (n.kind === "shape")
+            return n;
+        var leaves = section.doc._leavesUnder(n);
+        return leaves.length > 0 ? leaves[0] : null;
+    }
+    readonly property bool targetTopIsLinear: {
+        var t = section.targetTop;
+        if (!t)
+            return false;
+        var stack = section.preset === "customStrokeColor" ? (t.strokes || []) : (t.fills || []);
+        return stack.length > 0 && stack[0] && stack[0].type === "linear";
+    }
+    readonly property bool showGradientHint: (section.preset === "customColor" || section.preset === "customStrokeColor") && section.targetTopIsLinear
+    // Set when the automatic swap to the gradient sibling fails (the
+    // target is gone): the note below is a fallback, never a button.
+    property bool swapFailed: false
 
     spacing: 8
+
+    Text {
+        visible: section.showGradientHint && section.swapFailed
+        Layout.fillWidth: true
+        text: section.preset === "customStrokeColor" ? qsTr("Top stroke is a gradient — reopen this clip to animate its stops.") : qsTr("Top fill is a gradient — reopen this clip to animate its stops.")
+        font.pixelSize: 11
+        wrapMode: Text.WordWrap
+        color: AppTheme.muted
+    }
+
+    Component.onCompleted: {
+        // Solid color clips on a linear top entry animate an unused
+        // color field (invisible): swap to the gradient sibling at
+        // open time, seeded from the live entry, instead of asking.
+        if (section.showGradientHint) {
+            var gradPreset = section.preset === "customStrokeColor" ? "customStrokeGradient" : "customGradient";
+            if (!section.doc.convertClipPreset(section.clipId, gradPreset))
+                section.swapFailed = true;
+        }
+    }
 
     Text {
         visible: section.preset === "customOpacity" || section.preset === "customColor" || section.preset === "customStrokeColor"

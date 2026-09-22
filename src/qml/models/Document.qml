@@ -207,6 +207,9 @@ QtObject {
     function setClipOptions(id, patch) {
         return anim.setClipOptions(id, patch);
     }
+    function convertClipPreset(id, newPreset) {
+        return anim.convertClipPreset(id, newPreset);
+    }
     function retimeClip(id, t0, duration) {
         return anim.retimeClip(id, t0, duration);
     }

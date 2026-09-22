@@ -34,6 +34,8 @@ QtObject {
     property var presets: DocAnimPresets {
         doc: anim.doc
     }
+    property var customDefaults: DocCustomDefaults {
+    }
     property var sampler: DocAnimSample {}
 
     function clipById(id) {
@@ -107,6 +109,35 @@ QtObject {
         for (var p in keys)
             merged[p] = keys[p];
         var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, merged, old.easing, old.loop);
+        doc.history.checkpoint();
+        var list = anim.clips.slice();
+        list[at] = fixed;
+        anim.clips = list;
+        doc.touch();
+        return true;
+    }
+
+    // Converts a clip to another preset, reseeding options from the live
+    // target so the new clip starts jump-free. Timing, mode, easing and
+    // loop carry over; one undo entry. Used by the style editor to
+    // auto-swap solid color clips whose target top entry is linear.
+    function convertClipPreset(id, newPreset) {
+        var at = -1;
+        for (var i = 0; i < anim.clips.length; i++) {
+            if (anim.clips[i].id === id) {
+                at = i;
+                break;
+            }
+        }
+        if (at < 0 || anim.presets.presetIds().indexOf(newPreset) < 0)
+            return false;
+        var old = anim.clips[at];
+        if (old.preset === newPreset)
+            return false;
+        var node = doc.findNode(old.targetUid);
+        var tops = node ? [node] : [];
+        var opts = anim.customDefaults.seededOptions(anim.presets, doc, tops, newPreset);
+        var fixed = anim.presets.buildClip(newPreset, old.id, old.targetUid, old.t0, old.duration, old.mode, opts, old.easing, old.loop);
         doc.history.checkpoint();
         var list = anim.clips.slice();
         list[at] = fixed;

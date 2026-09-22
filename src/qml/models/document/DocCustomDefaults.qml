@@ -216,4 +216,20 @@ QtObject {
         var leaves = d._leavesUnder(top);
         return leaves.length > 0 ? leaves[0] : null;
     }
+
+    // Top stack entry paint type for gallery routing: color rows
+    // auto-upgrade to their gradient sibling when the target's top
+    // entry is linear, so a gradient stroke never lands in a solid
+    // hex editor. Missing entries read as solid.
+    function topFillType(d, tops) {
+        var leaf = tops.length > 0 ? firstLeaf(d, tops[0]) : null;
+        var f0 = (leaf && leaf.fills && leaf.fills.length > 0 ? leaf.fills[0] : {}) ?? {};
+        return f0.type === "linear" ? "linear" : "solid";
+    }
+
+    function topStrokeType(d, tops) {
+        var leaf = tops.length > 0 ? firstLeaf(d, tops[0]) : null;
+        var s0 = (leaf && leaf.strokes && leaf.strokes.length > 0 ? leaf.strokes[0] : {}) ?? {};
+        return s0.type === "linear" ? "linear" : "solid";
+    }
 }
