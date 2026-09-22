@@ -3,7 +3,7 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
-## [Unreleased]
+## [0.2.2] - 2026-09-22
 
 ### Added
 
@@ -11,10 +11,14 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 * Official seal in the permission header — the permission popup drops the `Official plugin — shipped with totm.` text row and puts the verified-badge seal top-right of the Allow title instead (old copy kept as a hover tooltip).
 * Dashed and dotted strokes — the stroke section grew a Solid/Dashed/Dotted preset row plus dash/gap lengths in stroke-width units, painted through the shared CPU painter so canvas, video, PNG and SVG export match (old scenes read as solid; native text outlines stay solid).
 * SVG import as editable vectors — picking an `.svg` in the image tool vectorizes paths, rects, circles, ellipses, lines, polylines, polygons, `use`/symbol references and text glyph outlines into pen shapes in one undo entry (grouped under the file name), reusing the picker-then-place stamp flow. Unconvertible files fall back to image-blob placement. A new `SvgImport` backend unit mirrors the export-side `SvgPaint` parser; gradients, filters, clips and masks stay out of scope.
+* Stacked fills and strokes — shapes now carry Figma-style `fills[]`/`strokes[]` stacks (index 0 paints topmost) with per-entry color, linear gradient, opacity, width, dash pair and center/inside/outside position, edited through per-entry cards with eye toggles and a dots menu for type, angle, position, dash style, order and delete. Canvas, video, PNG/SVG export and home previews all paint the stacks; old scenes fold their single keys into one-entry stacks untouched.
+* Animation for the new paints — style clips target the top stack entry: color/gradient clips carry entry opacity, the Stroke clip carries opacity plus a lerped dash pair and stepped position, and a new Stroke gradient clip mirrors the fill gradient. Extended keys are opt-in so old clips never stomp custom values. The gallery routes Color rows to gradient clips for linear paints (seeded from the live stops) and solid clips auto-swap on open; clip editors grew opacity/dash/position fields plus the shared color picker on every well.
+* Collapsible Export section — the header toggle owns expand/collapse with the body compact until opened, and the PNG scale-row + moved inside.
 
 ### Fixed
 
 * Gradient strokes lost the width field: only the solid row carried it, so `linear` strokes could change nothing but the angle — the gradient row carries the same width control now.
+* Numeric fields ate the minus key: a leading `-` typed next to existing text parsed as invalid, so negatives were unreachable without pre-selecting, and Enter died on out-of-range text — `-` now toggles the leading sign from any cursor spot (validator removed, commit still clamps to range).
 
 ## [0.2.1] - 2026-09-21
 

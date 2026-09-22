@@ -1,6 +1,6 @@
 # Maintainer: tot <https://github.com/emty-png/totm>
 pkgname=totm
-pkgver=0.2.1
+pkgver=0.2.2
 pkgrel=1
 pkgdesc="Cross-platform desktop motion-graphics editor"
 arch=('x86_64')
