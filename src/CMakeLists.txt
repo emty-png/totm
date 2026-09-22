@@ -37,6 +37,8 @@ qt_add_qml_module(totm
         backend/library/LibraryStore.cpp
         backend/library/AudioPeaks.h
         backend/library/AudioPeaks.cpp
+        backend/svg/SvgImport.h
+        backend/svg/SvgImport.cpp
         backend/settings/SettingsStore.h
         backend/settings/SettingsStore.cpp
         backend/video/VideoExporter.h
@@ -290,6 +292,7 @@ target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/settings
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/video
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/export
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/svg
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/plugins
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/crash
 )

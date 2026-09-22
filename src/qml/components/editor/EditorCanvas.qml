@@ -751,9 +751,25 @@ Item {
             canvas.pathTool.cancel();
         ToolState.cancelPathDraw();
     }
-    // Image picker accept: copy into the library and arm placement at
-    // natural size. Failures fall back to select so the tool never sticks.
+    // Image picker accept: SVGs vectorize into editable pen shapes when
+    // convertible, otherwise (and all rasters) copy into the library and
+    // arm placement at natural size. Failures fall back to select so the
+    // tool never sticks.
     function acceptImageFile(file) {
+        var flat = String(file).split("?")[0];
+        if (/\.svg$/i.test(flat)) {
+            var vec = LibraryStore.importSvgVectors(file);
+            if (vec && vec.ok && vec.paths && vec.paths.length > 0) {
+                var base = String(flat.split("/").pop() || "SVG").replace(/\.svg$/i, "");
+                canvas.imageTool.setPendingVectors({
+                    paths: vec.paths,
+                    w: Math.max(1, Number(vec.width) || 0),
+                    h: Math.max(1, Number(vec.height) || 0),
+                    name: base
+                });
+                return;
+            }
+        }
         var name = LibraryStore.importImage(file);
         if (!name) {
             canvas.cancelImageTool();

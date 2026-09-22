@@ -342,6 +342,93 @@ QtObject {
         return n.uid;
     }
 
+    // SVG vector import: batch-creates pen shapes from parsed entries
+    // ([{pathData, fill, penFill, stroke, strokeWidth, strokeCap,
+    // strokeJoin}]) stamped at (baseX, baseY) with scale factors, grouped
+    // under groupName when several land. No checkpoint inside: the
+    // Document wrapper owns the single undo entry. Returns the pen or
+    // group uid, -1 when nothing lands.
+    function importSvgPaths(entries, groupName, baseX, baseY, scaleX, scaleY) {
+        var container = doc._activeContainerUid();
+        doc.clearSelection();
+        var sx = Number(scaleX) || 1;
+        var sy = Number(scaleY) || 1;
+        var made = [];
+        for (var i = 0; i < (entries || []).length; i++) {
+            var e = entries[i] || {};
+            var clean = factory._copyPath(e.pathData);
+            var total = 0;
+            for (var j = 0; j < clean.length; j++) {
+                var pts = clean[j].pts || [];
+                total += pts.length;
+                for (var k = 0; k < pts.length; k++) {
+                    pts[k].x = baseX + pts[k].x * sx;
+                    pts[k].y = baseY + pts[k].y * sy;
+                    pts[k].inX = baseX + pts[k].inX * sx;
+                    pts[k].inY = baseY + pts[k].inY * sy;
+                    pts[k].outX = baseX + pts[k].outX * sx;
+                    pts[k].outY = baseY + pts[k].outY * sy;
+                }
+            }
+            if (total === 0)
+                continue;
+            var box = factory.penBBoxFor(clean);
+            var n = _makeShapeNode("pen", {
+                x: box.x,
+                y: box.y,
+                w: box.w,
+                h: box.h,
+                pathData: clean,
+                fill: e.fill ?? "#000000",
+                penFill: e.penFill !== false,
+                stroke: e.stroke ?? "#000000",
+                strokeType: "solid",
+                strokeWidth: Math.max(0, Number(e.strokeWidth) || 0) * (sx + sy) / 2,
+                strokeCap: e.strokeCap ?? "round",
+                strokeJoin: e.strokeJoin ?? "round"
+            });
+            var list = doc._childrenOf(container).slice();
+            list.unshift(n);
+            doc._setChildren(container, list);
+            made.push(n);
+        }
+        if (made.length === 0)
+            return -1;
+        if (made.length === 1) {
+            doc.anchorUid = made[0].uid;
+            doc._refreshStructural();
+            return made[0].uid;
+        }
+        // Group several paths. Every insert unshifts above the previous,
+        // so top-first order is reverse creation order; the group takes
+        // the slot of the topmost path (same-parent branch rule).
+        var cur = doc._childrenOf(container).slice();
+        var ids = {};
+        for (var m = 0; m < made.length; m++)
+            ids[made[m].uid] = true;
+        var ordered = [];
+        var rest = [];
+        var at = cur.length;
+        for (var r = 0; r < cur.length; r++) {
+            if (ids[cur[r].uid]) {
+                ordered.push(cur[r]);
+                if (r < at)
+                    at = r;
+            } else {
+                rest.push(cur[r]);
+            }
+        }
+        var group = _makeGroupNode(groupName, ordered);
+        for (var c = 0; c < ordered.length; c++)
+            ordered[c].selected = false;
+        group.selected = true;
+        rest.splice(Math.min(at, rest.length), 0, group);
+        doc._setChildren(container, rest);
+        doc.anchorUid = group.uid;
+        doc._refreshStructural();
+        return group.uid;
+    }
+
     // Text creation: click passes autoSize with a measured box, drag
     // passes a fixed wrapping box. Content starts empty; the canvas
     // opens the inline editor right after.

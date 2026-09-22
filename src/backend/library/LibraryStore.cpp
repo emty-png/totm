@@ -1,5 +1,7 @@
 #include "LibraryStore.h"
 
+#include "SvgImport.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -345,6 +347,26 @@ QString LibraryStore::importImage(const QUrl &source) {
     }
     clearError();
     return name;
+}
+
+QVariantMap LibraryStore::importSvgVectors(const QUrl &source)
+{
+    QVariantMap out;
+    out[QStringLiteral("ok")] = false;
+    const QString local = source.isLocalFile() ? source.toLocalFile() : source.toString();
+    if (local.isEmpty() || QFileInfo(local).suffix().toLower() != QStringLiteral("svg")) {
+        out[QStringLiteral("error")] = tr("Pick an SVG file first.");
+        return out;
+    }
+    // Same stamp clamp as the image flow: a poster-sized SVG never
+    // covers the scene; drags can still stretch larger.
+    QVariantMap parsed = SvgImport::importFile(local, 800.0);
+    if (!parsed.value(QStringLiteral("ok")).toBool()) {
+        out[QStringLiteral("error")] = parsed.value(QStringLiteral("error"));
+        return out;
+    }
+    clearError();
+    return parsed;
 }
 
 QUrl LibraryStore::imageUrl(const QString &name) const {

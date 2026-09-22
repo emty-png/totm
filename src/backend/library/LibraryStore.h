@@ -123,6 +123,11 @@ public:
     Q_INVOKABLE QString importImage(const QUrl &source);
     Q_INVOKABLE QUrl imageUrl(const QString &name) const;
     Q_INVOKABLE QVariantMap imageInfo(const QString &name) const;
+    // SVG vector import: parses an .svg file into editable pen data
+    // ({ok, error, width, height, paths}) without storing a blob, so
+    // icons land as shapes instead of flat images. Unconvertible files
+    // report ok=false for the image-blob fallback.
+    Q_INVOKABLE QVariantMap importSvgVectors(const QUrl &source);
     Q_INVOKABLE bool hasImage(const QString &name) const;
     Q_INVOKABLE quint64 imagesDiskUsage() const;
     Q_INVOKABLE int imageCount() const;

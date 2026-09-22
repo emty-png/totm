@@ -406,6 +406,10 @@ QtObject {
         history.checkpoint();
         return factory.addPen(pathData);
     }
+    function importSvgPaths(entries, groupName, baseX, baseY, scaleX, scaleY) {
+        history.checkpoint();
+        return factory.importSvgPaths(entries, groupName, baseX, baseY, scaleX, scaleY);
+    }
     function addImage(imageSource, x, y, w, h) {
         history.checkpoint();
         return factory.addImage(imageSource, x, y, w, h);
