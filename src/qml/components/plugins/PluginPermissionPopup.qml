@@ -88,33 +88,35 @@ Popup {
     contentItem: ColumnLayout {
         spacing: 8
 
-        Text {
-            Layout.fillWidth: true
-            text: qsTr("Allow \"%1\"?").arg(permissionPopup.pending ? (permissionPopup.pending.name || "") : "")
-            font.pixelSize: 13
-            font.weight: Font.DemiBold
-            color: AppTheme.foreground
-            elide: Text.ElideRight
-        }
-
         RowLayout {
             Layout.fillWidth: true
-            visible: !!(permissionPopup.pending && permissionPopup.pending.official)
-            spacing: 6
-
-            OfficialBadge {
-                Layout.alignment: Qt.AlignVCenter
-                badgeSize: 14
-            }
+            spacing: 8
 
             Text {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
-                text: qsTr("Official plugin — shipped with totm.")
-                font.pixelSize: 11
+                text: qsTr("Allow \"%1\"?").arg(permissionPopup.pending ? (permissionPopup.pending.name || "") : "")
+                font.pixelSize: 13
                 font.weight: Font.DemiBold
-                color: AppTheme.selection
+                color: AppTheme.foreground
                 elide: Text.ElideRight
+            }
+
+            OfficialBadge {
+                Layout.alignment: Qt.AlignVCenter
+                visible: !!(permissionPopup.pending && permissionPopup.pending.official)
+                badgeSize: 16
+
+                ToolTip.visible: sealMouse.containsMouse
+                ToolTip.text: qsTr("Official plugin — shipped with totm.")
+
+                MouseArea {
+                    id: sealMouse
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.NoButton
+                }
             }
         }
 
