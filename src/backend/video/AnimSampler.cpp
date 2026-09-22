@@ -366,6 +366,10 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         const QString c = lerpColor(str(o, "from", QStringLiteral("#000000")), str(o, "to", QStringLiteral("#ff0000")), e);
         if (!c.isEmpty())
             out[QStringLiteral("fill")] = c;
+        if (o.contains(QStringLiteral("fromOpacity")) || o.contains(QStringLiteral("toOpacity"))) {
+            const double fo = num(o, "fromOpacity", 1.0) + (num(o, "toOpacity", 1.0) - num(o, "fromOpacity", 1.0)) * e;
+            out[QStringLiteral("fillOpacity")] = qBound(0.0, fo, 1.0);
+        }
     } else if (preset == QLatin1String("customHide")) {
         out[QStringLiteral("visible")] = e < 0.5 ? o.value(QStringLiteral("fromVisible"), true).toBool()
                                                  : o.value(QStringLiteral("toVisible"), false).toBool();
@@ -382,10 +386,60 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         out[QStringLiteral("radius")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
     } else if (preset == QLatin1String("customStroke")) {
         out[QStringLiteral("strokeWidth")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+        if (o.contains(QStringLiteral("fromOpacity")) || o.contains(QStringLiteral("toOpacity"))) {
+            const double so = num(o, "fromOpacity", 1.0) + (num(o, "toOpacity", 1.0) - num(o, "fromOpacity", 1.0)) * e;
+            out[QStringLiteral("strokeOpacity")] = qBound(0.0, so, 1.0);
+        }
+        if (o.contains(QStringLiteral("fromDash")) || o.contains(QStringLiteral("toDash"))
+            || o.contains(QStringLiteral("fromGap")) || o.contains(QStringLiteral("toGap"))) {
+            const double dd = qMax(0.0, num(o, "fromDash") + (num(o, "toDash") - num(o, "fromDash")) * e);
+            const double gg = qMax(0.0, num(o, "fromGap") + (num(o, "toGap") - num(o, "fromGap")) * e);
+            if (dd > 0.001 && gg > 0.001)
+                out[QStringLiteral("strokeDash")] = QVariantList{dd, gg};
+            else
+                out[QStringLiteral("strokeDash")] = QVariantList{};
+        }
+        if (o.contains(QStringLiteral("fromPosition")) || o.contains(QStringLiteral("toPosition"))) {
+            const QString fp = str(o, "fromPosition", QStringLiteral("center"));
+            const QString tp = str(o, "toPosition", QStringLiteral("center"));
+            const auto normPos = [](const QString &v) {
+                return (v == QLatin1String("inside") || v == QLatin1String("outside")) ? v : QString(QStringLiteral("center"));
+            };
+            out[QStringLiteral("strokePosition")] = e < 0.5 ? normPos(fp) : normPos(tp);
+        }
     } else if (preset == QLatin1String("customStrokeColor")) {
         const QString c = lerpColor(str(o, "from", QStringLiteral("#000000")), str(o, "to", QStringLiteral("#ff0000")), e);
         if (!c.isEmpty())
             out[QStringLiteral("stroke")] = c;
+        if (o.contains(QStringLiteral("fromOpacity")) || o.contains(QStringLiteral("toOpacity"))) {
+            const double so2 = num(o, "fromOpacity", 1.0) + (num(o, "toOpacity", 1.0) - num(o, "fromOpacity", 1.0)) * e;
+            out[QStringLiteral("strokeOpacity")] = qBound(0.0, so2, 1.0);
+        }
+    } else if (preset == QLatin1String("customStrokeGradient")) {
+        const QString c1 = lerpColor(str(o, "fromC1", QStringLiteral("#000000")),
+            str(o, "toC1", QStringLiteral("#000000")), e);
+        const QString c2 = lerpColor(str(o, "fromC2", QStringLiteral("#ffffff")),
+            str(o, "toC2", QStringLiteral("#ffffff")), e);
+        if (!c1.isEmpty() && !c2.isEmpty()) {
+            const double ang = num(o, "fromAngle") + (num(o, "toAngle") - num(o, "fromAngle")) * e;
+            QVariantMap grad;
+            grad[QStringLiteral("angle")] = ang;
+            QVariantList stops;
+            QVariantMap s1;
+            s1[QStringLiteral("color")] = c1;
+            s1[QStringLiteral("pos")] = 0.0;
+            QVariantMap s2;
+            s2[QStringLiteral("color")] = c2;
+            s2[QStringLiteral("pos")] = 1.0;
+            stops << s1 << s2;
+            grad[QStringLiteral("stops")] = stops;
+            out[QStringLiteral("strokeGradient")] = grad;
+            out[QStringLiteral("strokeType")] = QStringLiteral("linear");
+        }
+        if (o.contains(QStringLiteral("fromOpacity")) || o.contains(QStringLiteral("toOpacity"))) {
+            const double so3 = num(o, "fromOpacity", 1.0) + (num(o, "toOpacity", 1.0) - num(o, "fromOpacity", 1.0)) * e;
+            out[QStringLiteral("strokeOpacity")] = qBound(0.0, so3, 1.0);
+        }
     } else if (preset == QLatin1String("customFontSize")) {
         out[QStringLiteral("fontSize")] = qMax(1.0, num(o, "from") + (num(o, "to") - num(o, "from")) * e);
     } else if (preset == QLatin1String("customFlip")) {
@@ -418,6 +472,10 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             grad[QStringLiteral("stops")] = stops;
             out[QStringLiteral("fillGradient")] = grad;
             out[QStringLiteral("fillType")] = QStringLiteral("linear");
+        }
+        if (o.contains(QStringLiteral("fromOpacity")) || o.contains(QStringLiteral("toOpacity"))) {
+            const double fo = num(o, "fromOpacity", 1.0) + (num(o, "toOpacity", 1.0) - num(o, "fromOpacity", 1.0)) * e;
+            out[QStringLiteral("fillOpacity")] = qBound(0.0, fo, 1.0);
         }
     } else if (preset == QLatin1String("customShadow")) {
         const QString c = lerpColorA(str(o, "fromColor", QStringLiteral("#000000")),
@@ -545,10 +603,14 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
         b[QStringLiteral("fontSize")] = num(m, "fontSize", 16.0);
         b[QStringLiteral("textContent")] = str(m, "textContent");
         b[QStringLiteral("shapeType")] = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
-        b[QStringLiteral("fill")] = str(m, "fill", QStringLiteral("#d9d9d9"));
-        b[QStringLiteral("stroke")] = str(m, "stroke", QStringLiteral("#000000"));
+        b[QStringLiteral("fills")] = m.value(QStringLiteral("fills")).toList();
+        b[QStringLiteral("strokes")] = m.value(QStringLiteral("strokes")).toList();
         b[QStringLiteral("flipH")] = m.value(QStringLiteral("flipH")).toBool();
         b[QStringLiteral("flipV")] = m.value(QStringLiteral("flipV")).toBool();
+        // Legacy single keys ride along so old clips sampling base
+        // still resolve; new clips read the stacks above.
+        b[QStringLiteral("fill")] = str(m, "fill", QStringLiteral("#d9d9d9"));
+        b[QStringLiteral("stroke")] = str(m, "stroke", QStringLiteral("#000000"));
         b[QStringLiteral("fillType")] = str(m, "fillType", QStringLiteral("solid"));
         b[QStringLiteral("fillGradient")] = m.value(QStringLiteral("fillGradient")).toMap();
         b[QStringLiteral("shadows")] = m.value(QStringLiteral("shadows")).toList();
@@ -558,7 +620,6 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
         b[QStringLiteral("grain")] = m.value(QStringLiteral("grain")).toMap();
         b[QStringLiteral("visible")] = m.value(QStringLiteral("visible"), true).toBool();
         b[QStringLiteral("radius")] = num(m, "radius");
-        b[QStringLiteral("strokeWidth")] = num(m, "strokeWidth");
         base[uid] = b;
     }
     return base;
@@ -882,14 +943,80 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
                     m[k] = ov.value(k);
             }
         }
-        for (const QString &k : {QStringLiteral("rotation"), QStringLiteral("opacity"), QStringLiteral("fill"),
-                 QStringLiteral("fillType"), QStringLiteral("fillGradient"), QStringLiteral("shadows"),
+        for (const QString &k : {QStringLiteral("rotation"), QStringLiteral("opacity"), QStringLiteral("shadows"),
                  QStringLiteral("layerBlur"), QStringLiteral("backgroundBlur"), QStringLiteral("glows"),
                  QStringLiteral("grain"), QStringLiteral("visible"), QStringLiteral("radius"),
-                 QStringLiteral("stroke"), QStringLiteral("flipH"), QStringLiteral("flipV"),
-                 QStringLiteral("strokeWidth"), QStringLiteral("textContent")}) {
+                 QStringLiteral("fills"), QStringLiteral("strokes"), QStringLiteral("flipH"), QStringLiteral("flipV"),
+                 QStringLiteral("textContent")}) {
             if (ov.contains(k))
                 m[k] = ov.value(k);
+        }
+        // Style clips animate the top stack entry via legacy single
+        // keys (customColor/customStroke/etc.): fold them onto
+        // fills[0]/strokes[0] so old clips keep working on stacks.
+        auto ensureFills = [&](QVariantMap &mm) -> QVariantList {
+            QVariantList l = mm.value(QStringLiteral("fills")).toList();
+            if (l.isEmpty()) {
+                QVariantMap d;
+                d[QStringLiteral("enabled")] = true;
+                d[QStringLiteral("color")] = QStringLiteral("#d9d9d9");
+                d[QStringLiteral("type")] = QStringLiteral("solid");
+                d[QStringLiteral("opacity")] = 1.0;
+                l.append(d);
+            }
+            return l;
+        };
+        auto ensureStrokes = [&](QVariantMap &mm) -> QVariantList {
+            QVariantList l = mm.value(QStringLiteral("strokes")).toList();
+            if (l.isEmpty()) {
+                QVariantMap d;
+                d[QStringLiteral("enabled")] = true;
+                d[QStringLiteral("color")] = QStringLiteral("#000000");
+                d[QStringLiteral("type")] = QStringLiteral("solid");
+                d[QStringLiteral("width")] = 0.0;
+                d[QStringLiteral("position")] = QStringLiteral("center");
+                d[QStringLiteral("opacity")] = 1.0;
+                l.append(d);
+            }
+            return l;
+        };
+        if (ov.contains(QStringLiteral("fill")) || ov.contains(QStringLiteral("fillType"))
+            || ov.contains(QStringLiteral("fillGradient")) || ov.contains(QStringLiteral("fillOpacity"))) {
+            QVariantList l = ensureFills(m);
+            QVariantMap f0 = l.first().toMap();
+            if (ov.contains(QStringLiteral("fill")))
+                f0[QStringLiteral("color")] = ov.value(QStringLiteral("fill")).toString();
+            if (ov.contains(QStringLiteral("fillType")))
+                f0[QStringLiteral("type")] = ov.value(QStringLiteral("fillType")).toString();
+            if (ov.contains(QStringLiteral("fillGradient")))
+                f0[QStringLiteral("gradient")] = ov.value(QStringLiteral("fillGradient")).toMap();
+            if (ov.contains(QStringLiteral("fillOpacity")))
+                f0[QStringLiteral("opacity")] = qBound(0.0, ov.value(QStringLiteral("fillOpacity")).toDouble(), 1.0);
+            l[0] = f0;
+            m[QStringLiteral("fills")] = l;
+        }
+        if (ov.contains(QStringLiteral("stroke")) || ov.contains(QStringLiteral("strokeWidth"))
+            || ov.contains(QStringLiteral("strokeType")) || ov.contains(QStringLiteral("strokeGradient"))
+            || ov.contains(QStringLiteral("strokeOpacity")) || ov.contains(QStringLiteral("strokeDash"))
+            || ov.contains(QStringLiteral("strokePosition"))) {
+            QVariantList l = ensureStrokes(m);
+            QVariantMap s0 = l.first().toMap();
+            if (ov.contains(QStringLiteral("stroke")))
+                s0[QStringLiteral("color")] = ov.value(QStringLiteral("stroke")).toString();
+            if (ov.contains(QStringLiteral("strokeType")))
+                s0[QStringLiteral("type")] = ov.value(QStringLiteral("strokeType")).toString();
+            if (ov.contains(QStringLiteral("strokeGradient")))
+                s0[QStringLiteral("gradient")] = ov.value(QStringLiteral("strokeGradient")).toMap();
+            if (ov.contains(QStringLiteral("strokeWidth")))
+                s0[QStringLiteral("width")] = qMax(0.0, ov.value(QStringLiteral("strokeWidth")).toDouble());
+            if (ov.contains(QStringLiteral("strokeOpacity")))
+                s0[QStringLiteral("opacity")] = qBound(0.0, ov.value(QStringLiteral("strokeOpacity")).toDouble(), 1.0);
+            if (ov.contains(QStringLiteral("strokeDash")))
+                s0[QStringLiteral("dash")] = ov.value(QStringLiteral("strokeDash")).toList();
+            if (ov.contains(QStringLiteral("strokePosition")))
+                s0[QStringLiteral("position")] = ov.value(QStringLiteral("strokePosition")).toString();
+            l[0] = s0;
+            m[QStringLiteral("strokes")] = l;
         }
         if (ov.contains(QStringLiteral("fontSize")) && shapeType == QLatin1String("text"))
             m[QStringLiteral("fontSize")] = ov.value(QStringLiteral("fontSize"));

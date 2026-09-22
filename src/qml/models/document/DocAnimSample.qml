@@ -84,6 +84,18 @@ QtObject {
         return "#" + hx(r) + hx(g) + hx(b);
     }
 
+    // Opacity from-to with 1.0 fallback for missing/garbage ends so
+    // old clips (no opacity keys) never produce NaN when gated wrong.
+    function lerpOpacity(fromV, toV, t) {
+        var a = Number(fromV !== undefined ? fromV : 1);
+        var b = Number(toV !== undefined ? toV : 1);
+        if (isNaN(a))
+            a = 1;
+        if (isNaN(b))
+            b = 1;
+        return Math.min(1, Math.max(0, a + (b - a) * t));
+    }
+
     // Param is `to`, not `toHex`: that name would shadow the helper below.
     function lerpColor(fromHex, to, t) {
         var a = parseHex(fromHex);
@@ -234,6 +246,11 @@ QtObject {
             var cc = lerpColor(o.from, o.to, e);
             if (cc)
                 out.fill = cc;
+            // Opacity rides along only when the clip carries it (new
+            // clips seed it; old clips stay color-only so they never
+            // stomp a custom entry opacity).
+            if (o.fromOpacity !== undefined || o.toOpacity !== undefined)
+                out.fillOpacity = lerpOpacity(o.fromOpacity, o.toOpacity, e);
         } else if (preset === "customHide") {
             // Stepped visibility (bools can't ease): first half reads
             // from, second half reads to.
@@ -253,10 +270,54 @@ QtObject {
             out.radius = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
         } else if (preset === "customStroke") {
             out.strokeWidth = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+            // Extended fields ride along only when the clip carries
+            // them (new clips seed them; old width-only clips stay
+            // width-only so custom dash/position/opacity survive).
+            if (o.fromOpacity !== undefined || o.toOpacity !== undefined)
+                out.strokeOpacity = lerpOpacity(o.fromOpacity, o.toOpacity, e);
+            if (o.fromDash !== undefined || o.toDash !== undefined || o.fromGap !== undefined || o.toGap !== undefined) {
+                // Dash pair lerps continuously (width units); solid is
+                // [0,0] so a solid<->dashed morph passes through dots.
+                var dd = Math.max(0, lerp(Number(o.fromDash) || 0, Number(o.toDash) || 0, e));
+                var dg = Math.max(0, lerp(Number(o.fromGap) || 0, Number(o.toGap) || 0, e));
+                if (dd > 0.001 && dg > 0.001)
+                    out.strokeDash = [dd, dg];
+                else
+                    out.strokeDash = [];
+            }
+            // Position can't ease: stepped like customHide.
+            if (o.fromPosition !== undefined || o.toPosition !== undefined)
+                out.strokePosition = e < 0.5 ? (o.fromPosition === "inside" || o.fromPosition === "outside" ? o.fromPosition : "center") : (o.toPosition === "inside" || o.toPosition === "outside" ? o.toPosition : "center");
         } else if (preset === "customStrokeColor") {
             var sc = lerpColor(o.from, o.to, e);
             if (sc)
                 out.stroke = sc;
+            if (o.fromOpacity !== undefined || o.toOpacity !== undefined)
+                out.strokeOpacity = lerpOpacity(o.fromOpacity, o.toOpacity, e);
+        } else if (preset === "customStrokeGradient") {
+            // Stroke gradient from-to (mirrors customGradient for fills):
+            // stop colors ease in sRGB, angle linearly, opacity lerps.
+            // Flips strokeType so a solid base renders the gradient.
+            var sgc1 = lerpColor(o.fromC1, o.toC1, e);
+            var sgc2 = lerpColor(o.fromC2, o.toC2, e);
+            if (sgc1 && sgc2) {
+                out.strokeType = "linear";
+                out.strokeGradient = {
+                    angle: lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e),
+                    stops: [
+                        {
+                            color: sgc1,
+                            pos: 0
+                        },
+                        {
+                            color: sgc2,
+                            pos: 1
+                        }
+                    ]
+                };
+            }
+            if (o.fromOpacity !== undefined || o.toOpacity !== undefined)
+                out.strokeOpacity = lerpOpacity(o.fromOpacity, o.toOpacity, e);
         } else if (preset === "customFontSize") {
             out.fontSize = Math.max(1, lerp(Number(o.from) || 0, Number(o.to) || 0, e));
         } else if (preset === "customFlip") {
@@ -288,6 +349,8 @@ QtObject {
                     ]
                 };
             }
+            if (o.fromOpacity !== undefined || o.toOpacity !== undefined)
+                out.fillOpacity = lerpOpacity(o.fromOpacity, o.toOpacity, e);
         } else if (preset === "customShadow") {
             var sc = lerpColorA(o.fromColor, o.toColor, e);
             if (sc) {
@@ -674,26 +737,75 @@ QtObject {
                 n.fontSize = ov.fontSize;
             if (ov.textContent !== undefined && n.shapeType === "text")
                 n.textContent = ov.textContent;
-            if (ov.fill !== undefined)
-                n.fill = ov.fill;
-            if (ov.stroke !== undefined)
-                n.stroke = ov.stroke;
-            if (ov.fillType !== undefined)
-                n.fillType = ov.fillType;
-            if (ov.fillGradient !== undefined)
-                n.fillGradient = {
-                    angle: ov.fillGradient.angle,
-                    stops: [
-                        {
-                            color: String(ov.fillGradient.stops[0].color),
-                            pos: 0
-                        },
-                        {
-                            color: String(ov.fillGradient.stops[1].color),
-                            pos: 1
-                        }
-                    ]
-                };
+            // Style animation targets the top stack entry (index 0);
+            // whole-stack animation is out of scope for v1. Legacy
+            // single keys from presetOverlay fold onto entry 0 so old
+            // clips keep working.
+            if (ov.fills !== undefined) {
+                n.fills = doc.factory._copyFills(ov.fills, n);
+            } else if (ov.fill !== undefined || ov.fillType !== undefined || ov.fillGradient !== undefined || ov.fillOpacity !== undefined) {
+                var farr = doc.factory._copyFills(n.fills, n);
+                if (farr.length === 0)
+                    farr.push(doc.factory.defaultFill());
+                if (ov.fill !== undefined)
+                    farr[0].color = String(ov.fill);
+                if (ov.fillType !== undefined)
+                    farr[0].type = ov.fillType === "linear" ? "linear" : "solid";
+                if (ov.fillGradient !== undefined)
+                    farr[0].gradient = {
+                        angle: ov.fillGradient.angle,
+                        stops: [
+                            {
+                                color: String(ov.fillGradient.stops[0].color),
+                                pos: 0
+                            },
+                            {
+                                color: String(ov.fillGradient.stops[1].color),
+                                pos: 1
+                            }
+                        ]
+                    };
+                if (ov.fillOpacity !== undefined)
+                    farr[0].opacity = Math.min(1, Math.max(0, Number(ov.fillOpacity)));
+                n.fills = farr;
+            }
+            if (ov.strokes !== undefined) {
+                n.strokes = doc.factory._copyStrokes(ov.strokes, n);
+            } else if (ov.stroke !== undefined || ov.strokeWidth !== undefined || ov.strokeType !== undefined || ov.strokeGradient !== undefined || ov.strokeOpacity !== undefined || ov.strokeDash !== undefined || ov.strokePosition !== undefined) {
+                var sarr = doc.factory._copyStrokes(n.strokes, n);
+                if (sarr.length === 0)
+                    sarr.push(doc.factory._copyStrokeEntry({
+                        color: "#000000",
+                        width: 0
+                    }));
+                if (ov.stroke !== undefined)
+                    sarr[0].color = String(ov.stroke);
+                if (ov.strokeType !== undefined)
+                    sarr[0].type = ov.strokeType === "linear" ? "linear" : "solid";
+                if (ov.strokeGradient !== undefined)
+                    sarr[0].gradient = {
+                        angle: ov.strokeGradient.angle,
+                        stops: [
+                            {
+                                color: String(ov.strokeGradient.stops[0].color),
+                                pos: 0
+                            },
+                            {
+                                color: String(ov.strokeGradient.stops[1].color),
+                                pos: 1
+                            }
+                        ]
+                    };
+                if (ov.strokeWidth !== undefined)
+                    sarr[0].width = Math.max(0, Number(ov.strokeWidth) || 0);
+                if (ov.strokeOpacity !== undefined)
+                    sarr[0].opacity = Math.min(1, Math.max(0, Number(ov.strokeOpacity)));
+                if (ov.strokeDash !== undefined)
+                    sarr[0].dash = doc.factory._copyDash(ov.strokeDash);
+                if (ov.strokePosition !== undefined)
+                    sarr[0].position = (ov.strokePosition === "inside" || ov.strokePosition === "outside") ? ov.strokePosition : "center";
+                n.strokes = sarr;
+            }
             if (ov.shadows !== undefined) {
                 var shOut = [];
                 var shSrc = ov.shadows || [];
@@ -756,8 +868,6 @@ QtObject {
                 if (n.independentCorners)
                     n.cornerRadii = [rv, rv, rv, rv];
             }
-            if (ov.strokeWidth !== undefined)
-                n.strokeWidth = Math.max(0, Number(ov.strokeWidth) || 0);
         }
     }
 }

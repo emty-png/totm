@@ -3,9 +3,14 @@ import QtQuick.Layouts
 import Totm
 
 // Custom Style editors: Opacity (absolute 0-1), Color (fill hex
-// from-to) and Stroke color (stroke hex from-to). Absolute values give
-// exact control; the gallery seeds From from the live selection so new
-// clips start jump-free.
+// from-to + entry opacity), Stroke color (stroke hex from-to + entry
+// opacity). Wells open the shared solid picker; hex stays for typing.
+// Absolute values give exact control; the gallery seeds From from the
+// live selection so new clips start jump-free. A solid clip opened on
+// a linear top entry auto-swaps to its gradient sibling (seeded, one
+// undo entry) instead of animating an invisible color. Color clips
+// target the top stack entry (index 0); whole-stack animation is out
+// of scope for v1.
 ColumnLayout {
     id: section
 
@@ -138,6 +143,44 @@ ColumnLayout {
             value: String(section.opts.to || "#ff0000")
             onCommitted: c => section.setOption("to", c)
         }
+    }
+
+    Text {
+        visible: section.preset === "customColor" || section.preset === "customStrokeColor"
+        text: qsTr("From opacity")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: section.preset === "customColor" || section.preset === "customStrokeColor"
+        Layout.fillWidth: true
+        minimum: 0
+        maximum: 1
+        scrubStep: 0.05
+        value: section.opts.fromOpacity !== undefined ? Number(section.opts.fromOpacity) : 1
+        onCommitted: v => section.setOption("fromOpacity", v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        visible: section.preset === "customColor" || section.preset === "customStrokeColor"
+        text: qsTr("To opacity")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: section.preset === "customColor" || section.preset === "customStrokeColor"
+        Layout.fillWidth: true
+        minimum: 0
+        maximum: 1
+        scrubStep: 0.05
+        value: section.opts.toOpacity !== undefined ? Number(section.opts.toOpacity) : 1
+        onCommitted: v => section.setOption("toOpacity", v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
     }
 
     function setOption(role, value) {

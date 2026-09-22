@@ -68,7 +68,7 @@ QtObject {
     }
 
     function presetIds() {
-        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customFontSize", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customStrokeGradient", "customFontSize", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
     }
 
     // Stepped presets switch state instead of interpolating (bools or
@@ -124,6 +124,8 @@ QtObject {
             return qsTr("Stroke");
         if (presetId === "customStrokeColor")
             return qsTr("Stroke color");
+        if (presetId === "customStrokeGradient")
+            return qsTr("Stroke gradient");
         if (presetId === "customFontSize")
             return qsTr("Font size");
         if (presetId === "customFlip")
@@ -205,7 +207,9 @@ QtObject {
         if (presetId === "customColor")
             return {
                 from: "#000000",
-                to: "#ff0000"
+                to: "#ff0000",
+                fromOpacity: 1,
+                toOpacity: 1
             };
         if (presetId === "customGradient")
             return {
@@ -214,7 +218,9 @@ QtObject {
                 fromC2: "#ffffff",
                 toC2: "#ff0000",
                 fromAngle: 90,
-                toAngle: 90
+                toAngle: 90,
+                fromOpacity: 1,
+                toOpacity: 1
             };
         if (presetId === "customHide")
             return {
@@ -236,12 +242,33 @@ QtObject {
         if (presetId === "customStroke")
             return {
                 from: 0,
-                to: 4
+                to: 4,
+                fromOpacity: 1,
+                toOpacity: 1,
+                fromDash: 0,
+                toDash: 0,
+                fromGap: 0,
+                toGap: 0,
+                fromPosition: "center",
+                toPosition: "center"
             };
         if (presetId === "customStrokeColor")
             return {
                 from: "#000000",
-                to: "#ff0000"
+                to: "#ff0000",
+                fromOpacity: 1,
+                toOpacity: 1
+            };
+        if (presetId === "customStrokeGradient")
+            return {
+                fromC1: "#000000",
+                toC1: "#000000",
+                fromC2: "#ffffff",
+                toC2: "#ff0000",
+                fromAngle: 90,
+                toAngle: 90,
+                fromOpacity: 1,
+                toOpacity: 1
             };
         if (presetId === "customFontSize")
             return {
@@ -325,6 +352,17 @@ QtObject {
         if (isNaN(n))
             return fallback;
         return Math.min(hi, Math.max(lo, n));
+    }
+
+    function normalizeStrokePosition(v) {
+        return v === "inside" || v === "outside" ? v : "center";
+    }
+
+    function normalizeOpacity(v, fallback) {
+        var n = Number(v);
+        if (isNaN(n))
+            return fallback;
+        return Math.min(1, Math.max(0, n));
     }
 
     function normalizeHex(v, fallback) {
@@ -422,13 +460,21 @@ QtObject {
                 from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 1),
                 to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 1)
             };
-        if (presetId === "customColor")
-            return {
+        if (presetId === "customColor") {
+            var co = {
                 from: normalizeHex(r.from !== undefined ? r.from : "#000000", "#000000"),
                 to: normalizeHex(r.to !== undefined ? r.to : "#ff0000", "#ff0000")
             };
-        if (presetId === "customGradient")
-            return {
+            // Extended keys are opt-in: old clips without them stay
+            // color-only so they never stomp entry opacity.
+            if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
+                co.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
+                co.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
+            }
+            return co;
+        }
+        if (presetId === "customGradient") {
+            var cg = {
                 fromC1: normalizeHex(r.fromC1 !== undefined ? r.fromC1 : "#000000", "#000000"),
                 toC1: normalizeHex(r.toC1 !== undefined ? r.toC1 : "#000000", "#000000"),
                 fromC2: normalizeHex(r.fromC2 !== undefined ? r.fromC2 : "#ffffff", "#ffffff"),
@@ -436,6 +482,12 @@ QtObject {
                 fromAngle: clampNum(r.fromAngle !== undefined ? r.fromAngle : 90, 90, 0, 360),
                 toAngle: clampNum(r.toAngle !== undefined ? r.toAngle : 90, 90, 0, 360)
             };
+            if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
+                cg.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
+                cg.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
+            }
+            return cg;
+        }
         if (presetId === "customHide")
             return {
                 fromVisible: r.fromVisible === undefined ? true : !!r.fromVisible,
@@ -453,15 +505,50 @@ QtObject {
                 from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 500),
                 to: clampNum(r.to !== undefined ? r.to : 24, 24, 0, 500)
             };
-        if (presetId === "customStroke")
-            return {
+        if (presetId === "customStroke") {
+            var cs = {
                 from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 100),
                 to: clampNum(r.to !== undefined ? r.to : 4, 4, 0, 100)
             };
-        if (presetId === "customStrokeColor")
-            return {
+            // Extended keys are opt-in (see customColor): old
+            // width-only clips never gain them on rebuild.
+            if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
+                cs.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
+                cs.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
+            }
+            if (r.fromDash !== undefined || r.toDash !== undefined || r.fromGap !== undefined || r.toGap !== undefined) {
+                cs.fromDash = clampNum(r.fromDash !== undefined ? r.fromDash : 0, 0, 0, 100);
+                cs.toDash = clampNum(r.toDash !== undefined ? r.toDash : 0, 0, 0, 100);
+                cs.fromGap = clampNum(r.fromGap !== undefined ? r.fromGap : 0, 0, 0, 100);
+                cs.toGap = clampNum(r.toGap !== undefined ? r.toGap : 0, 0, 0, 100);
+            }
+            if (r.fromPosition !== undefined || r.toPosition !== undefined) {
+                cs.fromPosition = normalizeStrokePosition(r.fromPosition !== undefined ? r.fromPosition : "center");
+                cs.toPosition = normalizeStrokePosition(r.toPosition !== undefined ? r.toPosition : "center");
+            }
+            return cs;
+        }
+        if (presetId === "customStrokeColor") {
+            var cc2 = {
                 from: normalizeHex(r.from !== undefined ? r.from : "#000000", "#000000"),
                 to: normalizeHex(r.to !== undefined ? r.to : "#ff0000", "#ff0000")
+            };
+            if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
+                cc2.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
+                cc2.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
+            }
+            return cc2;
+        }
+        if (presetId === "customStrokeGradient")
+            return {
+                fromC1: normalizeHex(r.fromC1 !== undefined ? r.fromC1 : "#000000", "#000000"),
+                toC1: normalizeHex(r.toC1 !== undefined ? r.toC1 : "#000000", "#000000"),
+                fromC2: normalizeHex(r.fromC2 !== undefined ? r.fromC2 : "#ffffff", "#ffffff"),
+                toC2: normalizeHex(r.toC2 !== undefined ? r.toC2 : "#ff0000", "#ff0000"),
+                fromAngle: clampNum(r.fromAngle !== undefined ? r.fromAngle : 90, 90, 0, 360),
+                toAngle: clampNum(r.toAngle !== undefined ? r.toAngle : 90, 90, 0, 360),
+                fromOpacity: normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1),
+                toOpacity: normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1)
             };
         if (presetId === "customFontSize")
             return {

@@ -171,16 +171,18 @@ ScrollView {
             }
         }
 
-        // Custom Gradient (fill-gradient stops + angle).
+        // Custom Gradient (fill-gradient stops + angle, or
+        // stroke-gradient for the stroke variant).
         PanelSection {
             width: parent.width
             title: editor.presetTitle()
-            visible: !!editor.clipData && editor.clipData.preset === "customGradient"
+            visible: !!editor.clipData && (editor.clipData.preset === "customGradient" || editor.clipData.preset === "customStrokeGradient")
 
             ClipCustomGradientOptions {
                 Layout.fillWidth: true
                 doc: editor.doc
                 clipId: editor.clipId
+                gradientKind: !!editor.clipData && editor.clipData.preset === "customStrokeGradient" ? "stroke" : "fill"
             }
         }
 

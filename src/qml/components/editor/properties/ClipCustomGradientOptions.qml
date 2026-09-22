@@ -2,14 +2,17 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Custom Gradient editor: fill-gradient stop colors + angle from-to.
-// Absolute values give exact control; the gallery seeds From from the
-// live selection so new clips start jump-free.
+// Custom Gradient editor: fill- or stroke-gradient stop colors +
+// angle from-to, plus entry opacity. Absolute values give exact
+// control; the gallery seeds From from the live selection so new clips
+// start jump-free. gradientKind picks the stack ("fill" default,
+// "stroke" for the new stroke-gradient clip); both target entry 0.
 ColumnLayout {
     id: section
 
     required property var doc
     required property int clipId
+    property string gradientKind: "fill"
 
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property var opts: section.clip ? section.clip.options || {} : ({})
@@ -122,6 +125,40 @@ ColumnLayout {
         scrubStep: 1
         value: Number(section.opts.toAngle) || 0
         onCommitted: v => section.setOption("toAngle", v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        text: qsTr("From opacity")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        Layout.fillWidth: true
+        minimum: 0
+        maximum: 1
+        scrubStep: 0.05
+        value: section.opts.fromOpacity !== undefined ? Number(section.opts.fromOpacity) : 1
+        onCommitted: v => section.setOption("fromOpacity", v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        text: qsTr("To opacity")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        Layout.fillWidth: true
+        minimum: 0
+        maximum: 1
+        scrubStep: 0.05
+        value: section.opts.toOpacity !== undefined ? Number(section.opts.toOpacity) : 1
+        onCommitted: v => section.setOption("toOpacity", v)
         onScrubStarted: section.beginScrub()
         onScrubFinished: section.endScrub()
     }

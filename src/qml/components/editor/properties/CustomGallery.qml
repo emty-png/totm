@@ -287,6 +287,11 @@ ScrollView {
                         icon: "circle"
                     },
                     {
+                        id: "customStrokeGradient",
+                        name: qsTr("Stroke gradient"),
+                        icon: "circle"
+                    },
+                    {
                         id: "customStrokeColor",
                         name: qsTr("Stroke color"),
                         icon: "pen"

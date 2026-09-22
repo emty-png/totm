@@ -4,8 +4,10 @@ import Totm
 
 // Custom Other editors: Hide/Show (stepped bools), Flip axis (stepped
 // mirror), Resize (absolute box), Corner Radius and Stroke width
-// (absolute px). Resize centers on each leaf's own center; corner writes
-// all four when independent is on.
+// (absolute px). Stroke clips also carry entry opacity, dash pair and
+// position: width/opacity/dash lerp, position steps at the midpoint.
+// Resize centers on each leaf's own center; corner writes
+// all four when independent is on. All style targets are entry 0.
 ColumnLayout {
     id: section
 
@@ -246,6 +248,170 @@ ColumnLayout {
         onCommitted: v => section.setOption("to", v)
         onScrubStarted: section.beginScrub()
         onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        visible: section.preset === "customStroke"
+        text: qsTr("From opacity")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: section.preset === "customStroke"
+        Layout.fillWidth: true
+        minimum: 0
+        maximum: 1
+        scrubStep: 0.05
+        value: section.opts.fromOpacity !== undefined ? Number(section.opts.fromOpacity) : 1
+        onCommitted: v => section.setOption("fromOpacity", v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        visible: section.preset === "customStroke"
+        text: qsTr("To opacity")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: section.preset === "customStroke"
+        Layout.fillWidth: true
+        minimum: 0
+        maximum: 1
+        scrubStep: 0.05
+        value: section.opts.toOpacity !== undefined ? Number(section.opts.toOpacity) : 1
+        onCommitted: v => section.setOption("toOpacity", v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        visible: section.preset === "customStroke"
+        text: qsTr("From dash / gap (width units, 0 = solid)")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        visible: section.preset === "customStroke"
+        spacing: 8
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: 0
+            prefix: "D"
+            minimum: 0
+            maximum: 100
+            value: Number(section.opts.fromDash) || 0
+            onCommitted: v => section.setOption("fromDash", v)
+            onScrubStarted: section.beginScrub()
+            onScrubFinished: section.endScrub()
+        }
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: 0
+            prefix: "G"
+            minimum: 0
+            maximum: 100
+            value: Number(section.opts.fromGap) || 0
+            onCommitted: v => section.setOption("fromGap", v)
+            onScrubStarted: section.beginScrub()
+            onScrubFinished: section.endScrub()
+        }
+    }
+
+    Text {
+        visible: section.preset === "customStroke"
+        text: qsTr("To dash / gap (width units, 0 = solid)")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        visible: section.preset === "customStroke"
+        spacing: 8
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: 0
+            prefix: "D"
+            minimum: 0
+            maximum: 100
+            value: Number(section.opts.toDash) || 0
+            onCommitted: v => section.setOption("toDash", v)
+            onScrubStarted: section.beginScrub()
+            onScrubFinished: section.endScrub()
+        }
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: 0
+            prefix: "G"
+            minimum: 0
+            maximum: 100
+            value: Number(section.opts.toGap) || 0
+            onCommitted: v => section.setOption("toGap", v)
+            onScrubStarted: section.beginScrub()
+            onScrubFinished: section.endScrub()
+        }
+    }
+
+    Text {
+        visible: section.preset === "customStroke"
+        text: qsTr("From position")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        visible: section.preset === "customStroke"
+        spacing: 8
+        SegmentedOption {
+            label: qsTr("Center")
+            active: (section.opts.fromPosition || "center") === "center"
+            onClicked: section.setOption("fromPosition", "center")
+        }
+        SegmentedOption {
+            label: qsTr("Inside")
+            active: section.opts.fromPosition === "inside"
+            onClicked: section.setOption("fromPosition", "inside")
+        }
+        SegmentedOption {
+            label: qsTr("Outside")
+            active: section.opts.fromPosition === "outside"
+            onClicked: section.setOption("fromPosition", "outside")
+        }
+    }
+
+    Text {
+        visible: section.preset === "customStroke"
+        text: qsTr("To position")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        visible: section.preset === "customStroke"
+        spacing: 8
+        SegmentedOption {
+            label: qsTr("Center")
+            active: (section.opts.toPosition || "center") === "center"
+            onClicked: section.setOption("toPosition", "center")
+        }
+        SegmentedOption {
+            label: qsTr("Inside")
+            active: section.opts.toPosition === "inside"
+            onClicked: section.setOption("toPosition", "inside")
+        }
+        SegmentedOption {
+            label: qsTr("Outside")
+            active: section.opts.toPosition === "outside"
+            onClicked: section.setOption("toPosition", "outside")
+        }
     }
 
     function setOption(role, value) {

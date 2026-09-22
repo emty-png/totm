@@ -18,27 +18,39 @@ QtObject {
             };
         }
         if (presetId === "customColor" && leaf) {
-            var fill = String(leaf.fill || "#000000");
+            var fills0 = (leaf.fills && leaf.fills.length > 0 ? leaf.fills[0] : {}) ?? {};
+            var fill = String(fills0.color ?? leaf.fill ?? "#000000");
+            var fop = fills0.opacity !== undefined ? Math.min(1, Math.max(0, Number(fills0.opacity))) : 1;
+            if (isNaN(fop))
+                fop = 1;
             return {
                 from: fill,
-                to: "#ff0000"
+                to: "#ff0000",
+                fromOpacity: Math.round(fop * 100) / 100,
+                toOpacity: Math.round(fop * 100) / 100
             };
         }
         if (presetId === "customGradient" && leaf) {
-            var fg = leaf.fillGradient ?? {};
+            var f0 = (leaf.fills && leaf.fills.length > 0 ? leaf.fills[0] : {}) ?? {};
+            var fg = f0.gradient ?? leaf.fillGradient ?? {};
             var fstops = fg.stops ?? [];
-            var fc1 = fstops.length > 0 ? String(fstops[0].color) : String(leaf.fill || "#000000");
+            var fc1 = fstops.length > 0 ? String(fstops[0].color) : String(f0.color ?? leaf.fill ?? "#000000");
             var fc2 = fstops.length > 1 ? String(fstops[1].color) : "#ffffff";
             var fang = Number(fg.angle);
             if (isNaN(fang))
                 fang = 90;
+            var fgop = f0.opacity !== undefined ? Math.min(1, Math.max(0, Number(f0.opacity))) : 1;
+            if (isNaN(fgop))
+                fgop = 1;
             return {
                 fromC1: fc1,
                 toC1: fc1,
                 fromC2: fc2,
                 toC2: "#ff0000",
                 fromAngle: Math.round(fang * 100) / 100,
-                toAngle: Math.round(fang * 100) / 100
+                toAngle: Math.round(fang * 100) / 100,
+                fromOpacity: Math.round(fgop * 100) / 100,
+                toOpacity: Math.round(fgop * 100) / 100
             };
         }
         if (presetId === "customShadow" && leaf) {
@@ -128,17 +140,62 @@ QtObject {
             };
         }
         if (presetId === "customStroke" && leaf) {
-            var sw = Math.max(0, Number(leaf.strokeWidth) || 0);
+            var s0 = (leaf.strokes && leaf.strokes.length > 0 ? leaf.strokes[0] : {}) ?? {};
+            var sw = Math.max(0, Number(s0.width ?? leaf.strokeWidth) || 0);
+            var sop = s0.opacity !== undefined ? Math.min(1, Math.max(0, Number(s0.opacity))) : 1;
+            if (isNaN(sop))
+                sop = 1;
+            var sd = (s0.dash && typeof s0.dash.length === "number") ? s0.dash : [];
+            var sdash = sd.length > 0 ? Math.max(0, Number(sd[0]) || 0) : 0;
+            var sgap = sd.length > 1 ? Math.max(0, Number(sd[1]) || 0) : 0;
+            var spos = (s0.position === "inside" || s0.position === "outside") ? s0.position : "center";
             return {
                 from: Math.round(sw * 100) / 100,
-                to: sw === 0 ? 4 : 0
+                to: sw === 0 ? 4 : 0,
+                fromOpacity: Math.round(sop * 100) / 100,
+                toOpacity: Math.round(sop * 100) / 100,
+                fromDash: Math.round(sdash * 100) / 100,
+                toDash: Math.round(sdash * 100) / 100,
+                fromGap: Math.round(sgap * 100) / 100,
+                toGap: Math.round(sgap * 100) / 100,
+                fromPosition: spos,
+                toPosition: spos
             };
         }
         if (presetId === "customStrokeColor" && leaf) {
-            var sc = String(leaf.stroke || "#000000");
+            var s1 = (leaf.strokes && leaf.strokes.length > 0 ? leaf.strokes[0] : {}) ?? {};
+            var sc = String(s1.color ?? leaf.stroke ?? "#000000");
+            var scop = s1.opacity !== undefined ? Math.min(1, Math.max(0, Number(s1.opacity))) : 1;
+            if (isNaN(scop))
+                scop = 1;
             return {
                 from: sc,
-                to: "#ff0000"
+                to: "#ff0000",
+                fromOpacity: Math.round(scop * 100) / 100,
+                toOpacity: Math.round(scop * 100) / 100
+            };
+        }
+        if (presetId === "customStrokeGradient" && leaf) {
+            var sg0 = (leaf.strokes && leaf.strokes.length > 0 ? leaf.strokes[0] : {}) ?? {};
+            var sgg = sg0.gradient ?? {};
+            var sgstops = sgg.stops ?? [];
+            var sgc1 = sgstops.length > 0 ? String(sgstops[0].color) : String(sg0.color ?? "#000000");
+            var sgc2 = sgstops.length > 1 ? String(sgstops[1].color) : "#ffffff";
+            var sgang = Number(sgg.angle);
+            if (isNaN(sgang))
+                sgang = 90;
+            var sgop = sg0.opacity !== undefined ? Math.min(1, Math.max(0, Number(sg0.opacity))) : 1;
+            if (isNaN(sgop))
+                sgop = 1;
+            return {
+                fromC1: sgc1,
+                toC1: sgc1,
+                fromC2: sgc2,
+                toC2: "#ff0000",
+                fromAngle: Math.round(sgang * 100) / 100,
+                toAngle: Math.round(sgang * 100) / 100,
+                fromOpacity: Math.round(sgop * 100) / 100,
+                toOpacity: Math.round(sgop * 100) / 100
             };
         }
         if (presetId === "customFontSize" && leaf) {
