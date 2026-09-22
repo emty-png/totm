@@ -20,9 +20,18 @@ PanelSection {
     required property var doc
 
     title: qsTr("Export")
-    showAdd: section.format === "png" && section.scales.length < 3
-    onAddClicked: section.addScale()
+    // Collapsible: + expands the options, - collapses them again.
+    // The scale-row + lives inside the body (see below) now that the
+    // header toggle owns expand/collapse.
+    showAdd: !section.expanded
+    showRemove: section.expanded
+    compact: !section.expanded
+    onAddClicked: section.expanded = true
+    onRemoveClicked: section.expanded = false
     visible: section.hasSelection()
+
+    // Collapsed by default; expands on + and stays until - .
+    property bool expanded: false
 
     // Export format (PNG raster at scales, SVG vector without scales)
     // plus per-row scales for PNG. Reassigned wholesale so Repeaters
@@ -134,6 +143,30 @@ PanelSection {
             label: qsTr("SVG")
             active: section.format === "svg"
             onClicked: section.format = "svg"
+        }
+    }
+
+    // Scale rows own their + now that the header toggle owns
+    // expand/collapse.
+    RowLayout {
+        visible: section.format === "png"
+        Layout.fillWidth: true
+        spacing: 4
+
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Scales")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        PanelIconButton {
+            iconKind: "plus"
+            filled: false
+            strong: true
+            iconSize: 16
+            visible: section.scales.length < 3
+            onClicked: section.addScale()
         }
     }
 
