@@ -357,6 +357,9 @@ QtObject {
     function visibleRowList() {
         return layers.visibleRowList();
     }
+    function visibleRowListFiltered(filter) {
+        return layers.visibleRowListFiltered(filter);
+    }
     function dropTargetForGap(gap) {
         return layers.dropTargetForGap(gap);
     }

@@ -54,6 +54,69 @@ QtObject {
         return out;
     }
 
+    // Filtered structural rows for the layers search field. Matches by
+    // name or shape type (case-insensitive); groups auto-expand while
+    // filtering so hits stay visible. A matching group shows its whole
+    // subtree; a hit under a plain group pulls its ancestor chain
+    // along so the hierarchy still reads. Blank queries fall back to
+    // visibleRowList. Touches rev too so live renames re-filter (rename
+    // only bumps rev, never structRev).
+    function visibleRowListFiltered(filter) {
+        doc.structRev;
+        doc.rev;
+        var q = (filter || "").trim().toLowerCase();
+        if (!q)
+            return visibleRowList();
+        var out = [];
+        var isMatch = node => {
+            if ((node.name || "").toLowerCase().indexOf(q) !== -1)
+                return true;
+            return (node.shapeType || "").toLowerCase().indexOf(q) !== -1;
+        };
+        var subtreeHasMatch = list => {
+            for (var i = 0; i < list.length; i++) {
+                if (isMatch(list[i]))
+                    return true;
+                if (list[i].kind === "group" && subtreeHasMatch(list[i].children))
+                    return true;
+            }
+            return false;
+        };
+        var pushAll = (list, level) => {
+            for (var j = 0; j < list.length; j++) {
+                out.push({
+                    node: list[j],
+                    level: level
+                });
+                if (list[j].kind === "group")
+                    pushAll(list[j].children, level + 1);
+            }
+        };
+        var walk = (list, level) => {
+            for (var k = 0; k < list.length; k++) {
+                var node = list[k];
+                if (isMatch(node)) {
+                    out.push({
+                        node: node,
+                        level: level
+                    });
+                    if (node.kind === "group")
+                        pushAll(node.children, level + 1);
+                } else if (node.kind === "group") {
+                    if (subtreeHasMatch(node.children)) {
+                        out.push({
+                            node: node,
+                            level: level
+                        });
+                        walk(node.children, level + 1);
+                    }
+                }
+            }
+        };
+        walk(doc.rootChildren, 0);
+        return out;
+    }
+
     function dropTargetForGap(gap) {
         var rows = visibleRowList();
         var n = rows.length;

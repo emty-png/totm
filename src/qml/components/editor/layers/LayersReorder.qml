@@ -14,6 +14,8 @@ QtObject {
         view.forceActiveFocus();
         if (!view.doc)
             return;
+        if ((view.filter || "").trim() !== "")
+            return;
         if (!!(mods & (Qt.ShiftModifier | Qt.ControlModifier | Qt.MetaModifier)))
             return;
         var hit = view.doc._find(uid);
@@ -73,12 +75,15 @@ QtObject {
             var it = rows.itemAt(i);
             if (!it)
                 continue;
-            if (y < it.y + it.height / 2) {
+            // Rows live in the scrolled content, so read view coords
+            // (dropY feeds the panel indicator, which shares them).
+            var iy0 = it.mapToItem(view, 0, 0).y;
+            if (y < iy0 + it.height / 2) {
                 idx = i;
-                iy = it.y;
+                iy = iy0;
                 break;
             }
-            iy = it.y + it.height;
+            iy = iy0 + it.height;
         }
         view.dropIndex = idx;
         view.dropY = iy;
