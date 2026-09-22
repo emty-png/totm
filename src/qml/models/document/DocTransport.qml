@@ -107,12 +107,10 @@ QtObject {
                 fontSize: n.fontSize,
                 shapeType: n.shapeType,
                 textContent: n.textContent,
-                fill: String(n.fill),
-                stroke: String(n.stroke),
+                fills: doc.factory._copyFills(n.fills, n),
+                strokes: doc.factory._copyStrokes(n.strokes, n),
                 flipH: n.flipH === true,
                 flipV: n.flipV === true,
-                fillType: n.fillType ?? "solid",
-                fillGradient: doc.factory._copyGradient(n.fillGradient),
                 shadows: doc.factory._copyShadows(n.shadows),
                 glows: doc.factory._copyGlows(n.glows),
                 layerBlur: doc.factory._copyBlur(n.layerBlur, 8, 1),
@@ -120,7 +118,6 @@ QtObject {
                 grain: doc.factory._copyGrain(n.grain),
                 visible: n.visible,
                 radius: n.radius,
-                strokeWidth: n.strokeWidth,
                 penFill: n.penFill !== false,
                 strokeCap: n.strokeCap ?? "round",
                 strokeJoin: n.strokeJoin ?? "round",
@@ -153,18 +150,22 @@ QtObject {
             n.h = b.h;
             n.rotation = b.rotation;
             n.opacity = b.opacity;
-            if (b.fill !== undefined)
-                n.fill = b.fill;
-            if (b.stroke !== undefined)
-                n.stroke = b.stroke;
+            if (b.fills !== undefined)
+                n.fills = doc.factory._copyFills(b.fills, b);
+            else {
+                if (b.fill !== undefined)
+                    n.fills = doc.factory._copyFills(undefined, b);
+            }
+            if (b.strokes !== undefined)
+                n.strokes = doc.factory._copyStrokes(b.strokes, b);
+            else {
+                if (b.stroke !== undefined)
+                    n.strokes = doc.factory._copyStrokes(undefined, b);
+            }
             if (b.flipH !== undefined)
                 n.flipH = b.flipH === true;
             if (b.flipV !== undefined)
                 n.flipV = b.flipV === true;
-            if (b.fillType !== undefined)
-                n.fillType = b.fillType;
-            if (b.fillGradient !== undefined)
-                n.fillGradient = doc.factory._copyGradient(b.fillGradient);
             if (b.shadows !== undefined)
                 n.shadows = doc.factory._copyShadows(b.shadows);
             if (b.glows !== undefined)
@@ -179,8 +180,6 @@ QtObject {
                 n.visible = b.visible;
             if (b.radius !== undefined)
                 n.radius = b.radius;
-            if (b.strokeWidth !== undefined)
-                n.strokeWidth = b.strokeWidth;
             if (b.penFill !== undefined)
                 n.penFill = b.penFill !== false;
             if (b.strokeCap !== undefined)

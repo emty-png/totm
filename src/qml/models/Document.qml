@@ -609,6 +609,70 @@ QtObject {
         history.checkpoint();
         edits.recolorSelected(oldFill, newFill);
     }
+    function addFillToSelected() {
+        history.checkpoint();
+        edits.addFillToSelected();
+    }
+    function addStrokeToSelected() {
+        history.checkpoint();
+        edits.addStrokeToSelected();
+    }
+    function removeFillAt(uid, index) {
+        history.checkpoint();
+        edits.removeFillAt(uid, index);
+    }
+    function removeStrokeAt(uid, index) {
+        history.checkpoint();
+        edits.removeStrokeAt(uid, index);
+    }
+    function moveFill(uid, from, to) {
+        history.checkpoint();
+        edits.moveFill(uid, from, to);
+    }
+    function moveStroke(uid, from, to) {
+        history.checkpoint();
+        edits.moveStroke(uid, from, to);
+    }
+    function setFillEntry(uid, index, patch) {
+        history.checkpoint();
+        edits.setFillEntry(uid, index, patch);
+    }
+    function setStrokeEntry(uid, index, patch) {
+        history.checkpoint();
+        edits.setStrokeEntry(uid, index, patch);
+    }
+    function patchFillAtSelected(at, patch) {
+        history.checkpoint();
+        edits.patchFillAtSelected(at, patch);
+    }
+    function patchStrokeAtSelected(at, patch) {
+        history.checkpoint();
+        edits.patchStrokeAtSelected(at, patch);
+    }
+    function toggleFillAtSelected(at) {
+        history.checkpoint();
+        edits.toggleFillAtSelected(at);
+    }
+    function toggleStrokeAtSelected(at) {
+        history.checkpoint();
+        edits.toggleStrokeAtSelected(at);
+    }
+    function moveFillAtSelected(at, delta) {
+        history.checkpoint();
+        edits.moveFillAtSelected(at, delta);
+    }
+    function moveStrokeAtSelected(at, delta) {
+        history.checkpoint();
+        edits.moveStrokeAtSelected(at, delta);
+    }
+    function removeFillAtSelected(at) {
+        history.checkpoint();
+        edits.removeFillAtSelected(at);
+    }
+    function removeStrokeAtSelected(at) {
+        history.checkpoint();
+        edits.removeStrokeAtSelected(at);
+    }
     function penMovePoint(uid, sub, idx, dx, dy) {
         history.checkpoint();
         return penOps.movePoint(uid, sub, idx, dx, dy);

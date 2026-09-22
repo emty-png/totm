@@ -9,7 +9,9 @@ QtObject {
         var uid = doc.nextNodeUid++;
         var s = snap ?? {};
         // Every field defaults: creation snapshots carry geometry only,
-        // clipboard snapshots carry the full style set.
+        // clipboard snapshots carry the full style set. Legacy single
+        // fill/stroke keys (pre-stack scenes) fold into one-entry
+        // stacks so old snapshots never crash; new code writes stacks.
         var n = doc.nodeFactory.createObject(doc, {
             uid: uid,
             kind: "shape",
@@ -20,14 +22,8 @@ QtObject {
             w: s.w ?? 10,
             h: s.h ?? 10,
             rotation: s.rotation ?? 0,
-            fill: s.fill ?? "#d9d9d9",
-            fillType: s.fillType ?? "solid",
-            fillGradient: factory._copyGradient(s.fillGradient),
-            stroke: s.stroke ?? "#000000",
-            strokeType: s.strokeType ?? "solid",
-            strokeGradient: factory._copyGradient(s.strokeGradient),
-            strokeWidth: s.strokeWidth ?? 0,
-            strokeDash: factory._copyDash(s.strokeDash),
+            fills: factory._copyFills(s.fills, s),
+            strokes: factory._copyStrokes(s.strokes, s),
             penFill: s.penFill !== false,
             strokeCap: s.strokeCap ?? "round",
             strokeJoin: s.strokeJoin ?? "round",
@@ -85,6 +81,111 @@ QtObject {
         for (var i = 0; i < src.length && i < 2; i++)
             out.push(Math.max(0, Number(src[i]) || 0));
         return out;
+    }
+
+    function _copyFillEntry(src) {
+        var d = src ?? {};
+        var t = String(d.type ?? d.fillType ?? "solid");
+        if (t !== "linear")
+            t = "solid";
+        var op = d.opacity !== undefined ? Number(d.opacity) : 1;
+        if (isNaN(op))
+            op = 1;
+        return {
+            enabled: d.enabled !== false,
+            color: String(d.color ?? d.fill ?? "#d9d9d9"),
+            type: t,
+            gradient: factory._copyGradient(d.gradient ?? d.fillGradient),
+            opacity: Math.min(1, Math.max(0, op))
+        };
+    }
+
+    // Stacked fills, index 0 topmost. Legacy single fill keys fold
+    // into one entry; missing input defaults to one solid fill so
+    // creation snapshots render like before.
+    function _copyFills(src, legacy) {
+        if (src && typeof src.length === "number") {
+            var out = [];
+            for (var i = 0; i < src.length; i++)
+                out.push(factory._copyFillEntry(src[i]));
+            return out;
+        }
+        if (src && typeof src === "object")
+            return [factory._copyFillEntry(src)];
+        var l = legacy ?? {};
+        if (l.fill !== undefined || l.fillType !== undefined || l.fillGradient !== undefined)
+            return [factory._copyFillEntry({
+                    enabled: true,
+                    color: l.fill ?? "#d9d9d9",
+                    type: l.fillType ?? "solid",
+                    gradient: l.fillGradient,
+                    opacity: 1
+                })];
+        return [factory._copyFillEntry({})];
+    }
+
+    function _copyStrokeEntry(src) {
+        var d = src ?? {};
+        var t = String(d.type ?? d.strokeType ?? "solid");
+        if (t !== "linear")
+            t = "solid";
+        var pos = String(d.position ?? "center");
+        if (pos !== "inside" && pos !== "outside")
+            pos = "center";
+        var op = d.opacity !== undefined ? Number(d.opacity) : 1;
+        if (isNaN(op))
+            op = 1;
+        return {
+            enabled: d.enabled !== false,
+            color: String(d.color ?? d.stroke ?? "#000000"),
+            type: t,
+            gradient: factory._copyGradient(d.gradient ?? d.strokeGradient),
+            width: Math.max(0, Number(d.width ?? d.strokeWidth) || 0),
+            dash: factory._copyDash(d.dash ?? d.strokeDash),
+            position: pos,
+            opacity: Math.min(1, Math.max(0, op))
+        };
+    }
+
+    // Stacked strokes, index 0 topmost. Legacy single stroke keys
+    // fold into one entry; missing input defaults to no stroke
+    // (width 0) so creation snapshots stay stroke-free.
+    function _copyStrokes(src, legacy) {
+        if (src && typeof src.length === "number") {
+            var out = [];
+            for (var i = 0; i < src.length; i++)
+                out.push(factory._copyStrokeEntry(src[i]));
+            return out;
+        }
+        if (src && typeof src === "object")
+            return [factory._copyStrokeEntry(src)];
+        var l = legacy ?? {};
+        if (l.stroke !== undefined || l.strokeType !== undefined || l.strokeWidth !== undefined || l.strokeDash !== undefined || l.strokeGradient !== undefined)
+            return [factory._copyStrokeEntry({
+                    enabled: true,
+                    color: l.stroke ?? "#000000",
+                    type: l.strokeType ?? "solid",
+                    gradient: l.strokeGradient,
+                    width: l.strokeWidth ?? 0,
+                    dash: l.strokeDash,
+                    position: "center",
+                    opacity: 1
+                })];
+        return [factory._copyStrokeEntry({
+                color: "#000000",
+                width: 0
+            })];
+    }
+
+    function defaultFill() {
+        return factory._copyFillEntry({});
+    }
+
+    function defaultStroke() {
+        return factory._copyStrokeEntry({
+            color: "#000000",
+            width: 1
+        });
     }
 
     // Deep copy so snapshots never share point objects with live nodes.
@@ -343,11 +444,11 @@ QtObject {
     }
 
     // SVG vector import: batch-creates pen shapes from parsed entries
-    // ([{pathData, fill, penFill, stroke, strokeWidth, strokeCap,
-    // strokeJoin}]) stamped at (baseX, baseY) with scale factors, grouped
-    // under groupName when several land. No checkpoint inside: the
-    // Document wrapper owns the single undo entry. Returns the pen or
-    // group uid, -1 when nothing lands.
+    // ([{pathData, fills, strokes, fill, penFill, stroke, strokeWidth,
+    // strokeCap, strokeJoin}]) stamped at (baseX, baseY) with scale
+    // factors, grouped under groupName when several land. No checkpoint
+    // inside: the Document wrapper owns the single undo entry. Returns
+    // the pen or group uid, -1 when nothing lands.
     function importSvgPaths(entries, groupName, baseX, baseY, scaleX, scaleY) {
         var container = doc._activeContainerUid();
         doc.clearSelection();
@@ -373,17 +474,38 @@ QtObject {
             if (total === 0)
                 continue;
             var box = factory.penBBoxFor(clean);
+            // New importers hand fills/strokes directly; legacy single
+            // keys fold through _copyFills/_copyStrokes inside the node.
+            var swScaled = Math.max(0, Number(e.strokeWidth) || 0) * (sx + sy) / 2;
             var n = _makeShapeNode("pen", {
                 x: box.x,
                 y: box.y,
                 w: box.w,
                 h: box.h,
                 pathData: clean,
+                fills: e.fills ?? (e.fill !== undefined ? [
+                        {
+                            enabled: true,
+                            color: e.fill ?? "#000000",
+                            type: "solid",
+                            opacity: 1
+                        }
+                    ] : undefined),
+                strokes: e.strokes ?? (e.stroke !== undefined || e.strokeWidth !== undefined ? [
+                        {
+                            enabled: true,
+                            color: e.stroke ?? "#000000",
+                            type: "solid",
+                            width: swScaled,
+                            position: "center",
+                            opacity: 1
+                        }
+                    ] : undefined),
                 fill: e.fill ?? "#000000",
                 penFill: e.penFill !== false,
                 stroke: e.stroke ?? "#000000",
                 strokeType: "solid",
-                strokeWidth: Math.max(0, Number(e.strokeWidth) || 0) * (sx + sy) / 2,
+                strokeWidth: swScaled,
                 strokeCap: e.strokeCap ?? "round",
                 strokeJoin: e.strokeJoin ?? "round"
             });

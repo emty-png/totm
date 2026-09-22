@@ -270,16 +270,332 @@ QtObject {
         doc.touch();
     }
 
-    // Recolor one fill variant within the selection only. A global
-    // replace-all would repaint same-colored shapes the user never
-    // selected, so this stays scoped like every other panel edit.
+    // Recolor one fill color within the selection only (compat for
+    // stacked fills: every matching entry across the selection takes
+    // the new color). Scoped like every other panel edit.
     function recolorSelected(oldFill, newFill) {
         var leaves = doc._selectedLeaves();
         for (var i = 0; i < leaves.length; i++) {
-            if (String(leaves[i].fill) === String(oldFill) && !doc.isEffectivelyLocked(leaves[i]))
-                leaves[i].fill = newFill;
+            if (doc.isEffectivelyLocked(leaves[i]))
+                continue;
+            var arr = doc.factory._copyFills(leaves[i].fills, leaves[i]);
+            var changed = false;
+            for (var j = 0; j < arr.length; j++) {
+                if (String(arr[j].color) === String(oldFill)) {
+                    arr[j].color = String(newFill);
+                    changed = true;
+                }
+            }
+            if (changed)
+                leaves[i].fills = arr;
         }
         doc.touch();
+    }
+
+    // Stacked paint edits. Arrays reassign wholesale so var bindings
+    // fire; every entry round-trips through the factory copy so live
+    // nodes never share objects with snapshots.
+    function _unlockedLeaves() {
+        var out = [];
+        var leaves = doc._selectedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            if (!doc.isEffectivelyLocked(leaves[i]))
+                out.push(leaves[i]);
+        }
+        return out;
+    }
+
+    function addFillToSelected() {
+        var leaves = _unlockedLeaves();
+        for (var i = 0; i < leaves.length; i++)
+            leaves[i].fills = [doc.factory.defaultFill()].concat(doc.factory._copyFills(leaves[i].fills, leaves[i]));
+        if (leaves.length > 0)
+            doc.touch();
+    }
+
+    function addStrokeToSelected() {
+        var leaves = _unlockedLeaves();
+        for (var i = 0; i < leaves.length; i++)
+            leaves[i].strokes = [doc.factory.defaultStroke()].concat(doc.factory._copyStrokes(leaves[i].strokes, leaves[i]));
+        if (leaves.length > 0)
+            doc.touch();
+    }
+
+    function removeFillAt(uid, index) {
+        var n = doc.findNode(uid);
+        if (!n || n.kind !== "shape" || doc.isEffectivelyLocked(n))
+            return;
+        var arr = doc.factory._copyFills(n.fills, n);
+        if (index < 0 || index >= arr.length)
+            return;
+        arr.splice(index, 1);
+        n.fills = arr;
+        doc.touch();
+    }
+
+    function removeStrokeAt(uid, index) {
+        var n = doc.findNode(uid);
+        if (!n || n.kind !== "shape" || doc.isEffectivelyLocked(n))
+            return;
+        var arr = doc.factory._copyStrokes(n.strokes, n);
+        if (index < 0 || index >= arr.length)
+            return;
+        arr.splice(index, 1);
+        n.strokes = arr;
+        doc.touch();
+    }
+
+    function moveFill(uid, from, to) {
+        var n = doc.findNode(uid);
+        if (!n || n.kind !== "shape" || doc.isEffectivelyLocked(n))
+            return;
+        var arr = doc.factory._copyFills(n.fills, n);
+        if (from < 0 || from >= arr.length || to < 0 || to >= arr.length || from === to)
+            return;
+        var entry = arr.splice(from, 1)[0];
+        arr.splice(to, 0, entry);
+        n.fills = arr;
+        doc.touch();
+    }
+
+    function moveStroke(uid, from, to) {
+        var n = doc.findNode(uid);
+        if (!n || n.kind !== "shape" || doc.isEffectivelyLocked(n))
+            return;
+        var arr = doc.factory._copyStrokes(n.strokes, n);
+        if (from < 0 || from >= arr.length || to < 0 || to >= arr.length || from === to)
+            return;
+        var entry = arr.splice(from, 1)[0];
+        arr.splice(to, 0, entry);
+        n.strokes = arr;
+        doc.touch();
+    }
+
+    function setFillEntry(uid, index, patch) {
+        var n = doc.findNode(uid);
+        if (!n || n.kind !== "shape" || doc.isEffectivelyLocked(n))
+            return;
+        var arr = doc.factory._copyFills(n.fills, n);
+        if (index < 0 || index >= arr.length)
+            return;
+        var p = patch ?? {};
+        var cur = arr[index];
+        if (p.color !== undefined)
+            cur.color = String(p.color);
+        if (p.type !== undefined)
+            cur.type = p.type === "linear" ? "linear" : "solid";
+        if (p.gradient !== undefined)
+            cur.gradient = doc.factory._copyGradient(p.gradient);
+        if (p.opacity !== undefined)
+            cur.opacity = Math.min(1, Math.max(0, Number(p.opacity)));
+        if (p.enabled !== undefined)
+            cur.enabled = p.enabled !== false;
+        arr[index] = doc.factory._copyFillEntry(cur);
+        n.fills = arr;
+        doc.touch();
+    }
+
+    function setStrokeEntry(uid, index, patch) {
+        var n = doc.findNode(uid);
+        if (!n || n.kind !== "shape" || doc.isEffectivelyLocked(n))
+            return;
+        var arr = doc.factory._copyStrokes(n.strokes, n);
+        if (index < 0 || index >= arr.length)
+            return;
+        var p = patch ?? {};
+        var cur = arr[index];
+        if (p.color !== undefined)
+            cur.color = String(p.color);
+        if (p.type !== undefined)
+            cur.type = p.type === "linear" ? "linear" : "solid";
+        if (p.gradient !== undefined)
+            cur.gradient = doc.factory._copyGradient(p.gradient);
+        if (p.width !== undefined)
+            cur.width = Math.max(0, Number(p.width) || 0);
+        if (p.dash !== undefined)
+            cur.dash = doc.factory._copyDash(p.dash);
+        if (p.position !== undefined)
+            cur.position = (p.position === "inside" || p.position === "outside") ? p.position : "center";
+        if (p.opacity !== undefined)
+            cur.opacity = Math.min(1, Math.max(0, Number(p.opacity)));
+        if (p.enabled !== undefined)
+            cur.enabled = p.enabled !== false;
+        arr[index] = doc.factory._copyStrokeEntry(cur);
+        n.strokes = arr;
+        doc.touch();
+    }
+
+    // Bulk per-index edits across the selection (one undo entry via
+    // the Document wrapper's single checkpoint). Leaves missing the
+    // index are skipped; adds/removes apply to every unlocked leaf.
+    function patchFillAtSelected(at, patch) {
+        var leaves = _unlockedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            var arr = doc.factory._copyFills(leaves[i].fills, leaves[i]);
+            if (at < 0 || at >= arr.length)
+                continue;
+            var cur = arr[at];
+            var p = patch ?? {};
+            if (p.color !== undefined)
+                cur.color = String(p.color);
+            if (p.type !== undefined)
+                cur.type = p.type === "linear" ? "linear" : "solid";
+            if (p.gradient !== undefined)
+                cur.gradient = doc.factory._copyGradient(p.gradient);
+            if (p.opacity !== undefined)
+                cur.opacity = Math.min(1, Math.max(0, Number(p.opacity)));
+            if (p.enabled !== undefined)
+                cur.enabled = p.enabled !== false;
+            arr[at] = doc.factory._copyFillEntry(cur);
+            leaves[i].fills = arr;
+        }
+        if (leaves.length > 0)
+            doc.touch();
+    }
+
+    function patchStrokeAtSelected(at, patch) {
+        var leaves = _unlockedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            var arr = doc.factory._copyStrokes(leaves[i].strokes, leaves[i]);
+            if (at < 0 || at >= arr.length)
+                continue;
+            var cur = arr[at];
+            var p = patch ?? {};
+            if (p.color !== undefined)
+                cur.color = String(p.color);
+            if (p.type !== undefined)
+                cur.type = p.type === "linear" ? "linear" : "solid";
+            if (p.gradient !== undefined)
+                cur.gradient = doc.factory._copyGradient(p.gradient);
+            if (p.width !== undefined)
+                cur.width = Math.max(0, Number(p.width) || 0);
+            if (p.dash !== undefined)
+                cur.dash = doc.factory._copyDash(p.dash);
+            if (p.position !== undefined)
+                cur.position = (p.position === "inside" || p.position === "outside") ? p.position : "center";
+            if (p.opacity !== undefined)
+                cur.opacity = Math.min(1, Math.max(0, Number(p.opacity)));
+            if (p.enabled !== undefined)
+                cur.enabled = p.enabled !== false;
+            arr[at] = doc.factory._copyStrokeEntry(cur);
+            leaves[i].strokes = arr;
+        }
+        if (leaves.length > 0)
+            doc.touch();
+    }
+
+    function toggleFillAtSelected(at) {
+        var leaves = _unlockedLeaves();
+        var nextOn = true;
+        var found = false;
+        for (var i = 0; i < leaves.length; i++) {
+            var arr = doc.factory._copyFills(leaves[i].fills, leaves[i]);
+            if (at < 0 || at >= arr.length)
+                continue;
+            if (!found) {
+                nextOn = !(arr[at].enabled !== false);
+                found = true;
+            }
+        }
+        for (var j = 0; j < leaves.length; j++) {
+            var list = doc.factory._copyFills(leaves[j].fills, leaves[j]);
+            if (at < 0 || at >= list.length)
+                continue;
+            list[at] = doc.factory._copyFillEntry(Object.assign({}, list[at], {
+                enabled: nextOn
+            }));
+            leaves[j].fills = list;
+        }
+        if (leaves.length > 0)
+            doc.touch();
+    }
+
+    function toggleStrokeAtSelected(at) {
+        var leaves = _unlockedLeaves();
+        var nextOn = true;
+        var found = false;
+        for (var i = 0; i < leaves.length; i++) {
+            var arr = doc.factory._copyStrokes(leaves[i].strokes, leaves[i]);
+            if (at < 0 || at >= arr.length)
+                continue;
+            if (!found) {
+                nextOn = !(arr[at].enabled !== false);
+                found = true;
+            }
+        }
+        for (var j = 0; j < leaves.length; j++) {
+            var list = doc.factory._copyStrokes(leaves[j].strokes, leaves[j]);
+            if (at < 0 || at >= list.length)
+                continue;
+            list[at] = doc.factory._copyStrokeEntry(Object.assign({}, list[at], {
+                enabled: nextOn
+            }));
+            leaves[j].strokes = list;
+        }
+        if (leaves.length > 0)
+            doc.touch();
+    }
+
+    function moveFillAtSelected(at, delta) {
+        var to = at + delta;
+        if (to < 0)
+            return;
+        var leaves = _unlockedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            var list = doc.factory._copyFills(leaves[i].fills, leaves[i]);
+            if (at < 0 || at >= list.length || to < 0 || to >= list.length)
+                continue;
+            var tmp = list[at];
+            list[at] = list[to];
+            list[to] = tmp;
+            leaves[i].fills = list;
+        }
+        if (leaves.length > 0)
+            doc.touch();
+    }
+
+    function moveStrokeAtSelected(at, delta) {
+        var to = at + delta;
+        if (to < 0)
+            return;
+        var leaves = _unlockedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            var list = doc.factory._copyStrokes(leaves[i].strokes, leaves[i]);
+            if (at < 0 || at >= list.length || to < 0 || to >= list.length)
+                continue;
+            var tmp = list[at];
+            list[at] = list[to];
+            list[to] = tmp;
+            leaves[i].strokes = list;
+        }
+        if (leaves.length > 0)
+            doc.touch();
+    }
+
+    function removeFillAtSelected(at) {
+        var leaves = _unlockedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            var list = doc.factory._copyFills(leaves[i].fills, leaves[i]);
+            if (at < 0 || at >= list.length)
+                continue;
+            list.splice(at, 1);
+            leaves[i].fills = list;
+        }
+        if (leaves.length > 0)
+            doc.touch();
+    }
+
+    function removeStrokeAtSelected(at) {
+        var leaves = _unlockedLeaves();
+        for (var i = 0; i < leaves.length; i++) {
+            var list = doc.factory._copyStrokes(leaves[i].strokes, leaves[i]);
+            if (at < 0 || at >= list.length)
+                continue;
+            list.splice(at, 1);
+            leaves[i].strokes = list;
+        }
+        if (leaves.length > 0)
+            doc.touch();
     }
 
     // Quarter turn clockwise per leaf, normalized to [0, 360).

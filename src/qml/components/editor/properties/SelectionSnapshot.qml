@@ -46,14 +46,8 @@ QtObject {
                     w: s.w,
                     h: s.h,
                     rotation: s.rotation,
-                    fill: s.fill,
-                    fillType: s.fillType ?? "solid",
-                    fillGradient: snapshot.doc.factory._copyGradient(s.fillGradient),
-                    stroke: s.stroke,
-                    strokeType: s.strokeType ?? "solid",
-                    strokeGradient: snapshot.doc.factory._copyGradient(s.strokeGradient),
-                    strokeWidth: s.strokeWidth,
-                    strokeDash: snapshot.doc.factory._copyDash(s.strokeDash),
+                    fills: snapshot.doc.factory._copyFills(s.fills, s),
+                    strokes: snapshot.doc.factory._copyStrokes(s.strokes, s),
                     penFill: s.penFill !== false,
                     strokeCap: s.strokeCap ?? "round",
                     strokeJoin: s.strokeJoin ?? "round",
@@ -104,9 +98,8 @@ QtObject {
                     w: box.w,
                     h: box.h,
                     rotation: 0,
-                    fill: "#000000",
-                    stroke: "#000000",
-                    strokeWidth: 0,
+                    fills: [],
+                    strokes: [],
                     opacity: 1,
                     radius: 0,
                     independentCorners: false,
@@ -162,11 +155,38 @@ QtObject {
     function distinctFills() {
         var out = [];
         for (var i = 0; i < snapshot.sel.length; i++) {
-            var f = String(snapshot.sel[i].fill);
-            if (out.indexOf(f) < 0)
-                out.push(f);
+            var fills = snapshot.sel[i].fills || [];
+            for (var j = 0; j < fills.length; j++) {
+                var f = String((fills[j] || {}).color ?? "");
+                if (f !== "" && out.indexOf(f) < 0)
+                    out.push(f);
+            }
         }
         return out;
+    }
+
+    // First enabled fill/stroke color for animation seeding and
+    // legacy single-value callers. Empty string when none applies.
+    function firstFillColor() {
+        for (var i = 0; i < snapshot.sel.length; i++) {
+            var fills = snapshot.sel[i].fills || [];
+            for (var j = 0; j < fills.length; j++) {
+                if (fills[j] && fills[j].enabled !== false)
+                    return String(fills[j].color ?? "");
+            }
+        }
+        return "";
+    }
+
+    function firstStrokeColor() {
+        for (var k = 0; k < snapshot.sel.length; k++) {
+            var strokes = snapshot.sel[k].strokes || [];
+            for (var m = 0; m < strokes.length; m++) {
+                if (strokes[m] && strokes[m].enabled !== false)
+                    return String(strokes[m].color ?? "");
+            }
+        }
+        return "";
     }
 
     function allOfType(type) {

@@ -33,14 +33,8 @@ QtObject {
             w: node.w,
             h: node.h,
             rotation: node.rotation,
-            fill: String(node.fill),
-            fillType: node.fillType ?? "solid",
-            fillGradient: doc.factory._copyGradient(node.fillGradient),
-            stroke: String(node.stroke),
-            strokeType: node.strokeType ?? "solid",
-            strokeGradient: doc.factory._copyGradient(node.strokeGradient),
-            strokeWidth: node.strokeWidth,
-            strokeDash: doc.factory._copyDash(node.strokeDash),
+            fills: doc.factory._copyFills(node.fills, node),
+            strokes: doc.factory._copyStrokes(node.strokes, node),
             penFill: node.penFill !== false,
             strokeCap: node.strokeCap ?? "round",
             strokeJoin: node.strokeJoin ?? "round",
@@ -308,14 +302,24 @@ QtObject {
             snap.textContent = b.textContent;
         // Gradient/shadow animate in custom clips: rebase from base when
         // present so saves capture the document, never the frame.
-        if (snap.fillType !== undefined && b.fillType !== undefined)
-            snap.fillType = b.fillType;
-        if (snap.fillGradient !== undefined && b.fillGradient !== undefined)
-            snap.fillGradient = doc.factory._copyGradient(b.fillGradient);
-        if (snap.strokeType !== undefined && b.strokeType !== undefined)
-            snap.strokeType = b.strokeType;
-        if (snap.strokeGradient !== undefined && b.strokeGradient !== undefined)
-            snap.strokeGradient = doc.factory._copyGradient(b.strokeGradient);
+        // Stacked paints rebase wholesale; legacy single keys fold via
+        // the factory so old bases never crash.
+        if (snap.fills !== undefined && b.fills !== undefined)
+            snap.fills = doc.factory._copyFills(b.fills, b);
+        else {
+            if (snap.fillType !== undefined && b.fillType !== undefined)
+                snap.fillType = b.fillType;
+            if (snap.fillGradient !== undefined && b.fillGradient !== undefined)
+                snap.fillGradient = doc.factory._copyGradient(b.fillGradient);
+        }
+        if (snap.strokes !== undefined && b.strokes !== undefined)
+            snap.strokes = doc.factory._copyStrokes(b.strokes, b);
+        else {
+            if (snap.strokeType !== undefined && b.strokeType !== undefined)
+                snap.strokeType = b.strokeType;
+            if (snap.strokeGradient !== undefined && b.strokeGradient !== undefined)
+                snap.strokeGradient = doc.factory._copyGradient(b.strokeGradient);
+        }
         if (snap.shadows !== undefined && b.shadows !== undefined)
             snap.shadows = doc.factory._copyShadows(b.shadows);
         if (snap.glows !== undefined && b.glows !== undefined)
