@@ -22,27 +22,49 @@
 // Rectangle borders stay solid, MultiEffect has no spread).
 namespace Effects {
 
-// Fill/stroke paint: solid colors or 2-stop linear gradients. penFill
-// toggles the path fill (pen line-art); strokeCap/strokeJoin pick line
-// ends and bends ("round" default preserves the historic paint for
-// every other shape).
-struct Style {
-    QColor fill = QColor(QStringLiteral("#d9d9d9"));
-    QString fillType = QStringLiteral("solid");
-    QVariantMap fillGradient;
-    QColor stroke = QColor(QStringLiteral("#000000"));
-    QString strokeType = QStringLiteral("solid");
-    QVariantMap strokeGradient;
-    double strokeWidth = 0.0;
+// Fill/stroke paint: stacked entries (Figma-style, index 0 topmost).
+// Each fill is solid or 2-stop linear with its own opacity (final
+// alpha = color alpha * opacity); each stroke adds width, dash pair,
+// position (center/inside/outside) and opacity. penFill toggles the
+// path fill (pen line-art); strokeCap/strokeJoin stay per-shape.
+struct FillEntry {
+    bool enabled = true;
+    QColor color = QColor(QStringLiteral("#d9d9d9"));
+    QString type = QStringLiteral("solid");
+    QVariantMap gradient;
+    double opacity = 1.0;
+
+    static FillEntry fromMap(const QVariantMap &m);
+    static QList<FillEntry> listFrom(const QVariantList &l, const QVariantMap &legacy);
+};
+
+struct StrokeEntry {
+    bool enabled = true;
+    QColor color = QColor(QStringLiteral("#000000"));
+    QString type = QStringLiteral("solid");
+    QVariantMap gradient;
+    double width = 0.0;
     // Dash pair in stroke-width units ([dash, gap]); empty paints solid.
     // Both entries must be positive, otherwise the stroke stays solid.
-    QVector<qreal> strokeDash;
+    QVector<qreal> dash;
+    QString position = QStringLiteral("center");
+    double opacity = 1.0;
+
+    static StrokeEntry fromMap(const QVariantMap &m);
+    static QList<StrokeEntry> listFrom(const QVariantList &l, const QVariantMap &legacy);
+};
+
+struct Style {
+    QList<FillEntry> fills;
+    QList<StrokeEntry> strokes;
     double radius = 0.0;
     bool penFill = true;
     QString strokeCap = QStringLiteral("round");
     QString strokeJoin = QStringLiteral("round");
 
     static Style fromMap(const QVariantMap &m);
+    // Max enabled stroke width (for pads/geometry); 0 when none.
+    double maxStrokeWidth() const;
 };
 
 // Geometry options for vector paths. cornerRadii/points mirror
@@ -208,8 +230,8 @@ void paintGrainPath(QPainter *pt, const QPainterPath &clip, double strokeWidth, 
     const Grain &gr, int uid, int frameNo, double scale);
 
 // Texture pad so blurs/offsets never clip: caller sizes the item
-// box+2*pad and paints the shape at (pad,pad). Zero when shadow is off
-// (strokes paint inside, like the QML Rectangle branch).
+// box+2*pad and paints the shape at (pad,pad). Includes the outer
+// half of center/outside strokes (inside strokes need no room).
 double shadowPad(const Shadow &sh, double strokeWidth);
 double shadowsPad(const QList<Shadow> &shadows, double strokeWidth);
 // Layer-blur pad (blur radius spreads beyond the bbox).
@@ -217,10 +239,13 @@ double blurPad(const Blur &b);
 // Glow pad (spread plus blur halo, centered so no offset term).
 double glowPad(const Glow &g);
 double glowsPad(const QList<Glow> &glows);
+double strokesPad(const QList<StrokeEntry> &strokes);
 // Combined pad for single-effect shapes (max of active branches).
 double effectPad(const Shadow &sh, const Blur &b, double strokeWidth);
 double effectPad(const Shadow &sh, const Blur &b, const Glow &g, double strokeWidth);
 double effectPad(const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &b,
     double strokeWidth);
+double effectPad(const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &b,
+    const QList<StrokeEntry> &strokes);
 
 } // namespace Effects

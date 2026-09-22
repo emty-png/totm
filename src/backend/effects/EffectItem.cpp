@@ -15,19 +15,14 @@ void EffectItem::paint(QPainter *painter)
     if (!painter || m_boxW <= 0 || m_boxH <= 0)
         return;
     painter->setRenderHint(QPainter::Antialiasing, true);
-    Effects::Style st;
-    st.fill = m_fill;
-    st.fillType = m_fillType;
-    st.fillGradient = m_fillGradient;
-    st.stroke = m_stroke;
-    st.strokeType = m_strokeType;
-    st.strokeGradient = m_strokeGradient;
-    st.strokeWidth = m_strokeWidth;
-    st.strokeDash = Effects::dashFrom(m_strokeDash);
-    st.radius = m_radius;
-    st.penFill = m_penFill;
-    st.strokeCap = m_strokeCap;
-    st.strokeJoin = m_strokeJoin;
+    QVariantMap styleMap;
+    styleMap[QStringLiteral("fills")] = m_fills;
+    styleMap[QStringLiteral("strokes")] = m_strokes;
+    styleMap[QStringLiteral("radius")] = m_radius;
+    styleMap[QStringLiteral("penFill")] = m_penFill;
+    styleMap[QStringLiteral("strokeCap")] = m_strokeCap;
+    styleMap[QStringLiteral("strokeJoin")] = m_strokeJoin;
+    Effects::Style st = Effects::Style::fromMap(styleMap);
     Effects::PathOpts opts;
     opts.cornerRadii = m_cornerRadii;
     opts.points = m_points;
@@ -55,12 +50,16 @@ void EffectItem::paint(QPainter *painter)
 
 void EffectItem::updatePad()
 {
+    QVariantMap styleMap;
+    styleMap[QStringLiteral("fills")] = m_fills;
+    styleMap[QStringLiteral("strokes")] = m_strokes;
+    const Effects::Style st = Effects::Style::fromMap(styleMap);
     double next = Effects::effectPad(Effects::Shadow::listFrom(m_shadows),
-        Effects::Glow::listFrom(m_glows), Effects::Blur::fromMap(m_layerBlur), m_strokeWidth);
+        Effects::Glow::listFrom(m_glows), Effects::Blur::fromMap(m_layerBlur), st.strokes);
     // Miter spikes can overshoot the round-cap bounds the pad assumes,
-    // so effected pens hold at least one stroke width of margin.
-    if (m_shapeType == QStringLiteral("pen") && m_strokeJoin == QStringLiteral("miter") && m_strokeWidth > 0)
-        next = qMax(next, m_strokeWidth);
+    // so effected pens hold at least one max stroke width of margin.
+    if (m_shapeType == QStringLiteral("pen") && m_strokeJoin == QStringLiteral("miter") && st.maxStrokeWidth() > 0)
+        next = qMax(next, st.maxStrokeWidth());
     if (qFuzzyCompare(m_pad, next))
         return;
     m_pad = next;
@@ -220,112 +219,27 @@ void EffectItem::setNodeY(double v)
     update();
 }
 
-QColor EffectItem::fill() const
+QVariantList EffectItem::fills() const
 {
-    return m_fill;
+    return m_fills;
 }
 
-void EffectItem::setFill(const QColor &v)
+void EffectItem::setFills(const QVariantList &v)
 {
-    if (m_fill == v)
-        return;
-    m_fill = v;
+    m_fills = v;
     emit fillChanged();
+    updatePad();
     update();
 }
 
-QString EffectItem::fillType() const
+QVariantList EffectItem::strokes() const
 {
-    return m_fillType;
+    return m_strokes;
 }
 
-void EffectItem::setFillType(const QString &v)
+void EffectItem::setStrokes(const QVariantList &v)
 {
-    if (m_fillType == v)
-        return;
-    m_fillType = v;
-    emit fillChanged();
-    update();
-}
-
-QVariantMap EffectItem::fillGradient() const
-{
-    return m_fillGradient;
-}
-
-void EffectItem::setFillGradient(const QVariantMap &v)
-{
-    m_fillGradient = v;
-    emit fillChanged();
-    update();
-}
-
-QColor EffectItem::stroke() const
-{
-    return m_stroke;
-}
-
-void EffectItem::setStroke(const QColor &v)
-{
-    if (m_stroke == v)
-        return;
-    m_stroke = v;
-    emit strokeChanged();
-    update();
-}
-
-QString EffectItem::strokeType() const
-{
-    return m_strokeType;
-}
-
-void EffectItem::setStrokeType(const QString &v)
-{
-    if (m_strokeType == v)
-        return;
-    m_strokeType = v;
-    emit strokeChanged();
-    update();
-}
-
-QVariantMap EffectItem::strokeGradient() const
-{
-    return m_strokeGradient;
-}
-
-void EffectItem::setStrokeGradient(const QVariantMap &v)
-{
-    m_strokeGradient = v;
-    emit strokeChanged();
-    update();
-}
-
-double EffectItem::strokeWidth() const
-{
-    return m_strokeWidth;
-}
-
-QVariantList EffectItem::strokeDash() const
-{
-    return m_strokeDash;
-}
-
-void EffectItem::setStrokeDash(const QVariantList &v)
-{
-    if (m_strokeDash == v)
-        return;
-    m_strokeDash = v;
-    emit strokeChanged();
-    update();
-}
-
-void EffectItem::setStrokeWidth(double v)
-{
-    if (qFuzzyCompare(m_strokeWidth, v))
-        return;
-    m_strokeWidth = v;
-    // Plain rects inset the stroke inside the bounds, so the silhouette
-    // moves with the width.
+    m_strokes = v;
     m_masks.clear();
     emit strokeChanged();
     updatePad();

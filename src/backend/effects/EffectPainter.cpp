@@ -40,17 +40,94 @@ void applyDashToPen(QPen &pen, const QVector<qreal> &dash)
     pen.setDashOffset(0.0);
 }
 
+FillEntry FillEntry::fromMap(const QVariantMap &m)
+{
+    FillEntry f;
+    f.enabled = m.value(QStringLiteral("enabled"), true).toBool();
+    f.color = colorFrom(m.value(QStringLiteral("color"), m.value(QStringLiteral("fill"))), f.color);
+    QString t = m.value(QStringLiteral("type"), m.value(QStringLiteral("fillType"), QStringLiteral("solid"))).toString();
+    f.type = (t == QLatin1String("linear")) ? t : QStringLiteral("solid");
+    f.gradient = m.value(QStringLiteral("gradient"), m.value(QStringLiteral("fillGradient"))).toMap();
+    f.opacity = qBound(0.0, m.value(QStringLiteral("opacity"), 1.0).toDouble(), 1.0);
+    return f;
+}
+
+QList<FillEntry> FillEntry::listFrom(const QVariantList &l, const QVariantMap &legacy)
+{
+    QList<FillEntry> out;
+    if (!l.isEmpty()) {
+        for (const QVariant &v : l) {
+            const FillEntry f = FillEntry::fromMap(v.toMap());
+            if (f.enabled)
+                out.append(f);
+        }
+        return out;
+    }
+    // Legacy single fill keys fold into one entry; missing input keeps
+    // the historic default so creation snapshots render as before.
+    if (legacy.contains(QStringLiteral("fills")) && legacy.value(QStringLiteral("fills")).toList().isEmpty())
+        return out;
+    if (legacy.contains(QStringLiteral("fill")) || legacy.contains(QStringLiteral("fillType"))
+        || legacy.contains(QStringLiteral("fillGradient"))) {
+        const FillEntry f = FillEntry::fromMap(legacy);
+        if (f.enabled)
+            out.append(f);
+        return out;
+    }
+    if (legacy.isEmpty()) {
+        FillEntry d;
+        out.append(d);
+        return out;
+    }
+    return out;
+}
+
+StrokeEntry StrokeEntry::fromMap(const QVariantMap &m)
+{
+    StrokeEntry s;
+    s.enabled = m.value(QStringLiteral("enabled"), true).toBool();
+    s.color = colorFrom(m.value(QStringLiteral("color"), m.value(QStringLiteral("stroke"))), s.color);
+    QString t = m.value(QStringLiteral("type"), m.value(QStringLiteral("strokeType"), QStringLiteral("solid"))).toString();
+    s.type = (t == QLatin1String("linear")) ? t : QStringLiteral("solid");
+    s.gradient = m.value(QStringLiteral("gradient"), m.value(QStringLiteral("strokeGradient"))).toMap();
+    s.width = qMax(0.0, m.value(QStringLiteral("width"), m.value(QStringLiteral("strokeWidth"), 0.0)).toDouble());
+    s.dash = dashFrom(m.value(QStringLiteral("dash"), m.value(QStringLiteral("strokeDash"))));
+    const QString pos = m.value(QStringLiteral("position"), QStringLiteral("center")).toString();
+    s.position = (pos == QLatin1String("inside") || pos == QLatin1String("outside")) ? pos
+                                                                                     : QStringLiteral("center");
+    s.opacity = qBound(0.0, m.value(QStringLiteral("opacity"), 1.0).toDouble(), 1.0);
+    return s;
+}
+
+QList<StrokeEntry> StrokeEntry::listFrom(const QVariantList &l, const QVariantMap &legacy)
+{
+    QList<StrokeEntry> out;
+    if (!l.isEmpty()) {
+        for (const QVariant &v : l) {
+            const StrokeEntry s = StrokeEntry::fromMap(v.toMap());
+            if (s.enabled && s.width > 0.01)
+                out.append(s);
+        }
+        return out;
+    }
+    if (legacy.contains(QStringLiteral("strokes")) && legacy.value(QStringLiteral("strokes")).toList().isEmpty())
+        return out;
+    if (legacy.contains(QStringLiteral("stroke")) || legacy.contains(QStringLiteral("strokeType"))
+        || legacy.contains(QStringLiteral("strokeWidth")) || legacy.contains(QStringLiteral("strokeDash"))
+        || legacy.contains(QStringLiteral("strokeGradient"))) {
+        const StrokeEntry s = StrokeEntry::fromMap(legacy);
+        if (s.enabled && s.width > 0.01)
+            out.append(s);
+        return out;
+    }
+    return out;
+}
+
 Style Style::fromMap(const QVariantMap &m)
 {
     Style st;
-    st.fill = colorFrom(m.value(QStringLiteral("fill")), st.fill);
-    st.fillType = m.value(QStringLiteral("fillType"), QStringLiteral("solid")).toString();
-    st.fillGradient = m.value(QStringLiteral("fillGradient")).toMap();
-    st.stroke = colorFrom(m.value(QStringLiteral("stroke")), st.stroke);
-    st.strokeType = m.value(QStringLiteral("strokeType"), QStringLiteral("solid")).toString();
-    st.strokeGradient = m.value(QStringLiteral("strokeGradient")).toMap();
-    st.strokeWidth = qMax(0.0, m.value(QStringLiteral("strokeWidth"), 0.0).toDouble());
-    st.strokeDash = dashFrom(m.value(QStringLiteral("strokeDash")));
+    st.fills = FillEntry::listFrom(m.value(QStringLiteral("fills")).toList(), m);
+    st.strokes = StrokeEntry::listFrom(m.value(QStringLiteral("strokes")).toList(), m);
     st.radius = qMax(0.0, m.value(QStringLiteral("radius"), 0.0).toDouble());
     st.penFill = m.value(QStringLiteral("penFill"), true).toBool();
     // Unknown cap/join spellings fall back to round (matches QML).
@@ -63,6 +140,14 @@ Style Style::fromMap(const QVariantMap &m)
         ? join
         : QStringLiteral("round");
     return st;
+}
+
+double Style::maxStrokeWidth() const
+{
+    double w = 0.0;
+    for (const StrokeEntry &s : strokes)
+        w = qMax(w, s.width);
+    return w;
 }
 
 PathOpts PathOpts::fromMap(const QVariantMap &m)
@@ -362,6 +447,47 @@ QBrush paintBrush(const QRectF &box, const QString &type, const QVariantMap &gra
     return QBrush(solid);
 }
 
+QColor withEntryOpacity(const QColor &c, double opacity)
+{
+    QColor out = c;
+    out.setAlphaF(qBound(0.0, c.alphaF() * qBound(0.0, opacity, 1.0), 1.0));
+    return out;
+}
+
+QBrush fillBrushFor(const QRectF &box, const FillEntry &f)
+{
+    if (f.type == QLatin1String("linear")) {
+        const LinearSpec spec = linearFrom(f.gradient);
+        QPointF p0, p1;
+        gradientEndpoints(box, spec.angle, &p0, &p1);
+        QLinearGradient g(p0, p1);
+        g.setCoordinateMode(QGradient::LogicalMode);
+        QColor c0 = withEntryOpacity(spec.stops[0].color, f.opacity);
+        QColor c1 = withEntryOpacity(spec.stops[1].color, f.opacity);
+        g.setColorAt(spec.stops[0].pos, c0);
+        g.setColorAt(spec.stops[1].pos, c1);
+        return QBrush(g);
+    }
+    return QBrush(withEntryOpacity(f.color, f.opacity));
+}
+
+QBrush strokeBrushFor(const QRectF &box, const StrokeEntry &s)
+{
+    if (s.type == QLatin1String("linear")) {
+        const LinearSpec spec = linearFrom(s.gradient);
+        QPointF p0, p1;
+        gradientEndpoints(box, spec.angle, &p0, &p1);
+        QLinearGradient g(p0, p1);
+        g.setCoordinateMode(QGradient::LogicalMode);
+        QColor c0 = withEntryOpacity(spec.stops[0].color, s.opacity);
+        QColor c1 = withEntryOpacity(spec.stops[1].color, s.opacity);
+        g.setColorAt(spec.stops[0].pos, c0);
+        g.setColorAt(spec.stops[1].pos, c1);
+        return QBrush(g);
+    }
+    return QBrush(withEntryOpacity(s.color, s.opacity));
+}
+
 // Fast separable box blur (3 passes ~= gaussian) on premultiplied data.
 // Radius is in device px; kept small by the pad cap.
 void blurImageImpl(QImage &img, double radius)
@@ -427,18 +553,17 @@ void blurImageImpl(QImage &img, double radius)
 }
 
 // Geometry fingerprint for blurred-mask caching. Covers exactly the
-// silhouette raster inputs (kind, size, corner/star rounding, stroke
-// width for the plain-rect inset, pen anchors relative to the node
-// origin so pure moves keep the key stable). Fill/stroke colors,
-// offsets and tints never enter: they apply after the blur, so
-// color/offset-only edits reuse the cached raster bit-for-bit.
-QByteArray geometryKey(const QString &kind, double w, double h, const PathOpts &opts, double radius,
-    double strokeWidth)
+// silhouette raster inputs (kind, size, corner/star rounding, pen
+// anchors relative to the node origin so pure moves keep the key
+// stable). Fill/stroke colors, widths, offsets and tints never enter:
+// they apply after the blur, so color/offset-only edits reuse the
+// cached raster bit-for-bit.
+QByteArray geometryKey(const QString &kind, double w, double h, const PathOpts &opts, double radius)
 {
     QByteArray bytes;
     QDataStream ds(&bytes, QIODevice::WriteOnly);
     ds.setVersion(QDataStream::Qt_6_0);
-    ds << kind << w << h << radius << strokeWidth << opts.independentCorners << opts.points;
+    ds << kind << w << h << radius << opts.independentCorners << opts.points;
     ds << opts.cornerRadii.size();
     for (const QVariant &v : opts.cornerRadii)
         ds << v.toDouble();
@@ -578,18 +703,20 @@ QImage innerCutter(const QPainterPath &path, const QByteArray &geom, double spre
 namespace {
 // Forward: shared tails defined below paintLeaf.
 void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
-    const QRectF &box, const PathOpts &opts, const Style &st, const Shadow &sh, double s, double sw,
-    double r, bool plainRect);
+    const Style &st, const Shadow &sh, double s);
 void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double s,
     const QByteArray &geom, QCache<QByteArray, QImage> *cache);
 // Glow tail (centered halo, no offset term).
 void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
-    const Style &st, const Glow &glow, double s, double sw);
+    const Style &st, const Glow &glow, double s);
 void paintGlowInner(QPainter *pt, const QPainterPath &path, const Glow &glow, double s,
     const QByteArray &geom, QCache<QByteArray, QImage> *cache);
 
 // Vector outline in device coords plus the fill box the brushes span.
 // Shared by the shadow/blur and glow leaves so geometry never drifts.
+// Figma semantics: fills always span the full box; strokes straddle
+// the edge and clip per entry (center/inside/outside), so unlike the
+// old Rectangle-parity inset there is no stroke-driven shrink here.
 struct Outline {
     QPainterPath path;
     QRectF fillBox;
@@ -600,18 +727,11 @@ struct Outline {
 Outline outlineFor(const QString &kind, const QRectF &box, const PathOpts &opts, const Style &st, double s)
 {
     Outline o;
-    o.sw = qMax(0.0, st.strokeWidth) * s;
-    // Plain rects inset the stroke inside the bounds (QML Rectangle
-    // parity); vector paths straddle it (ShapePath parity).
+    o.sw = qMax(0.0, st.maxStrokeWidth()) * s;
     o.plainRect = kind == QLatin1String("rectangle") && !opts.independentCorners;
     o.fillBox = box;
     o.r = qMax(0.0, st.radius) * s;
     if (o.plainRect) {
-        if (o.sw > 0.01 && box.width() > o.sw && box.height() > o.sw) {
-            const double inset = o.sw / 2.0;
-            o.fillBox.adjust(inset, inset, -inset, -inset);
-            o.r = qMax(0.0, o.r - inset);
-        }
         o.r = qMin(o.r, qMin(o.fillBox.width(), o.fillBox.height()) / 2.0);
         if (o.r <= 0.01)
             o.path.addRect(o.fillBox);
@@ -666,6 +786,79 @@ bool fillsPath(const QString &kind, const Style &st)
 {
     return kind != QLatin1String("pen") || st.penFill;
 }
+
+// Stacked fills, bottom-first so index 0 paints topmost (closest to
+// the strokes), matching the shadow/glow convention.
+void paintFills(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
+    const Style &st)
+{
+    if (!fillsPath(kind, st))
+        return;
+    for (int i = st.fills.size() - 1; i >= 0; --i) {
+        const FillEntry &f = st.fills.at(i);
+        if (!f.enabled)
+            continue;
+        pt->fillPath(path, fillBrushFor(fillBox, f));
+    }
+}
+
+// One stroke with Figma position: center straddles, inside/outside
+// draw double-width clipped to the respective side (open line-art
+// pens fall back to center: an open path has no interior).
+void paintOneStroke(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
+    const Style &st, const StrokeEntry &s, double scale)
+{
+    const double w = qMax(0.0, s.width) * scale;
+    if (w <= 0.01)
+        return;
+    const QBrush sb = strokeBrushFor(fillBox, s);
+    const bool lineArt = kind == QLatin1String("pen") && !st.penFill;
+    QString pos = s.position;
+    if (lineArt)
+        pos = QStringLiteral("center");
+    if (pos == QLatin1String("inside")) {
+        QPen pen(sb, w * 2.0, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin));
+        applyDashToPen(pen, s.dash);
+        pt->save();
+        pt->setClipPath(path, Qt::IntersectClip);
+        pt->setPen(pen);
+        pt->setBrush(Qt::NoBrush);
+        pt->drawPath(path);
+        pt->restore();
+        return;
+    }
+    if (pos == QLatin1String("outside")) {
+        QPainterPath big;
+        QRectF bounds = path.boundingRect().adjusted(-w * 2.0 - 2.0, -w * 2.0 - 2.0, w * 2.0 + 2.0, w * 2.0 + 2.0);
+        big.addRect(bounds);
+        const QPainterPath clip = big.subtracted(path);
+        QPen pen(sb, w * 2.0, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin));
+        applyDashToPen(pen, s.dash);
+        pt->save();
+        pt->setClipPath(clip, Qt::IntersectClip);
+        pt->setPen(pen);
+        pt->setBrush(Qt::NoBrush);
+        pt->drawPath(path);
+        pt->restore();
+        return;
+    }
+    QPen pen(sb, w, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin));
+    applyDashToPen(pen, s.dash);
+    pt->setPen(pen);
+    pt->setBrush(Qt::NoBrush);
+    pt->drawPath(path);
+}
+
+void paintStrokes(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
+    const Style &st, double scale)
+{
+    for (int i = st.strokes.size() - 1; i >= 0; --i) {
+        const StrokeEntry &s = st.strokes.at(i);
+        if (!s.enabled || s.width <= 0.01)
+            continue;
+        paintOneStroke(pt, path, fillBox, kind, st, s, scale);
+    }
+}
 } // namespace
 
 double shadowPad(const Shadow &sh, double strokeWidth)
@@ -705,6 +898,25 @@ double glowsPad(const QList<Glow> &glows)
     return pad;
 }
 
+// Max outward stroke extent: inside needs no room, center half the
+// width, outside the full width (Figma semantics via 2x clipped
+// strokes, see paintStrokes).
+double strokesPad(const QList<StrokeEntry> &strokes)
+{
+    double pad = 0.0;
+    for (const StrokeEntry &s : strokes) {
+        if (!s.enabled || s.width <= 0.01)
+            continue;
+        if (s.position == QLatin1String("inside"))
+            continue;
+        if (s.position == QLatin1String("outside"))
+            pad = qMax(pad, s.width);
+        else
+            pad = qMax(pad, s.width / 2.0);
+    }
+    return qMin(256.0, qMax(0.0, pad));
+}
+
 double effectPad(const Shadow &sh, const Blur &b, double strokeWidth)
 {
     return qMin(256.0, qMax(shadowPad(sh, strokeWidth), blurPad(b)));
@@ -719,6 +931,16 @@ double effectPad(const QList<Shadow> &shadows, const QList<Glow> &glows, const B
     double strokeWidth)
 {
     return qMin(256.0, qMax(shadowsPad(shadows, strokeWidth), qMax(glowsPad(glows), blurPad(b))));
+}
+
+double effectPad(const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &b,
+    const QList<StrokeEntry> &strokes)
+{
+    double maxW = 0.0;
+    for (const StrokeEntry &s : strokes)
+        maxW = qMax(maxW, s.enabled ? s.width : 0.0);
+    return qMin(256.0,
+        qMax(effectPad(shadows, glows, b, maxW), strokesPad(strokes)));
 }
 
 void blurImage(QImage &img, double radius)
@@ -841,7 +1063,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
     }
     const double s = scale > 0 ? scale : 1.0;
     const Outline o = outlineFor(kind, box, opts, st, s);
-    paintPathShadow(pt, o.path, o.fillBox, kind, box, opts, st, sh, s, o.sw, o.r, o.plainRect);
+    paintPathShadow(pt, o.path, o.fillBox, kind, st, sh, s);
 }
 
 void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathOpts &opts,
@@ -865,21 +1087,17 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
         return;
     const double s = scale > 0 ? scale : 1.0;
     const Outline o = outlineFor(kind, box, opts, st, s);
-    paintPathGlow(pt, o.path, o.fillBox, kind, st, glow, s, o.sw);
+    paintPathGlow(pt, o.path, o.fillBox, kind, st, glow, s);
 }
 
 namespace {
 
-// Shared tail: outer shadow under the shape, then fill, then the inner
-// shadow above the fill (Figma order), then the stroke on top.
+// Shared tail: outer shadow under the shape, then stacked fills,
+// then the inner shadow above the fills (Figma order), then stacked
+// strokes on top.
 void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
-    const QRectF &box, const PathOpts &opts, const Style &st, const Shadow &sh, double s, double sw,
-    double r, bool plainRect)
+    const Style &st, const Shadow &sh, double s)
 {
-    Q_UNUSED(box);
-    Q_UNUSED(opts);
-    Q_UNUSED(r);
-    Q_UNUSED(plainRect);
     if (sh.enabled && !sh.inner) {
         QPainterPath silhouette = path;
         if (sh.spread * s > 0.01) {
@@ -909,18 +1127,10 @@ void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillB
         }
         pt->drawImage(area.topLeft() + QPointF(sh.x * s, sh.y * s), mask);
     }
-    if (fillsPath(kind, st))
-        pt->fillPath(path, paintBrush(fillBox, st.fillType, st.fillGradient, st.fill));
+    paintFills(pt, path, fillBox, kind, st);
     if (sh.enabled && sh.inner)
         paintInner(pt, path, sh, s, QByteArray(), nullptr);
-    if (sw > 0.01) {
-        const QBrush sb = paintBrush(fillBox, st.strokeType, st.strokeGradient, st.stroke);
-        QPen pen(sb, sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin));
-        applyDashToPen(pen, st.strokeDash);
-        pt->setPen(pen);
-        pt->setBrush(Qt::NoBrush);
-        pt->drawPath(path);
-    }
+    paintStrokes(pt, path, fillBox, kind, st, s);
 }
 
 // Inner shadow: tinted shape with the blurred shifted silhouette erased
@@ -954,11 +1164,11 @@ void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double
 }
 
 // Shared tail for glow leaves: centered halo (outer under the shape,
-// inner above the fill like Figma), then the stroke on top. Spread
-// dilates the silhouette before blur; with zero blur and spread the
-// halo hugs the edge exactly.
+// inner above the fills like Figma), then stacked strokes on top.
+// Spread dilates the silhouette before blur; with zero blur and
+// spread the halo hugs the edge exactly.
 void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
-    const Style &st, const Glow &glow, double s, double sw)
+    const Style &st, const Glow &glow, double s)
 {
     if (glow.enabled && !glow.inner) {
         QPainterPath silhouette = path;
@@ -989,18 +1199,10 @@ void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox
         }
         pt->drawImage(area.topLeft(), mask);
     }
-    if (fillsPath(kind, st))
-        pt->fillPath(path, paintBrush(fillBox, st.fillType, st.fillGradient, st.fill));
+    paintFills(pt, path, fillBox, kind, st);
     if (glow.enabled && glow.inner)
         paintGlowInner(pt, path, glow, s, QByteArray(), nullptr);
-    if (sw > 0.01) {
-        const QBrush sb = paintBrush(fillBox, st.strokeType, st.strokeGradient, st.stroke);
-        QPen pen(sb, sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin));
-        applyDashToPen(pen, st.strokeDash);
-        pt->setPen(pen);
-        pt->setBrush(Qt::NoBrush);
-        pt->drawPath(path);
-    }
+    paintStrokes(pt, path, fillBox, kind, st, s);
 }
 
 // Inner glow: same edge-band construction as the inner shadow but
@@ -1057,10 +1259,12 @@ void paintOuterGlow(QPainter *pt, const QPainterPath &path, const Glow &glow, do
 
 } // namespace
 
-// Stacked leaf: outer shadows -> outer glows -> fill -> inner shadows
-// -> inner glows -> stroke, then layer-blur mixes the whole stack.
-// Lists paint index 0 topmost, so outers iterate last-to-first and
-// inners do the same (0 paints last, closest to the top).
+// Stacked leaf: outer shadows -> outer glows -> stacked fills ->
+// inner shadows -> inner glows -> stacked strokes, then layer-blur
+// mixes the whole stack. Lists paint index 0 topmost, so outers
+// iterate last-to-first and inners do the same (0 paints last,
+// closest to the top). Fills paint bottom-first above the outers;
+// strokes paint bottom-first on top of everything.
 void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathOpts &opts,
     const Style &st, const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur,
     double scale, QCache<QByteArray, QImage> *maskCache)
@@ -1092,13 +1296,12 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
     // Silhouette fingerprint: blurred masks memoize on this while tints
     // and offsets stay per paint, so stacked siblings and offset/color
     // edits reuse the raster bit-for-bit.
-    const QByteArray geom = geometryKey(kind, box.width(), box.height(), opts, st.radius, st.strokeWidth);
+    const QByteArray geom = geometryKey(kind, box.width(), box.height(), opts, st.radius);
     for (int i = shadows.size() - 1; i >= 0; --i)
         paintOuterShadow(pt, o.path, shadows.at(i), s, geom, maskCache);
     for (int i = glows.size() - 1; i >= 0; --i)
         paintOuterGlow(pt, o.path, glows.at(i), s, geom, maskCache);
-    if (fillsPath(kind, st))
-        pt->fillPath(o.path, paintBrush(o.fillBox, st.fillType, st.fillGradient, st.fill));
+    paintFills(pt, o.path, o.fillBox, kind, st);
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Shadow &sh = shadows.at(i);
         if (sh.enabled && sh.inner)
@@ -1109,14 +1312,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
         if (g.enabled && g.inner)
             paintGlowInner(pt, o.path, g, s, geom, maskCache);
     }
-    if (o.sw > 0.01) {
-        const QBrush sb = paintBrush(o.fillBox, st.strokeType, st.strokeGradient, st.stroke);
-        QPen pen(sb, o.sw, Qt::SolidLine, penCapFor(st.strokeCap), penJoinFor(st.strokeJoin));
-        applyDashToPen(pen, st.strokeDash);
-        pt->setPen(pen);
-        pt->setBrush(Qt::NoBrush);
-        pt->drawPath(o.path);
-    }
+    paintStrokes(pt, o.path, o.fillBox, kind, st, s);
 }
 
 namespace {
@@ -1424,7 +1620,12 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
         return;
     }
     QByteArray tkey;
-    const bool outlined = text.outlinePx > 0.01;
+    double maxOutline = 0.0;
+    for (const StrokeEntry &se : st.strokes) {
+        if (se.enabled && se.width > 0.01)
+            maxOutline = qMax(maxOutline, se.width);
+    }
+    const bool outlined = maxOutline > 0.01;
     const QImage cover = textCoverage(text, box.width(), box.height(), s, outlined, maskCache, &tkey);
     const QImage base = outlined ? textCoverage(text, box.width(), box.height(), s, false, maskCache, nullptr)
                                  : cover;
@@ -1449,15 +1650,19 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
         tintImage(halo, g.color);
         pt->drawImage(box.topLeft() + QPointF(-m, -m), halo);
     }
-    // Fill (solid or linear across the box) confined to the glyphs.
-    {
+    // Stacked fills (solid or linear across the box) confined to
+    // the glyphs, bottom-first so index 0 paints topmost.
+    for (int i = st.fills.size() - 1; i >= 0; --i) {
+        const FillEntry &f = st.fills.at(i);
+        if (!f.enabled)
+            continue;
         QImage fill(base.size(), QImage::Format_ARGB32_Premultiplied);
         fill.fill(0);
         {
             QPainter p(&fill);
             p.drawImage(0, 0, base);
         }
-        tintImage(fill, paintBrush(fillBox, st.fillType, st.fillGradient, st.fill));
+        tintImage(fill, fillBrushFor(fillBox, f));
         pt->drawImage(box.topLeft(), fill);
     }
     // Real inner bands above the fill, index 0 topmost. The tinted
@@ -1491,10 +1696,15 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
         }
         paintTextInner(pt, box.topLeft() + QPointF(-m, -m), tinted, cutter, g.color);
     }
-    // Stroke ring (outer band of the outline) on top, like vectors.
-    if (outlined) {
-        QImage ring = textRing(cover, tkey, text.outlinePx, s, maskCache);
-        tintImage(ring, st.stroke);
+    // Stacked stroke rings (outer band of the outline) on top,
+    // bottom-first like vectors. Position/dash stay centered rings
+    // for text in v1; width/color/opacity stack per entry.
+    for (int i = st.strokes.size() - 1; i >= 0; --i) {
+        const StrokeEntry &se = st.strokes.at(i);
+        if (!se.enabled || se.width <= 0.01)
+            continue;
+        QImage ring = textRing(cover, tkey, se.width, s, maskCache);
+        tintImage(ring, strokeBrushFor(fillBox, se));
         pt->drawImage(box.topLeft(), ring);
     }
 }

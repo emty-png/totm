@@ -206,6 +206,40 @@ QString solidFillAttr(const QColor &c, bool isFill) {
     return attr;
 }
 
+GradientOut gradientFillOpacity(
+    const QVariantMap &gradMap, const QRectF &box, const QString &id, bool isFill, double opacity) {
+    GradientOut out;
+    Effects::LinearSpec spec = Effects::linearFrom(gradMap);
+    spec.stops[0].color.setAlphaF(
+        qBound(0.0, spec.stops[0].color.alphaF() * qBound(0.0, opacity, 1.0), 1.0));
+    spec.stops[1].color.setAlphaF(
+        qBound(0.0, spec.stops[1].color.alphaF() * qBound(0.0, opacity, 1.0), 1.0));
+    QPointF p0, p1;
+    Effects::gradientEndpoints(box, spec.angle, &p0, &p1);
+    QString def = QStringLiteral("<linearGradient id=\"%1\" gradientUnits=\"userSpaceOnUse\" x1=\"%2\" y1=\"%3\" "
+                                 "x2=\"%4\" y2=\"%5\">")
+                      .arg(id)
+                      .arg(fmtNum(p0.x()))
+                      .arg(fmtNum(p0.y()))
+                      .arg(fmtNum(p1.x()))
+                      .arg(fmtNum(p1.y()));
+    for (int i = 0; i < 2; ++i) {
+        const QColor c = spec.stops[i].color;
+        const double off = qBound(0.0, spec.stops[i].pos, 1.0);
+        def += QStringLiteral("<stop offset=\"%1\" stop-color=\"%2\" stop-opacity=\"%3\"/>")
+                   .arg(fmtNum(off))
+                   .arg(colorHex(c.isValid() ? c : (i == 0 ? QColor(Qt::black) : QColor(Qt::white))))
+                   .arg(fmtNum(colorAlpha01(c)));
+    }
+    def += QStringLiteral("</linearGradient>");
+    out.def = def;
+    out.attr = QStringLiteral("%1=\"url(#%2)\"").arg(isFill ? QStringLiteral("fill") : QStringLiteral("stroke")).arg(id);
+    // Per-entry opacity rides on the stop alphas above, but SVG
+    // viewers also honor the element opacity; the caller adds
+    // fill-/stroke-opacity only for solid paints.
+    return out;
+}
+
 QString capFor(const QString &cap) {
     if (cap == QLatin1String("square"))
         return QStringLiteral("square");
@@ -224,14 +258,21 @@ QString joinFor(const QString &join) {
 
 // Dash pattern in stroke-width units, scaled to SVG user units by the
 // stroke width. Empty when the stroke paints solid.
-QString dashAttr(const Effects::Style &st, double sw)
+QString dashAttr(const QVector<qreal> &dash, double sw)
 {
-    if (st.strokeDash.isEmpty() || sw <= 0.01)
+    if (dash.isEmpty() || sw <= 0.01)
         return QString();
     QStringList parts;
-    for (const qreal d : st.strokeDash)
+    for (const qreal d : dash)
         parts.append(fmtNum(d * sw));
     return QStringLiteral(" stroke-dasharray=\"%1\"").arg(parts.join(QLatin1Char(' ')));
+}
+
+QString solidFillAttrOpacity(const QColor &c, bool isFill, double opacity)
+{
+    QColor cc = c;
+    cc.setAlphaF(qBound(0.0, cc.alphaF() * qBound(0.0, opacity, 1.0), 1.0));
+    return solidFillAttr(cc, isFill);
 }
 
 QString imageMime(const QString &name) {
@@ -392,10 +433,13 @@ double filterPadFor(const QVariantMap &m, const QString &shapeType, double sw) {
     const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
     const Effects::Blur layerBlur = Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap());
     const Effects::Grain grain = Effects::Grain::fromMap(m.value(QStringLiteral("grain")).toMap());
+    const Effects::Style st = Effects::Style::fromMap(m);
+    const double maxSw = st.maxStrokeWidth();
     if (shadows.isEmpty() && glows.isEmpty() && !(layerBlur.enabled && layerBlur.radius > 0.01)
         && !(grain.enabled && grain.amount > 0.001))
-        return 0.0;
-    return qMax(double(Effects::effectPad(shadows, glows, layerBlur, sw)), sw / 2.0 + 1.0);
+        return qMax(0.0, Effects::strokesPad(st.strokes));
+    Q_UNUSED(sw);
+    return qMax(double(Effects::effectPad(shadows, glows, layerBlur, st.strokes)), maxSw / 2.0 + 1.0);
 }
 
 // Builds the leaf filter, appends its <filter> to defs and returns the
@@ -582,7 +626,7 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
             continue;
         bounds = bounds.united(box);
         const QString shapeType = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
-        maxPad = qMax(maxPad, filterPadFor(m, shapeType, qMax(0.0, num(m, "strokeWidth"))));
+        maxPad = qMax(maxPad, filterPadFor(m, shapeType, 0.0));
     }
     bounds.adjust(-maxPad, -maxPad, maxPad, maxPad);
     if (bounds.isEmpty() || bounds.width() < 0.01 || bounds.height() < 0.01)
@@ -620,8 +664,9 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
         if (shapeType == QLatin1String("text") && str(m, "textContent").isEmpty())
             continue;
         const int uid = m.value(QStringLiteral("uid"), -1).toInt();
+        const Effects::Style stFx = Effects::Style::fromMap(m);
         const QString fxCand = QStringLiteral("svgfl%1").arg(fxSeq);
-        const QString fxId = buildLeafFilter(m, shapeType, qMax(0.0, num(m, "strokeWidth")), w, h, uid, fxCand, defs);
+        const QString fxId = buildLeafFilter(m, shapeType, stFx.maxStrokeWidth(), w, h, uid, fxCand, defs);
         if (!fxId.isEmpty())
             ++fxSeq;
 
@@ -659,19 +704,30 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                 ty = y + h / 2.0;
             else if (valign == QLatin1String("bottom"))
                 ty = y + h;
-            // Fill mirrors the PNG text leaf (solid or box-spanning linear).
-            const QString fillType = str(m, "fillType", QStringLiteral("solid"));
+            // Fill mirrors the PNG text leaf: topmost enabled stack
+            // entry (solid or box-spanning linear with per-entry
+            // opacity). Stacked text fills beyond the first are
+            // out of scope for standalone SVG vectors.
+            const Effects::Style stText = Effects::Style::fromMap(m);
+            const Effects::FillEntry *firstFill = stText.fills.isEmpty() ? nullptr : &stText.fills.first();
+            const Effects::StrokeEntry *firstStroke = nullptr;
+            for (const Effects::StrokeEntry &se : stText.strokes) {
+                if (se.enabled && se.width > 0.01) {
+                    firstStroke = &se;
+                    break;
+                }
+            }
             QString fillAttr;
-            if (fillType == QLatin1String("linear")) {
-                GradientOut g = gradientFill(m.value(QStringLiteral("fillGradient")).toMap(), box,
-                    QStringLiteral("svgft%1").arg(gradSeq++), true);
+            if (firstFill && firstFill->type == QLatin1String("linear")) {
+                GradientOut g = gradientFillOpacity(firstFill->gradient, box,
+                    QStringLiteral("svgft%1").arg(gradSeq++), true, firstFill->opacity);
                 defs.append(g.def);
                 fillAttr = g.attr;
             } else {
-                QColor fc(str(m, "fill", QStringLiteral("#d9d9d9")));
+                QColor fc = firstFill ? firstFill->color : QColor(QStringLiteral("#d9d9d9"));
                 if (!fc.isValid())
                     fc = fillFallback();
-                fillAttr = solidFillAttr(fc, true);
+                fillAttr = solidFillAttrOpacity(fc, true, firstFill ? firstFill->opacity : 1.0);
             }
             QStringList tAttrs;
             tAttrs.append(QStringLiteral("x=\"%1\"").arg(fmtNum(tx)));
@@ -684,14 +740,14 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
             if (spacing != 0.0)
                 tAttrs.append(QStringLiteral("letter-spacing=\"%1\"").arg(fmtNum(spacing)));
             tAttrs.append(fillAttr);
-            const double sw = qMax(0.0, num(m, "strokeWidth"));
-            if (sw > 0.01) {
-                QColor sc(str(m, "stroke", QStringLiteral("#000000")));
+            if (firstStroke) {
+                QColor sc = firstStroke->color;
+                sc.setAlphaF(qBound(0.0, sc.alphaF() * firstStroke->opacity, 1.0));
                 if (sc.isValid() && sc.alpha() > 0) {
                     tAttrs.append(QStringLiteral("stroke=\"%1\"").arg(colorHex(sc)));
                     if (sc.alpha() < 255)
                         tAttrs.append(QStringLiteral("stroke-opacity=\"%1\"").arg(fmtNum(colorAlpha01(sc))));
-                    tAttrs.append(QStringLiteral("stroke-width=\"%1\"").arg(fmtNum(sw)));
+                    tAttrs.append(QStringLiteral("stroke-width=\"%1\"").arg(fmtNum(firstStroke->width)));
                 }
             }
             const QStringList lines = content.split(QLatin1Char('\n'));
@@ -757,7 +813,11 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
         }
 
         // Vector shapes share the outline builder with the canvas, so
-        // silhouettes match the PNG export by construction.
+        // silhouettes match the PNG export by construction. Stacked
+        // paints layer as separate paths: fills bottom-first, then
+        // strokes bottom-first on top (index 0 topmost in both).
+        // Position stays centered in standalone SVG (no backdrop to
+        // clip against); per-entry opacity folds into the paint.
         const Effects::Style st = Effects::Style::fromMap(m);
         const QPainterPath path = Effects::outlinePath(shapeType, QRectF(x, y, w, h),
             Effects::PathOpts::fromMap(m), st, 1.0);
@@ -765,35 +825,48 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
         if (d.isEmpty())
             continue;
         const bool fills = shapeType != QLatin1String("pen") || st.penFill;
-        QString fillAttr = QStringLiteral("fill=\"none\"");
+        QStringList layers;
         if (fills) {
-            if (st.fillType == QLatin1String("linear")) {
-                GradientOut g = gradientFill(m.value(QStringLiteral("fillGradient")).toMap(), QRectF(x, y, w, h),
-                    QStringLiteral("svgfg%1").arg(gradSeq++), true);
-                defs.append(g.def);
-                fillAttr = g.attr;
-            } else {
-                QColor fc = st.fill;
-                if (!fc.isValid())
-                    fc = fillFallback();
-                fillAttr = solidFillAttr(fc, true);
+            for (int fi = st.fills.size() - 1; fi >= 0; --fi) {
+                const Effects::FillEntry &f = st.fills.at(fi);
+                if (!f.enabled)
+                    continue;
+                QString fillAttr = QStringLiteral("fill=\"none\"");
+                if (f.type == QLatin1String("linear")) {
+                    GradientOut g = gradientFillOpacity(f.gradient, QRectF(x, y, w, h),
+                        QStringLiteral("svgfg%1").arg(gradSeq++), true, f.opacity);
+                    defs.append(g.def);
+                    fillAttr = g.attr;
+                } else {
+                    QColor fc = f.color;
+                    if (!fc.isValid())
+                        fc = fillFallback();
+                    fillAttr = solidFillAttrOpacity(fc, true, f.opacity);
+                }
+                if (fillAttr == QLatin1String("fill=\"none\""))
+                    continue;
+                layers.append(QStringLiteral("<path d=\"%1\" %2 stroke=\"none\"/>").arg(xmlEscape(d)).arg(fillAttr));
             }
         }
-        QString strokeAttr = QStringLiteral("stroke=\"none\"");
-        const double sw = qMax(0.0, st.strokeWidth);
-        if (sw > 0.01) {
-            if (st.strokeType == QLatin1String("linear")) {
-                GradientOut g = gradientFill(m.value(QStringLiteral("strokeGradient")).toMap(), QRectF(x, y, w, h),
-                    QStringLiteral("svgsg%1").arg(gradSeq++), false);
+        for (int si = st.strokes.size() - 1; si >= 0; --si) {
+            const Effects::StrokeEntry &se = st.strokes.at(si);
+            if (!se.enabled || se.width <= 0.01)
+                continue;
+            const double sw = se.width;
+            QString strokeAttr = QStringLiteral("stroke=\"none\"");
+            if (se.type == QLatin1String("linear")) {
+                GradientOut g = gradientFillOpacity(se.gradient, QRectF(x, y, w, h),
+                    QStringLiteral("svgsg%1").arg(gradSeq++), false, se.opacity);
                 defs.append(g.def);
                 strokeAttr = QStringLiteral("%1 stroke-width=\"%2\" stroke-linecap=\"%3\" stroke-linejoin=\"%4\"%5")
                                  .arg(g.attr)
                                  .arg(fmtNum(sw))
                                  .arg(capFor(st.strokeCap))
                                  .arg(joinFor(st.strokeJoin))
-                                 .arg(dashAttr(st, sw));
+                                 .arg(dashAttr(se.dash, sw));
             } else {
-                const QColor sc = st.stroke;
+                QColor sc = se.color;
+                sc.setAlphaF(qBound(0.0, sc.alphaF() * se.opacity, 1.0));
                 if (sc.isValid() && sc.alpha() > 0) {
                     strokeAttr = QStringLiteral("stroke=\"%1\"").arg(colorHex(sc));
                     if (sc.alpha() < 255)
@@ -802,12 +875,20 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                                       .arg(fmtNum(sw))
                                       .arg(capFor(st.strokeCap))
                                       .arg(joinFor(st.strokeJoin))
-                                      .arg(dashAttr(st, sw));
+                                      .arg(dashAttr(se.dash, sw));
                 }
             }
+            if (strokeAttr == QLatin1String("stroke=\"none\""))
+                continue;
+            layers.append(QStringLiteral("<path d=\"%1\" fill=\"none\" %2/>").arg(xmlEscape(d)).arg(strokeAttr));
         }
-        body.append(gOpen
-            + QStringLiteral("<path d=\"%1\" %2 %3/></g>").arg(xmlEscape(d)).arg(fillAttr).arg(strokeAttr));
+        if (layers.isEmpty())
+            continue;
+        QString el = gOpen;
+        for (const QString &layer : layers)
+            el += layer;
+        el += QStringLiteral("</g>");
+        body.append(el);
     }
 
     if (body.isEmpty())

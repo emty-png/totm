@@ -29,15 +29,12 @@ Item {
     property real sw: 10
     property real sh: 10
     property real shapeRotation: 0
-    property color fill: "#d9d9d9"
-    property string fillType: "solid"
-    property var fillGradient: null
-    property color strokeColor: "#000000"
-    property string strokeType: "solid"
-    property var strokeGradient: null
-    property real strokeWidth: 0
-    // Dash pair in stroke-width units ([dash, gap]); empty paints solid.
-    property var strokeDash: []
+    // Stacked paints (Figma-style, index 0 paints topmost). Each fill:
+    // {enabled, color, type, gradient, opacity}; each stroke: {enabled,
+    // color, type, gradient, width, dash, position, opacity}. Bound
+    // from model roles by the repeater (see ShapeLayer).
+    property var fills: []
+    property var strokes: []
     // Pen-only paint switches (meaningful for pen): fill on/off plus
     // line cap/join. Defaults match the old hardcoded paint (filled,
     // round caps/joins), so every other shape renders identically.
@@ -137,6 +134,26 @@ Item {
     // and glows here; text and images stack glows in their native
     // branches (shadows stay vector-only, like export).
     readonly property bool isVectorPaint: shape.shapeType === "rectangle" || shape.shapeType === "ellipse" || shape.shapeType === "triangle" || shape.shapeType === "star" || shape.shapeType === "pen"
+    readonly property var enabledFills: (shape.fills || []).filter(f => f && f.enabled !== false)
+    readonly property var enabledStrokes: (shape.strokes || []).filter(s => s && s.enabled !== false && Number(s.width) > 0)
+    // First enabled entries drive the fast GPU branches and text.
+    readonly property var firstFill: shape.enabledFills.length > 0 ? shape.enabledFills[0] : null
+    readonly property var firstStroke: shape.enabledStrokes.length > 0 ? shape.enabledStrokes[0] : null
+    readonly property color firstFillColor: shape.firstFill ? shape.firstFill.color : "transparent"
+    readonly property color firstStrokeColor: shape.firstStroke ? shape.firstStroke.color : "transparent"
+    readonly property real maxStrokeWidth: {
+        var w = 0;
+        for (var i = 0; i < shape.enabledStrokes.length; i++)
+            w = Math.max(w, Number(shape.enabledStrokes[i].width) || 0);
+        return w;
+    }
+    readonly property bool hasLinearFill: shape.enabledFills.some(f => (f.type || "solid") === "linear")
+    readonly property bool hasLinearStroke: shape.enabledStrokes.some(s => (s.type || "solid") === "linear")
+    // Per-entry opacity below 1 routes through the CPU painter (which
+    // folds color alpha * entry opacity exactly); fast branches keep
+    // the historic raw-color paint.
+    readonly property bool hasFillOpacity: shape.enabledFills.some(f => Number(f.opacity ?? 1) < 0.999)
+    readonly property bool hasStrokeOpacity: shape.enabledStrokes.some(s => Number(s.opacity ?? 1) < 0.999)
     readonly property var enabledShadows: (shape.shadows || []).filter(s => s && s.enabled !== false)
     readonly property bool hasShadow: shape.enabledShadows.length > 0
     readonly property bool hasLayerBlur: shape.layerBlur !== null && shape.layerBlur !== undefined && shape.layerBlur.enabled === true && Number(shape.layerBlur.radius) > 0
@@ -150,16 +167,27 @@ Item {
     // and ShapePaths cannot dash. Both entries must be positive,
     // mirroring the backend rule, so half-cleared pairs stay solid.
     readonly property bool hasStrokeDash: {
-        var d = shape.strokeDash;
-        if (!d || typeof d.length !== "number" || d.length < 2)
-            return false;
-        return Number(d[0]) > 0 && Number(d[1]) > 0;
+        for (var i = 0; i < shape.enabledStrokes.length; i++) {
+            var d = shape.enabledStrokes[i].dash;
+            if (!d || typeof d.length !== "number" || d.length < 2)
+                continue;
+            if (Number(d[0]) > 0 && Number(d[1]) > 0)
+                return true;
+        }
+        return false;
     }
-    readonly property bool useEffectPaint: shape.isVectorPaint && (shape.fillType === "linear" || shape.strokeType === "linear" || shape.hasShadow || shape.hasLayerBlur || shape.hasGlow || shape.hasStrokeDash)
+    // Non-center strokes need the CPU clipper (inside/outside); the
+    // native border straddles (Shape) or sits inside (Rectangle).
+    readonly property bool hasNonCenterStroke: shape.enabledStrokes.some(s => (s.position || "center") !== "center")
+    // Native Rectangle borders paint inside, so the fast branch only
+    // holds for solid inside strokes (or no stroke); everything else
+    // rides the shared CPU painter like export.
+    readonly property bool rectFastStroke: shape.enabledStrokes.length === 0 || (shape.enabledStrokes.length === 1 && (shape.firstStroke.type || "solid") !== "linear" && (shape.firstStroke.position || "center") === "inside" && !shape.hasStrokeDash)
+    readonly property bool useEffectPaint: shape.isVectorPaint && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 1 || shape.hasLinearStroke || shape.hasStrokeOpacity || shape.hasStrokeDash || shape.hasNonCenterStroke || (shape.shapeType === "rectangle" && !shape.independentCorners && !shape.rectFastStroke && shape.enabledStrokes.length > 0) || shape.hasShadow || shape.hasLayerBlur || shape.hasGlow)
     // Effected text paints the glyph stack on the CPU (same code export
     // calls); plain text stays on the fast GPU glyphs. Grain rides its
     // own overlay either way; background blur stays off for text.
-    readonly property bool useTextEffectPaint: shape.shapeType === "text" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur)
+    readonly property bool useTextEffectPaint: shape.shapeType === "text" && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 1 || shape.hasStrokeOpacity || shape.hasShadow || shape.hasGlow || shape.hasLayerBlur)
 
     x: shape.sx
     y: shape.sy
@@ -173,13 +201,15 @@ Item {
     // Rectangle: native item (radius + stroke border built in).
     // Flip mirrors paint about the center in local space, under the
     // root rotation; geometry, outline and hit area keep the bbox.
+    // Fast only for solid inside strokes (native borders paint
+    // inside); center/outside/gradient/dashed stacks ride EffectItem.
     Rectangle {
         anchors.fill: parent
         visible: shape.shapeType === "rectangle" && !shape.independentCorners && !shape.useEffectPaint
-        color: shape.fill
+        color: shape.firstFill ? shape.firstFillColor : "transparent"
         radius: shape.radius
-        border.width: shape.strokeWidth
-        border.color: shape.strokeWidth > 0 ? shape.strokeColor : "transparent"
+        border.width: shape.firstStroke && shape.rectFastStroke ? Number(shape.firstStroke.width) || 0 : 0
+        border.color: shape.firstStroke && shape.rectFastStroke && Number(shape.firstStroke.width) > 0 ? shape.firstStrokeColor : "transparent"
         opacity: shape.shapeOpacity
         transform: Scale {
             xScale: shape.flipH ? -1 : 1
@@ -215,38 +245,8 @@ Item {
         // the CPU repaint entirely and ride the parent transform.
         nodeX: shape.shapeType === "pen" ? shape.sx : 0
         nodeY: shape.shapeType === "pen" ? shape.sy : 0
-        fill: shape.fill
-        fillType: shape.fillType
-        fillGradient: shape.fillGradient ?? ({
-                "angle": 90,
-                "stops": [
-                    {
-                        "color": "#000000",
-                        "pos": 0
-                    },
-                    {
-                        "color": "#ffffff",
-                        "pos": 1
-                    }
-                ]
-            })
-        stroke: shape.strokeColor
-        strokeType: shape.strokeType
-        strokeGradient: shape.strokeGradient ?? ({
-                "angle": 90,
-                "stops": [
-                    {
-                        "color": "#000000",
-                        "pos": 0
-                    },
-                    {
-                        "color": "#ffffff",
-                        "pos": 1
-                    }
-                ]
-            })
-        strokeWidth: shape.strokeWidth
-        strokeDash: shape.strokeDash ?? []
+        fills: shape.fills ?? []
+        strokes: shape.strokes ?? []
         penFill: shape.penFill !== false
         strokeCap: shape.strokeCap || "round"
         strokeJoin: shape.strokeJoin || "round"
@@ -382,9 +382,9 @@ Item {
             origin.y: shape.sh / 2
         }
         ShapePath {
-            fillColor: shape.shapeType === "pen" && shape.penFill !== true ? "transparent" : shape.fill
-            strokeColor: shape.strokeWidth > 0 ? shape.strokeColor : "transparent"
-            strokeWidth: shape.strokeWidth
+            fillColor: shape.shapeType === "pen" && shape.penFill !== true ? "transparent" : (shape.firstFill ? shape.firstFillColor : "transparent")
+            strokeColor: shape.firstStroke ? shape.firstStrokeColor : "transparent"
+            strokeWidth: shape.firstStroke ? Number(shape.firstStroke.width) || 0 : 0
             joinStyle: shape.joinFor()
             capStyle: shape.capFor()
             PathSvg {
@@ -422,23 +422,8 @@ Item {
             shapeType: "text"
             boxW: shape.sw
             boxH: shape.sh
-            fill: shape.fill
-            fillType: shape.fillType
-            fillGradient: shape.fillGradient ?? ({
-                    "angle": 90,
-                    "stops": [
-                        {
-                            "color": "#000000",
-                            "pos": 0
-                        },
-                        {
-                            "color": "#ffffff",
-                            "pos": 1
-                        }
-                    ]
-                })
-            stroke: shape.strokeColor
-            strokeWidth: shape.strokeWidth > 0 ? 1 : 0
+            fills: shape.fills ?? []
+            strokes: shape.strokes ?? []
             shadows: shape.shadows ?? []
             glows: shape.glows ?? []
             layerBlur: shape.layerBlur ?? ({
@@ -459,7 +444,7 @@ Item {
                     "leading": shape.lineHeight,
                     "boxW": shape.sw,
                     "boxH": shape.sh,
-                    "outlinePx": shape.strokeWidth > 0 ? 1 : 0
+                    "outlinePx": shape.maxStrokeWidth
                 })
             transform: Scale {
                 xScale: shape.flipH ? -1 : 1
@@ -475,9 +460,9 @@ Item {
             anchors.fill: parent
             visible: !shape.useTextEffectPaint
             text: shape.textContent
-            color: shape.fill
-            style: shape.strokeWidth > 0 ? Text.Outline : Text.Normal
-            styleColor: shape.strokeColor
+            color: shape.firstFill ? shape.firstFillColor : "transparent"
+            style: shape.firstStroke ? Text.Outline : Text.Normal
+            styleColor: shape.firstStroke ? shape.firstStrokeColor : "#000000"
             family: shape.fontFamily
             weight: shape.fontWeight
             size: shape.fontSize
@@ -689,12 +674,30 @@ Item {
             }
         }
 
-        Rectangle {
-            anchors.fill: parent
-            radius: Math.max(0, shape.radius)
-            color: "transparent"
-            border.width: shape.strokeWidth
-            border.color: shape.strokeWidth > 0 ? shape.strokeColor : "transparent"
+        // Stacked strokes as borders, bottom-first so index 0 paints
+        // topmost. Inside rides the clip edge (native border), center
+        // straddles it, outside grows past it. Gradient strokes fall
+        // back to their first stop in v1; entry opacity rides the item.
+        Repeater {
+            model: shape.shapeType === "image" ? shape.enabledStrokes.slice().reverse() : []
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: {
+                    var pos = (modelData ?? {}).position || "center";
+                    var w = Number((modelData ?? {}).width) || 0;
+                    if (pos === "outside")
+                        return -w;
+                    if (pos === "center")
+                        return -w / 2;
+                    return 0;
+                }
+                radius: Math.max(0, shape.radius) + Math.max(0, -anchors.margins)
+                color: "transparent"
+                opacity: Math.min(1, Math.max(0, Number((modelData ?? {}).opacity ?? 1)))
+                border.width: Number((modelData ?? {}).width) || 0
+                border.color: String((modelData ?? {}).color ?? "#000000")
+            }
         }
     }
 
@@ -712,7 +715,7 @@ Item {
         maskKind: (shape.shapeType === "rectangle" && !shape.independentCorners) || shape.shapeType === "image" ? "rect" : "path"
         maskRadius: shape.radius
         maskPath: shape.geometry.vectorPath(shape)
-        maskStroke: shape.strokeWidth
+        maskStroke: shape.maxStrokeWidth
         transform: Scale {
             xScale: shape.flipH ? -1 : 1
             yScale: shape.flipV ? -1 : 1

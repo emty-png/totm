@@ -61,9 +61,25 @@ Item {
             sy: overlays.draft ? overlays.draft.y : 0
             sw: overlays.draft ? Math.max(1, overlays.draft.w) : 1
             sh: overlays.draft ? Math.max(1, overlays.draft.h) : 1
-            fill: "#140d99ff"
-            strokeColor: AppTheme.selection
-            strokeWidth: 1 / (overlays.zoom > 0 ? overlays.zoom : 1)
+            fills: [
+                {
+                    enabled: true,
+                    color: "#140d99ff",
+                    type: "solid",
+                    opacity: 1
+                }
+            ]
+            strokes: [
+                {
+                    enabled: true,
+                    color: String(AppTheme.selection),
+                    type: "solid",
+                    width: 1 / (overlays.zoom > 0 ? overlays.zoom : 1),
+                    dash: [],
+                    position: "center",
+                    opacity: 1
+                }
+            ]
             interactive: false
             zoom: overlays.zoom
         }

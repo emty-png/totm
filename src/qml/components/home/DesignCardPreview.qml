@@ -85,14 +85,8 @@ Item {
                         sw: Math.max(1, modelData.w || 10)
                         sh: Math.max(1, modelData.h || 10)
                         shapeRotation: modelData.rotation || 0
-                        fill: modelData.fill || "#d9d9d9"
-                        fillType: modelData.fillType || "solid"
-                        fillGradient: modelData.fillGradient
-                        strokeColor: modelData.stroke || "#000000"
-                        strokeType: modelData.strokeType || "solid"
-                        strokeGradient: modelData.strokeGradient
-                        strokeWidth: modelData.strokeWidth || 0
-                        strokeDash: modelData.strokeDash ?? []
+                        fills: modelData.fills ?? []
+                        strokes: modelData.strokes ?? []
                         penFill: modelData.penFill !== false
                         strokeCap: modelData.strokeCap || "round"
                         strokeJoin: modelData.strokeJoin || "round"
@@ -143,14 +137,8 @@ Item {
                     sw: Math.max(1, modelData.w || 10)
                     sh: Math.max(1, modelData.h || 10)
                     shapeRotation: modelData.rotation || 0
-                    fill: modelData.fill || "#d9d9d9"
-                    fillType: modelData.fillType || "solid"
-                    fillGradient: modelData.fillGradient
-                    strokeColor: modelData.stroke || "#000000"
-                    strokeType: modelData.strokeType || "solid"
-                    strokeGradient: modelData.strokeGradient
-                    strokeWidth: modelData.strokeWidth || 0
-                    strokeDash: modelData.strokeDash ?? []
+                    fills: modelData.fills ?? []
+                    strokes: modelData.strokes ?? []
                     penFill: modelData.penFill !== false
                     strokeCap: modelData.strokeCap || "round"
                     strokeJoin: modelData.strokeJoin || "round"
@@ -217,6 +205,67 @@ Item {
 
     // Top-first walk that hides a whole branch when any ancestor is
     // hidden, mirroring Document.isEffectivelyVisible over snapshots.
+    // Pre-stack scenes carry single fill/stroke keys: fold them into
+    // one-entry stacks so old library entries still paint (new code
+    // writes stacks; the factory folds the same way for live nodes).
+    function foldStacks(n) {
+        if (!n || n.kind === "group")
+            return n;
+        if (n.fills !== undefined && n.strokes !== undefined)
+            return n;
+        var c = Object.assign({}, n);
+        if (c.fills === undefined) {
+            if (c.fill !== undefined || c.fillType !== undefined || c.fillGradient !== undefined) {
+                c.fills = [
+                    {
+                        enabled: true,
+                        color: c.fill ?? "#d9d9d9",
+                        type: c.fillType ?? "solid",
+                        gradient: c.fillGradient,
+                        opacity: 1
+                    }
+                ];
+            } else {
+                c.fills = [
+                    {
+                        enabled: true,
+                        color: "#d9d9d9",
+                        type: "solid",
+                        opacity: 1
+                    }
+                ];
+            }
+        }
+        if (c.strokes === undefined) {
+            if (c.stroke !== undefined || c.strokeType !== undefined || c.strokeWidth !== undefined || c.strokeDash !== undefined || c.strokeGradient !== undefined) {
+                c.strokes = [
+                    {
+                        enabled: true,
+                        color: c.stroke ?? "#000000",
+                        type: c.strokeType ?? "solid",
+                        gradient: c.strokeGradient,
+                        width: c.strokeWidth ?? 0,
+                        dash: c.strokeDash,
+                        position: "center",
+                        opacity: 1
+                    }
+                ];
+            } else {
+                c.strokes = [
+                    {
+                        enabled: true,
+                        color: "#000000",
+                        type: "solid",
+                        width: 0,
+                        position: "center",
+                        opacity: 1
+                    }
+                ];
+            }
+        }
+        return c;
+    }
+
     function collectLeaves() {
         var s = preview.scene;
         if (!s || !s.nodes)
@@ -235,7 +284,7 @@ Item {
                 if (n.kind === "group")
                     walk(n.children || [], false);
                 else
-                    out.push(n);
+                    out.push(preview.foldStacks(n));
             }
         };
         walk(s.nodes, false);

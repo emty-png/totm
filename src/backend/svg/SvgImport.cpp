@@ -1506,6 +1506,24 @@ QVariantMap importFile(const QString &localPath, double maxSize)
         entry[QStringLiteral("strokeWidth")] = round2(sh.strokeWidth * k);
         entry[QStringLiteral("strokeCap")] = sh.strokeCap;
         entry[QStringLiteral("strokeJoin")] = sh.strokeJoin;
+        // Stacked form for the new model (legacy keys kept above for
+        // older readers): single fill entry plus single center stroke.
+        QVariantMap fillEntry;
+        fillEntry[QStringLiteral("enabled")] = true;
+        fillEntry[QStringLiteral("color")] = sh.fill.name(QColor::HexArgb);
+        fillEntry[QStringLiteral("type")] = QStringLiteral("solid");
+        fillEntry[QStringLiteral("opacity")] = 1.0;
+        entry[QStringLiteral("fills")] = QVariantList{fillEntry};
+        QVariantMap strokeEntry;
+        strokeEntry[QStringLiteral("enabled")] = sh.stroke.alpha() > 0 && sh.strokeWidth > 0.0;
+        strokeEntry[QStringLiteral("color")] = sh.stroke.alpha() > 0
+            ? sh.stroke.name(QColor::HexArgb)
+            : QStringLiteral("#00000000");
+        strokeEntry[QStringLiteral("type")] = QStringLiteral("solid");
+        strokeEntry[QStringLiteral("width")] = round2(sh.strokeWidth * k);
+        strokeEntry[QStringLiteral("position")] = QStringLiteral("center");
+        strokeEntry[QStringLiteral("opacity")] = 1.0;
+        entry[QStringLiteral("strokes")] = QVariantList{strokeEntry};
         paths.append(entry);
     }
     out[QStringLiteral("ok")] = true;

@@ -78,9 +78,15 @@ Item {
                     sh: Math.max(1, card.frame.h !== undefined ? card.frame.h : 56)
                     shapeRotation: card.frame.rotation !== undefined ? card.frame.rotation : 0
                     // Content gray, not chrome: previews mimic user shapes.
-                    fill: "#9a9a9a"
-                    strokeColor: "#000000"
-                    strokeWidth: 0
+                    fills: [
+                        {
+                            enabled: true,
+                            color: "#9a9a9a",
+                            type: "solid",
+                            opacity: 1
+                        }
+                    ]
+                    strokes: []
                     shapeOpacity: card.frame.opacity !== undefined ? card.frame.opacity : 1
                     radius: 0
                     points: 5

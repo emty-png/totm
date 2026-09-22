@@ -104,14 +104,8 @@ Item {
             sw: modelData.w
             sh: modelData.h
             shapeRotation: modelData.rotation
-            fill: modelData.fill
-            fillType: modelData.fillType ?? "solid"
-            fillGradient: modelData.fillGradient
-            strokeColor: modelData.stroke
-            strokeType: modelData.strokeType ?? "solid"
-            strokeGradient: modelData.strokeGradient
-            strokeWidth: modelData.strokeWidth
-            strokeDash: modelData.strokeDash ?? []
+            fills: modelData.fills ?? []
+            strokes: modelData.strokes ?? []
             penFill: modelData.penFill !== false
             strokeCap: modelData.strokeCap || "round"
             strokeJoin: modelData.strokeJoin || "round"

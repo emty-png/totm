@@ -34,14 +34,8 @@ class EffectItem : public QQuickPaintedItem {
     Q_PROPERTY(QVariantList pathData READ pathData WRITE setPathData NOTIFY shapeChanged)
     Q_PROPERTY(double nodeX READ nodeX WRITE setNodeX NOTIFY shapeChanged)
     Q_PROPERTY(double nodeY READ nodeY WRITE setNodeY NOTIFY shapeChanged)
-    Q_PROPERTY(QColor fill READ fill WRITE setFill NOTIFY fillChanged)
-    Q_PROPERTY(QString fillType READ fillType WRITE setFillType NOTIFY fillChanged)
-    Q_PROPERTY(QVariantMap fillGradient READ fillGradient WRITE setFillGradient NOTIFY fillChanged)
-    Q_PROPERTY(QColor stroke READ stroke WRITE setStroke NOTIFY strokeChanged)
-    Q_PROPERTY(QString strokeType READ strokeType WRITE setStrokeType NOTIFY strokeChanged)
-    Q_PROPERTY(QVariantMap strokeGradient READ strokeGradient WRITE setStrokeGradient NOTIFY strokeChanged)
-    Q_PROPERTY(double strokeWidth READ strokeWidth WRITE setStrokeWidth NOTIFY strokeChanged)
-    Q_PROPERTY(QVariantList strokeDash READ strokeDash WRITE setStrokeDash NOTIFY strokeChanged)
+    Q_PROPERTY(QVariantList fills READ fills WRITE setFills NOTIFY fillChanged)
+    Q_PROPERTY(QVariantList strokes READ strokes WRITE setStrokes NOTIFY strokeChanged)
     Q_PROPERTY(bool penFill READ penFill WRITE setPenFill NOTIFY fillChanged)
     Q_PROPERTY(QString strokeCap READ strokeCap WRITE setStrokeCap NOTIFY strokeChanged)
     Q_PROPERTY(QString strokeJoin READ strokeJoin WRITE setStrokeJoin NOTIFY strokeChanged)
@@ -77,22 +71,10 @@ public:
     void setNodeX(double v);
     double nodeY() const;
     void setNodeY(double v);
-    QColor fill() const;
-    void setFill(const QColor &v);
-    QString fillType() const;
-    void setFillType(const QString &v);
-    QVariantMap fillGradient() const;
-    void setFillGradient(const QVariantMap &v);
-    QColor stroke() const;
-    void setStroke(const QColor &v);
-    QString strokeType() const;
-    void setStrokeType(const QString &v);
-    QVariantMap strokeGradient() const;
-    void setStrokeGradient(const QVariantMap &v);
-    double strokeWidth() const;
-    void setStrokeWidth(double v);
-    QVariantList strokeDash() const;
-    void setStrokeDash(const QVariantList &v);
+    QVariantList fills() const;
+    void setFills(const QVariantList &v);
+    QVariantList strokes() const;
+    void setStrokes(const QVariantList &v);
     bool penFill() const;
     void setPenFill(bool v);
     QString strokeCap() const;
@@ -134,14 +116,8 @@ private:
     QVariantList m_pathData;
     double m_nodeX = 0.0;
     double m_nodeY = 0.0;
-    QColor m_fill = QColor(QStringLiteral("#d9d9d9"));
-    QString m_fillType = QStringLiteral("solid");
-    QVariantMap m_fillGradient;
-    QColor m_stroke = QColor(QStringLiteral("#000000"));
-    QString m_strokeType = QStringLiteral("solid");
-    QVariantMap m_strokeGradient;
-    double m_strokeWidth = 0.0;
-    QVariantList m_strokeDash;
+    QVariantList m_fills;
+    QVariantList m_strokes;
     bool m_penFill = true;
     QString m_strokeCap = QStringLiteral("round");
     QString m_strokeJoin = QStringLiteral("round");

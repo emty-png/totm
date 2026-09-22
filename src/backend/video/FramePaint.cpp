@@ -157,7 +157,7 @@ void paintImageGlowInner(QPainter &pt, const QPainterPath &clip, const Effects::
 }
 
 void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h, double s,
-    const QColor &stroke, double sw, const Effects::Blur &layerBlur = Effects::Blur(),
+    const QList<Effects::StrokeEntry> &strokes, const Effects::Blur &layerBlur = Effects::Blur(),
     const QList<Effects::Glow> &glows = QList<Effects::Glow>(), const Effects::Grain &grain = Effects::Grain(),
     int uid = -1, int frameNo = 0) {
     const QString name = str(m, "imageSource", str(m, "image", QString()));
@@ -197,23 +197,44 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
         if (g.enabled && g.inner)
             paintImageGlowInner(pt, clip, g, s);
     }
-    if (sw > 0.01) {
-        QPen pen(stroke, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    // Stacked strokes as rect borders, bottom-first so index 0 paints
+    // topmost. Position maps to border placement: inside rides the
+    // clip edge, center straddles it, outside grows past it.
+    double maxSw = 0.0;
+    for (int i = strokes.size() - 1; i >= 0; --i) {
+        const Effects::StrokeEntry &se = strokes.at(i);
+        if (!se.enabled || se.width <= 0.01)
+            continue;
+        const double sw = se.width * s;
+        maxSw = qMax(maxSw, sw);
+        QColor sc = se.color;
+        sc.setAlphaF(qBound(0.0, sc.alphaF() * se.opacity, 1.0));
+        QPen pen(sc, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        if (!se.dash.isEmpty()) {
+            pen.setStyle(Qt::CustomDashLine);
+            pen.setDashPattern(se.dash);
+        }
+        QRectF rect(x, y, w, h);
+        if (se.position == QLatin1String("outside"))
+            rect.adjust(-sw / 2.0, -sw / 2.0, sw / 2.0, sw / 2.0);
+        else if (se.position == QLatin1String("center"))
+            rect.adjust(0, 0, 0, 0);
+        // inside: default clip rect (border paints inside in Qt).
         pt.setPen(pen);
         pt.setBrush(Qt::NoBrush);
-        pt.drawPath(clip);
+        pt.drawRoundedRect(rect, r, r);
     }
     // Grain over pixels and stroke (preview tiles the same way).
     if (grain.enabled && grain.amount > 0.001)
-        Effects::paintGrainPath(&pt, clip, sw, QRectF(x, y, w, h), grain, uid, frameNo, s);
+        Effects::paintGrainPath(&pt, clip, maxSw, QRectF(x, y, w, h), grain, uid, frameNo, s);
 }
 
 // Text through the shared glyph-stack painter (mirrors the canvas
-// EffectItem branch): outer/inner shadows and glows, gradient fill,
-// outline ring, whole-stack layer blur. Grain stays glyph-confined
-// like the preview overlay.
+// EffectItem branch): outer/inner shadows and glows, stacked fills,
+// stacked stroke rings, whole-stack layer blur. Grain stays
+// glyph-confined like the preview overlay.
 void paintText(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h, double s,
-    const QColor &fill, const QList<Effects::Shadow> &shadows = QList<Effects::Shadow>(),
+    const Effects::Style &style, const QList<Effects::Shadow> &shadows = QList<Effects::Shadow>(),
     const QList<Effects::Glow> &glows = QList<Effects::Glow>(),
     const Effects::Blur &layerBlur = Effects::Blur(), const Effects::Grain &grain = Effects::Grain(), int uid = -1,
     int frameNo = 0) {
@@ -230,15 +251,9 @@ void paintText(QPainter &pt, const QVariantMap &m, double x, double y, double w,
     tm[QStringLiteral("leading")] = num(m, "lineHeight", 1.2);
     tm[QStringLiteral("boxW")] = num(m, "w");
     tm[QStringLiteral("boxH")] = num(m, "h");
-    tm[QStringLiteral("outlinePx")] = num(m, "strokeWidth") > 0.0 ? 1.0 : 0.0;
+    tm[QStringLiteral("outlinePx")] = style.maxStrokeWidth() > 0.0 ? style.maxStrokeWidth() : 0.0;
     const Effects::TextOpts text = Effects::TextOpts::fromMap(tm);
-    Effects::Style st;
-    st.fill = fill;
-    st.fillType = str(m, "fillType", QStringLiteral("solid"));
-    st.fillGradient = m.value(QStringLiteral("fillGradient")).toMap();
-    st.stroke = QColor(str(m, "stroke", QStringLiteral("#000000")));
-    st.strokeWidth = num(m, "strokeWidth") > 0.0 ? 1.0 : 0.0;
-    Effects::paintTextLeaf(&pt, QRectF(x, y, w, h), text, st, shadows, glows, layerBlur, s, nullptr);
+    Effects::paintTextLeaf(&pt, QRectF(x, y, w, h), text, style, shadows, glows, layerBlur, s, nullptr);
     // Grain confined to the glyphs: ghost the coverage, keep dots
     // where the ghost is opaque (preview masks its tile the same way).
     if (grain.enabled && grain.amount > 0.001) {
@@ -263,11 +278,11 @@ double leafPad(const QVariantMap &m) {
     const QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
     const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
     const Effects::Blur layerBlur = Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap());
-    const double sw = qMax(0.0, num(m, "strokeWidth"));
-    double pad = Effects::effectPad(shadows, glows, layerBlur, sw);
+    const Effects::Style st = Effects::Style::fromMap(m);
+    double pad = Effects::effectPad(shadows, glows, layerBlur, st.strokes);
     if (shapeType == QLatin1String("pen") && str(m, "strokeJoin", QStringLiteral("round")) == QLatin1String("miter")
-        && sw > 0)
-        pad = qMax(pad, sw);
+        && st.maxStrokeWidth() > 0)
+        pad = qMax(pad, st.maxStrokeWidth());
     if (shapeType == QLatin1String("image"))
         pad = qMax(pad, Effects::glowsPad(glows));
     return pad;
@@ -307,9 +322,7 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
     const double opacity = qBound(0.0, num(m, "opacity", 1.0), 1.0);
     if (opacity <= 0.001)
         return;
-    const QColor fill(str(m, "fill", QStringLiteral("#d9d9d9")));
-    const QColor stroke(str(m, "stroke", QStringLiteral("#000000")));
-    const double sw = qMax(0.0, num(m, "strokeWidth") * scale);
+    const Effects::Style style = Effects::Style::fromMap(m);
     const double cx = x + w / 2.0, cy = y + h / 2.0;
     const int uid = m.value(QStringLiteral("uid"), -1).toInt();
 
@@ -332,9 +345,9 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
 
     if (shapeType == QLatin1String("text")) {
         // Glyph stack through the shared painter: real inner bands,
-        // gradient fill, outline ring and whole-stack layer blur,
+        // stacked fills, stroke rings and whole-stack layer blur,
         // identical to the canvas preview by construction.
-        paintText(pt, m, x, y, w, h, scale, fill, shadows, glows, layerBlur,
+        paintText(pt, m, x, y, w, h, scale, style, shadows, glows, layerBlur,
             useGrain ? grain : Effects::Grain(), uid, frameNo);
         pt.restore();
         return;
@@ -343,7 +356,7 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
     if (shapeType == QLatin1String("image")) {
         if (useBackground)
             paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale, backgroundBlur.opacity);
-        paintImage(pt, m, x, y, w, h, scale, stroke, sw, layerBlur, glows,
+        paintImage(pt, m, x, y, w, h, scale, style.strokes, layerBlur, glows,
             useGrain ? grain : Effects::Grain(), uid, frameNo);
         pt.restore();
         return;
@@ -369,7 +382,7 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
         Effects::paintGrainPath(&pt,
             Effects::outlinePath(shapeType, QRectF(x, y, w, h), Effects::PathOpts::fromMap(m),
                 Effects::Style::fromMap(m), scale),
-            sw, QRectF(x, y, w, h), grain, uid, frameNo, scale);
+            style.maxStrokeWidth() * scale, QRectF(x, y, w, h), grain, uid, frameNo, scale);
     }
     pt.restore();
 }
