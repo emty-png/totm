@@ -29,6 +29,8 @@ ColumnLayout {
         spacing: 8
 
         Rectangle {
+            id: fromStop1
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -36,6 +38,13 @@ ColumnLayout {
             color: String(section.opts.fromC1 || "#000000")
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => section.openStopPicker("fromC1", String(section.opts.fromC1 || "#000000"), fromStop1, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -45,6 +54,8 @@ ColumnLayout {
         }
 
         Rectangle {
+            id: fromStop2
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -52,6 +63,13 @@ ColumnLayout {
             color: String(section.opts.fromC2 || "#ffffff")
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => section.openStopPicker("fromC2", String(section.opts.fromC2 || "#ffffff"), fromStop2, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -84,6 +102,8 @@ ColumnLayout {
         spacing: 8
 
         Rectangle {
+            id: toStop1
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -91,6 +111,13 @@ ColumnLayout {
             color: String(section.opts.toC1 || "#000000")
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => section.openStopPicker("toC1", String(section.opts.toC1 || "#000000"), toStop1, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -100,6 +127,8 @@ ColumnLayout {
         }
 
         Rectangle {
+            id: toStop2
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -107,6 +136,13 @@ ColumnLayout {
             color: String(section.opts.toC2 || "#ff0000")
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => section.openStopPicker("toC2", String(section.opts.toC2 || "#ff0000"), toStop2, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -171,6 +207,14 @@ ColumnLayout {
         section.doc.setClipOptions(section.clipId, patch);
     }
 
+    // Solid picker for the stop wells (stops are solid colors): the
+    // well seeds the popup, drags stream through one scrub
+    // transaction, typed hex commits discretely on its own.
+    function openStopPicker(role, color, anchor, ax, ay) {
+        section.pickerRole = role;
+        stopPicker.openFor(color, anchor, ax, ay);
+    }
+
     function beginScrub() {
         if (section.doc)
             section.doc.beginTransaction();
@@ -179,5 +223,20 @@ ColumnLayout {
     function endScrub() {
         if (section.doc)
             section.doc.endTransaction();
+    }
+
+    // Option key the picker popup is editing
+    // ("fromC1"/"fromC2"/"toC1"/"toC2").
+    property string pickerRole: ""
+
+    ColorPickerPopup {
+        id: stopPicker
+
+        onScrubStarted: section.beginScrub()
+        onCommitted: c => {
+            if (section.pickerRole !== "")
+                section.setOption(section.pickerRole, String(c));
+        }
+        onScrubFinished: section.endScrub()
     }
 }

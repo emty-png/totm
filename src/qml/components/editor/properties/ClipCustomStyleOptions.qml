@@ -94,6 +94,8 @@ ColumnLayout {
         spacing: 8
 
         Rectangle {
+            id: fromSwatch
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -101,6 +103,13 @@ ColumnLayout {
             color: String(section.opts.from || "#000000")
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => section.openPicker("from", String(section.opts.from || "#000000"), fromSwatch, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -115,6 +124,8 @@ ColumnLayout {
         spacing: 8
 
         Rectangle {
+            id: fromStrokeSwatch
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -122,6 +133,13 @@ ColumnLayout {
             color: String(section.opts.from || "#000000")
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => section.openPicker("from", String(section.opts.from || "#000000"), fromStrokeSwatch, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -155,6 +173,8 @@ ColumnLayout {
         spacing: 8
 
         Rectangle {
+            id: toSwatch
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -162,6 +182,13 @@ ColumnLayout {
             color: String(section.opts.to || "#ff0000")
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => section.openPicker("to", String(section.opts.to || "#ff0000"), toSwatch, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -176,6 +203,8 @@ ColumnLayout {
         spacing: 8
 
         Rectangle {
+            id: toStrokeSwatch
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -183,6 +212,13 @@ ColumnLayout {
             color: String(section.opts.to || "#ff0000")
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => section.openPicker("to", String(section.opts.to || "#ff0000"), toStrokeSwatch, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -238,6 +274,16 @@ ColumnLayout {
         section.doc.setClipOptions(section.clipId, patch);
     }
 
+    // Solid picker for the From/To wells: swatch seeds the popup,
+    // drags stream through one scrub transaction (same contract as
+    // NumberField scrubs), typed hex commits discretely on its own.
+    // Gradient paints animate through the gradient sibling clips, so
+    // this popup stays solid-only.
+    function openPicker(role, color, anchor, ax, ay) {
+        section.pickerRole = role;
+        colorPicker.openFor(color, anchor, ax, ay);
+    }
+
     function beginScrub() {
         if (section.doc)
             section.doc.beginTransaction();
@@ -246,5 +292,19 @@ ColumnLayout {
     function endScrub() {
         if (section.doc)
             section.doc.endTransaction();
+    }
+
+    // Option key the picker popup is editing ("from"/"to").
+    property string pickerRole: ""
+
+    ColorPickerPopup {
+        id: colorPicker
+
+        onScrubStarted: section.beginScrub()
+        onCommitted: c => {
+            if (section.pickerRole !== "")
+                section.setOption(section.pickerRole, String(c));
+        }
+        onScrubFinished: section.endScrub()
     }
 }
