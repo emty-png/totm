@@ -3,6 +3,19 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [Unreleased]
+
+### Added
+
+* Layers search and scrolling — the layers panel grew a search field matching by name or shape type with groups auto-expanded around hits (plus a no-matches empty state), and the row list scrolls so long designs no longer overflow the sidebar. Filtering suspends drag-reorder whose gap math assumes the full list; empty-area deselect and the empty context menu moved into the scroller with the presses it now eats.
+* Official seal in the permission header — the permission popup drops the `Official plugin — shipped with totm.` text row and puts the verified-badge seal top-right of the Allow title instead (old copy kept as a hover tooltip).
+* Dashed and dotted strokes — the stroke section grew a Solid/Dashed/Dotted preset row plus dash/gap lengths in stroke-width units, painted through the shared CPU painter so canvas, video, PNG and SVG export match (old scenes read as solid; native text outlines stay solid).
+* SVG import as editable vectors — picking an `.svg` in the image tool vectorizes paths, rects, circles, ellipses, lines, polylines, polygons, `use`/symbol references and text glyph outlines into pen shapes in one undo entry (grouped under the file name), reusing the picker-then-place stamp flow. Unconvertible files fall back to image-blob placement. A new `SvgImport` backend unit mirrors the export-side `SvgPaint` parser; gradients, filters, clips and masks stay out of scope.
+
+### Fixed
+
+* Gradient strokes lost the width field: only the solid row carried it, so `linear` strokes could change nothing but the angle — the gradient row carries the same width control now.
+
 ## [0.2.1] - 2026-09-21
 
 ### Added
