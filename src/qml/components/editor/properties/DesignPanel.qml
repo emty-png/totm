@@ -86,6 +86,7 @@ ScrollView {
         StrokeSection {
             Layout.fillWidth: true
             snapshot: panel.snapshot
+            doc: panel.doc
         }
 
         PenSection {

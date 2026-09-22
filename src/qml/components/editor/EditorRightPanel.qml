@@ -4,12 +4,12 @@ import Totm
 
 // Editor right panel: mode switcher on top; design shows the
 // properties panel, animate shows the preset/custom switcher with
-// per-mode content below. 280px, background fill, 1px left border,
+// per-mode content below. 320px, background fill, 1px left border,
 // shared resize strip on the left edge.
 Item {
     id: rightPanel
 
-    property int panelWidth: 280
+    property int panelWidth: 320
     readonly property int minPanelWidth: 180
     readonly property int maxPanelWidth: 480
 

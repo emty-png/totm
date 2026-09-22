@@ -170,7 +170,9 @@ qt_add_qml_module(totm
         qml/components/editor/properties/AudioSection.qml
         qml/components/editor/properties/ImageSection.qml
         qml/components/editor/properties/FillSection.qml
+        qml/components/editor/properties/FillEntryCard.qml
         qml/components/editor/properties/StrokeSection.qml
+        qml/components/editor/properties/StrokeEntryCard.qml
         qml/components/editor/properties/PenSection.qml
         # Titlebar + window
         qml/components/titlebar/TitleBar.qml
