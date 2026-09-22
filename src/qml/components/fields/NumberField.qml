@@ -38,11 +38,29 @@ TextField {
     placeholderText: field.mixed ? qsTr("Mixed") : ""
     placeholderTextColor: AppTheme.muted
     selectByMouse: true
-    validator: DoubleValidator {
-        bottom: field.minimum
-        top: field.maximum
-        decimals: 2
-        notation: DoubleValidator.StandardNotation
+    // No validator: it rejects legitimate intermediate keystrokes (a
+    // leading "-" inside existing text parses as invalid) and, worse,
+    // swallows Enter on out-of-range text so min-0 fields can never
+    // commit. commit() below parses and clamps to [minimum, maximum],
+    // reverting garbage, which covers the validator's job; the Minus
+    // handler above keeps sign entry working from any cursor spot.
+    // Minus never inserts mid-text (that parses as invalid and the
+    // keystroke dies): it toggles the leading sign instead, so
+    // negatives are enterable from any cursor position without
+    // pre-selecting. The toggled digits stay selected (past the sign)
+    // so typing a value replaces them, keeping the minus.
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Minus && (event.modifiers === Qt.NoModifier || event.modifiers === Qt.KeypadModifier)) {
+            var t = field.text;
+            if (t.charAt(0) === "-") {
+                field.text = t.slice(1);
+                field.selectAll();
+            } else {
+                field.text = "-" + t;
+                field.select(1, field.text.length);
+            }
+            event.accepted = true;
+        }
     }
 
     background: Rectangle {

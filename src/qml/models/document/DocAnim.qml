@@ -34,8 +34,7 @@ QtObject {
     property var presets: DocAnimPresets {
         doc: anim.doc
     }
-    property var customDefaults: DocCustomDefaults {
-    }
+    property var customDefaults: DocCustomDefaults {}
     property var sampler: DocAnimSample {}
 
     function clipById(id) {
