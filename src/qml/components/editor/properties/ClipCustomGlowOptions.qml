@@ -34,7 +34,7 @@ ColumnLayout {
             if (section.pickerRole === "")
                 return;
             var cur = section.pickerRole === "fromColor" ? section.opts.fromColor : section.opts.toColor;
-            section.setOption(section.pickerRole, section.withAlpha(String(c), cur));
+            section.setOption(section.pickerRole, fromWell.withAlpha(String(c), cur));
         }
         onScrubFinished: section.endScrub()
     }
@@ -45,33 +45,15 @@ ColumnLayout {
         color: AppTheme.muted
     }
 
-    RowLayout {
-        spacing: 8
+    ClipAlphaWell {
+        id: fromWell
 
-        Rectangle {
-            id: fromSwatch
-
-            Layout.preferredWidth: 28
-            Layout.preferredHeight: 28
-            Layout.alignment: Qt.AlignVCenter
-            radius: AppTheme.radiusSmall
-            color: String(section.opts.fromColor || "#cc00ffff")
-            border.width: 1
-            border.color: AppTheme.border
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                cursorShape: Qt.PointingHandCursor
-                onClicked: mouse => section.openPicker("fromColor", section.hexOf(section.opts.fromColor), fromSwatch, mouse.x, mouse.y)
-            }
-        }
-
-        HexField {
-            Layout.fillWidth: true
-            value: String(section.opts.fromColor || "#cc00ffff")
-            onCommitted: c => section.setOption("fromColor", c)
-        }
+        colorValue: section.opts.fromColor
+        defaultColor: "#cc00ffff"
+        doc: section.doc
+        clipId: section.clipId
+        optionRole: "fromColor"
+        onSwatchClicked: (role, rgb, anchor, ax, ay) => section.openPicker(role, rgb, anchor, ax, ay)
     }
 
     RowLayout {
@@ -148,33 +130,13 @@ ColumnLayout {
         color: AppTheme.muted
     }
 
-    RowLayout {
-        spacing: 8
-
-        Rectangle {
-            id: toSwatch
-
-            Layout.preferredWidth: 28
-            Layout.preferredHeight: 28
-            Layout.alignment: Qt.AlignVCenter
-            radius: AppTheme.radiusSmall
-            color: String(section.opts.toColor || "#cc00ffff")
-            border.width: 1
-            border.color: AppTheme.border
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                cursorShape: Qt.PointingHandCursor
-                onClicked: mouse => section.openPicker("toColor", section.hexOf(section.opts.toColor), toSwatch, mouse.x, mouse.y)
-            }
-        }
-
-        HexField {
-            Layout.fillWidth: true
-            value: String(section.opts.toColor || "#cc00ffff")
-            onCommitted: c => section.setOption("toColor", c)
-        }
+    ClipAlphaWell {
+        colorValue: section.opts.toColor
+        defaultColor: "#cc00ffff"
+        doc: section.doc
+        clipId: section.clipId
+        optionRole: "toColor"
+        onSwatchClicked: (role, rgb, anchor, ax, ay) => section.openPicker(role, rgb, anchor, ax, ay)
     }
 
     RowLayout {
@@ -251,32 +213,6 @@ ColumnLayout {
         var patch = {};
         patch[role] = value;
         section.doc.setClipOptions(section.clipId, patch);
-    }
-
-    // Hex fields speak opaque rgb: split/combine alpha around them.
-    function hexOf(c) {
-        var t = String(c || "#cc00ffff").toLowerCase();
-        if (t.charAt(0) === "#")
-            t = t.slice(1);
-        if (t.length === 8)
-            return "#" + t.slice(2);
-        return "#" + t;
-    }
-
-    function withAlpha(hex, keep) {
-        var t = String(hex).toLowerCase();
-        if (t.charAt(0) === "#")
-            t = t.slice(1);
-        if (t.length === 3)
-            t = t.charAt(0) + t.charAt(0) + t.charAt(1) + t.charAt(1) + t.charAt(2) + t.charAt(2);
-        if (!/^[0-9a-f]{6}$/.test(t))
-            t = "000000";
-        var k = String(keep || "").toLowerCase();
-        if (k.charAt(0) === "#")
-            k = k.slice(1);
-        if (k.length === 8)
-            return "#" + k.slice(0, 2) + t;
-        return "#" + t;
     }
 
     // Solid picker for the color wells: the well seeds the popup

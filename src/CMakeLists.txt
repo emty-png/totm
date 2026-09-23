@@ -153,6 +153,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ClipCustomGrainOptions.qml
         qml/components/editor/properties/ClipCustomOtherOptions.qml
         qml/components/editor/properties/ClipEntryDropdown.qml
+        qml/components/editor/properties/ClipAlphaWell.qml
         qml/components/editor/properties/ClipDashPair.qml
         qml/components/editor/properties/ClipPositionSwitch.qml
         qml/components/editor/properties/ClipPathOptions.qml
