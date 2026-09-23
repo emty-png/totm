@@ -14,8 +14,25 @@
 #include <QXmlStreamReader>
 #include <QtMath>
 
+#include <algorithm>
+
 namespace SvgImport {
 namespace {
+
+// Gradient paint for linearGradient/radialGradient defs. Only linear
+// maps onto the app's 2-stop bbox model (angle + stops at pos 0/1);
+// radial resolves too but callers fall back to its first stop as solid.
+struct GradStop {
+    double offset = 0.0;
+    QColor color = QColor(QStringLiteral("#000000"));
+};
+struct Gradient {
+    bool linear = false;
+    bool userSpace = false;
+    double x1 = 0.0, y1 = 0.0, x2 = 1.0, y2 = 0.0;
+    QList<GradStop> stops;
+    bool valid = false;
+};
 
 // One pen anchor: cubic handles ride in/out (smooth only). Absolute
 // SVG user-space coords; the import normalizes at the end.
@@ -34,24 +51,31 @@ struct Sub {
     QList<Anchor> pts;
 };
 
-// One drawable element: subpaths plus resolved solid paints.
+// One drawable element: subpaths plus resolved paints (solid colors
+// plus optional gradients; gradient refs resolve via the id table).
 struct Shape {
     QList<Sub> subs;
     QColor fill = QColor(QStringLiteral("#000000"));
+    Gradient fillGrad;
     bool penFill = true;
     QColor stroke = QColor(0, 0, 0, 0);
+    Gradient strokeGrad;
     double strokeWidth = 0.0;
     QString strokeCap = QStringLiteral("round");
     QString strokeJoin = QStringLiteral("round");
 };
 
 // Inherited presentation state while walking the element tree.
+// Gradient paints ride as def ids (resolved later against the id
+// table); solids ride as colors, like before.
 struct Style {
     bool hasFill = false;
     QColor fill = QColor(QStringLiteral("#000000"));
+    QString fillGrad;
     double fillOpacity = 1.0;
     bool hasStroke = false;
     QColor stroke = QColor(0, 0, 0, 0);
+    QString strokeGrad;
     double strokeWidth = 1.0;
     double strokeOpacity = 1.0;
     QString strokeCap;
@@ -132,6 +156,61 @@ QColor parsePaint(const QString &s, bool *set)
     return c;
 }
 
+// Gradient reference: url(#id) with optional quotes/whitespace.
+// Anything else (solid, none, fallback lists) reads empty.
+QString gradientRefId(const QString &s)
+{
+    const QString t = s.trimmed();
+    if (!t.startsWith(QLatin1String("url("), Qt::CaseInsensitive) || !t.endsWith(QLatin1Char(')')))
+        return {};
+    QString inner = t.mid(4, t.size() - 5).trimmed();
+    if (inner.size() >= 2
+        && ((inner.startsWith(QLatin1Char('"')) && inner.endsWith(QLatin1Char('"')))
+            || (inner.startsWith(QLatin1Char('\'')) && inner.endsWith(QLatin1Char('\'')))))
+        inner = inner.mid(1, inner.size() - 2).trimmed();
+    if (!inner.startsWith(QLatin1Char('#')))
+        return {};
+    return inner.mid(1);
+}
+
+// Bbox fraction (number or %) for objectBoundingBox vector ends.
+double parseFraction(const QString &s, bool *ok = nullptr)
+{
+    const QString t = s.trimmed();
+    bool pct = t.endsWith(QLatin1Char('%'));
+    bool numOk = false;
+    const double v = (pct ? t.left(t.size() - 1) : t).toDouble(&numOk);
+    if (!numOk) {
+        if (ok)
+            *ok = false;
+        return 0.0;
+    }
+    if (ok)
+        *ok = true;
+    return pct ? v / 100.0 : v;
+}
+
+
+// App-model angle for a gradient vector: 0 = left->right, 90 =
+// top->bottom, clockwise in y-down coords (matches EffectSpec).
+// userSpace vectors read the same way; position/scale are out of scope
+// for the bbox model, and viewBox skew is ignored.
+double gradientAngle(const Gradient &g, bool *ok = nullptr)
+{
+    const double dx = g.x2 - g.x1, dy = g.y2 - g.y1;
+    if (qHypot(dx, dy) < 1e-9) {
+        if (ok)
+            *ok = false;
+        return 90.0;
+    }
+    double a = qRadiansToDegrees(qAtan2(dy, dx));
+    if (a < 0.0)
+        a += 360.0;
+    if (ok)
+        *ok = true;
+    return a;
+}
+
 double numAttr(const QXmlStreamAttributes &a, const char *key, double fallback)
 {
     if (!a.hasAttribute(QLatin1String(key)))
@@ -190,11 +269,17 @@ Style childStyle(const Style &parent, const QMap<QString, QString> &props)
             s.opacity = qBound(0.0, o, 1.0);
     }
     if (props.contains(QStringLiteral("fill"))) {
-        bool set = false;
-        const QColor c = parsePaint(props.value(QStringLiteral("fill")), &set);
-        if (set) {
-            s.hasFill = true;
-            s.fill = c;
+        const QString ref = gradientRefId(props.value(QStringLiteral("fill")));
+        if (!ref.isEmpty()) {
+            s.fillGrad = ref;
+        } else {
+            bool set = false;
+            const QColor c = parsePaint(props.value(QStringLiteral("fill")), &set);
+            if (set) {
+                s.hasFill = true;
+                s.fill = c;
+                s.fillGrad.clear();
+            }
         }
     }
     if (props.contains(QStringLiteral("fill-opacity"))) {
@@ -204,11 +289,17 @@ Style childStyle(const Style &parent, const QMap<QString, QString> &props)
             s.fillOpacity = qBound(0.0, o, 1.0);
     }
     if (props.contains(QStringLiteral("stroke"))) {
-        bool set = false;
-        const QColor c = parsePaint(props.value(QStringLiteral("stroke")), &set);
-        if (set) {
-            s.hasStroke = true;
-            s.stroke = c;
+        const QString ref = gradientRefId(props.value(QStringLiteral("stroke")));
+        if (!ref.isEmpty()) {
+            s.strokeGrad = ref;
+        } else {
+            bool set = false;
+            const QColor c = parsePaint(props.value(QStringLiteral("stroke")), &set);
+            if (set) {
+                s.hasStroke = true;
+                s.stroke = c;
+                s.strokeGrad.clear();
+            }
         }
     }
     if (props.contains(QStringLiteral("stroke-width"))) {
@@ -962,6 +1053,187 @@ DomNode *buildDom(QXmlStreamReader &xml, QHash<QString, DomNode *> &ids)
     return root;
 }
 
+// Stop presentation value: attribute first, inline style fallback
+// (stops often carry style="stop-color:...;stop-opacity:...").
+QString stopProp(DomNode *node, const char *key)
+{
+    const QString a = attrLocal(node->attrs, key);
+    if (!a.isEmpty())
+        return a;
+    const QString style = attrLocal(node->attrs, "style");
+    const QString k = QString::fromLatin1(key);
+    for (const QString &decl : style.split(QLatin1Char(';'))) {
+        const int ci = decl.indexOf(QLatin1Char(':'));
+        if (ci <= 0)
+            continue;
+        if (decl.left(ci).trimmed().compare(k, Qt::CaseInsensitive) == 0)
+            return decl.mid(ci + 1).trimmed();
+    }
+    return {};
+}
+
+// Stop color with stop-opacity folded into alpha. rgb()/rgba() are
+// parsed by hand (QColor takes rgb() but not CSS float-alpha rgba()).
+QColor parseStopColor(DomNode *node)
+{
+    const QString t = stopProp(node, "stop-color").trimmed();
+    QColor c;
+    if (t.startsWith(QLatin1String("rgb"), Qt::CaseInsensitive)) {
+        static const QRegularExpression num(QStringLiteral("[-+]?\\d*\\.?\\d+%?"));
+        QList<double> nums;
+        QList<bool> pct;
+        QRegularExpressionMatchIterator it = num.globalMatch(t);
+        while (it.hasNext()) {
+            const QString tok = it.next().captured(0);
+            pct.append(tok.endsWith(QLatin1Char('%')));
+            nums.append(tok.left(tok.size() - (tok.endsWith(QLatin1Char('%')) ? 1 : 0)).toDouble());
+        }
+        const double a = nums.size() > 3 ? (pct.at(3) ? nums.at(3) / 100.0 : nums.at(3)) : 1.0;
+        auto comp = [&](int i) {
+            const double v = nums.size() > i ? nums.at(i) : (i == 3 ? 1.0 : 0.0);
+            return qBound(0, qRound(pct.size() > i && pct.at(i) ? v * 255.0 / 100.0 : v), 255);
+        };
+        if (nums.size() >= 3)
+            c = QColor(comp(0), comp(1), comp(2), qBound(0, qRound(a * 255.0), 255));
+    } else {
+        c = QColor(t);
+    }
+    if (!c.isValid())
+        c = QColor(QStringLiteral("#000000"));
+    bool ok = false;
+    const double so = stopProp(node, "stop-opacity").toDouble(&ok);
+    return withOpacity(c, ok ? so : 1.0);
+}
+
+QList<GradStop> parseStops(DomNode *node)
+{
+    QList<GradStop> out;
+    for (const DomNode::Chunk &c : node->content) {
+        if (c.isText || c.node->tag != QLatin1String("stop"))
+            continue;
+        GradStop s;
+        bool ok = false;
+        s.offset = parseFraction(attrLocal(c.node->attrs, "offset"), &ok);
+        if (!ok)
+            s.offset = 0.0;
+        s.color = parseStopColor(c.node);
+        out.append(s);
+    }
+    std::stable_sort(out.begin(), out.end(),
+        [](const GradStop &a, const GradStop &b) { return a.offset < b.offset; });
+    return out;
+}
+
+// sRGB + alpha lerp of the sorted stops at t (stops clamp outside).
+QColor sampleStops(const QList<GradStop> &stops, double t)
+{
+    if (stops.isEmpty())
+        return QColor(QStringLiteral("#000000"));
+    if (t <= stops.first().offset)
+        return stops.first().color;
+    if (t >= stops.last().offset)
+        return stops.last().color;
+    for (int i = 0; i + 1 < stops.size(); ++i) {
+        const GradStop &a = stops.at(i), &b = stops.at(i + 1);
+        if (t >= a.offset && t <= b.offset) {
+            const double span = qMax(1e-9, b.offset - a.offset);
+            const double k = (t - a.offset) / span;
+            return QColor(qRound(a.color.red() + (b.color.red() - a.color.red()) * k),
+                qRound(a.color.green() + (b.color.green() - a.color.green()) * k),
+                qRound(a.color.blue() + (b.color.blue() - a.color.blue()) * k),
+                qRound(a.color.alpha() + (b.color.alpha() - a.color.alpha()) * k));
+        }
+    }
+    return stops.last().color;
+}
+
+// Resolve one gradient (href chains included, cycle-capped). Child
+// vector/stops override the parent; type mismatch with the href
+// target invalidates. gradientTransform maps the endpoints in
+// gradient space (bbox fractions or user units alike).
+Gradient resolveGradient(const QString &id, const QHash<QString, DomNode *> &ids, int depth = 0)
+{
+    Gradient g;
+    if (id.isEmpty() || !ids.contains(id) || depth > 8)
+        return g;
+    DomNode *node = ids.value(id);
+    const bool isLinear = node->tag == QLatin1String("lineargradient");
+    if (!isLinear && node->tag != QLatin1String("radialgradient"))
+        return g;
+    QString href = attrLocal(node->attrs, "href");
+    if (href.startsWith(QLatin1Char('#')))
+        href = href.mid(1);
+    Gradient base;
+    bool hasBase = false;
+    if (!href.isEmpty() && href != id) {
+        DomNode *target = ids.value(href, nullptr);
+        if (!target
+            || target->tag != node->tag
+            || href == id)
+            return g;
+        base = resolveGradient(href, ids, depth + 1);
+        if (!base.valid)
+            return g;
+        hasBase = true;
+        g = base;
+    }
+    g.linear = isLinear;
+    const QString units = attrLocal(node->attrs, "gradientunits");
+    if (!units.isEmpty())
+        g.userSpace = units.compare(QLatin1String("userspaceonuse"), Qt::CaseInsensitive) == 0;
+    else if (!hasBase)
+        g.userSpace = false;
+    auto readVec = [&](const char *key, double fallback) {
+        const QString v = attrLocal(node->attrs, key);
+        if (v.isEmpty())
+            return fallback;
+        if (g.userSpace) {
+            bool ok = false;
+            const double d = parseLength(v, &ok);
+            return ok ? d : fallback;
+        }
+        bool ok = false;
+        const double d = parseFraction(v, &ok);
+        return ok ? d : fallback;
+    };
+    // Presence-tracked so href parents fill only the missing ends.
+    const QString sx1 = attrLocal(node->attrs, "x1"), sy1 = attrLocal(node->attrs, "y1");
+    const QString sx2 = attrLocal(node->attrs, "x2"), sy2 = attrLocal(node->attrs, "y2");
+    if (!sx1.isEmpty())
+        g.x1 = readVec("x1", g.x1);
+    else if (!hasBase)
+        g.x1 = 0.0;
+    if (!sy1.isEmpty())
+        g.y1 = readVec("y1", g.y1);
+    else if (!hasBase)
+        g.y1 = 0.0;
+    if (!sx2.isEmpty())
+        g.x2 = readVec("x2", g.x2);
+    else if (!hasBase)
+        g.x2 = 1.0;
+    if (!sy2.isEmpty())
+        g.y2 = readVec("y2", g.y2);
+    else if (!hasBase)
+        g.y2 = 0.0;
+    const QString xf = attrLocal(node->attrs, "gradienttransform");
+    if (!xf.isEmpty()) {
+        const QTransform t = parseTransform(xf);
+        const QPointF p0 = t.map(QPointF(g.x1, g.y1));
+        const QPointF p1 = t.map(QPointF(g.x2, g.y2));
+        g.x1 = p0.x();
+        g.y1 = p0.y();
+        g.x2 = p1.x();
+        g.y2 = p1.y();
+    }
+    const QList<GradStop> own = parseStops(node);
+    if (!own.isEmpty())
+        g.stops = own;
+    else if (!hasBase)
+        g.stops = own;
+    g.valid = !g.stops.isEmpty();
+    return g;
+}
+
 bool isDrawable(const QString &tag)
 {
     return tag == QLatin1String("path") || tag == QLatin1String("rect")
@@ -980,7 +1252,11 @@ bool isSilentContainer(const QString &tag)
 }
 
 // Shared paint resolution for converted shapes and glyph runs.
-void appendShape(QList<Sub> subs, const Style &st, QList<Shape> &shapes)
+// Gradient ids resolve against the pre-resolved def table; a valid
+// linear gradient wins over the solid, anything else falls back to
+// the solid path (radial degrades to its first stop, unknown ids to
+// the SVG default like before).
+void appendShape(QList<Sub> subs, const Style &st, const QHash<QString, Gradient> &grads, QList<Shape> &shapes)
 {
     QList<Sub> kept;
     for (const Sub &s : subs) {
@@ -992,7 +1268,22 @@ void appendShape(QList<Sub> subs, const Style &st, QList<Shape> &shapes)
     Shape sh;
     sh.subs = kept;
     const double op = qBound(0.0, st.opacity, 1.0);
-    if (st.hasFill && st.fill.alpha() > 0) {
+    const Gradient fillG = grads.value(st.fillGrad);
+    if (fillG.valid && !fillG.stops.isEmpty()) {
+        // Opacity folds into the sampled alphas (entry opacity stays 1,
+        // like the solid path below).
+        const double fo = op * st.fillOpacity;
+        if (fillG.linear) {
+            Gradient g = fillG;
+            for (GradStop &s : g.stops)
+                s.color = withOpacity(s.color, fo);
+            sh.fillGrad = g;
+            sh.fill = withOpacity(sampleStops(g.stops, 0.0), 1.0);
+        } else {
+            sh.fill = withOpacity(sampleStops(fillG.stops, 0.0), fo);
+        }
+        sh.penFill = true;
+    } else if (st.hasFill && st.fill.alpha() > 0) {
         sh.fill = withOpacity(st.fill, op * st.fillOpacity);
         sh.penFill = true;
     } else if (st.hasFill) {
@@ -1001,7 +1292,20 @@ void appendShape(QList<Sub> subs, const Style &st, QList<Shape> &shapes)
         sh.fill = withOpacity(QColor(QStringLiteral("#000000")), op);
         sh.penFill = true;
     }
-    if (st.hasStroke && st.stroke.alpha() > 0 && st.strokeWidth > 0.0) {
+    const Gradient strokeG = grads.value(st.strokeGrad);
+    if (strokeG.valid && !strokeG.stops.isEmpty() && st.strokeWidth > 0.0) {
+        const double so = op * st.strokeOpacity;
+        if (strokeG.linear) {
+            Gradient g = strokeG;
+            for (GradStop &s : g.stops)
+                s.color = withOpacity(s.color, so);
+            sh.strokeGrad = g;
+            sh.stroke = withOpacity(sampleStops(g.stops, 0.0), 1.0);
+        } else {
+            sh.stroke = withOpacity(sampleStops(strokeG.stops, 0.0), so);
+        }
+        sh.strokeWidth = st.strokeWidth;
+    } else if (st.hasStroke && st.stroke.alpha() > 0 && st.strokeWidth > 0.0) {
         sh.stroke = withOpacity(st.stroke, op * st.strokeOpacity);
         sh.strokeWidth = st.strokeWidth;
     }
@@ -1209,7 +1513,7 @@ QList<Sub> glyphOutlines(const QPainterPath &path)
 
 // text-anchor shifts the run start by its own advance (exact for the
 // common single-run label; multi-run anchored spans keep positions).
-void convertText(DomNode *node, const Style &style, const QTransform &ctm, QList<Shape> &shapes)
+void convertText(DomNode *node, const Style &style, const QTransform &ctm, const QHash<QString, Gradient> &grads, QList<Shape> &shapes)
 {
     double penX = 0.0, penY = 0.0;
     const QString xs = attrLocal(node->attrs, "x"), ys = attrLocal(node->attrs, "y");
@@ -1251,7 +1555,7 @@ void convertText(DomNode *node, const Style &style, const QTransform &ctm, QList
     if (subs.isEmpty())
         return;
     applyTransform(subs, ctm);
-    appendShape(subs, style, shapes);
+    appendShape(subs, style, grads, shapes);
 }
 
 // Viewport mapping for nested svg/symbol viewports (meet only; slice
@@ -1296,8 +1600,8 @@ QList<double> numList(const QString &s, int need)
 }
 
 void walkNode(DomNode *node, const QTransform &ctm, const Style &style, bool inDefs,
-    const QHash<QString, DomNode *> &ids, QSet<QString> &activeUses, int useDepth, QList<Shape> &shapes,
-    bool viaUse = false)
+    const QHash<QString, DomNode *> &ids, const QHash<QString, Gradient> &grads, QSet<QString> &activeUses,
+    int useDepth, QList<Shape> &shapes, bool viaUse = false)
 {
     if (!node)
         return;
@@ -1344,20 +1648,20 @@ void walkNode(DomNode *node, const QTransform &ctm, const Style &style, bool inD
         // Referenced symbols render their children (a direct walk would
         // hit the silent-container rule below).
         const bool renderRoot = target->tag == QLatin1String("symbol");
-        walkNode(target, uc, st, false, ids, activeUses, useDepth + 1, shapes, renderRoot);
+        walkNode(target, uc, st, false, ids, grads, activeUses, useDepth + 1, shapes, renderRoot);
         activeUses.remove(href);
         return;
     }
     if (tag == QLatin1String("text")) {
         if (!inDefs)
-            convertText(node, st, local, shapes);
+            convertText(node, st, local, grads, shapes);
         return;
     }
     if (isDrawable(tag)) {
         if (!inDefs) {
             QList<Sub> subs = shapeSubs(tag, node->attrs);
             applyTransform(subs, local);
-            appendShape(subs, st, shapes);
+            appendShape(subs, st, grads, shapes);
         }
         return;
     }
@@ -1380,7 +1684,7 @@ void walkNode(DomNode *node, const QTransform &ctm, const Style &style, bool inD
     }
     for (const DomNode::Chunk &c : node->content) {
         if (!c.isText)
-            walkNode(c.node, local, st, inDefs, ids, activeUses, useDepth, shapes);
+            walkNode(c.node, local, st, inDefs, ids, grads, activeUses, useDepth, shapes);
     }
 }
 
@@ -1410,6 +1714,18 @@ QVariantMap importFile(const QString &localPath, double maxSize)
         return out;
     }
     QList<Shape> shapes;
+    // Pre-resolve every gradient def once (href chains included), so
+    // shape conversion is a table lookup. Unresolvable ids simply miss
+    // and paint through the old solid path.
+    QHash<QString, Gradient> grads;
+    for (auto it = ids.constBegin(); it != ids.constEnd(); ++it) {
+        const QString tag = it.value()->tag;
+        if (tag == QLatin1String("lineargradient") || tag == QLatin1String("radialgradient")) {
+            const Gradient g = resolveGradient(it.key(), ids);
+            if (g.valid)
+                grads.insert(it.key(), g);
+        }
+    }
     double svgW = 0.0, svgH = 0.0, vbX = 0.0, vbY = 0.0, vbW = 0.0, vbH = 0.0;
     bool haveVb = false, haveSize = false;
     if (dom && dom->tag == QLatin1String("svg")) {
@@ -1431,7 +1747,7 @@ QVariantMap importFile(const QString &localPath, double maxSize)
         }
         Style base;
         QSet<QString> activeUses;
-        walkNode(dom, QTransform(), base, false, ids, activeUses, 0, shapes);
+        walkNode(dom, QTransform(), base, false, ids, grads, activeUses, 0, shapes);
     }
     deleteDom(dom);
     if (shapes.isEmpty()) {
@@ -1498,6 +1814,9 @@ QVariantMap importFile(const QString &localPath, double maxSize)
         }
         QVariantMap entry;
         entry[QStringLiteral("pathData")] = subs;
+        // Gradient shapes report their first stop as the legacy solid
+        // (old readers stay meaningful); the stacks below carry the
+        // real linear paint for the new model.
         entry[QStringLiteral("fill")] = sh.fill.name(QColor::HexArgb);
         entry[QStringLiteral("penFill")] = sh.penFill;
         entry[QStringLiteral("stroke")] = sh.stroke.alpha() > 0
@@ -1508,10 +1827,38 @@ QVariantMap importFile(const QString &localPath, double maxSize)
         entry[QStringLiteral("strokeJoin")] = sh.strokeJoin;
         // Stacked form for the new model (legacy keys kept above for
         // older readers): single fill entry plus single center stroke.
+        // Linear-gradient paints land as linear entries (2 stops at pos
+        // 0/1, bbox-relative angle); radial degrades to the first stop
+        // as solid inside appendShape, so it never reaches this branch.
         QVariantMap fillEntry;
         fillEntry[QStringLiteral("enabled")] = true;
         fillEntry[QStringLiteral("color")] = sh.fill.name(QColor::HexArgb);
-        fillEntry[QStringLiteral("type")] = QStringLiteral("solid");
+        if (sh.fillGrad.valid && sh.fillGrad.linear && sh.fillGrad.stops.size() >= 2) {
+            bool ok = false;
+            const double ang = gradientAngle(sh.fillGrad, &ok);
+            if (ok) {
+                fillEntry[QStringLiteral("type")] = QStringLiteral("linear");
+                QVariantMap grad;
+                grad[QStringLiteral("angle")] = round2(ang);
+                QVariantList stops;
+                const QColor c0 = sampleStops(sh.fillGrad.stops, 0.0);
+                const QColor c1 = sampleStops(sh.fillGrad.stops, 1.0);
+                stops.append(QVariantMap{
+                    {QStringLiteral("color"), c0.name(QColor::HexArgb)},
+                    {QStringLiteral("pos"), 0.0},
+                });
+                stops.append(QVariantMap{
+                    {QStringLiteral("color"), c1.name(QColor::HexArgb)},
+                    {QStringLiteral("pos"), 1.0},
+                });
+                grad[QStringLiteral("stops")] = stops;
+                fillEntry[QStringLiteral("gradient")] = grad;
+            } else {
+                fillEntry[QStringLiteral("type")] = QStringLiteral("solid");
+            }
+        } else {
+            fillEntry[QStringLiteral("type")] = QStringLiteral("solid");
+        }
         fillEntry[QStringLiteral("opacity")] = 1.0;
         entry[QStringLiteral("fills")] = QVariantList{fillEntry};
         QVariantMap strokeEntry;
@@ -1519,7 +1866,33 @@ QVariantMap importFile(const QString &localPath, double maxSize)
         strokeEntry[QStringLiteral("color")] = sh.stroke.alpha() > 0
             ? sh.stroke.name(QColor::HexArgb)
             : QStringLiteral("#00000000");
-        strokeEntry[QStringLiteral("type")] = QStringLiteral("solid");
+        if (sh.strokeGrad.valid && sh.strokeGrad.linear && sh.strokeGrad.stops.size() >= 2
+            && sh.stroke.alpha() > 0 && sh.strokeWidth > 0.0) {
+            bool ok = false;
+            const double ang = gradientAngle(sh.strokeGrad, &ok);
+            if (ok) {
+                strokeEntry[QStringLiteral("type")] = QStringLiteral("linear");
+                QVariantMap grad;
+                grad[QStringLiteral("angle")] = round2(ang);
+                QVariantList stops;
+                const QColor c0 = sampleStops(sh.strokeGrad.stops, 0.0);
+                const QColor c1 = sampleStops(sh.strokeGrad.stops, 1.0);
+                stops.append(QVariantMap{
+                    {QStringLiteral("color"), c0.name(QColor::HexArgb)},
+                    {QStringLiteral("pos"), 0.0},
+                });
+                stops.append(QVariantMap{
+                    {QStringLiteral("color"), c1.name(QColor::HexArgb)},
+                    {QStringLiteral("pos"), 1.0},
+                });
+                grad[QStringLiteral("stops")] = stops;
+                strokeEntry[QStringLiteral("gradient")] = grad;
+            } else {
+                strokeEntry[QStringLiteral("type")] = QStringLiteral("solid");
+            }
+        } else {
+            strokeEntry[QStringLiteral("type")] = QStringLiteral("solid");
+        }
         strokeEntry[QStringLiteral("width")] = round2(sh.strokeWidth * k);
         strokeEntry[QStringLiteral("position")] = QStringLiteral("center");
         strokeEntry[QStringLiteral("opacity")] = 1.0;
