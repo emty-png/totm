@@ -13,8 +13,23 @@ ColumnLayout {
 
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property var opts: section.clip ? section.clip.options || {} : ({})
+    // Option key the picker popup is editing ("fromColor"/"toColor").
+    property string pickerRole: ""
 
     spacing: 8
+
+    ColorPickerPopup {
+        id: colorPicker
+
+        onScrubStarted: section.beginScrub()
+        onCommitted: c => {
+            if (section.pickerRole === "")
+                return;
+            var cur = section.pickerRole === "fromColor" ? section.opts.fromColor : section.opts.toColor;
+            section.setOption(section.pickerRole, section.withAlpha(String(c), cur));
+        }
+        onScrubFinished: section.endScrub()
+    }
 
     Text {
         text: qsTr("From")
@@ -26,6 +41,8 @@ ColumnLayout {
         spacing: 8
 
         Rectangle {
+            id: fromSwatch
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -33,6 +50,13 @@ ColumnLayout {
             color: String(section.opts.fromColor || "#80000000")
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => section.openPicker("fromColor", section.hexOf(section.opts.fromColor), fromSwatch, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -152,6 +176,8 @@ ColumnLayout {
         spacing: 8
 
         Rectangle {
+            id: toSwatch
+
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             Layout.alignment: Qt.AlignVCenter
@@ -159,6 +185,13 @@ ColumnLayout {
             color: String(section.opts.toColor || "#80000000")
             border.width: 1
             border.color: AppTheme.border
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mouse => section.openPicker("toColor", section.hexOf(section.opts.toColor), toSwatch, mouse.x, mouse.y)
+            }
         }
 
         HexField {
@@ -300,6 +333,15 @@ ColumnLayout {
         var patch = {};
         patch[role] = value;
         section.doc.setClipOptions(section.clipId, patch);
+    }
+
+    // Solid picker for the color wells: the well seeds the popup
+    // (opaque rgb; the stored alpha rides through withAlpha like the
+    // hex path), drags stream through one scrub transaction, typed
+    // hex commits discretely on its own.
+    function openPicker(role, color, anchor, ax, ay) {
+        section.pickerRole = role;
+        colorPicker.openFor(color, anchor, ax, ay);
     }
 
     function beginScrub() {
