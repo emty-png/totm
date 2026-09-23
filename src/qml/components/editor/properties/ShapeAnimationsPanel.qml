@@ -175,7 +175,7 @@ ScrollView {
                 detail = qsTr("at %1s · Instant").arg(clips[j].t0.toFixed(1)) + loopSuffix;
             out.push({
                 id: clips[j].id,
-                name: d.anim.presets.presetName(clips[j].preset),
+                name: d.anim.presets.presetName(clips[j].preset) + d.anim.presets.entrySuffix(clips[j].preset, clips[j].options),
                 detail: detail
             });
         }

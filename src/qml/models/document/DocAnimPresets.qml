@@ -1,8 +1,7 @@
 import QtQuick
 
 // Preset catalog and clip builders for one Document's animation.
-// Builders capture nothing but explicit params: the sampler derives
-// every frame from clip plus base snapshot, so clips stay valid when
+// Frames derive from clip plus base snapshot, so clips stay valid when
 // nodes move after being applied. Owned by DocAnim, which assigns clip ids.
 QtObject {
     id: presets
@@ -71,78 +70,77 @@ QtObject {
         return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customStrokeGradient", "customFontSize", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
     }
 
-    // Stepped presets switch state instead of interpolating (bools or
-    // hard pops): they render as one diamond at t0 with a locked 0.1s
-    // duration, never a span bar.
+    // Stepped presets render as one diamond at t0 with a locked 0.1s
+    // duration (see buildClip), never a span bar.
     function isStepped(presetId) {
         return presetId === "appear" || presetId === "customHide" || presetId === "customFlip";
     }
 
-    // Custom from-to clips reuse the preset pipeline (timeline, undo,
-    // easing, video-safe plain data). Later clips win per property like
-    // presets, matching Figma Smart Animate merge behavior.
+    // Custom from-to clips reuse the preset pipeline; later clips win
+    // per property, matching Figma Smart Animate merge behavior.
     function isCustom(presetId) {
         return String(presetId).slice(0, 6) === "custom";
     }
 
     function presetName(presetId) {
-        if (presetId === "appear")
-            return qsTr("Appear");
-        if (presetId === "slide")
-            return qsTr("Slide");
-        if (presetId === "grow")
-            return qsTr("Grow");
-        if (presetId === "shrink")
-            return qsTr("Shrink");
-        if (presetId === "spin")
-            return qsTr("Spin");
-        if (presetId === "twist")
-            return qsTr("Twist");
-        if (presetId === "movescale")
-            return qsTr("Move & Scale");
-        if (presetId === "type")
-            return qsTr("Type");
-        if (presetId === "customScale")
-            return qsTr("Scale");
-        if (presetId === "customRotate")
-            return qsTr("Rotate");
-        if (presetId === "customMove")
-            return qsTr("Move");
-        if (presetId === "customOpacity")
-            return qsTr("Opacity");
-        if (presetId === "customColor")
-            return qsTr("Color");
-        if (presetId === "customGradient")
-            return qsTr("Gradient");
-        if (presetId === "customHide")
-            return qsTr("Hide / Show");
-        if (presetId === "customResize")
-            return qsTr("Resize");
-        if (presetId === "customCorner")
-            return qsTr("Corner Radius");
-        if (presetId === "customStroke")
-            return qsTr("Stroke");
-        if (presetId === "customStrokeColor")
-            return qsTr("Stroke color");
-        if (presetId === "customStrokeGradient")
-            return qsTr("Stroke gradient");
-        if (presetId === "customFontSize")
-            return qsTr("Font size");
-        if (presetId === "customFlip")
-            return qsTr("Flip");
-        if (presetId === "customShadow")
-            return qsTr("Shadow");
-        if (presetId === "customLayerBlur")
-            return qsTr("Layer Blur");
-        if (presetId === "customBackgroundBlur")
-            return qsTr("Background Blur");
-        if (presetId === "customGlow")
-            return qsTr("Glow");
-        if (presetId === "customGrain")
-            return qsTr("Grain");
-        if (presetId === "customPath")
-            return qsTr("Path");
-        return qsTr("Fade");
+        var names = {
+            "appear": qsTr("Appear"),
+            "slide": qsTr("Slide"),
+            "grow": qsTr("Grow"),
+            "shrink": qsTr("Shrink"),
+            "spin": qsTr("Spin"),
+            "twist": qsTr("Twist"),
+            "movescale": qsTr("Move & Scale"),
+            "type": qsTr("Type"),
+            "customScale": qsTr("Scale"),
+            "customRotate": qsTr("Rotate"),
+            "customMove": qsTr("Move"),
+            "customOpacity": qsTr("Opacity"),
+            "customColor": qsTr("Color"),
+            "customGradient": qsTr("Gradient"),
+            "customHide": qsTr("Hide / Show"),
+            "customResize": qsTr("Resize"),
+            "customCorner": qsTr("Corner Radius"),
+            "customStroke": qsTr("Stroke"),
+            "customStrokeColor": qsTr("Stroke color"),
+            "customStrokeGradient": qsTr("Stroke gradient"),
+            "customFontSize": qsTr("Font size"),
+            "customFlip": qsTr("Flip"),
+            "customShadow": qsTr("Shadow"),
+            "customLayerBlur": qsTr("Layer Blur"),
+            "customBackgroundBlur": qsTr("Background Blur"),
+            "customGlow": qsTr("Glow"),
+            "customGrain": qsTr("Grain"),
+            "customPath": qsTr("Path")
+        };
+        return names[presetId] !== undefined ? names[presetId] : qsTr("Fade");
+    }
+
+    // Entry suffix for style/effect clips (" · Fill 2"): 1-based, shown
+    // only when the clip carries its index key so old clips stay clean.
+    function entrySuffix(presetId, options) {
+        var o = options || {};
+        if (presetId === "customColor" || presetId === "customGradient") {
+            if (o.fillIndex === undefined)
+                return "";
+            return " · " + qsTr("Fill %1").arg(normalizeEntryIndex(o.fillIndex) + 1);
+        }
+        if (presetId === "customStroke" || presetId === "customStrokeColor" || presetId === "customStrokeGradient") {
+            if (o.strokeIndex === undefined)
+                return "";
+            return " · " + qsTr("Stroke %1").arg(normalizeEntryIndex(o.strokeIndex) + 1);
+        }
+        if (presetId === "customShadow") {
+            if (o.shadowIndex === undefined)
+                return "";
+            return " · " + qsTr("Shadow %1").arg(normalizeEntryIndex(o.shadowIndex) + 1);
+        }
+        if (presetId === "customGlow") {
+            if (o.glowIndex === undefined)
+                return "";
+            return " · " + qsTr("Glow %1").arg(normalizeEntryIndex(o.glowIndex) + 1);
+        }
+        return "";
     }
 
     function defaultEasingFor(presetId) {
@@ -154,200 +152,180 @@ QtObject {
         return "easeOut";
     }
 
+    // Fresh defaults per call (callers mutate the result).
+    readonly property var _defaultOptions: {
+        "slide": {
+            direction: "left",
+            distance: 200,
+            fade: true
+        },
+        "spin": {
+            direction: "cw",
+            turns: 1
+        },
+        "twist": {
+            direction: "cw"
+        },
+        "movescale": {
+            direction: "left",
+            distance: 200,
+            scale: 0
+        },
+        "type": {
+            unit: "letters",
+            cps: 20,
+            cursor: false
+        },
+        "customScale": {
+            from: 0,
+            to: 1
+        },
+        "customRotate": {
+            from: 0,
+            to: 90
+        },
+        "customMove": {
+            fromX: 0,
+            fromY: 0,
+            toX: 200,
+            toY: 0
+        },
+        "customOpacity": {
+            from: 0,
+            to: 1
+        },
+        "customColor": {
+            from: "#000000",
+            to: "#ff0000",
+            fromOpacity: 1,
+            toOpacity: 1,
+            fillIndex: 0
+        },
+        "customGradient": {
+            fromC1: "#000000",
+            toC1: "#000000",
+            fromC2: "#ffffff",
+            toC2: "#ff0000",
+            fromAngle: 90,
+            toAngle: 90,
+            fromOpacity: 1,
+            toOpacity: 1,
+            fillIndex: 0
+        },
+        "customHide": {
+            fromVisible: true,
+            toVisible: false
+        },
+        "customResize": {
+            fromW: 100,
+            fromH: 100,
+            toW: 200,
+            toH: 200
+        },
+        "customCorner": {
+            from: 0,
+            to: 24
+        },
+        "customStroke": {
+            from: 0,
+            to: 4,
+            fromOpacity: 1,
+            toOpacity: 1,
+            fromDash: 0,
+            toDash: 0,
+            fromGap: 0,
+            toGap: 0,
+            fromPosition: "center",
+            toPosition: "center",
+            strokeIndex: 0
+        },
+        "customStrokeColor": {
+            from: "#000000",
+            to: "#ff0000",
+            fromOpacity: 1,
+            toOpacity: 1,
+            strokeIndex: 0
+        },
+        "customStrokeGradient": {
+            fromC1: "#000000",
+            toC1: "#000000",
+            fromC2: "#ffffff",
+            toC2: "#ff0000",
+            fromAngle: 90,
+            toAngle: 90,
+            fromOpacity: 1,
+            toOpacity: 1,
+            from: 1,
+            to: 1,
+            fromDash: 0,
+            toDash: 0,
+            fromGap: 0,
+            toGap: 0,
+            fromPosition: "center",
+            toPosition: "center",
+            strokeIndex: 0
+        },
+        "customFontSize": {
+            from: 16,
+            to: 32
+        },
+        "customFlip": {
+            axis: "h"
+        },
+        "customShadow": {
+            fromColor: "#80000000",
+            toColor: "#80000000",
+            fromX: 0,
+            toX: 0,
+            fromY: 4,
+            toY: 12,
+            fromBlur: 8,
+            toBlur: 16,
+            fromSpread: 0,
+            toSpread: 0,
+            fromInner: false,
+            toInner: false,
+            shadowIndex: 0
+        },
+        "customLayerBlur": {
+            fromRadius: 0,
+            toRadius: 12,
+            fromOpacity: 1,
+            toOpacity: 1
+        },
+        "customBackgroundBlur": {
+            fromRadius: 0,
+            toRadius: 16,
+            fromOpacity: 0.7,
+            toOpacity: 0.7
+        },
+        "customGlow": {
+            fromColor: "#cc00ffff",
+            toColor: "#cc00ffff",
+            fromBlur: 16,
+            toBlur: 28,
+            fromSpread: 4,
+            toSpread: 4,
+            fromInner: false,
+            toInner: false,
+            glowIndex: 0
+        },
+        "customGrain": {
+            fromAmount: 0,
+            toAmount: 0.5,
+            fromSize: 2,
+            toSize: 2
+        },
+        "customPath": {
+            pts: [],
+            closed: false,
+            orient: false
+        }
+    }
+
     function defaultsFor(presetId) {
-        if (presetId === "slide")
-            return {
-                direction: "left",
-                distance: 200,
-                fade: true
-            };
-        if (presetId === "spin")
-            return {
-                direction: "cw",
-                turns: 1
-            };
-        if (presetId === "twist")
-            return {
-                direction: "cw"
-            };
-        if (presetId === "movescale")
-            return {
-                direction: "left",
-                distance: 200,
-                scale: 0
-            };
-        if (presetId === "type")
-            return {
-                unit: "letters",
-                cps: 20,
-                cursor: false
-            };
-        if (presetId === "customScale")
-            return {
-                from: 0,
-                to: 1
-            };
-        if (presetId === "customRotate")
-            return {
-                from: 0,
-                to: 90
-            };
-        if (presetId === "customMove")
-            return {
-                fromX: 0,
-                fromY: 0,
-                toX: 200,
-                toY: 0
-            };
-        if (presetId === "customOpacity")
-            return {
-                from: 0,
-                to: 1
-            };
-        if (presetId === "customColor")
-            return {
-                from: "#000000",
-                to: "#ff0000",
-                fromOpacity: 1,
-                toOpacity: 1,
-                fillIndex: 0
-            };
-        if (presetId === "customGradient")
-            return {
-                fromC1: "#000000",
-                toC1: "#000000",
-                fromC2: "#ffffff",
-                toC2: "#ff0000",
-                fromAngle: 90,
-                toAngle: 90,
-                fromOpacity: 1,
-                toOpacity: 1,
-                fillIndex: 0
-            };
-        if (presetId === "customHide")
-            return {
-                fromVisible: true,
-                toVisible: false
-            };
-        if (presetId === "customResize")
-            return {
-                fromW: 100,
-                fromH: 100,
-                toW: 200,
-                toH: 200
-            };
-        if (presetId === "customCorner")
-            return {
-                from: 0,
-                to: 24
-            };
-        if (presetId === "customStroke")
-            return {
-                from: 0,
-                to: 4,
-                fromOpacity: 1,
-                toOpacity: 1,
-                fromDash: 0,
-                toDash: 0,
-                fromGap: 0,
-                toGap: 0,
-                fromPosition: "center",
-                toPosition: "center",
-                strokeIndex: 0
-            };
-        if (presetId === "customStrokeColor")
-            return {
-                from: "#000000",
-                to: "#ff0000",
-                fromOpacity: 1,
-                toOpacity: 1,
-                strokeIndex: 0
-            };
-        if (presetId === "customStrokeGradient")
-            return {
-                fromC1: "#000000",
-                toC1: "#000000",
-                fromC2: "#ffffff",
-                toC2: "#ff0000",
-                fromAngle: 90,
-                toAngle: 90,
-                fromOpacity: 1,
-                toOpacity: 1,
-                from: 1,
-                to: 1,
-                fromDash: 0,
-                toDash: 0,
-                fromGap: 0,
-                toGap: 0,
-                fromPosition: "center",
-                toPosition: "center",
-                strokeIndex: 0
-            };
-        if (presetId === "customFontSize")
-            return {
-                from: 16,
-                to: 32
-            };
-        if (presetId === "customFlip")
-            return {
-                axis: "h"
-            };
-        if (presetId === "customShadow")
-            return {
-                fromColor: "#80000000",
-                toColor: "#80000000",
-                fromX: 0,
-                toX: 0,
-                fromY: 4,
-                toY: 12,
-                fromBlur: 8,
-                toBlur: 16,
-                fromSpread: 0,
-                toSpread: 0,
-                fromInner: false,
-                toInner: false,
-                shadowIndex: 0
-            };
-        if (presetId === "customLayerBlur")
-            return {
-                fromRadius: 0,
-                toRadius: 12,
-                fromOpacity: 1,
-                toOpacity: 1
-            };
-        if (presetId === "customBackgroundBlur")
-            return {
-                fromRadius: 0,
-                toRadius: 16,
-                fromOpacity: 0.7,
-                toOpacity: 0.7
-            };
-        if (presetId === "customGlow")
-            return {
-                fromColor: "#cc00ffff",
-                toColor: "#cc00ffff",
-                fromBlur: 16,
-                toBlur: 28,
-                fromSpread: 4,
-                toSpread: 4,
-                fromInner: false,
-                toInner: false,
-                glowIndex: 0
-            };
-        if (presetId === "customGrain")
-            return {
-                fromAmount: 0,
-                toAmount: 0.5,
-                fromSize: 2,
-                toSize: 2
-            };
-        if (presetId === "customPath")
-            return {
-                pts: [],
-                closed: false,
-                orient: false
-            };
-        return {};
+        var t = presets._defaultOptions[presetId];
+        return t !== undefined ? JSON.parse(JSON.stringify(t)) : {};
     }
 
     function slideDirection(v) {
@@ -373,9 +351,8 @@ QtObject {
         return v === "inside" || v === "outside" ? v : "center";
     }
 
-    // Stack entry index for style clips (0 = top). Capped so a
-    // hand-edited scene can never stage a silly index; targets with
-    // fewer entries pad with defaults at sample time.
+    // Stack entry index (0 = top), capped so hand-edited scenes stay sane;
+    // short stacks pad with defaults at sample time.
     function normalizeEntryIndex(v) {
         var n = Math.round(Number(v));
         if (isNaN(n))
@@ -401,8 +378,8 @@ QtObject {
         return fallback;
     }
 
-    // Alpha-aware twin for shadow colors: preserves #aarrggbb so
-    // opacity animates; opaque stays #rrggbb.
+    // Alpha-aware twin for shadow colors: preserves #aarrggbb so opacity
+    // animates; opaque stays #rrggbb.
     function normalizeHexA(v, fallback) {
         var t = String(v !== undefined ? v : "").trim().toLowerCase();
         if (t.charAt(0) === "#")
@@ -432,266 +409,331 @@ QtObject {
         return out;
     }
 
-    // Merges user options over defaults, coercing enums and ranges so
-    // stored clips are always backend-safe (plain values only).
+    // Stored clips stay backend-safe (plain values only). Extended keys
+    // are opt-in: old clips without them never gain them on rebuild, so
+    // they can't stomp values the old editor never wrote.
     function normalizeOptions(presetId, raw) {
-        var r = raw || {};
-        if (presetId === "slide")
-            return {
-                direction: slideDirection(r.direction !== undefined ? r.direction : "left"),
-                distance: clampNum(r.distance !== undefined ? r.distance : 200, 200, 0, 2000),
-                fade: r.fade !== false
-            };
-        if (presetId === "spin")
-            return {
-                direction: spinDirection(r.direction !== undefined ? r.direction : "cw"),
-                turns: clampNum(r.turns !== undefined ? r.turns : 1, 1, 0.25, 10)
-            };
-        if (presetId === "twist")
-            return {
-                direction: spinDirection(r.direction !== undefined ? r.direction : "cw")
-            };
-        if (presetId === "movescale")
-            return {
-                direction: slideDirection(r.direction !== undefined ? r.direction : "left"),
-                distance: clampNum(r.distance !== undefined ? r.distance : 200, 200, 0, 2000),
-                scale: clampNum(r.scale !== undefined ? r.scale : 0, 0, 0, 150)
-            };
-        if (presetId === "type")
-            return {
-                unit: typeUnit(r.unit !== undefined ? r.unit : "letters"),
-                cps: clampNum(r.cps !== undefined ? r.cps : 20, 20, 1, 120),
-                cursor: r.cursor === true
-            };
-        if (presetId === "customScale")
-            return {
-                from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 10),
-                to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 10)
-            };
-        if (presetId === "customRotate")
-            return {
-                from: clampNum(r.from !== undefined ? r.from : 0, 0, -1440, 1440),
-                to: clampNum(r.to !== undefined ? r.to : 90, 90, -1440, 1440)
-            };
-        if (presetId === "customMove")
-            return {
-                fromX: clampNum(r.fromX !== undefined ? r.fromX : 0, 0, -2000, 2000),
-                fromY: clampNum(r.fromY !== undefined ? r.fromY : 0, 0, -2000, 2000),
-                toX: clampNum(r.toX !== undefined ? r.toX : 200, 200, -2000, 2000),
-                toY: clampNum(r.toY !== undefined ? r.toY : 0, 0, -2000, 2000)
-            };
-        if (presetId === "customOpacity")
-            return {
-                from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 1),
-                to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 1)
-            };
-        if (presetId === "customColor") {
-            var co = {
-                from: normalizeHex(r.from !== undefined ? r.from : "#000000", "#000000"),
-                to: normalizeHex(r.to !== undefined ? r.to : "#ff0000", "#ff0000")
-            };
-            // Extended keys are opt-in: old clips without them stay
-            // color-only so they never stomp entry opacity.
-            if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
-                co.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
-                co.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
-            }
-            if (r.fillIndex !== undefined)
-                co.fillIndex = normalizeEntryIndex(r.fillIndex);
-            return co;
+        var f = presets._normalizerFor(presetId);
+        return f ? f(raw || {}) : {};
+    }
+
+    function _normalizerFor(presetId) {
+        var table = {
+            "slide": presets._normalizeSlide,
+            "spin": presets._normalizeSpin,
+            "twist": presets._normalizeTwist,
+            "movescale": presets._normalizeMovescale,
+            "type": presets._normalizeType,
+            "customScale": presets._normalizeCustomScale,
+            "customRotate": presets._normalizeCustomRotate,
+            "customMove": presets._normalizeCustomMove,
+            "customOpacity": presets._normalizeCustomOpacity,
+            "customColor": presets._normalizeCustomColor,
+            "customGradient": presets._normalizeCustomGradient,
+            "customHide": presets._normalizeCustomHide,
+            "customResize": presets._normalizeCustomResize,
+            "customCorner": presets._normalizeCustomCorner,
+            "customStroke": presets._normalizeCustomStroke,
+            "customStrokeColor": presets._normalizeCustomStrokeColor,
+            "customStrokeGradient": presets._normalizeCustomStrokeGradient,
+            "customFontSize": presets._normalizeCustomFontSize,
+            "customFlip": presets._normalizeCustomFlip,
+            "customShadow": presets._normalizeCustomShadow,
+            "customLayerBlur": presets._normalizeCustomLayerBlur,
+            "customBackgroundBlur": presets._normalizeCustomBackgroundBlur,
+            "customGlow": presets._normalizeCustomGlow,
+            "customGrain": presets._normalizeCustomGrain,
+            "customPath": presets._normalizeCustomPath
+        };
+        return table[presetId];
+    }
+
+    function _normalizeSlide(r) {
+        return {
+            direction: slideDirection(r.direction !== undefined ? r.direction : "left"),
+            distance: clampNum(r.distance !== undefined ? r.distance : 200, 200, 0, 2000),
+            fade: r.fade !== false
+        };
+    }
+
+    function _normalizeSpin(r) {
+        return {
+            direction: spinDirection(r.direction !== undefined ? r.direction : "cw"),
+            turns: clampNum(r.turns !== undefined ? r.turns : 1, 1, 0.25, 10)
+        };
+    }
+
+    function _normalizeTwist(r) {
+        return {
+            direction: spinDirection(r.direction !== undefined ? r.direction : "cw")
+        };
+    }
+
+    function _normalizeMovescale(r) {
+        return {
+            direction: slideDirection(r.direction !== undefined ? r.direction : "left"),
+            distance: clampNum(r.distance !== undefined ? r.distance : 200, 200, 0, 2000),
+            scale: clampNum(r.scale !== undefined ? r.scale : 0, 0, 0, 150)
+        };
+    }
+
+    function _normalizeType(r) {
+        return {
+            unit: typeUnit(r.unit !== undefined ? r.unit : "letters"),
+            cps: clampNum(r.cps !== undefined ? r.cps : 20, 20, 1, 120),
+            cursor: r.cursor === true
+        };
+    }
+
+    function _normalizeCustomScale(r) {
+        return {
+            from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 10),
+            to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 10)
+        };
+    }
+
+    function _normalizeCustomRotate(r) {
+        return {
+            from: clampNum(r.from !== undefined ? r.from : 0, 0, -1440, 1440),
+            to: clampNum(r.to !== undefined ? r.to : 90, 90, -1440, 1440)
+        };
+    }
+
+    function _normalizeCustomMove(r) {
+        return {
+            fromX: clampNum(r.fromX !== undefined ? r.fromX : 0, 0, -2000, 2000),
+            fromY: clampNum(r.fromY !== undefined ? r.fromY : 0, 0, -2000, 2000),
+            toX: clampNum(r.toX !== undefined ? r.toX : 200, 200, -2000, 2000),
+            toY: clampNum(r.toY !== undefined ? r.toY : 0, 0, -2000, 2000)
+        };
+    }
+
+    function _normalizeCustomOpacity(r) {
+        return {
+            from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 1),
+            to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 1)
+        };
+    }
+
+    function _normalizeCustomColor(r) {
+        var co = {
+            from: normalizeHex(r.from !== undefined ? r.from : "#000000", "#000000"),
+            to: normalizeHex(r.to !== undefined ? r.to : "#ff0000", "#ff0000")
+        };
+        if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
+            co.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
+            co.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
         }
-        if (presetId === "customGradient") {
-            var cg = {
-                fromC1: normalizeHex(r.fromC1 !== undefined ? r.fromC1 : "#000000", "#000000"),
-                toC1: normalizeHex(r.toC1 !== undefined ? r.toC1 : "#000000", "#000000"),
-                fromC2: normalizeHex(r.fromC2 !== undefined ? r.fromC2 : "#ffffff", "#ffffff"),
-                toC2: normalizeHex(r.toC2 !== undefined ? r.toC2 : "#ff0000", "#ff0000"),
-                fromAngle: clampNum(r.fromAngle !== undefined ? r.fromAngle : 90, 90, 0, 360),
-                toAngle: clampNum(r.toAngle !== undefined ? r.toAngle : 90, 90, 0, 360)
-            };
-            if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
-                cg.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
-                cg.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
-            }
-            if (r.fillIndex !== undefined)
-                cg.fillIndex = normalizeEntryIndex(r.fillIndex);
-            return cg;
+        if (r.fillIndex !== undefined)
+            co.fillIndex = normalizeEntryIndex(r.fillIndex);
+        return co;
+    }
+
+    function _normalizeCustomGradient(r) {
+        var cg = {
+            fromC1: normalizeHex(r.fromC1 !== undefined ? r.fromC1 : "#000000", "#000000"),
+            toC1: normalizeHex(r.toC1 !== undefined ? r.toC1 : "#000000", "#000000"),
+            fromC2: normalizeHex(r.fromC2 !== undefined ? r.fromC2 : "#ffffff", "#ffffff"),
+            toC2: normalizeHex(r.toC2 !== undefined ? r.toC2 : "#ff0000", "#ff0000"),
+            fromAngle: clampNum(r.fromAngle !== undefined ? r.fromAngle : 90, 90, 0, 360),
+            toAngle: clampNum(r.toAngle !== undefined ? r.toAngle : 90, 90, 0, 360)
+        };
+        if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
+            cg.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
+            cg.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
         }
-        if (presetId === "customHide")
-            return {
-                fromVisible: r.fromVisible === undefined ? true : !!r.fromVisible,
-                toVisible: r.toVisible === undefined ? false : !!r.toVisible
-            };
-        if (presetId === "customResize")
-            return {
-                fromW: clampNum(r.fromW !== undefined ? r.fromW : 100, 100, 1, 4000),
-                fromH: clampNum(r.fromH !== undefined ? r.fromH : 100, 100, 1, 4000),
-                toW: clampNum(r.toW !== undefined ? r.toW : 200, 200, 1, 4000),
-                toH: clampNum(r.toH !== undefined ? r.toH : 200, 200, 1, 4000)
-            };
-        if (presetId === "customCorner")
-            return {
-                from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 500),
-                to: clampNum(r.to !== undefined ? r.to : 24, 24, 0, 500)
-            };
-        if (presetId === "customStroke") {
-            var cs = {
-                from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 100),
-                to: clampNum(r.to !== undefined ? r.to : 4, 4, 0, 100)
-            };
-            // Extended keys are opt-in (see customColor): old
-            // width-only clips never gain them on rebuild.
-            if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
-                cs.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
-                cs.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
-            }
-            if (r.fromDash !== undefined || r.toDash !== undefined || r.fromGap !== undefined || r.toGap !== undefined) {
-                cs.fromDash = clampNum(r.fromDash !== undefined ? r.fromDash : 0, 0, 0, 100);
-                cs.toDash = clampNum(r.toDash !== undefined ? r.toDash : 0, 0, 0, 100);
-                cs.fromGap = clampNum(r.fromGap !== undefined ? r.fromGap : 0, 0, 0, 100);
-                cs.toGap = clampNum(r.toGap !== undefined ? r.toGap : 0, 0, 0, 100);
-            }
-            if (r.fromPosition !== undefined || r.toPosition !== undefined) {
-                cs.fromPosition = normalizeStrokePosition(r.fromPosition !== undefined ? r.fromPosition : "center");
-                cs.toPosition = normalizeStrokePosition(r.toPosition !== undefined ? r.toPosition : "center");
-            }
-            if (r.strokeIndex !== undefined)
-                cs.strokeIndex = normalizeEntryIndex(r.strokeIndex);
-            return cs;
+        if (r.fillIndex !== undefined)
+            cg.fillIndex = normalizeEntryIndex(r.fillIndex);
+        return cg;
+    }
+
+    function _normalizeCustomHide(r) {
+        return {
+            fromVisible: r.fromVisible === undefined ? true : !!r.fromVisible,
+            toVisible: r.toVisible === undefined ? false : !!r.toVisible
+        };
+    }
+
+    function _normalizeCustomResize(r) {
+        return {
+            fromW: clampNum(r.fromW !== undefined ? r.fromW : 100, 100, 1, 4000),
+            fromH: clampNum(r.fromH !== undefined ? r.fromH : 100, 100, 1, 4000),
+            toW: clampNum(r.toW !== undefined ? r.toW : 200, 200, 1, 4000),
+            toH: clampNum(r.toH !== undefined ? r.toH : 200, 200, 1, 4000)
+        };
+    }
+
+    function _normalizeCustomCorner(r) {
+        return {
+            from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 500),
+            to: clampNum(r.to !== undefined ? r.to : 24, 24, 0, 500)
+        };
+    }
+
+    function _normalizeCustomStroke(r) {
+        var cs = {
+            from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 100),
+            to: clampNum(r.to !== undefined ? r.to : 4, 4, 0, 100)
+        };
+        if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
+            cs.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
+            cs.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
         }
-        if (presetId === "customStrokeColor") {
-            var cc2 = {
-                from: normalizeHex(r.from !== undefined ? r.from : "#000000", "#000000"),
-                to: normalizeHex(r.to !== undefined ? r.to : "#ff0000", "#ff0000")
-            };
-            if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
-                cc2.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
-                cc2.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
-            }
-            if (r.strokeIndex !== undefined)
-                cc2.strokeIndex = normalizeEntryIndex(r.strokeIndex);
-            return cc2;
+        if (r.fromDash !== undefined || r.toDash !== undefined || r.fromGap !== undefined || r.toGap !== undefined) {
+            cs.fromDash = clampNum(r.fromDash !== undefined ? r.fromDash : 0, 0, 0, 100);
+            cs.toDash = clampNum(r.toDash !== undefined ? r.toDash : 0, 0, 0, 100);
+            cs.fromGap = clampNum(r.fromGap !== undefined ? r.fromGap : 0, 0, 0, 100);
+            cs.toGap = clampNum(r.toGap !== undefined ? r.toGap : 0, 0, 0, 100);
         }
-        if (presetId === "customStrokeGradient") {
-            var sg = {
-                fromC1: normalizeHex(r.fromC1 !== undefined ? r.fromC1 : "#000000", "#000000"),
-                toC1: normalizeHex(r.toC1 !== undefined ? r.toC1 : "#000000", "#000000"),
-                fromC2: normalizeHex(r.fromC2 !== undefined ? r.fromC2 : "#ffffff", "#ffffff"),
-                toC2: normalizeHex(r.toC2 !== undefined ? r.toC2 : "#ff0000", "#ff0000"),
-                fromAngle: clampNum(r.fromAngle !== undefined ? r.fromAngle : 90, 90, 0, 360),
-                toAngle: clampNum(r.toAngle !== undefined ? r.toAngle : 90, 90, 0, 360),
-                fromOpacity: normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1),
-                toOpacity: normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1)
-            };
-            // Width/dash/position ride along only when the clip carries
-            // them (new clips seed them; old gradient-only clips stay
-            // gradient-only so custom width/dash/position survive).
-            if (r.from !== undefined || r.to !== undefined) {
-                sg.from = clampNum(r.from !== undefined ? r.from : 1, 1, 0, 100);
-                sg.to = clampNum(r.to !== undefined ? r.to : 1, 1, 0, 100);
-            }
-            if (r.fromDash !== undefined || r.toDash !== undefined || r.fromGap !== undefined || r.toGap !== undefined) {
-                sg.fromDash = clampNum(r.fromDash !== undefined ? r.fromDash : 0, 0, 0, 100);
-                sg.toDash = clampNum(r.toDash !== undefined ? r.toDash : 0, 0, 0, 100);
-                sg.fromGap = clampNum(r.fromGap !== undefined ? r.fromGap : 0, 0, 0, 100);
-                sg.toGap = clampNum(r.toGap !== undefined ? r.toGap : 0, 0, 0, 100);
-            }
-            if (r.fromPosition !== undefined || r.toPosition !== undefined) {
-                sg.fromPosition = normalizeStrokePosition(r.fromPosition !== undefined ? r.fromPosition : "center");
-                sg.toPosition = normalizeStrokePosition(r.toPosition !== undefined ? r.toPosition : "center");
-            }
-            if (r.strokeIndex !== undefined)
-                sg.strokeIndex = normalizeEntryIndex(r.strokeIndex);
-            return sg;
+        if (r.fromPosition !== undefined || r.toPosition !== undefined) {
+            cs.fromPosition = normalizeStrokePosition(r.fromPosition !== undefined ? r.fromPosition : "center");
+            cs.toPosition = normalizeStrokePosition(r.toPosition !== undefined ? r.toPosition : "center");
         }
-        if (presetId === "customFontSize")
-            return {
-                from: clampNum(r.from !== undefined ? r.from : 16, 16, 1, 500),
-                to: clampNum(r.to !== undefined ? r.to : 32, 32, 1, 500)
-            };
-        if (presetId === "customFlip")
-            return {
-                axis: r.axis === "v" ? "v" : "h"
-            };
-        if (presetId === "customShadow") {
-            var sh = {
-                fromColor: normalizeHexA(r.fromColor !== undefined ? r.fromColor : "#80000000", "#80000000"),
-                toColor: normalizeHexA(r.toColor !== undefined ? r.toColor : "#80000000", "#80000000"),
-                fromX: clampNum(r.fromX !== undefined ? r.fromX : 0, 0, -500, 500),
-                toX: clampNum(r.toX !== undefined ? r.toX : 0, 0, -500, 500),
-                fromY: clampNum(r.fromY !== undefined ? r.fromY : 4, 4, -500, 500),
-                toY: clampNum(r.toY !== undefined ? r.toY : 12, 12, -500, 500),
-                fromBlur: clampNum(r.fromBlur !== undefined ? r.fromBlur : 8, 8, 0, 100),
-                toBlur: clampNum(r.toBlur !== undefined ? r.toBlur : 16, 16, 0, 100),
-                fromSpread: clampNum(r.fromSpread !== undefined ? r.fromSpread : 0, 0, 0, 50),
-                toSpread: clampNum(r.toSpread !== undefined ? r.toSpread : 0, 0, 0, 50),
-                fromInner: r.fromInner === undefined ? false : !!r.fromInner,
-                toInner: r.toInner === undefined ? false : !!r.toInner
-            };
-            if (r.shadowIndex !== undefined)
-                sh.shadowIndex = normalizeEntryIndex(r.shadowIndex);
-            return sh;
+        if (r.strokeIndex !== undefined)
+            cs.strokeIndex = normalizeEntryIndex(r.strokeIndex);
+        return cs;
+    }
+
+    function _normalizeCustomStrokeColor(r) {
+        var cc = {
+            from: normalizeHex(r.from !== undefined ? r.from : "#000000", "#000000"),
+            to: normalizeHex(r.to !== undefined ? r.to : "#ff0000", "#ff0000")
+        };
+        if (r.fromOpacity !== undefined || r.toOpacity !== undefined) {
+            cc.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
+            cc.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
         }
-        if (presetId === "customLayerBlur")
-            return {
-                fromRadius: clampNum(r.fromRadius !== undefined ? r.fromRadius : 0, 0, 0, 100),
-                toRadius: clampNum(r.toRadius !== undefined ? r.toRadius : 12, 12, 0, 100),
-                fromOpacity: clampNum(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1, 0, 1),
-                toOpacity: clampNum(r.toOpacity !== undefined ? r.toOpacity : 1, 1, 0, 1)
-            };
-        if (presetId === "customBackgroundBlur")
-            return {
-                fromRadius: clampNum(r.fromRadius !== undefined ? r.fromRadius : 0, 0, 0, 100),
-                toRadius: clampNum(r.toRadius !== undefined ? r.toRadius : 16, 16, 0, 100),
-                fromOpacity: clampNum(r.fromOpacity !== undefined ? r.fromOpacity : 0.7, 0.7, 0, 1),
-                toOpacity: clampNum(r.toOpacity !== undefined ? r.toOpacity : 0.7, 0.7, 0, 1)
-            };
-        if (presetId === "customGlow") {
-            var gl = {
-                fromColor: normalizeHexA(r.fromColor !== undefined ? r.fromColor : "#cc00ffff", "#cc00ffff"),
-                toColor: normalizeHexA(r.toColor !== undefined ? r.toColor : "#cc00ffff", "#cc00ffff"),
-                fromBlur: clampNum(r.fromBlur !== undefined ? r.fromBlur : 16, 16, 0, 100),
-                toBlur: clampNum(r.toBlur !== undefined ? r.toBlur : 28, 28, 0, 100),
-                fromSpread: clampNum(r.fromSpread !== undefined ? r.fromSpread : 4, 4, 0, 50),
-                toSpread: clampNum(r.toSpread !== undefined ? r.toSpread : 4, 4, 0, 50),
-                fromInner: r.fromInner === undefined ? false : !!r.fromInner,
-                toInner: r.toInner === undefined ? false : !!r.toInner
-            };
-            if (r.glowIndex !== undefined)
-                gl.glowIndex = normalizeEntryIndex(r.glowIndex);
-            return gl;
+        if (r.strokeIndex !== undefined)
+            cc.strokeIndex = normalizeEntryIndex(r.strokeIndex);
+        return cc;
+    }
+
+    function _normalizeCustomStrokeGradient(r) {
+        var sg = {
+            fromC1: normalizeHex(r.fromC1 !== undefined ? r.fromC1 : "#000000", "#000000"),
+            toC1: normalizeHex(r.toC1 !== undefined ? r.toC1 : "#000000", "#000000"),
+            fromC2: normalizeHex(r.fromC2 !== undefined ? r.fromC2 : "#ffffff", "#ffffff"),
+            toC2: normalizeHex(r.toC2 !== undefined ? r.toC2 : "#ff0000", "#ff0000"),
+            fromAngle: clampNum(r.fromAngle !== undefined ? r.fromAngle : 90, 90, 0, 360),
+            toAngle: clampNum(r.toAngle !== undefined ? r.toAngle : 90, 90, 0, 360),
+            fromOpacity: normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1),
+            toOpacity: normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1)
+        };
+        if (r.from !== undefined || r.to !== undefined) {
+            sg.from = clampNum(r.from !== undefined ? r.from : 1, 1, 0, 100);
+            sg.to = clampNum(r.to !== undefined ? r.to : 1, 1, 0, 100);
         }
-        if (presetId === "customGrain")
-            return {
-                fromAmount: clampNum(r.fromAmount !== undefined ? r.fromAmount : 0, 0, 0, 1),
-                toAmount: clampNum(r.toAmount !== undefined ? r.toAmount : 0.5, 0.5, 0, 1),
-                fromSize: clampNum(r.fromSize !== undefined ? r.fromSize : 2, 2, 1, 10),
-                toSize: clampNum(r.toSize !== undefined ? r.toSize : 2, 2, 1, 10)
-            };
-        if (presetId === "customPath")
-            return {
-                pts: normalizePathPts(r.pts),
-                closed: r.closed === true,
-                orient: r.orient === true
-            };
-        return {};
+        if (r.fromDash !== undefined || r.toDash !== undefined || r.fromGap !== undefined || r.toGap !== undefined) {
+            sg.fromDash = clampNum(r.fromDash !== undefined ? r.fromDash : 0, 0, 0, 100);
+            sg.toDash = clampNum(r.toDash !== undefined ? r.toDash : 0, 0, 0, 100);
+            sg.fromGap = clampNum(r.fromGap !== undefined ? r.fromGap : 0, 0, 0, 100);
+            sg.toGap = clampNum(r.toGap !== undefined ? r.toGap : 0, 0, 0, 100);
+        }
+        if (r.fromPosition !== undefined || r.toPosition !== undefined) {
+            sg.fromPosition = normalizeStrokePosition(r.fromPosition !== undefined ? r.fromPosition : "center");
+            sg.toPosition = normalizeStrokePosition(r.toPosition !== undefined ? r.toPosition : "center");
+        }
+        if (r.strokeIndex !== undefined)
+            sg.strokeIndex = normalizeEntryIndex(r.strokeIndex);
+        return sg;
+    }
+
+    function _normalizeCustomFontSize(r) {
+        return {
+            from: clampNum(r.from !== undefined ? r.from : 16, 16, 1, 500),
+            to: clampNum(r.to !== undefined ? r.to : 32, 32, 1, 500)
+        };
+    }
+
+    function _normalizeCustomFlip(r) {
+        return {
+            axis: r.axis === "v" ? "v" : "h"
+        };
+    }
+
+    function _normalizeCustomShadow(r) {
+        var sh = {
+            fromColor: normalizeHexA(r.fromColor !== undefined ? r.fromColor : "#80000000", "#80000000"),
+            toColor: normalizeHexA(r.toColor !== undefined ? r.toColor : "#80000000", "#80000000"),
+            fromX: clampNum(r.fromX !== undefined ? r.fromX : 0, 0, -500, 500),
+            toX: clampNum(r.toX !== undefined ? r.toX : 0, 0, -500, 500),
+            fromY: clampNum(r.fromY !== undefined ? r.fromY : 4, 4, -500, 500),
+            toY: clampNum(r.toY !== undefined ? r.toY : 12, 12, -500, 500),
+            fromBlur: clampNum(r.fromBlur !== undefined ? r.fromBlur : 8, 8, 0, 100),
+            toBlur: clampNum(r.toBlur !== undefined ? r.toBlur : 16, 16, 0, 100),
+            fromSpread: clampNum(r.fromSpread !== undefined ? r.fromSpread : 0, 0, 0, 50),
+            toSpread: clampNum(r.toSpread !== undefined ? r.toSpread : 0, 0, 0, 50),
+            fromInner: r.fromInner === undefined ? false : !!r.fromInner,
+            toInner: r.toInner === undefined ? false : !!r.toInner
+        };
+        if (r.shadowIndex !== undefined)
+            sh.shadowIndex = normalizeEntryIndex(r.shadowIndex);
+        return sh;
+    }
+
+    function _normalizeCustomLayerBlur(r) {
+        return {
+            fromRadius: clampNum(r.fromRadius !== undefined ? r.fromRadius : 0, 0, 0, 100),
+            toRadius: clampNum(r.toRadius !== undefined ? r.toRadius : 12, 12, 0, 100),
+            fromOpacity: clampNum(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1, 0, 1),
+            toOpacity: clampNum(r.toOpacity !== undefined ? r.toOpacity : 1, 1, 0, 1)
+        };
+    }
+
+    function _normalizeCustomBackgroundBlur(r) {
+        return {
+            fromRadius: clampNum(r.fromRadius !== undefined ? r.fromRadius : 0, 0, 0, 100),
+            toRadius: clampNum(r.toRadius !== undefined ? r.toRadius : 16, 16, 0, 100),
+            fromOpacity: clampNum(r.fromOpacity !== undefined ? r.fromOpacity : 0.7, 0.7, 0, 1),
+            toOpacity: clampNum(r.toOpacity !== undefined ? r.toOpacity : 0.7, 0.7, 0, 1)
+        };
+    }
+
+    function _normalizeCustomGlow(r) {
+        var gl = {
+            fromColor: normalizeHexA(r.fromColor !== undefined ? r.fromColor : "#cc00ffff", "#cc00ffff"),
+            toColor: normalizeHexA(r.toColor !== undefined ? r.toColor : "#cc00ffff", "#cc00ffff"),
+            fromBlur: clampNum(r.fromBlur !== undefined ? r.fromBlur : 16, 16, 0, 100),
+            toBlur: clampNum(r.toBlur !== undefined ? r.toBlur : 28, 28, 0, 100),
+            fromSpread: clampNum(r.fromSpread !== undefined ? r.fromSpread : 4, 4, 0, 50),
+            toSpread: clampNum(r.toSpread !== undefined ? r.toSpread : 4, 4, 0, 50),
+            fromInner: r.fromInner === undefined ? false : !!r.fromInner,
+            toInner: r.toInner === undefined ? false : !!r.toInner
+        };
+        if (r.glowIndex !== undefined)
+            gl.glowIndex = normalizeEntryIndex(r.glowIndex);
+        return gl;
+    }
+
+    function _normalizeCustomGrain(r) {
+        return {
+            fromAmount: clampNum(r.fromAmount !== undefined ? r.fromAmount : 0, 0, 0, 1),
+            toAmount: clampNum(r.toAmount !== undefined ? r.toAmount : 0.5, 0.5, 0, 1),
+            fromSize: clampNum(r.fromSize !== undefined ? r.fromSize : 2, 2, 1, 10),
+            toSize: clampNum(r.toSize !== undefined ? r.toSize : 2, 2, 1, 10)
+        };
+    }
+
+    function _normalizeCustomPath(r) {
+        return {
+            pts: normalizePathPts(r.pts),
+            closed: r.closed === true,
+            orient: r.orient === true
+        };
     }
 
     function normalizeMode(mode) {
         return mode === "out" ? "out" : "in";
     }
 
-    // Clip loop: none holds the end state (current behavior), loop
-    // restarts each cycle, pingpong runs forward then backward.
-    // Stored top-level on the clip (not in options) so edits that
-    // rebuild options never drop it; old scenes miss it and read none.
+    // Clip loop lives top-level on the clip (not in options) so option
+    // rebuilds never drop it; old scenes miss it and read none.
     function normalizeLoop(loop) {
         return loop === "loop" || loop === "pingpong" ? loop : "none";
     }
 
-    // Easing presets for the graph editor. Bezier values are the
-    // CSS-equivalent handles for display and dragging; the sampler keeps
-    // exact cubics for the named ids and uses bezier only for custom.
+    // Bezier values are CSS-equivalent handles for display and dragging;
+    // the sampler keeps exact cubics for the named ids, bezier for custom.
     function easingPresets() {
         return [
             {
@@ -763,10 +805,8 @@ QtObject {
     function buildClip(presetId, clipId, targetUid, t0, duration, mode, options, easing, loop) {
         var ez = easing || {};
         var ct0 = Math.max(0, Number(t0) || 0);
-        // Clips never stage past the composition end (applying near the
-        // tail yields a shorter clip, never an overhanging one).
-        // Stepped clips are instants: locked to the 0.1s floor so the
-        // switch reads as one keyframe at t0 on every surface.
+        // Clips never stage past the composition end; stepped clips lock
+        // to the 0.1s floor so the switch reads as one keyframe at t0.
         var comp = presets.doc && presets.doc.anim ? presets.doc.anim.duration : 60;
         var cd = Math.min(60, Math.max(0.1, Number(duration) || 0.8));
         cd = Math.min(cd, Math.max(0.1, comp - ct0));

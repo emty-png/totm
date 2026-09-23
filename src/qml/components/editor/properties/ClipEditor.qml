@@ -303,7 +303,7 @@ ScrollView {
     function presetTitle() {
         if (!editor.clipData || !editor.doc)
             return "";
-        return editor.doc.anim.presets.presetName(editor.clipData.preset);
+        return editor.doc.anim.presets.presetName(editor.clipData.preset) + editor.doc.anim.presets.entrySuffix(editor.clipData.preset, editor.clipData.options);
     }
 
     function setMode(mode) {
