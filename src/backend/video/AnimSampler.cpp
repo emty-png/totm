@@ -590,6 +590,28 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         }
         bool hasOp3 = false;
         const double so3 = lerpOpacityOpt(o, e, &hasOp3);
+        const bool hasW = o.contains(QStringLiteral("from")) || o.contains(QStringLiteral("to"));
+        const double wOut = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+        const bool hasDash = o.contains(QStringLiteral("fromDash")) || o.contains(QStringLiteral("toDash"))
+            || o.contains(QStringLiteral("fromGap")) || o.contains(QStringLiteral("toGap"));
+        QVariantList dashOut;
+        if (hasDash) {
+            const double dd = qMax(0.0, num(o, "fromDash") + (num(o, "toDash") - num(o, "fromDash")) * e);
+            const double gg = qMax(0.0, num(o, "fromGap") + (num(o, "toGap") - num(o, "fromGap")) * e);
+            if (dd > 0.001 && gg > 0.001)
+                dashOut = QVariantList{dd, gg};
+        }
+        bool hasPos = false;
+        QString posOut;
+        if (o.contains(QStringLiteral("fromPosition")) || o.contains(QStringLiteral("toPosition"))) {
+            hasPos = true;
+            const QString fp = str(o, "fromPosition", QStringLiteral("center"));
+            const QString tp = str(o, "toPosition", QStringLiteral("center"));
+            const auto normPos = [](const QString &v) {
+                return (v == QLatin1String("inside") || v == QLatin1String("outside")) ? v : QString(QStringLiteral("center"));
+            };
+            posOut = e < 0.5 ? normPos(fp) : normPos(tp);
+        }
         if (sgIdx == 0) {
             if (hasGrad) {
                 out[QStringLiteral("strokeGradient")] = grad;
@@ -597,6 +619,12 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             }
             if (hasOp3)
                 out[QStringLiteral("strokeOpacity")] = so3;
+            if (hasW)
+                out[QStringLiteral("strokeWidth")] = wOut;
+            if (hasDash)
+                out[QStringLiteral("strokeDash")] = dashOut;
+            if (hasPos)
+                out[QStringLiteral("strokePosition")] = posOut;
         } else {
             QVariantMap sge = strokeEntryFromBase(base, sgIdx);
             if (hasGrad) {
@@ -605,6 +633,12 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             }
             if (hasOp3)
                 sge[QStringLiteral("opacity")] = so3;
+            if (hasW)
+                sge[QStringLiteral("width")] = wOut;
+            if (hasDash)
+                sge[QStringLiteral("dash")] = dashOut;
+            if (hasPos)
+                sge[QStringLiteral("position")] = posOut;
             out[QStringLiteral("strokeEntry") + QString::number(sgIdx)] = sge;
         }
     } else if (preset == QLatin1String("customFontSize")) {

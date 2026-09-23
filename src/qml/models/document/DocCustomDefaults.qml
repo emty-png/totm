@@ -194,6 +194,11 @@ QtObject {
             var sgop = sg0.opacity !== undefined ? Math.min(1, Math.max(0, Number(sg0.opacity))) : 1;
             if (isNaN(sgop))
                 sgop = 1;
+            var sgw = Math.max(0, Number(sg0.width) || 0);
+            var sgd = (sg0.dash && typeof sg0.dash.length === "number") ? sg0.dash : [];
+            var sgdash = sgd.length > 0 ? Math.max(0, Number(sgd[0]) || 0) : 0;
+            var sggap = sgd.length > 1 ? Math.max(0, Number(sgd[1]) || 0) : 0;
+            var sgpos = (sg0.position === "inside" || sg0.position === "outside") ? sg0.position : "center";
             return {
                 fromC1: sgc1,
                 toC1: sgc1,
@@ -203,6 +208,14 @@ QtObject {
                 toAngle: Math.round(sgang * 100) / 100,
                 fromOpacity: Math.round(sgop * 100) / 100,
                 toOpacity: Math.round(sgop * 100) / 100,
+                from: Math.round(sgw * 100) / 100,
+                to: Math.round(sgw * 100) / 100,
+                fromDash: Math.round(sgdash * 100) / 100,
+                toDash: Math.round(sgdash * 100) / 100,
+                fromGap: Math.round(sggap * 100) / 100,
+                toGap: Math.round(sggap * 100) / 100,
+                fromPosition: sgpos,
+                toPosition: sgpos,
                 strokeIndex: ei
             };
         }

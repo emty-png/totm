@@ -449,7 +449,8 @@ QtObject {
         } else if (preset === "customStrokeGradient") {
             // Stroke gradient from-to (mirrors customGradient for fills):
             // stop colors ease in sRGB, angle linearly, opacity lerps.
-            // Flips strokeType so a solid base renders the gradient.
+            // Width/dash ride like customStroke, position steps at the
+            // midpoint. Flips strokeType so a solid base renders gradient.
             var sgIdx = entryIndexOf(o, "strokeIndex");
             var sgc1 = lerpColor(o.fromC1, o.toC1, e);
             var sgc2 = lerpColor(o.fromC2, o.toC2, e);
@@ -470,6 +471,19 @@ QtObject {
                     ]
                 };
             }
+            var sgW = undefined, sgD = null, sgP = undefined;
+            if (o.from !== undefined || o.to !== undefined)
+                sgW = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+            if (o.fromDash !== undefined || o.toDash !== undefined || o.fromGap !== undefined || o.toGap !== undefined) {
+                var sgdd = Math.max(0, lerp(Number(o.fromDash) || 0, Number(o.toDash) || 0, e));
+                var sggg = Math.max(0, lerp(Number(o.fromGap) || 0, Number(o.toGap) || 0, e));
+                if (sgdd > 0.001 && sggg > 0.001)
+                    sgD = [sgdd, sggg];
+                else
+                    sgD = [];
+            }
+            if (o.fromPosition !== undefined || o.toPosition !== undefined)
+                sgP = e < 0.5 ? (o.fromPosition === "inside" || o.fromPosition === "outside" ? o.fromPosition : "center") : (o.toPosition === "inside" || o.toPosition === "outside" ? o.toPosition : "center");
             if (sgIdx === 0) {
                 if (sgGrad) {
                     out.strokeType = "linear";
@@ -477,6 +491,12 @@ QtObject {
                 }
                 if (sgOp !== undefined)
                     out.strokeOpacity = sgOp;
+                if (sgW !== undefined)
+                    out.strokeWidth = sgW;
+                if (sgD !== null)
+                    out.strokeDash = sgD;
+                if (sgP !== undefined)
+                    out.strokePosition = sgP;
             } else {
                 var sge = strokeEntryFromBase(base, sgIdx);
                 if (sgGrad) {
@@ -485,6 +505,12 @@ QtObject {
                 }
                 if (sgOp !== undefined)
                     sge.opacity = sgOp;
+                if (sgW !== undefined)
+                    sge.width = sgW;
+                if (sgD !== null)
+                    sge.dash = sgD;
+                if (sgP !== undefined)
+                    sge.position = sgP;
                 out["strokeEntry" + sgIdx] = sge;
             }
         } else if (preset === "customFontSize") {

@@ -3,10 +3,12 @@ import QtQuick.Layouts
 import Totm
 
 // Custom Gradient editor: fill- or stroke-gradient stop colors +
-// angle from-to, plus entry opacity. Absolute values give exact
-// control; the gallery seeds From from the live selection so new clips
-// start jump-free. gradientKind picks the stack ("fill" default,
-// "stroke" for the new stroke-gradient clip); both target entry 0.
+// angle from-to, plus entry opacity. Stroke gradients also carry width,
+// dash pair and position like the solid Stroke clip: width/dash lerp,
+// position steps at the midpoint. Absolute values give exact control;
+// the gallery seeds From from the live selection so new clips start
+// jump-free. gradientKind picks the stack ("fill" default, "stroke" for
+// the stroke-gradient clip); both target any entry with a dropdown.
 ColumnLayout {
     id: section
 
@@ -225,6 +227,170 @@ ColumnLayout {
         onCommitted: v => section.setOption("toOpacity", v)
         onScrubStarted: section.beginScrub()
         onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        visible: section.gradientKind === "stroke"
+        text: qsTr("From width")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: section.gradientKind === "stroke"
+        Layout.fillWidth: true
+        suffix: qsTr("px")
+        minimum: 0
+        maximum: 100
+        value: Number(section.opts.from) || 0
+        onCommitted: v => section.setOption("from", v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        visible: section.gradientKind === "stroke"
+        text: qsTr("To width")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: section.gradientKind === "stroke"
+        Layout.fillWidth: true
+        suffix: qsTr("px")
+        minimum: 0
+        maximum: 100
+        value: Number(section.opts.to) || 0
+        onCommitted: v => section.setOption("to", v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        visible: section.gradientKind === "stroke"
+        text: qsTr("From dash / gap (width units, 0 = solid)")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        visible: section.gradientKind === "stroke"
+        spacing: 8
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: 0
+            prefix: "D"
+            minimum: 0
+            maximum: 100
+            value: Number(section.opts.fromDash) || 0
+            onCommitted: v => section.setOption("fromDash", v)
+            onScrubStarted: section.beginScrub()
+            onScrubFinished: section.endScrub()
+        }
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: 0
+            prefix: "G"
+            minimum: 0
+            maximum: 100
+            value: Number(section.opts.fromGap) || 0
+            onCommitted: v => section.setOption("fromGap", v)
+            onScrubStarted: section.beginScrub()
+            onScrubFinished: section.endScrub()
+        }
+    }
+
+    Text {
+        visible: section.gradientKind === "stroke"
+        text: qsTr("To dash / gap (width units, 0 = solid)")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        visible: section.gradientKind === "stroke"
+        spacing: 8
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: 0
+            prefix: "D"
+            minimum: 0
+            maximum: 100
+            value: Number(section.opts.toDash) || 0
+            onCommitted: v => section.setOption("toDash", v)
+            onScrubStarted: section.beginScrub()
+            onScrubFinished: section.endScrub()
+        }
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: 0
+            prefix: "G"
+            minimum: 0
+            maximum: 100
+            value: Number(section.opts.toGap) || 0
+            onCommitted: v => section.setOption("toGap", v)
+            onScrubStarted: section.beginScrub()
+            onScrubFinished: section.endScrub()
+        }
+    }
+
+    Text {
+        visible: section.gradientKind === "stroke"
+        text: qsTr("From position")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        visible: section.gradientKind === "stroke"
+        spacing: 8
+        SegmentedOption {
+            label: qsTr("Center")
+            active: (section.opts.fromPosition || "center") === "center"
+            onClicked: section.setOption("fromPosition", "center")
+        }
+        SegmentedOption {
+            label: qsTr("Inside")
+            active: section.opts.fromPosition === "inside"
+            onClicked: section.setOption("fromPosition", "inside")
+        }
+        SegmentedOption {
+            label: qsTr("Outside")
+            active: section.opts.fromPosition === "outside"
+            onClicked: section.setOption("fromPosition", "outside")
+        }
+    }
+
+    Text {
+        visible: section.gradientKind === "stroke"
+        text: qsTr("To position")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    RowLayout {
+        visible: section.gradientKind === "stroke"
+        spacing: 8
+        SegmentedOption {
+            label: qsTr("Center")
+            active: (section.opts.toPosition || "center") === "center"
+            onClicked: section.setOption("toPosition", "center")
+        }
+        SegmentedOption {
+            label: qsTr("Inside")
+            active: section.opts.toPosition === "inside"
+            onClicked: section.setOption("toPosition", "inside")
+        }
+        SegmentedOption {
+            label: qsTr("Outside")
+            active: section.opts.toPosition === "outside"
+            onClicked: section.setOption("toPosition", "outside")
+        }
     }
 
     function setOption(role, value) {

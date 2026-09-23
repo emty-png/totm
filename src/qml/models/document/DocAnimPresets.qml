@@ -273,6 +273,14 @@ QtObject {
                 toAngle: 90,
                 fromOpacity: 1,
                 toOpacity: 1,
+                from: 1,
+                to: 1,
+                fromDash: 0,
+                toDash: 0,
+                fromGap: 0,
+                toGap: 0,
+                fromPosition: "center",
+                toPosition: "center",
                 strokeIndex: 0
             };
         if (presetId === "customFontSize")
@@ -575,6 +583,23 @@ QtObject {
                 fromOpacity: normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1),
                 toOpacity: normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1)
             };
+            // Width/dash/position ride along only when the clip carries
+            // them (new clips seed them; old gradient-only clips stay
+            // gradient-only so custom width/dash/position survive).
+            if (r.from !== undefined || r.to !== undefined) {
+                sg.from = clampNum(r.from !== undefined ? r.from : 1, 1, 0, 100);
+                sg.to = clampNum(r.to !== undefined ? r.to : 1, 1, 0, 100);
+            }
+            if (r.fromDash !== undefined || r.toDash !== undefined || r.fromGap !== undefined || r.toGap !== undefined) {
+                sg.fromDash = clampNum(r.fromDash !== undefined ? r.fromDash : 0, 0, 0, 100);
+                sg.toDash = clampNum(r.toDash !== undefined ? r.toDash : 0, 0, 0, 100);
+                sg.fromGap = clampNum(r.fromGap !== undefined ? r.fromGap : 0, 0, 0, 100);
+                sg.toGap = clampNum(r.toGap !== undefined ? r.toGap : 0, 0, 0, 100);
+            }
+            if (r.fromPosition !== undefined || r.toPosition !== undefined) {
+                sg.fromPosition = normalizeStrokePosition(r.fromPosition !== undefined ? r.fromPosition : "center");
+                sg.toPosition = normalizeStrokePosition(r.toPosition !== undefined ? r.toPosition : "center");
+            }
             if (r.strokeIndex !== undefined)
                 sg.strokeIndex = normalizeEntryIndex(r.strokeIndex);
             return sg;
