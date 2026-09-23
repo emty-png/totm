@@ -14,7 +14,7 @@ ColumnLayout {
     property var section: null
     property int entryIndex: -1
 
-    property var common: card.section && card.entryIndex >= 0 ? card.section.collectGlowAt(card.entryIndex) : null
+    property var common: card.section && card.entryIndex >= 0 ? card.section.collectEntryAt("glows", card.entryIndex) : null
     readonly property var current: card.common ?? ({
             value: {
                 enabled: true,
@@ -48,7 +48,7 @@ ColumnLayout {
             iconSize: 14
             onClicked: {
                 if (card.section)
-                    card.section.toggleGlowAt(card.entryIndex);
+                    card.section.toggleEntryAt("glows", card.entryIndex);
             }
         }
 
@@ -60,7 +60,7 @@ ColumnLayout {
             rotation: 180
             onClicked: {
                 if (card.section)
-                    card.section.moveGlowAt(card.entryIndex, -1);
+                    card.section.moveEntryAt("glows", card.entryIndex, -1);
             }
         }
 
@@ -71,7 +71,7 @@ ColumnLayout {
             enabled: card.section && card.entryIndex < card.section.glowCount - 1
             onClicked: {
                 if (card.section)
-                    card.section.moveGlowAt(card.entryIndex, 1);
+                    card.section.moveEntryAt("glows", card.entryIndex, 1);
             }
         }
 
@@ -81,7 +81,7 @@ ColumnLayout {
             iconSize: 12
             onClicked: {
                 if (card.section)
-                    card.section.removeGlowAt(card.entryIndex);
+                    card.section.removeEntryAt("glows", card.entryIndex);
             }
         }
     }
@@ -95,7 +95,7 @@ ColumnLayout {
             active: card.current.value.inner !== true
             onClicked: {
                 if (card.section)
-                    card.section.setGlowInnerAt(card.entryIndex, false);
+                    card.section.setInnerAt("glows", card.entryIndex, false);
             }
         }
 
@@ -104,7 +104,7 @@ ColumnLayout {
             active: card.current.value.inner === true
             onClicked: {
                 if (card.section)
-                    card.section.setGlowInnerAt(card.entryIndex, true);
+                    card.section.setInnerAt("glows", card.entryIndex, true);
             }
         }
     }
@@ -120,23 +120,23 @@ ColumnLayout {
         spreadMixed: card.current.mixedSpread
         onRgbCommitted: c => {
             if (card.section)
-                card.section.patchGlowAt(card.entryIndex, "color", card.section.withAlpha(c, card.section.alphaOf(card.current.value.color)));
+                card.section.patchEntryAt("glows", card.entryIndex, "color", card.section.withAlpha(c, card.section.alphaOf(card.current.value.color)));
         }
         onAlphaCommitted: v => {
             if (card.section)
-                card.section.patchGlowAt(card.entryIndex, "color", card.section.withAlpha(card.section.hexOf(card.current.value.color), v));
+                card.section.patchEntryAt("glows", card.entryIndex, "color", card.section.withAlpha(card.section.hexOf(card.current.value.color), v));
         }
         onBlurCommitted: v => {
             if (card.section)
-                card.section.patchGlowAt(card.entryIndex, "blur", v);
+                card.section.patchEntryAt("glows", card.entryIndex, "blur", v);
         }
         onSpreadCommitted: v => {
             if (card.section)
-                card.section.patchGlowAt(card.entryIndex, "spread", v);
+                card.section.patchEntryAt("glows", card.entryIndex, "spread", v);
         }
         onSwatchClicked: (anchor, mx, my) => {
             if (card.section)
-                card.section.openGlowPickerAt(card.entryIndex, String(card.section.hexOf(card.current.value.color)), anchor, mx, my);
+                card.section.openPickerAt("glows", card.entryIndex, String(card.section.hexOf(card.current.value.color)), anchor, mx, my);
         }
         onScrubStarted: {
             if (card.section)

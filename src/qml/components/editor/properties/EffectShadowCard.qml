@@ -5,7 +5,7 @@ import Totm
 // One stacked shadow entry: header (eye, reorder, delete) plus outer/
 // inner switch and color/offset/blur/spread rows. Wired in onItemAdded
 // by the owner like LayersView delegates; every commit goes through
-// section.patchShadowAt so multi-selection stays in one undo entry.
+// section.patchEntryAt so multi-selection stays in one undo entry.
 ColumnLayout {
     id: card
 
@@ -14,7 +14,7 @@ ColumnLayout {
     property var section: null
     property int entryIndex: -1
 
-    property var common: card.section && card.entryIndex >= 0 ? card.section.collectShadowAt(card.entryIndex) : null
+    property var common: card.section && card.entryIndex >= 0 ? card.section.collectEntryAt("shadows", card.entryIndex) : null
     readonly property var current: card.common ?? ({
             value: {
                 enabled: true,
@@ -53,7 +53,7 @@ ColumnLayout {
             iconSize: 14
             onClicked: {
                 if (card.section)
-                    card.section.toggleShadowAt(card.entryIndex);
+                    card.section.toggleEntryAt("shadows", card.entryIndex);
             }
         }
 
@@ -65,7 +65,7 @@ ColumnLayout {
             rotation: 180
             onClicked: {
                 if (card.section)
-                    card.section.moveShadowAt(card.entryIndex, -1);
+                    card.section.moveEntryAt("shadows", card.entryIndex, -1);
             }
         }
 
@@ -76,7 +76,7 @@ ColumnLayout {
             enabled: card.section && card.entryIndex < card.section.shadowCount - 1
             onClicked: {
                 if (card.section)
-                    card.section.moveShadowAt(card.entryIndex, 1);
+                    card.section.moveEntryAt("shadows", card.entryIndex, 1);
             }
         }
 
@@ -86,7 +86,7 @@ ColumnLayout {
             iconSize: 12
             onClicked: {
                 if (card.section)
-                    card.section.removeShadowAt(card.entryIndex);
+                    card.section.removeEntryAt("shadows", card.entryIndex);
             }
         }
     }
@@ -100,7 +100,7 @@ ColumnLayout {
             active: card.current.value.inner !== true
             onClicked: {
                 if (card.section)
-                    card.section.setShadowInnerAt(card.entryIndex, false);
+                    card.section.setInnerAt("shadows", card.entryIndex, false);
             }
         }
 
@@ -109,7 +109,7 @@ ColumnLayout {
             active: card.current.value.inner === true
             onClicked: {
                 if (card.section)
-                    card.section.setShadowInnerAt(card.entryIndex, true);
+                    card.section.setInnerAt("shadows", card.entryIndex, true);
             }
         }
     }
@@ -135,7 +135,7 @@ ColumnLayout {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: mouse => {
                     if (card.section)
-                        card.section.openShadowPickerAt(card.entryIndex, String(card.current.value.color), swatch, mouse.x, mouse.y);
+                        card.section.openPickerAt("shadows", card.entryIndex, String(card.current.value.color), swatch, mouse.x, mouse.y);
                 }
             }
         }
@@ -146,7 +146,7 @@ ColumnLayout {
             mixed: card.current.mixedColor
             onCommitted: c => {
                 if (card.section)
-                    card.section.patchShadowAt(card.entryIndex, "color", card.section.withAlpha(c, card.section.alphaOf(card.current.value.color)));
+                    card.section.patchEntryAt("shadows", card.entryIndex, "color", card.section.withAlpha(c, card.section.alphaOf(card.current.value.color)));
             }
         }
 
@@ -159,7 +159,7 @@ ColumnLayout {
             mixed: card.current.mixedColor
             onCommitted: v => {
                 if (card.section)
-                    card.section.patchShadowAt(card.entryIndex, "color", card.section.withAlpha(card.section.hexOf(card.current.value.color), v));
+                    card.section.patchEntryAt("shadows", card.entryIndex, "color", card.section.withAlpha(card.section.hexOf(card.current.value.color), v));
             }
             onScrubStarted: {
                 if (card.section)
@@ -188,7 +188,7 @@ ColumnLayout {
             mixed: card.current.mixedX
             onCommitted: v => {
                 if (card.section)
-                    card.section.patchShadowAt(card.entryIndex, "x", v);
+                    card.section.patchEntryAt("shadows", card.entryIndex, "x", v);
             }
             onScrubStarted: {
                 if (card.section)
@@ -212,7 +212,7 @@ ColumnLayout {
             mixed: card.current.mixedY
             onCommitted: v => {
                 if (card.section)
-                    card.section.patchShadowAt(card.entryIndex, "y", v);
+                    card.section.patchEntryAt("shadows", card.entryIndex, "y", v);
             }
             onScrubStarted: {
                 if (card.section)
@@ -241,7 +241,7 @@ ColumnLayout {
             mixed: card.current.mixedBlur
             onCommitted: v => {
                 if (card.section)
-                    card.section.patchShadowAt(card.entryIndex, "blur", v);
+                    card.section.patchEntryAt("shadows", card.entryIndex, "blur", v);
             }
             onScrubStarted: {
                 if (card.section)
@@ -265,7 +265,7 @@ ColumnLayout {
             mixed: card.current.mixedSpread
             onCommitted: v => {
                 if (card.section)
-                    card.section.patchShadowAt(card.entryIndex, "spread", v);
+                    card.section.patchEntryAt("shadows", card.entryIndex, "spread", v);
             }
             onScrubStarted: {
                 if (card.section)

@@ -22,13 +22,13 @@ PanelSection {
     onAddClicked: picker.openAt(section)
     onRemoveClicked: section.clearAllEffects()
 
-    property int shadowCount: section.maxShadows()
-    property int glowCount: section.maxGlows()
+    property int shadowCount: section.maxEntries("shadows")
+    property int glowCount: section.maxEntries("glows")
     property var layerCommon: section.collectBlur("layerBlur", 8, 1)
     property var backgroundCommon: section.collectBlur("backgroundBlur", 16, 0.7)
     property var grainCommon: section.collectGrain()
-    property int pickerShadowIndex: -1
-    property int pickerGlowIndex: -1
+    property string pickerKind: ""
+    property int pickerAt: -1
 
     Repeater {
         model: section.shadowCount
@@ -201,15 +201,12 @@ PanelSection {
         var leaves = section.snapshot.selLeaves;
         for (var i = 0; i < leaves.length; i++) {
             var l = leaves[i];
-            var sh = l.shadows || [];
-            for (var a = 0; a < sh.length; a++) {
-                if (sh[a] && sh[a].enabled !== false)
-                    return true;
-            }
-            var gl = l.glows || [];
-            for (var b = 0; b < gl.length; b++) {
-                if (gl[b] && gl[b].enabled !== false)
-                    return true;
+            for (var k = 0; k < 2; k++) {
+                var entries = k === 0 ? (l.shadows || []) : (l.glows || []);
+                for (var a = 0; a < entries.length; a++) {
+                    if (entries[a] && entries[a].enabled !== false)
+                        return true;
+                }
             }
             if (l.layerBlur && l.layerBlur.enabled === true)
                 return true;
@@ -221,34 +218,24 @@ PanelSection {
         return false;
     }
 
-    function maxShadows() {
+    function maxEntries(kind) {
         var leaves = section.snapshot.selLeaves;
         var m = 0;
         for (var i = 0; i < leaves.length; i++) {
-            var n = (leaves[i].shadows || []).length;
+            var n = (leaves[i][kind] || []).length;
             if (n > m)
                 m = n;
         }
         return m;
     }
 
-    function maxGlows() {
-        var leaves = section.snapshot.selLeaves;
-        var m = 0;
-        for (var i = 0; i < leaves.length; i++) {
-            var n = (leaves[i].glows || []).length;
-            if (n > m)
-                m = n;
-        }
-        return m;
-    }
-
-    // Per-index common shadow (maps never === by ref). Leaves missing
+    // Per-index common entry (maps never === by ref). Leaves missing
     // the index are skipped: edits apply where the entry exists, adds
     // and removes apply to every leaf.
-    function collectShadowAt(at) {
+    function collectEntryAt(kind, at) {
+        var shadow = kind === "shadows";
         var leaves = section.snapshot.selLeaves;
-        var base = {
+        var base = shadow ? {
             enabled: true,
             inner: false,
             color: "#80000000",
@@ -256,68 +243,7 @@ PanelSection {
             y: 4,
             blur: 8,
             spread: 0
-        };
-        var first = null;
-        for (var i = 0; i < leaves.length; i++) {
-            var list = leaves[i].shadows || [];
-            if (at < list.length) {
-                first = list[at];
-                break;
-            }
-        }
-        if (!first)
-            return {
-                value: base,
-                mixedColor: true,
-                mixedX: true,
-                mixedY: true,
-                mixedBlur: true,
-                mixedSpread: true,
-                mixedInner: true
-            };
-        var mc = false, mx = false, my = false, mb = false, ms = false, mi = false, me = false;
-        for (var j = 0; j < leaves.length; j++) {
-            var cur = (leaves[j].shadows || [])[at];
-            if (!cur)
-                continue;
-            if (String(cur.color) !== String(first.color))
-                mc = true;
-            if (Number(cur.x) !== Number(first.x))
-                mx = true;
-            if (Number(cur.y) !== Number(first.y))
-                my = true;
-            if (Number(cur.blur) !== Number(first.blur))
-                mb = true;
-            if (Number(cur.spread) !== Number(first.spread))
-                ms = true;
-            if ((cur.inner === true) !== (first.inner === true))
-                mi = true;
-            if ((cur.enabled !== false) !== (first.enabled !== false))
-                me = true;
-        }
-        return {
-            value: {
-                enabled: first.enabled !== false,
-                inner: first.inner === true,
-                color: String(first.color ?? "#80000000"),
-                x: Number(first.x) || 0,
-                y: first.y !== undefined ? (Number(first.y) || 0) : 4,
-                blur: first.blur !== undefined ? Math.max(0, Number(first.blur) || 0) : 8,
-                spread: first.spread !== undefined ? Math.max(0, Number(first.spread) || 0) : 0
-            },
-            mixedColor: mc,
-            mixedX: mx,
-            mixedY: my,
-            mixedBlur: mb,
-            mixedSpread: ms,
-            mixedInner: mi,
-            mixedEnabled: me
-        };
-    }
-
-    function collectGlowAt(at) {
-        var leaves = section.snapshot.selLeaves;
-        var base = {
+        } : {
             enabled: true,
             inner: false,
             color: "#cc00ffff",
@@ -326,27 +252,39 @@ PanelSection {
         };
         var first = null;
         for (var i = 0; i < leaves.length; i++) {
-            var list = leaves[i].glows || [];
+            var list = leaves[i][kind] || [];
             if (at < list.length) {
                 first = list[at];
                 break;
             }
         }
-        if (!first)
-            return {
+        if (!first) {
+            var empty = {
                 value: base,
                 mixedColor: true,
                 mixedBlur: true,
                 mixedSpread: true,
                 mixedInner: true
             };
-        var mc = false, mb = false, ms = false, mi = false, me = false;
+            if (shadow) {
+                empty.mixedX = true;
+                empty.mixedY = true;
+            }
+            return empty;
+        }
+        var mc = false, mb = false, ms = false, mi = false, me = false, mx = false, my = false;
         for (var j = 0; j < leaves.length; j++) {
-            var cur = (leaves[j].glows || [])[at];
+            var cur = (leaves[j][kind] || [])[at];
             if (!cur)
                 continue;
             if (String(cur.color) !== String(first.color))
                 mc = true;
+            if (shadow) {
+                if (Number(cur.x) !== Number(first.x))
+                    mx = true;
+                if (Number(cur.y) !== Number(first.y))
+                    my = true;
+            }
             if (Number(cur.blur) !== Number(first.blur))
                 mb = true;
             if (Number(cur.spread) !== Number(first.spread))
@@ -356,20 +294,28 @@ PanelSection {
             if ((cur.enabled !== false) !== (first.enabled !== false))
                 me = true;
         }
-        return {
-            value: {
-                enabled: first.enabled !== false,
-                inner: first.inner === true,
-                color: String(first.color ?? "#cc00ffff"),
-                blur: first.blur !== undefined ? Math.max(0, Number(first.blur) || 0) : 16,
-                spread: first.spread !== undefined ? Math.max(0, Number(first.spread) || 0) : 4
-            },
+        var value = {
+            enabled: first.enabled !== false,
+            inner: first.inner === true,
+            color: String(first.color ?? (shadow ? "#80000000" : "#cc00ffff")),
+            blur: first.blur !== undefined ? Math.max(0, Number(first.blur) || 0) : (shadow ? 8 : 16),
+            spread: first.spread !== undefined ? Math.max(0, Number(first.spread) || 0) : (shadow ? 0 : 4)
+        };
+        var out = {
+            value: value,
             mixedColor: mc,
             mixedBlur: mb,
             mixedSpread: ms,
             mixedInner: mi,
             mixedEnabled: me
         };
+        if (shadow) {
+            value.x = Number(first.x) || 0;
+            value.y = first.y !== undefined ? (Number(first.y) || 0) : 4;
+            out.mixedX = mx;
+            out.mixedY = my;
+        }
+        return out;
     }
 
     // Common blur with mixed flags (radius px, opacity 0..1).
@@ -442,28 +388,15 @@ PanelSection {
         };
     }
 
-    // Shadow color picker: solid only. The pad edits opaque rgb; the
+    // Entry color picker: solid only. The pad edits opaque rgb; the
     // row's opacity field owns alpha, so picks keep current alpha.
     ColorPickerPopup {
-        id: colorPicker
+        id: effectPicker
 
         onScrubStarted: section.snapshot.beginScrub()
         onCommitted: c => {
-            if (section.pickerShadowIndex >= 0)
-                section.patchShadowAt(section.pickerShadowIndex, "color", section.withAlpha(String(c), section.alphaOf(section.collectShadowAt(section.pickerShadowIndex).value.color)));
-        }
-        onScrubFinished: section.snapshot.endScrub()
-    }
-
-    // Glow color picker: solid only, alpha owned by the % field like
-    // the shadow rows, so picks keep current opacity.
-    ColorPickerPopup {
-        id: glowPicker
-
-        onScrubStarted: section.snapshot.beginScrub()
-        onCommitted: c => {
-            if (section.pickerGlowIndex >= 0)
-                section.patchGlowAt(section.pickerGlowIndex, "color", section.withAlpha(String(c), section.alphaOf(section.collectGlowAt(section.pickerGlowIndex).value.color)));
+            if (section.pickerAt >= 0 && (section.pickerKind === "shadows" || section.pickerKind === "glows"))
+                section.patchEntryAt(section.pickerKind, section.pickerAt, "color", section.withAlpha(String(c), section.alphaOf(section.collectEntryAt(section.pickerKind, section.pickerAt).value.color)));
         }
         onScrubFinished: section.snapshot.endScrub()
     }
@@ -472,23 +405,19 @@ PanelSection {
         id: picker
 
         textSelected: section.hasText()
-        onOuterShadowClicked: section.addShadow(false)
-        onInnerShadowClicked: section.addShadow(true)
+        onOuterShadowClicked: section.addEntry("shadows", false)
+        onInnerShadowClicked: section.addEntry("shadows", true)
         onLayerBlurClicked: section.enableBlur("layerBlur")
         onBackgroundBlurClicked: section.enableBlur("backgroundBlur")
-        onOuterGlowClicked: section.addGlow(false)
-        onInnerGlowClicked: section.addGlow(true)
+        onOuterGlowClicked: section.addEntry("glows", false)
+        onInnerGlowClicked: section.addEntry("glows", true)
         onGrainClicked: section.enableGrain()
     }
 
-    function openShadowPickerAt(at, color, anchor, mx, my) {
-        section.pickerShadowIndex = at;
-        colorPicker.openFor(color, anchor, mx, my);
-    }
-
-    function openGlowPickerAt(at, color, anchor, mx, my) {
-        section.pickerGlowIndex = at;
-        glowPicker.openFor(color, anchor, mx, my);
+    function openPickerAt(kind, at, color, anchor, mx, my) {
+        section.pickerKind = kind;
+        section.pickerAt = at;
+        effectPicker.openFor(color, anchor, mx, my);
     }
 
     // Picker entries stack: shadows/glows always append, singles
@@ -496,9 +425,9 @@ PanelSection {
     // the backdrop, so the picker row disables up front for text).
     function setEffect(type, inner) {
         if (type === "shadow")
-            section.addShadow(inner);
+            section.addEntry("shadows", inner);
         else if (type === "glow")
-            section.addGlow(inner);
+            section.addEntry("glows", inner);
         else if (type === "layerBlur" || type === "backgroundBlur")
             section.enableBlur(type);
         else if (type === "grain")
@@ -507,7 +436,7 @@ PanelSection {
             section.clearAllEffects();
     }
 
-    function addShadow(inner) {
+    function addEntry(kind, inner) {
         var d = section.snapshot.doc;
         if (!d)
             return;
@@ -516,28 +445,10 @@ PanelSection {
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
-            var next = (leaves[i].shadows || []).slice();
-            next.push(d.factory.defaultShadow(inner));
-            leaves[i].shadows = next;
-        }
-        d.touch();
-    }
-
-    function addGlow(inner) {
-        var d = section.snapshot.doc;
-        if (!d)
-            return;
-        d.history.checkpoint();
-        var leaves = d._selectedLeaves();
-        for (var i = 0; i < leaves.length; i++) {
-            var n = leaves[i];
-            if (d.isEffectivelyLocked(n))
-                continue;
-            var next = (n.glows || []).slice();
+            var next = (leaves[i][kind] || []).slice();
             // Fresh map per leaf (never share one object across nodes).
-            var entry = d.factory.defaultGlow(inner);
-            next.push(entry);
-            n.glows = next;
+            next.push(kind === "shadows" ? d.factory.defaultShadow(inner) : d.factory.defaultGlow(inner));
+            leaves[i][kind] = next;
         }
         d.touch();
     }
@@ -617,51 +528,29 @@ PanelSection {
         d.touch();
     }
 
-    function toggleShadowAt(at) {
+    function toggleEntryAt(kind, at) {
         var d = section.snapshot.doc;
         if (!d)
             return;
-        var common = section.collectShadowAt(at);
+        var common = section.collectEntryAt(kind, at);
         var nextOn = !(common.value.enabled !== false);
         d.history.checkpoint();
         var leaves = d._selectedLeaves();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
-            var list = (leaves[i].shadows || []).slice();
+            var list = (leaves[i][kind] || []).slice();
             if (at >= list.length)
                 continue;
             var entry = Object.assign({}, list[at]);
             entry.enabled = nextOn;
             list[at] = entry;
-            leaves[i].shadows = list;
+            leaves[i][kind] = list;
         }
         d.touch();
     }
 
-    function toggleGlowAt(at) {
-        var d = section.snapshot.doc;
-        if (!d)
-            return;
-        var common = section.collectGlowAt(at);
-        var nextOn = !(common.value.enabled !== false);
-        d.history.checkpoint();
-        var leaves = d._selectedLeaves();
-        for (var i = 0; i < leaves.length; i++) {
-            if (d.isEffectivelyLocked(leaves[i]))
-                continue;
-            var list = (leaves[i].glows || []).slice();
-            if (at >= list.length)
-                continue;
-            var entry = Object.assign({}, list[at]);
-            entry.enabled = nextOn;
-            list[at] = entry;
-            leaves[i].glows = list;
-        }
-        d.touch();
-    }
-
-    function removeShadowAt(at) {
+    function removeEntryAt(kind, at) {
         var d = section.snapshot.doc;
         if (!d)
             return;
@@ -670,34 +559,16 @@ PanelSection {
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
-            var list = (leaves[i].shadows || []).slice();
+            var list = (leaves[i][kind] || []).slice();
             if (at >= list.length)
                 continue;
             list.splice(at, 1);
-            leaves[i].shadows = list;
+            leaves[i][kind] = list;
         }
         d.touch();
     }
 
-    function removeGlowAt(at) {
-        var d = section.snapshot.doc;
-        if (!d)
-            return;
-        d.history.checkpoint();
-        var leaves = d._selectedLeaves();
-        for (var i = 0; i < leaves.length; i++) {
-            if (d.isEffectivelyLocked(leaves[i]))
-                continue;
-            var list = (leaves[i].glows || []).slice();
-            if (at >= list.length)
-                continue;
-            list.splice(at, 1);
-            leaves[i].glows = list;
-        }
-        d.touch();
-    }
-
-    function moveShadowAt(at, delta) {
+    function moveEntryAt(kind, at, delta) {
         var d = section.snapshot.doc;
         if (!d)
             return;
@@ -709,67 +580,22 @@ PanelSection {
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
-            var list = (leaves[i].shadows || []).slice();
+            var list = (leaves[i][kind] || []).slice();
             if (at >= list.length || to >= list.length)
                 continue;
             var tmp = list[at];
             list[at] = list[to];
             list[to] = tmp;
-            leaves[i].shadows = list;
+            leaves[i][kind] = list;
         }
         d.touch();
     }
 
-    function moveGlowAt(at, delta) {
-        var d = section.snapshot.doc;
-        if (!d)
-            return;
-        var to = at + delta;
-        if (to < 0)
-            return;
-        d.history.checkpoint();
-        var leaves = d._selectedLeaves();
-        for (var i = 0; i < leaves.length; i++) {
-            if (d.isEffectivelyLocked(leaves[i]))
-                continue;
-            var list = (leaves[i].glows || []).slice();
-            if (at >= list.length || to >= list.length)
-                continue;
-            var tmp = list[at];
-            list[at] = list[to];
-            list[to] = tmp;
-            leaves[i].glows = list;
-        }
-        d.touch();
+    function setInnerAt(kind, at, on) {
+        section.patchEntryAt(kind, at, "inner", on === true);
     }
 
-    function setShadowInnerAt(at, on) {
-        section.patchShadowAt(at, "inner", on === true);
-    }
-
-    function setGlowInnerAt(at, on) {
-        var d = section.snapshot.doc;
-        if (!d)
-            return;
-        d.history.checkpoint();
-        var leaves = d._selectedLeaves();
-        for (var i = 0; i < leaves.length; i++) {
-            var n = leaves[i];
-            if (d.isEffectivelyLocked(n))
-                continue;
-            var list = (n.glows || []).slice();
-            if (at >= list.length)
-                continue;
-            var entry = Object.assign({}, list[at]);
-            entry.enabled = true;
-            entry.inner = on === true;
-            list[at] = entry;
-            n.glows = list;
-        }
-        d.touch();
-    }
-
-    function patchShadowAt(at, role, value) {
+    function patchEntryAt(kind, at, role, value) {
         var d = section.snapshot.doc;
         if (!d)
             return;
@@ -778,35 +604,14 @@ PanelSection {
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
-            var list = (leaves[i].shadows || []).slice();
+            var list = (leaves[i][kind] || []).slice();
             if (at >= list.length)
                 continue;
             var entry = Object.assign({}, list[at]);
             entry.enabled = true;
             entry[role] = role === "blur" || role === "spread" ? Math.max(0, Number(value) || 0) : value;
             list[at] = entry;
-            leaves[i].shadows = list;
-        }
-        d.touch();
-    }
-
-    function patchGlowAt(at, role, value) {
-        var d = section.snapshot.doc;
-        if (!d)
-            return;
-        d.history.checkpoint();
-        var leaves = d._selectedLeaves();
-        for (var j = 0; j < leaves.length; j++) {
-            if (d.isEffectivelyLocked(leaves[j]))
-                continue;
-            var list = (leaves[j].glows || []).slice();
-            if (at >= list.length)
-                continue;
-            var entry = Object.assign({}, list[at]);
-            entry.enabled = true;
-            entry[role] = role === "blur" || role === "spread" ? Math.max(0, Number(value) || 0) : value;
-            list[at] = entry;
-            leaves[j].glows = list;
+            leaves[i][kind] = list;
         }
         d.touch();
     }
