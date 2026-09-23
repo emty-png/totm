@@ -3,6 +3,13 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [Unreleased]
+
+### Added
+
+* SVG linear-gradient import — `url(#id)` fills and strokes land as editable `linear` stack entries (bbox and userSpace vectors, gradientTransform, href chains, multi-stop sampling with stop-opacity) instead of black; radial degrades to its first stop as solid.
+* Drag-and-drop plus clipboard paste for images and SVG — files dropped anywhere over the editor stamp at the drop point (cascaded, one undo entry), Ctrl+V takes copied files then raw pixels at the viewport center; app clipboards keep precedence, inbound only.
+
 ## [0.2.2] - 2026-09-22
 
 ### Added
