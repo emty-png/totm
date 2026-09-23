@@ -3,6 +3,25 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.3.0] - 2026-09-23
+
+### Added
+
+* Animation entry targeting — color, gradient, stroke, shadow and glow clips target any stack entry (index 0 = top) through an Entry dropdown that reseeds only the From side; cards and the clip editor show the entry (`Color · Fill 2`).
+* Stroke-gradient width, dash and position — gradient strokes animate the same width, dash pair and stepped position as solid strokes.
+* Clip deleting — a delete button in the clip editor, per-card delete in the animation lists, and one Delete/Backspace shortcut for shapes, clips and audio.
+* Pretty build wrapper — `tools/build.sh` renders the presets as a single-line gradient bar with warning counts; full output stays in the log and failures print the real error tail.
+
+### Fixed
+
+* Top-entry shadow and glow clips clobbering multi-entry stacks — folds preserve the rest of the stack now, like fills and strokes.
+* Glow typed-hex dropping stored alpha — strips and reattaches like shadow and its own picker.
+* Timeline Delete never firing for clips: two shortcuts shared the sequence (Backspace never reached the timeline) — merged into one handler.
+
+### Changed
+
+* Behavior-preserving refactors (parity-harnessed): table-driven `DocAnimPresets` and clip seeds, shared clip editor rows (entry, dash, position, alpha wells), merged shadow/glow helpers in the effects panel.
+
 ## [0.2.3] - 2026-09-23
 
 ### Added
