@@ -7,7 +7,7 @@ import Totm
 // (absolute px). Stroke clips also carry entry opacity, dash pair and
 // position: width/opacity/dash lerp, position steps at the midpoint.
 // Resize centers on each leaf's own center; corner writes
-// all four when independent is on. All style targets are entry 0.
+// all four when independent is on. Stroke targets any stack entry.
 ColumnLayout {
     id: section
 
@@ -17,20 +17,6 @@ ColumnLayout {
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property var opts: section.clip ? section.clip.options || {} : ({})
     readonly property string preset: section.clip ? section.clip.preset : ""
-    readonly property var entryDefaults: DocCustomDefaults {}
-    readonly property var targetTop: {
-        if (section.doc)
-            section.doc.rev;
-        if (!section.doc || !section.clip)
-            return null;
-        var n = section.doc.findNode(section.clip.targetUid);
-        if (!n)
-            return null;
-        if (n.kind === "shape")
-            return n;
-        var leaves = section.doc._leavesUnder(n);
-        return leaves.length > 0 ? leaves[0] : null;
-    }
 
     spacing: 8
 
@@ -233,19 +219,12 @@ ColumnLayout {
         color: AppTheme.muted
     }
 
-    Text {
+    ClipEntryDropdown {
         visible: section.preset === "customStroke"
-        text: qsTr("Stroke entry")
-        font.pixelSize: 11
-        color: AppTheme.muted
-    }
-
-    PanelDropdown {
-        visible: section.preset === "customStroke"
-        Layout.fillWidth: true
-        options: section.entryOptions()
-        currentId: String(section.entryIndex())
-        onPicked: id => section.retargetEntry(Number(id))
+        doc: section.doc
+        clip: section.clip
+        clipId: section.clipId
+        entryKind: "strokes"
     }
 
     NumberField {
@@ -317,130 +296,29 @@ ColumnLayout {
         onScrubFinished: section.endScrub()
     }
 
-    Text {
+    ClipDashPair {
         visible: section.preset === "customStroke"
-        text: qsTr("From dash / gap (width units, 0 = solid)")
-        font.pixelSize: 11
-        color: AppTheme.muted
+        doc: section.doc
+        clipId: section.clipId
+        opts: section.opts
     }
 
-    RowLayout {
+    ClipPositionSwitch {
         visible: section.preset === "customStroke"
-        spacing: 8
-        NumberField {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.preferredWidth: 0
-            prefix: "D"
-            minimum: 0
-            maximum: 100
-            value: Number(section.opts.fromDash) || 0
-            onCommitted: v => section.setOption("fromDash", v)
-            onScrubStarted: section.beginScrub()
-            onScrubFinished: section.endScrub()
-        }
-        NumberField {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.preferredWidth: 0
-            prefix: "G"
-            minimum: 0
-            maximum: 100
-            value: Number(section.opts.fromGap) || 0
-            onCommitted: v => section.setOption("fromGap", v)
-            onScrubStarted: section.beginScrub()
-            onScrubFinished: section.endScrub()
-        }
+        label: qsTr("From position")
+        position: section.opts.fromPosition
+        doc: section.doc
+        clipId: section.clipId
+        optionRole: "fromPosition"
     }
 
-    Text {
+    ClipPositionSwitch {
         visible: section.preset === "customStroke"
-        text: qsTr("To dash / gap (width units, 0 = solid)")
-        font.pixelSize: 11
-        color: AppTheme.muted
-    }
-
-    RowLayout {
-        visible: section.preset === "customStroke"
-        spacing: 8
-        NumberField {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.preferredWidth: 0
-            prefix: "D"
-            minimum: 0
-            maximum: 100
-            value: Number(section.opts.toDash) || 0
-            onCommitted: v => section.setOption("toDash", v)
-            onScrubStarted: section.beginScrub()
-            onScrubFinished: section.endScrub()
-        }
-        NumberField {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.preferredWidth: 0
-            prefix: "G"
-            minimum: 0
-            maximum: 100
-            value: Number(section.opts.toGap) || 0
-            onCommitted: v => section.setOption("toGap", v)
-            onScrubStarted: section.beginScrub()
-            onScrubFinished: section.endScrub()
-        }
-    }
-
-    Text {
-        visible: section.preset === "customStroke"
-        text: qsTr("From position")
-        font.pixelSize: 11
-        color: AppTheme.muted
-    }
-
-    RowLayout {
-        visible: section.preset === "customStroke"
-        spacing: 8
-        SegmentedOption {
-            label: qsTr("Center")
-            active: (section.opts.fromPosition || "center") === "center"
-            onClicked: section.setOption("fromPosition", "center")
-        }
-        SegmentedOption {
-            label: qsTr("Inside")
-            active: section.opts.fromPosition === "inside"
-            onClicked: section.setOption("fromPosition", "inside")
-        }
-        SegmentedOption {
-            label: qsTr("Outside")
-            active: section.opts.fromPosition === "outside"
-            onClicked: section.setOption("fromPosition", "outside")
-        }
-    }
-
-    Text {
-        visible: section.preset === "customStroke"
-        text: qsTr("To position")
-        font.pixelSize: 11
-        color: AppTheme.muted
-    }
-
-    RowLayout {
-        visible: section.preset === "customStroke"
-        spacing: 8
-        SegmentedOption {
-            label: qsTr("Center")
-            active: (section.opts.toPosition || "center") === "center"
-            onClicked: section.setOption("toPosition", "center")
-        }
-        SegmentedOption {
-            label: qsTr("Inside")
-            active: section.opts.toPosition === "inside"
-            onClicked: section.setOption("toPosition", "inside")
-        }
-        SegmentedOption {
-            label: qsTr("Outside")
-            active: section.opts.toPosition === "outside"
-            onClicked: section.setOption("toPosition", "outside")
-        }
+        label: qsTr("To position")
+        position: section.opts.toPosition
+        doc: section.doc
+        clipId: section.clipId
+        optionRole: "toPosition"
     }
 
     function setOption(role, value) {
@@ -448,44 +326,6 @@ ColumnLayout {
             return;
         var patch = {};
         patch[role] = value;
-        section.doc.setClipOptions(section.clipId, patch);
-    }
-
-    function entryIndex() {
-        if (section.opts.strokeIndex === undefined)
-            return 0;
-        var n = Math.round(Number(section.opts.strokeIndex));
-        if (isNaN(n))
-            return 0;
-        return Math.min(32, Math.max(0, n));
-    }
-
-    function entryOptions() {
-        var out = [];
-        var list = (section.targetTop && section.targetTop.strokes) || [];
-        for (var i = 0; i < list.length; i++) {
-            var e = list[i] || {};
-            out.push({
-                id: String(i),
-                name: qsTr("Stroke ") + (i + 1) + (e.enabled === false ? qsTr(" (off)") : "")
-            });
-        }
-        if (out.length === 0)
-            out.push({
-                id: "0",
-                name: qsTr("Stroke 1")
-            });
-        return out;
-    }
-
-    // Retarget onto another entry: From reseeds from the live entry
-    // (no jump at clip start), To stays user-edited, one undo entry.
-    function retargetEntry(i) {
-        if (!section.doc || !section.clip || i === section.entryIndex())
-            return;
-        var node = section.doc.findNode(section.clip.targetUid);
-        var tops = node ? [node] : [];
-        var patch = section.entryDefaults.fromPatchForEntry(section.doc.anim.presets, section.doc, tops, "customStroke", i);
         section.doc.setClipOptions(section.clipId, patch);
     }
 
