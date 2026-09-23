@@ -5,6 +5,9 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QMimeData>
 #include <QImage>
 #include <QImageReader>
 #include <QJsonArray>
@@ -342,6 +345,46 @@ QString LibraryStore::importImage(const QUrl &source) {
     const QString name = newId() + QStringLiteral(".") + suffix;
     const QString dest = imagesDir() + QStringLiteral("/") + name;
     if (!QFile::copy(local, dest)) {
+        setLastError(tr("Could not import that image."));
+        return {};
+    }
+    clearError();
+    return name;
+}
+
+QStringList LibraryStore::clipboardFileUrls() const
+{
+    const QClipboard *cb = QGuiApplication::clipboard();
+    if (!cb)
+        return {};
+    const QMimeData *md = cb->mimeData();
+    if (!md || !md->hasUrls())
+        return {};
+    QStringList out;
+    for (const QUrl &u : md->urls()) {
+        if (u.isLocalFile())
+            out.append(u.toLocalFile());
+    }
+    return out;
+}
+
+bool LibraryStore::clipboardHasImage() const
+{
+    const QClipboard *cb = QGuiApplication::clipboard();
+    return cb && cb->mimeData() && cb->mimeData()->hasImage();
+}
+
+QString LibraryStore::pasteClipboardImage()
+{
+    const QClipboard *cb = QGuiApplication::clipboard();
+    const QImage img = cb ? cb->image() : QImage();
+    if (img.isNull()) {
+        setLastError(tr("The clipboard holds no image."));
+        return {};
+    }
+    QDir().mkpath(imagesDir());
+    const QString name = newId() + QStringLiteral(".png");
+    if (!img.save(imagesDir() + QStringLiteral("/") + name, "PNG")) {
         setLastError(tr("Could not import that image."));
         return {};
     }

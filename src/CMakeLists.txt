@@ -195,6 +195,7 @@ qt_add_qml_module(totm
         qml/components/editor/EditorLeftPanel.qml
         qml/components/editor/EditorRightPanel.qml
         qml/components/editor/EditorShortcuts.qml
+        qml/components/editor/ExternalDropArea.qml
         qml/components/editor/EditorModeSwitcher.qml
         qml/components/editor/AnimateModeSwitcher.qml
         qml/components/editor/timeline/TimelineView.qml

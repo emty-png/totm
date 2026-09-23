@@ -12,6 +12,10 @@ Item {
 
     required property var view
     required property var panel
+    // Window-level image intake (Main wires it through the view):
+    // paste falls back to the OS clipboard when both app clipboards
+    // are empty.
+    property var dropHandler: null
 
     function doc() {
         return shortcuts.view ? shortcuts.view.playDoc : null;
@@ -79,6 +83,9 @@ Item {
             d.pasteClips(TabState.animClipboard, uids);
         } else if (shortcuts.canPasteShapes()) {
             d.insertCopies(TabState.clipboard);
+        } else if (shortcuts.dropHandler && shortcuts.dropHandler.pasteFromSystem()) {
+            // System clipboard fallback (copied files or raw pixels land
+            // at the viewport center); internal pastes keep precedence.
         }
     }
 
@@ -163,7 +170,10 @@ Item {
 
     Shortcut {
         sequences: [ShortcutState.editPaste]
-        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && (shortcuts.canPasteShapes() || shortcuts.canPasteClips())
+        // System paste has no change signal to bind (the OS clipboard
+        // is opaque), so the shortcut stays armed whenever a doc is
+        // open and falls back to it inside doPaste; empty pastes no-op.
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && !!shortcuts.doc()
         onActivated: {
             if (shortcuts.guarded())
                 return;

@@ -123,6 +123,14 @@ public:
     Q_INVOKABLE QString importImage(const QUrl &source);
     Q_INVOKABLE QUrl imageUrl(const QString &name) const;
     Q_INVOKABLE QVariantMap imageInfo(const QString &name) const;
+    // System clipboard reads for drag-drop/paste parity. clipboardFileUrls
+    // lists pasted/copied local files ("" entries dropped); clipboardHasImage
+    // reports raw pixel data (screenshots, browser copies);
+    // pasteClipboardImage stores that pixel data as a PNG blob and returns
+    // its name ("" when the clipboard holds no image). Inbound only.
+    Q_INVOKABLE QStringList clipboardFileUrls() const;
+    Q_INVOKABLE bool clipboardHasImage() const;
+    Q_INVOKABLE QString pasteClipboardImage();
     // SVG vector import: parses an .svg file into editable pen data
     // ({ok, error, width, height, paths}) without storing a blob, so
     // icons land as shapes instead of flat images. Unconvertible files

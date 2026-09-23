@@ -135,10 +135,26 @@ ApplicationWindow {
 
         // Document tab content
         EditorView {
+            id: editorView
+
             visible: !TabState.isHomeSelected
             Layout.fillWidth: true
             Layout.fillHeight: true
+            externalDrop: dropIntake
         }
+    }
+
+    // OS-level image intake over the whole editor window (drops map
+    // onto the canvas; paste is wired through EditorShortcuts). Lives
+    // outside the layouts: anchored items inside one are undefined
+    // behavior.
+    ExternalDropArea {
+        id: dropIntake
+
+        anchors.fill: parent
+        windowActive: !TabState.isHomeSelected
+        canvas: editorView.canvas
+        doc: TabState.documentFor(TabState.currentIndex)
     }
 
     WindowResizeHandles {

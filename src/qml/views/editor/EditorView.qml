@@ -41,6 +41,8 @@ ColumnLayout {
 
     // Document driving canvas and panels (null on home).
     readonly property var playDoc: TabState.documentFor(TabState.currentIndex)
+    // Canvas item for window-level drop mapping (Main wires it in).
+    property alias canvas: canvasView
 
     // Playback clock: one 16ms timer for the visible tab. Transport state
     // lives per document, so tab switches park and resume with no
@@ -72,9 +74,15 @@ ColumnLayout {
 
     // All editor keyboard shortcuts live in one helper so this screen
     // stays a thin composition of panels + canvas + timeline.
+    // externalDrop is set by Main (window-level image intake); the
+    // paste shortcut falls back to it when the internal clipboards
+    // are empty.
+    property var externalDrop: null
+
     EditorShortcuts {
         view: view
         panel: rightPanel
+        dropHandler: view.externalDrop
     }
 
     // Debounced autosave: each mutation queues its tab id; the queue
