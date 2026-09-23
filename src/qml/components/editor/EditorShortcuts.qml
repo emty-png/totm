@@ -191,14 +191,25 @@ Item {
         }
     }
 
+    // Delete whatever is selected: shapes always go; clips and audio
+    // go in animate mode (one Shortcut for all three, so the shared
+    // editDelete sequence never competes with itself).
     Shortcut {
         sequences: [ShortcutState.editDelete, "Backspace"]
-        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && (shortcuts.hasShapes() || shortcuts.hasClips() || shortcuts.hasAudioSel())
         onActivated: {
             if (shortcuts.guarded())
                 return;
             var d = shortcuts.doc();
-            if (d)
+            if (!d)
+                return;
+            if (shortcuts.panel && shortcuts.panel.mode === "animate") {
+                if (shortcuts.hasClips())
+                    d.deleteSelectedClips();
+                if (shortcuts.hasAudioSel())
+                    d.deleteSelectedAudio();
+            }
+            if (shortcuts.hasShapes())
                 d.deleteSelected();
         }
     }
@@ -591,20 +602,6 @@ Item {
                 return;
             if (shortcuts.view && shortcuts.view.bottomPanel && shortcuts.view.bottomPanel.timelineView)
                 shortcuts.view.bottomPanel.timelineView.zoomStep(-120);
-        }
-    }
-
-    // Timeline clip + audio delete (each side no-ops quietly when empty).
-    Shortcut {
-        sequences: [ShortcutState.editDelete]
-        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.panel.mode === "animate" && (shortcuts.hasClips() || shortcuts.hasAudioSel())
-        onActivated: {
-            if (shortcuts.guarded())
-                return;
-            if (shortcuts.hasClips() && shortcuts.doc())
-                shortcuts.doc().deleteSelectedClips();
-            if (shortcuts.hasAudioSel() && shortcuts.doc())
-                shortcuts.doc().deleteSelectedAudio();
         }
     }
 }

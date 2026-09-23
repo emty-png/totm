@@ -76,6 +76,14 @@ ScrollView {
                 elide: Text.ElideRight
                 color: AppTheme.foreground
             }
+
+            PanelIconButton {
+                Layout.rightMargin: 4
+                iconKind: "close"
+                filled: false
+                iconSize: 12
+                onClicked: editor.deleteClip()
+            }
         }
 
         Rectangle {
@@ -301,6 +309,19 @@ ScrollView {
     function setMode(mode) {
         if (editor.doc)
             editor.doc.setClipMode(editor.clipId, mode);
+    }
+
+    // Delete the open clip (plus any other selected clips, like shape
+    // delete removes the whole selection). deleteSelectedClips filters
+    // the selection, so the editor hides on its own once its clip is
+    // gone; no back navigation needed.
+    function deleteClip() {
+        if (!editor.doc)
+            return;
+        if (editor.doc.anim.isClipSelected(editor.clipId))
+            editor.doc.deleteSelectedClips();
+        else
+            editor.doc.deleteClips([editor.clipId]);
     }
 
     function redrawPath() {
