@@ -47,6 +47,12 @@ ColumnLayout {
     // Set when the automatic swap to the gradient sibling fails (the
     // target is gone): the note below is a fallback, never a button.
     property bool swapFailed: false
+    readonly property var entryDefaults: DocCustomDefaults {}
+
+    // Entry target for color clips (index 0 = top): which stack entry
+    // animates. Missing key reads 0 so old clips stay top-targeted.
+    readonly property bool isEntryClip: section.preset === "customColor" || section.preset === "customStrokeColor"
+    readonly property string entryKind: section.preset === "customStrokeColor" ? "strokes" : "fills"
 
     spacing: 8
 
@@ -75,6 +81,21 @@ ColumnLayout {
         text: qsTr("From")
         font.pixelSize: 11
         color: AppTheme.muted
+    }
+
+    Text {
+        visible: section.isEntryClip
+        text: section.preset === "customStrokeColor" ? qsTr("Stroke entry") : qsTr("Fill entry")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    PanelDropdown {
+        visible: section.isEntryClip
+        Layout.fillWidth: true
+        options: section.entryOptions()
+        currentId: String(section.entryIndex())
+        onPicked: id => section.retargetEntry(Number(id))
     }
 
     NumberField {
@@ -271,6 +292,46 @@ ColumnLayout {
             return;
         var patch = {};
         patch[role] = value;
+        section.doc.setClipOptions(section.clipId, patch);
+    }
+
+    function entryIndex() {
+        var raw = section.preset === "customStrokeColor" ? section.opts.strokeIndex : section.opts.fillIndex;
+        if (raw === undefined)
+            return 0;
+        var n = Math.round(Number(raw));
+        if (isNaN(n))
+            return 0;
+        return Math.min(32, Math.max(0, n));
+    }
+
+    function entryOptions() {
+        var out = [];
+        var list = (section.targetTop && section.targetTop[section.entryKind]) || [];
+        var base = section.preset === "customStrokeColor" ? qsTr("Stroke ") : qsTr("Fill ");
+        for (var i = 0; i < list.length; i++) {
+            var e = list[i] || {};
+            out.push({
+                id: String(i),
+                name: base + (i + 1) + (e.enabled === false ? qsTr(" (off)") : "")
+            });
+        }
+        if (out.length === 0)
+            out.push({
+                id: "0",
+                name: base + "1"
+            });
+        return out;
+    }
+
+    // Retarget onto another entry: From reseeds from the live entry
+    // (no jump at clip start), To stays user-edited, one undo entry.
+    function retargetEntry(i) {
+        if (!section.doc || !section.clip || i === section.entryIndex())
+            return;
+        var node = section.doc.findNode(section.clip.targetUid);
+        var tops = node ? [node] : [];
+        var patch = section.entryDefaults.fromPatchForEntry(section.doc.anim.presets, section.doc, tops, section.preset, i);
         section.doc.setClipOptions(section.clipId, patch);
     }
 

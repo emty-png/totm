@@ -209,7 +209,8 @@ QtObject {
                 from: "#000000",
                 to: "#ff0000",
                 fromOpacity: 1,
-                toOpacity: 1
+                toOpacity: 1,
+                fillIndex: 0
             };
         if (presetId === "customGradient")
             return {
@@ -220,7 +221,8 @@ QtObject {
                 fromAngle: 90,
                 toAngle: 90,
                 fromOpacity: 1,
-                toOpacity: 1
+                toOpacity: 1,
+                fillIndex: 0
             };
         if (presetId === "customHide")
             return {
@@ -250,14 +252,16 @@ QtObject {
                 fromGap: 0,
                 toGap: 0,
                 fromPosition: "center",
-                toPosition: "center"
+                toPosition: "center",
+                strokeIndex: 0
             };
         if (presetId === "customStrokeColor")
             return {
                 from: "#000000",
                 to: "#ff0000",
                 fromOpacity: 1,
-                toOpacity: 1
+                toOpacity: 1,
+                strokeIndex: 0
             };
         if (presetId === "customStrokeGradient")
             return {
@@ -268,7 +272,8 @@ QtObject {
                 fromAngle: 90,
                 toAngle: 90,
                 fromOpacity: 1,
-                toOpacity: 1
+                toOpacity: 1,
+                strokeIndex: 0
             };
         if (presetId === "customFontSize")
             return {
@@ -356,6 +361,16 @@ QtObject {
 
     function normalizeStrokePosition(v) {
         return v === "inside" || v === "outside" ? v : "center";
+    }
+
+    // Stack entry index for style clips (0 = top). Capped so a
+    // hand-edited scene can never stage a silly index; targets with
+    // fewer entries pad with defaults at sample time.
+    function normalizeEntryIndex(v) {
+        var n = Math.round(Number(v));
+        if (isNaN(n))
+            return 0;
+        return Math.min(32, Math.max(0, n));
     }
 
     function normalizeOpacity(v, fallback) {
@@ -471,6 +486,8 @@ QtObject {
                 co.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
                 co.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
             }
+            if (r.fillIndex !== undefined)
+                co.fillIndex = normalizeEntryIndex(r.fillIndex);
             return co;
         }
         if (presetId === "customGradient") {
@@ -486,6 +503,8 @@ QtObject {
                 cg.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
                 cg.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
             }
+            if (r.fillIndex !== undefined)
+                cg.fillIndex = normalizeEntryIndex(r.fillIndex);
             return cg;
         }
         if (presetId === "customHide")
@@ -526,6 +545,8 @@ QtObject {
                 cs.fromPosition = normalizeStrokePosition(r.fromPosition !== undefined ? r.fromPosition : "center");
                 cs.toPosition = normalizeStrokePosition(r.toPosition !== undefined ? r.toPosition : "center");
             }
+            if (r.strokeIndex !== undefined)
+                cs.strokeIndex = normalizeEntryIndex(r.strokeIndex);
             return cs;
         }
         if (presetId === "customStrokeColor") {
@@ -537,10 +558,12 @@ QtObject {
                 cc2.fromOpacity = normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1);
                 cc2.toOpacity = normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1);
             }
+            if (r.strokeIndex !== undefined)
+                cc2.strokeIndex = normalizeEntryIndex(r.strokeIndex);
             return cc2;
         }
-        if (presetId === "customStrokeGradient")
-            return {
+        if (presetId === "customStrokeGradient") {
+            var sg = {
                 fromC1: normalizeHex(r.fromC1 !== undefined ? r.fromC1 : "#000000", "#000000"),
                 toC1: normalizeHex(r.toC1 !== undefined ? r.toC1 : "#000000", "#000000"),
                 fromC2: normalizeHex(r.fromC2 !== undefined ? r.fromC2 : "#ffffff", "#ffffff"),
@@ -550,6 +573,10 @@ QtObject {
                 fromOpacity: normalizeOpacity(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1),
                 toOpacity: normalizeOpacity(r.toOpacity !== undefined ? r.toOpacity : 1, 1)
             };
+            if (r.strokeIndex !== undefined)
+                sg.strokeIndex = normalizeEntryIndex(r.strokeIndex);
+            return sg;
+        }
         if (presetId === "customFontSize")
             return {
                 from: clampNum(r.from !== undefined ? r.from : 16, 16, 1, 500),

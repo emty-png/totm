@@ -84,6 +84,83 @@ QtObject {
         return "#" + hx(r) + hx(g) + hx(b);
     }
 
+    // Style-clip stack entry index (fillIndex/strokeIndex, 0 = top).
+    // Missing key reads 0 so old clips keep the legacy flat path.
+    function entryIndexOf(o, key) {
+        if (o[key] === undefined)
+            return 0;
+        var n = Math.round(Number(o[key]));
+        if (isNaN(n))
+            return 0;
+        return Math.min(32, Math.max(0, n));
+    }
+
+    function clampEntryOpacity(v) {
+        var n = Number(v !== undefined ? v : 1);
+        if (isNaN(n))
+            n = 1;
+        return Math.min(1, Math.max(0, n));
+    }
+
+    // Fresh full entry objects from the frozen base (never aliased):
+    // indexed overlays carry complete entry state so different indices
+    // resolve on different keys and coexist.
+    function fillEntryFromBase(base, i) {
+        var list = (base && base.fills) || [];
+        var src = i < list.length ? (list[i] ?? {}) : {};
+        var grad = src.gradient ?? {};
+        var stops = grad.stops ?? [];
+        return {
+            enabled: src.enabled !== false,
+            color: String(src.color ?? "#d9d9d9"),
+            type: src.type === "linear" ? "linear" : "solid",
+            gradient: {
+                angle: Number(grad.angle) || 0,
+                stops: [
+                    {
+                        color: String((stops[0] ?? {}).color ?? "#000000"),
+                        pos: 0
+                    },
+                    {
+                        color: String((stops[1] ?? {}).color ?? "#ffffff"),
+                        pos: 1
+                    }
+                ]
+            },
+            opacity: clampEntryOpacity(src.opacity)
+        };
+    }
+
+    function strokeEntryFromBase(base, i) {
+        var list = (base && base.strokes) || [];
+        var src = i < list.length ? (list[i] ?? {}) : {};
+        var grad = src.gradient ?? {};
+        var stops = grad.stops ?? [];
+        var dash = (src.dash && typeof src.dash.length === "number") ? [Math.max(0, Number(src.dash[0]) || 0), Math.max(0, Number(src.dash[1]) || 0)] : [];
+        return {
+            enabled: src.enabled !== false,
+            color: String(src.color ?? "#000000"),
+            type: src.type === "linear" ? "linear" : "solid",
+            gradient: {
+                angle: Number(grad.angle) || 0,
+                stops: [
+                    {
+                        color: String((stops[0] ?? {}).color ?? "#000000"),
+                        pos: 0
+                    },
+                    {
+                        color: String((stops[1] ?? {}).color ?? "#ffffff"),
+                        pos: 1
+                    }
+                ]
+            },
+            width: Math.max(0, Number(src.width) || 0),
+            dash: dash.length === 2 && dash[0] > 0.001 && dash[1] > 0.001 ? dash : [],
+            position: (src.position === "inside" || src.position === "outside") ? src.position : "center",
+            opacity: clampEntryOpacity(src.opacity)
+        };
+    }
+
     // Opacity from-to with 1.0 fallback for missing/garbage ends so
     // old clips (no opacity keys) never produce NaN when gated wrong.
     function lerpOpacity(fromV, toV, t) {
@@ -243,14 +320,28 @@ QtObject {
         } else if (preset === "customOpacity") {
             out.opacity = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
         } else if (preset === "customColor") {
+            var fIdx = entryIndexOf(o, "fillIndex");
             var cc = lerpColor(o.from, o.to, e);
-            if (cc)
-                out.fill = cc;
-            // Opacity rides along only when the clip carries it (new
-            // clips seed it; old clips stay color-only so they never
-            // stomp a custom entry opacity).
-            if (o.fromOpacity !== undefined || o.toOpacity !== undefined)
-                out.fillOpacity = lerpOpacity(o.fromOpacity, o.toOpacity, e);
+            var fOp = (o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined;
+            if (fIdx === 0) {
+                if (cc)
+                    out.fill = cc;
+                // Opacity rides along only when the clip carries it (new
+                // clips seed it; old clips stay color-only so they never
+                // stomp a custom entry opacity).
+                if (fOp !== undefined)
+                    out.fillOpacity = fOp;
+            } else {
+                // Non-top entries travel as complete entry objects on
+                // index-namespaced keys, so clips on different entries
+                // coexist under later-wins instead of colliding.
+                var fe = fillEntryFromBase(base, fIdx);
+                if (cc)
+                    fe.color = cc;
+                if (fOp !== undefined)
+                    fe.opacity = fOp;
+                out["fillEntry" + fIdx] = fe;
+            }
         } else if (preset === "customHide") {
             // Stepped visibility (bools can't ease): first half reads
             // from, second half reads to.
@@ -269,40 +360,73 @@ QtObject {
         } else if (preset === "customCorner") {
             out.radius = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
         } else if (preset === "customStroke") {
-            out.strokeWidth = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
-            // Extended fields ride along only when the clip carries
-            // them (new clips seed them; old width-only clips stay
-            // width-only so custom dash/position/opacity survive).
-            if (o.fromOpacity !== undefined || o.toOpacity !== undefined)
-                out.strokeOpacity = lerpOpacity(o.fromOpacity, o.toOpacity, e);
+            var sIdx = entryIndexOf(o, "strokeIndex");
+            var sW = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+            var sOp = (o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined;
+            var sD = null, sP = undefined;
             if (o.fromDash !== undefined || o.toDash !== undefined || o.fromGap !== undefined || o.toGap !== undefined) {
                 // Dash pair lerps continuously (width units); solid is
                 // [0,0] so a solid<->dashed morph passes through dots.
                 var dd = Math.max(0, lerp(Number(o.fromDash) || 0, Number(o.toDash) || 0, e));
                 var dg = Math.max(0, lerp(Number(o.fromGap) || 0, Number(o.toGap) || 0, e));
                 if (dd > 0.001 && dg > 0.001)
-                    out.strokeDash = [dd, dg];
+                    sD = [dd, dg];
                 else
-                    out.strokeDash = [];
+                    sD = [];
             }
             // Position can't ease: stepped like customHide.
             if (o.fromPosition !== undefined || o.toPosition !== undefined)
-                out.strokePosition = e < 0.5 ? (o.fromPosition === "inside" || o.fromPosition === "outside" ? o.fromPosition : "center") : (o.toPosition === "inside" || o.toPosition === "outside" ? o.toPosition : "center");
+                sP = e < 0.5 ? (o.fromPosition === "inside" || o.fromPosition === "outside" ? o.fromPosition : "center") : (o.toPosition === "inside" || o.toPosition === "outside" ? o.toPosition : "center");
+            if (sIdx === 0) {
+                out.strokeWidth = sW;
+                // Extended fields ride along only when the clip carries
+                // them (new clips seed them; old width-only clips stay
+                // width-only so custom dash/position/opacity survive).
+                if (sOp !== undefined)
+                    out.strokeOpacity = sOp;
+                if (sD !== null)
+                    out.strokeDash = sD;
+                if (sP !== undefined)
+                    out.strokePosition = sP;
+            } else {
+                var se = strokeEntryFromBase(base, sIdx);
+                se.width = sW;
+                if (sOp !== undefined)
+                    se.opacity = sOp;
+                if (sD !== null)
+                    se.dash = sD;
+                if (sP !== undefined)
+                    se.position = sP;
+                out["strokeEntry" + sIdx] = se;
+            }
         } else if (preset === "customStrokeColor") {
+            var scIdx = entryIndexOf(o, "strokeIndex");
             var sc = lerpColor(o.from, o.to, e);
-            if (sc)
-                out.stroke = sc;
-            if (o.fromOpacity !== undefined || o.toOpacity !== undefined)
-                out.strokeOpacity = lerpOpacity(o.fromOpacity, o.toOpacity, e);
+            var scOp = (o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined;
+            if (scIdx === 0) {
+                if (sc)
+                    out.stroke = sc;
+                if (scOp !== undefined)
+                    out.strokeOpacity = scOp;
+            } else {
+                var sce = strokeEntryFromBase(base, scIdx);
+                if (sc)
+                    sce.color = sc;
+                if (scOp !== undefined)
+                    sce.opacity = scOp;
+                out["strokeEntry" + scIdx] = sce;
+            }
         } else if (preset === "customStrokeGradient") {
             // Stroke gradient from-to (mirrors customGradient for fills):
             // stop colors ease in sRGB, angle linearly, opacity lerps.
             // Flips strokeType so a solid base renders the gradient.
+            var sgIdx = entryIndexOf(o, "strokeIndex");
             var sgc1 = lerpColor(o.fromC1, o.toC1, e);
             var sgc2 = lerpColor(o.fromC2, o.toC2, e);
+            var sgOp = (o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined;
+            var sgGrad = null;
             if (sgc1 && sgc2) {
-                out.strokeType = "linear";
-                out.strokeGradient = {
+                sgGrad = {
                     angle: lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e),
                     stops: [
                         {
@@ -316,8 +440,23 @@ QtObject {
                     ]
                 };
             }
-            if (o.fromOpacity !== undefined || o.toOpacity !== undefined)
-                out.strokeOpacity = lerpOpacity(o.fromOpacity, o.toOpacity, e);
+            if (sgIdx === 0) {
+                if (sgGrad) {
+                    out.strokeType = "linear";
+                    out.strokeGradient = sgGrad;
+                }
+                if (sgOp !== undefined)
+                    out.strokeOpacity = sgOp;
+            } else {
+                var sge = strokeEntryFromBase(base, sgIdx);
+                if (sgGrad) {
+                    sge.type = "linear";
+                    sge.gradient = sgGrad;
+                }
+                if (sgOp !== undefined)
+                    sge.opacity = sgOp;
+                out["strokeEntry" + sgIdx] = sge;
+            }
         } else if (preset === "customFontSize") {
             out.fontSize = Math.max(1, lerp(Number(o.from) || 0, Number(o.to) || 0, e));
         } else if (preset === "customFlip") {
@@ -331,11 +470,13 @@ QtObject {
             // Fill gradient from-to: stop colors ease in sRGB, angle
             // linearly. Ports to AnimSampler; also flips fillType so a
             // solid base renders the gradient from the first frame.
+            var gIdx = entryIndexOf(o, "fillIndex");
             var gc1 = lerpColor(o.fromC1, o.toC1, e);
             var gc2 = lerpColor(o.fromC2, o.toC2, e);
+            var gOp = (o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined;
+            var gGrad = null;
             if (gc1 && gc2) {
-                out.fillType = "linear";
-                out.fillGradient = {
+                gGrad = {
                     angle: lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e),
                     stops: [
                         {
@@ -349,8 +490,23 @@ QtObject {
                     ]
                 };
             }
-            if (o.fromOpacity !== undefined || o.toOpacity !== undefined)
-                out.fillOpacity = lerpOpacity(o.fromOpacity, o.toOpacity, e);
+            if (gIdx === 0) {
+                if (gGrad) {
+                    out.fillType = "linear";
+                    out.fillGradient = gGrad;
+                }
+                if (gOp !== undefined)
+                    out.fillOpacity = gOp;
+            } else {
+                var ge = fillEntryFromBase(base, gIdx);
+                if (gGrad) {
+                    ge.type = "linear";
+                    ge.gradient = gGrad;
+                }
+                if (gOp !== undefined)
+                    ge.opacity = gOp;
+                out["fillEntry" + gIdx] = ge;
+            }
         } else if (preset === "customShadow") {
             var sc = lerpColorA(o.fromColor, o.toColor, e);
             if (sc) {
@@ -805,6 +961,33 @@ QtObject {
                 if (ov.strokePosition !== undefined)
                     sarr[0].position = (ov.strokePosition === "inside" || ov.strokePosition === "outside") ? ov.strokePosition : "center";
                 n.strokes = sarr;
+            }
+            // Indexed style overlays (entry 1+): complete entry objects
+            // on fillEntry{i}/strokeEntry{i} keys. Short stacks pad with
+            // defaults so retargeted clips still land; the pre-play
+            // restore puts the lengths back after.
+            for (var fi = 1; fi <= 32; fi++) {
+                var fk = "fillEntry" + fi;
+                if (ov[fk] === undefined)
+                    continue;
+                var farr2 = doc.factory._copyFills(n.fills, n);
+                while (farr2.length <= fi)
+                    farr2.push(doc.factory.defaultFill());
+                farr2[fi] = doc.factory._copyFillEntry(ov[fk]);
+                n.fills = farr2;
+            }
+            for (var si = 1; si <= 32; si++) {
+                var sk = "strokeEntry" + si;
+                if (ov[sk] === undefined)
+                    continue;
+                var sarr2 = doc.factory._copyStrokes(n.strokes, n);
+                while (sarr2.length <= si)
+                    sarr2.push(doc.factory._copyStrokeEntry({
+                        color: "#000000",
+                        width: 0
+                    }));
+                sarr2[si] = doc.factory._copyStrokeEntry(ov[sk]);
+                n.strokes = sarr2;
             }
             if (ov.shadows !== undefined) {
                 var shOut = [];

@@ -17,6 +17,20 @@ ColumnLayout {
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property var opts: section.clip ? section.clip.options || {} : ({})
     readonly property string preset: section.clip ? section.clip.preset : ""
+    readonly property var entryDefaults: DocCustomDefaults {}
+    readonly property var targetTop: {
+        if (section.doc)
+            section.doc.rev;
+        if (!section.doc || !section.clip)
+            return null;
+        var n = section.doc.findNode(section.clip.targetUid);
+        if (!n)
+            return null;
+        if (n.kind === "shape")
+            return n;
+        var leaves = section.doc._leavesUnder(n);
+        return leaves.length > 0 ? leaves[0] : null;
+    }
 
     spacing: 8
 
@@ -219,6 +233,21 @@ ColumnLayout {
         color: AppTheme.muted
     }
 
+    Text {
+        visible: section.preset === "customStroke"
+        text: qsTr("Stroke entry")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    PanelDropdown {
+        visible: section.preset === "customStroke"
+        Layout.fillWidth: true
+        options: section.entryOptions()
+        currentId: String(section.entryIndex())
+        onPicked: id => section.retargetEntry(Number(id))
+    }
+
     NumberField {
         visible: section.preset === "customCorner" || section.preset === "customStroke"
         Layout.fillWidth: true
@@ -419,6 +448,44 @@ ColumnLayout {
             return;
         var patch = {};
         patch[role] = value;
+        section.doc.setClipOptions(section.clipId, patch);
+    }
+
+    function entryIndex() {
+        if (section.opts.strokeIndex === undefined)
+            return 0;
+        var n = Math.round(Number(section.opts.strokeIndex));
+        if (isNaN(n))
+            return 0;
+        return Math.min(32, Math.max(0, n));
+    }
+
+    function entryOptions() {
+        var out = [];
+        var list = (section.targetTop && section.targetTop.strokes) || [];
+        for (var i = 0; i < list.length; i++) {
+            var e = list[i] || {};
+            out.push({
+                id: String(i),
+                name: qsTr("Stroke ") + (i + 1) + (e.enabled === false ? qsTr(" (off)") : "")
+            });
+        }
+        if (out.length === 0)
+            out.push({
+                id: "0",
+                name: qsTr("Stroke 1")
+            });
+        return out;
+    }
+
+    // Retarget onto another entry: From reseeds from the live entry
+    // (no jump at clip start), To stays user-edited, one undo entry.
+    function retargetEntry(i) {
+        if (!section.doc || !section.clip || i === section.entryIndex())
+            return;
+        var node = section.doc.findNode(section.clip.targetUid);
+        var tops = node ? [node] : [];
+        var patch = section.entryDefaults.fromPatchForEntry(section.doc.anim.presets, section.doc, tops, "customStroke", i);
         section.doc.setClipOptions(section.clipId, patch);
     }
 

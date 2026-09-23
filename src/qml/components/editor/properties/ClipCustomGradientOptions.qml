@@ -16,8 +16,36 @@ ColumnLayout {
 
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property var opts: section.clip ? section.clip.options || {} : ({})
+    readonly property var entryDefaults: DocCustomDefaults {}
+    readonly property string entryKind: section.gradientKind === "stroke" ? "strokes" : "fills"
+    readonly property var targetTop: {
+        if (section.doc)
+            section.doc.rev;
+        if (!section.doc || !section.clip)
+            return null;
+        var n = section.doc.findNode(section.clip.targetUid);
+        if (!n)
+            return null;
+        if (n.kind === "shape")
+            return n;
+        var leaves = section.doc._leavesUnder(n);
+        return leaves.length > 0 ? leaves[0] : null;
+    }
 
     spacing: 8
+
+    Text {
+        text: section.gradientKind === "stroke" ? qsTr("Stroke entry") : qsTr("Fill entry")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    PanelDropdown {
+        Layout.fillWidth: true
+        options: section.entryOptions()
+        currentId: String(section.entryIndex())
+        onPicked: id => section.retargetEntry(Number(id))
+    }
 
     Text {
         text: qsTr("From stops")
@@ -213,6 +241,46 @@ ColumnLayout {
     function openStopPicker(role, color, anchor, ax, ay) {
         section.pickerRole = role;
         stopPicker.openFor(color, anchor, ax, ay);
+    }
+
+    function entryIndex() {
+        var raw = section.gradientKind === "stroke" ? section.opts.strokeIndex : section.opts.fillIndex;
+        if (raw === undefined)
+            return 0;
+        var n = Math.round(Number(raw));
+        if (isNaN(n))
+            return 0;
+        return Math.min(32, Math.max(0, n));
+    }
+
+    function entryOptions() {
+        var out = [];
+        var list = (section.targetTop && section.targetTop[section.entryKind]) || [];
+        var base = section.gradientKind === "stroke" ? qsTr("Stroke ") : qsTr("Fill ");
+        for (var i = 0; i < list.length; i++) {
+            var e = list[i] || {};
+            out.push({
+                id: String(i),
+                name: base + (i + 1) + (e.enabled === false ? qsTr(" (off)") : "")
+            });
+        }
+        if (out.length === 0)
+            out.push({
+                id: "0",
+                name: base + "1"
+            });
+        return out;
+    }
+
+    // Retarget onto another entry: From reseeds from the live entry
+    // (no jump at clip start), To stays user-edited, one undo entry.
+    function retargetEntry(i) {
+        if (!section.doc || !section.clip || i === section.entryIndex())
+            return;
+        var node = section.doc.findNode(section.clip.targetUid);
+        var tops = node ? [node] : [];
+        var patch = section.entryDefaults.fromPatchForEntry(section.doc.anim.presets, section.doc, tops, section.clip.preset, i);
+        section.doc.setClipOptions(section.clipId, patch);
     }
 
     function beginScrub() {

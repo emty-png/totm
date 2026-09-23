@@ -7,9 +7,10 @@ import QtQuick
 QtObject {
     id: defaults
 
-    function seededOptions(presets, d, tops, presetId) {
+    function seededOptions(presets, d, tops, presetId, entryIndex) {
         var first = tops.length > 0 ? tops[0] : null;
         var leaf = first ? defaults.firstLeaf(d, first) : null;
+        var ei = Math.min(32, Math.max(0, Math.round(Number(entryIndex) || 0)));
         if (presetId === "customOpacity" && leaf) {
             var op = Math.min(1, Math.max(0, Number(leaf.opacity) || 0));
             return {
@@ -18,7 +19,7 @@ QtObject {
             };
         }
         if (presetId === "customColor" && leaf) {
-            var fills0 = (leaf.fills && leaf.fills.length > 0 ? leaf.fills[0] : {}) ?? {};
+            var fills0 = defaults.stackEntry(leaf, "fills", ei);
             var fill = String(fills0.color ?? leaf.fill ?? "#000000");
             var fop = fills0.opacity !== undefined ? Math.min(1, Math.max(0, Number(fills0.opacity))) : 1;
             if (isNaN(fop))
@@ -27,11 +28,12 @@ QtObject {
                 from: fill,
                 to: "#ff0000",
                 fromOpacity: Math.round(fop * 100) / 100,
-                toOpacity: Math.round(fop * 100) / 100
+                toOpacity: Math.round(fop * 100) / 100,
+                fillIndex: ei
             };
         }
         if (presetId === "customGradient" && leaf) {
-            var f0 = (leaf.fills && leaf.fills.length > 0 ? leaf.fills[0] : {}) ?? {};
+            var f0 = defaults.stackEntry(leaf, "fills", ei);
             var fg = f0.gradient ?? leaf.fillGradient ?? {};
             var fstops = fg.stops ?? [];
             var fc1 = fstops.length > 0 ? String(fstops[0].color) : String(f0.color ?? leaf.fill ?? "#000000");
@@ -50,7 +52,8 @@ QtObject {
                 fromAngle: Math.round(fang * 100) / 100,
                 toAngle: Math.round(fang * 100) / 100,
                 fromOpacity: Math.round(fgop * 100) / 100,
-                toOpacity: Math.round(fgop * 100) / 100
+                toOpacity: Math.round(fgop * 100) / 100,
+                fillIndex: ei
             };
         }
         if (presetId === "customShadow" && leaf) {
@@ -140,7 +143,7 @@ QtObject {
             };
         }
         if (presetId === "customStroke" && leaf) {
-            var s0 = (leaf.strokes && leaf.strokes.length > 0 ? leaf.strokes[0] : {}) ?? {};
+            var s0 = defaults.stackEntry(leaf, "strokes", ei);
             var sw = Math.max(0, Number(s0.width ?? leaf.strokeWidth) || 0);
             var sop = s0.opacity !== undefined ? Math.min(1, Math.max(0, Number(s0.opacity))) : 1;
             if (isNaN(sop))
@@ -159,11 +162,12 @@ QtObject {
                 fromGap: Math.round(sgap * 100) / 100,
                 toGap: Math.round(sgap * 100) / 100,
                 fromPosition: spos,
-                toPosition: spos
+                toPosition: spos,
+                strokeIndex: ei
             };
         }
         if (presetId === "customStrokeColor" && leaf) {
-            var s1 = (leaf.strokes && leaf.strokes.length > 0 ? leaf.strokes[0] : {}) ?? {};
+            var s1 = defaults.stackEntry(leaf, "strokes", ei);
             var sc = String(s1.color ?? leaf.stroke ?? "#000000");
             var scop = s1.opacity !== undefined ? Math.min(1, Math.max(0, Number(s1.opacity))) : 1;
             if (isNaN(scop))
@@ -172,11 +176,12 @@ QtObject {
                 from: sc,
                 to: "#ff0000",
                 fromOpacity: Math.round(scop * 100) / 100,
-                toOpacity: Math.round(scop * 100) / 100
+                toOpacity: Math.round(scop * 100) / 100,
+                strokeIndex: ei
             };
         }
         if (presetId === "customStrokeGradient" && leaf) {
-            var sg0 = (leaf.strokes && leaf.strokes.length > 0 ? leaf.strokes[0] : {}) ?? {};
+            var sg0 = defaults.stackEntry(leaf, "strokes", ei);
             var sgg = sg0.gradient ?? {};
             var sgstops = sgg.stops ?? [];
             var sgc1 = sgstops.length > 0 ? String(sgstops[0].color) : String(sg0.color ?? "#000000");
@@ -195,7 +200,8 @@ QtObject {
                 fromAngle: Math.round(sgang * 100) / 100,
                 toAngle: Math.round(sgang * 100) / 100,
                 fromOpacity: Math.round(sgop * 100) / 100,
-                toOpacity: Math.round(sgop * 100) / 100
+                toOpacity: Math.round(sgop * 100) / 100,
+                strokeIndex: ei
             };
         }
         if (presetId === "customFontSize" && leaf) {
@@ -206,6 +212,36 @@ QtObject {
             };
         }
         return presets.defaultsFor(presetId);
+    }
+
+    // One stack entry (fills/strokes) by index, {} when the leaf is
+    // short. Seeding and reseeds read through here so clips can target
+    // any entry, not just the top one.
+    function stackEntry(leaf, kind, index) {
+        var ei = Math.min(32, Math.max(0, Math.round(Number(index) || 0)));
+        var list = (leaf && leaf[kind]) || [];
+        if (ei < list.length)
+            return list[ei] ?? {};
+        return {};
+    }
+
+    // From-side-only reseed when the user retargets a style clip onto
+    // another entry: From tracks the live entry (no jump at clip
+    // start), To stays user-edited. Carries the index key itself.
+    function fromPatchForEntry(presets, d, tops, presetId, index) {
+        var ei = Math.min(32, Math.max(0, Math.round(Number(index) || 0)));
+        var full = defaults.seededOptions(presets, d, tops, presetId, ei);
+        var patch = {};
+        var keys = ["from", "fromOpacity", "fromC1", "fromC2", "fromAngle", "fromDash", "fromGap", "fromPosition"];
+        for (var i = 0; i < keys.length; i++) {
+            if (full[keys[i]] !== undefined)
+                patch[keys[i]] = full[keys[i]];
+        }
+        if (presetId === "customColor" || presetId === "customGradient")
+            patch.fillIndex = ei;
+        else
+            patch.strokeIndex = ei;
+        return patch;
     }
 
     function firstLeaf(d, top) {
