@@ -166,6 +166,9 @@ CHANGELOG.md             # Keep a Changelog, SemVer once 1.0 ships
    ```sh
    cmake --preset ci && cmake --build --preset ci
    ```
+   Prefer `tools/build.sh [dev|ci]` for the same steps with a compact
+   progress bar (full output in `build/<preset>/build.log`, real errors
+   still surface).
    If you touched `packaging/arch/PKGBUILD`, regenerate and sync
    `.SRCINFO` (CI diffs `makepkg --printsrcinfo` against it).
 5. **Smoke-test the app**, not just your panel. Minimum pass: new tab →
