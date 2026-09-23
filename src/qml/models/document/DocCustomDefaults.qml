@@ -57,7 +57,7 @@ QtObject {
             };
         }
         if (presetId === "customShadow" && leaf) {
-            var sh = (leaf.shadows && leaf.shadows.length > 0 ? leaf.shadows[0] : {}) ?? {};
+            var sh = defaults.stackEntry(leaf, "shadows", ei);
             var fx = Number(sh.x) || 0;
             var fy = sh.y !== undefined ? (Number(sh.y) || 0) : 4;
             var fb = sh.blur !== undefined ? Math.max(0, Number(sh.blur) || 0) : 8;
@@ -74,7 +74,8 @@ QtObject {
                 fromSpread: Math.round(fs * 100) / 100,
                 toSpread: Math.round(fs * 100) / 100,
                 fromInner: sh.inner === true,
-                toInner: sh.inner === true
+                toInner: sh.inner === true,
+                shadowIndex: ei
             };
         }
         if (presetId === "customLayerBlur" && leaf) {
@@ -100,7 +101,7 @@ QtObject {
             };
         }
         if (presetId === "customGlow" && leaf) {
-            var gl = (leaf.glows && leaf.glows.length > 0 ? leaf.glows[0] : {}) ?? {};
+            var gl = defaults.stackEntry(leaf, "glows", ei);
             var gb = gl.blur !== undefined ? Math.max(0, Number(gl.blur) || 0) : 16;
             var gs = gl.spread !== undefined ? Math.max(0, Number(gl.spread) || 0) : 4;
             return {
@@ -111,7 +112,8 @@ QtObject {
                 fromSpread: Math.round(gs * 100) / 100,
                 toSpread: Math.round(gs * 100) / 100,
                 fromInner: gl.inner === true,
-                toInner: gl.inner === true
+                toInner: gl.inner === true,
+                glowIndex: ei
             };
         }
         if (presetId === "customGrain" && leaf) {
@@ -214,9 +216,9 @@ QtObject {
         return presets.defaultsFor(presetId);
     }
 
-    // One stack entry (fills/strokes) by index, {} when the leaf is
-    // short. Seeding and reseeds read through here so clips can target
-    // any entry, not just the top one.
+    // One stack entry (fills/strokes/shadows/glows) by index, {} when
+    // the leaf is short. Seeding and reseeds read through here so clips
+    // can target any entry, not just the top one.
     function stackEntry(leaf, kind, index) {
         var ei = Math.min(32, Math.max(0, Math.round(Number(index) || 0)));
         var list = (leaf && leaf[kind]) || [];
@@ -225,20 +227,24 @@ QtObject {
         return {};
     }
 
-    // From-side-only reseed when the user retargets a style clip onto
-    // another entry: From tracks the live entry (no jump at clip
-    // start), To stays user-edited. Carries the index key itself.
+    // From-side-only reseed when the user retargets a style or effect
+    // clip onto another entry: From tracks the live entry (no jump at
+    // clip start), To stays user-edited. Carries the index key itself.
     function fromPatchForEntry(presets, d, tops, presetId, index) {
         var ei = Math.min(32, Math.max(0, Math.round(Number(index) || 0)));
         var full = defaults.seededOptions(presets, d, tops, presetId, ei);
         var patch = {};
-        var keys = ["from", "fromOpacity", "fromC1", "fromC2", "fromAngle", "fromDash", "fromGap", "fromPosition"];
+        var keys = ["from", "fromOpacity", "fromC1", "fromC2", "fromAngle", "fromDash", "fromGap", "fromPosition", "fromColor", "fromX", "fromY", "fromBlur", "fromSpread", "fromInner"];
         for (var i = 0; i < keys.length; i++) {
             if (full[keys[i]] !== undefined)
                 patch[keys[i]] = full[keys[i]];
         }
         if (presetId === "customColor" || presetId === "customGradient")
             patch.fillIndex = ei;
+        else if (presetId === "customShadow")
+            patch.shadowIndex = ei;
+        else if (presetId === "customGlow")
+            patch.glowIndex = ei;
         else
             patch.strokeIndex = ei;
         return patch;

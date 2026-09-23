@@ -4,7 +4,8 @@ import Totm
 
 // Custom Glow editor: color, blur and spread from-to plus the inner
 // toggle. Absolute values give exact control; the gallery seeds From
-// from the live selection so new clips start jump-free.
+// from the live selection so new clips start jump-free. Targets any
+// stack entry (index 0 = top) with a dropdown that reseeds From only.
 ColumnLayout {
     id: section
 
@@ -13,10 +14,37 @@ ColumnLayout {
 
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property var opts: section.clip ? section.clip.options || {} : ({})
+    readonly property var entryDefaults: DocCustomDefaults {}
+    readonly property var targetTop: {
+        if (section.doc)
+            section.doc.rev;
+        if (!section.doc || !section.clip)
+            return null;
+        var n = section.doc.findNode(section.clip.targetUid);
+        if (!n)
+            return null;
+        if (n.kind === "shape")
+            return n;
+        var leaves = section.doc._leavesUnder(n);
+        return leaves.length > 0 ? leaves[0] : null;
+    }
     // Option key the picker popup is editing ("fromColor"/"toColor").
     property string pickerRole: ""
 
     spacing: 8
+
+    Text {
+        text: qsTr("Glow entry")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    PanelDropdown {
+        Layout.fillWidth: true
+        options: section.entryOptions()
+        currentId: String(section.entryIndex())
+        onPicked: id => section.retargetEntry(Number(id))
+    }
 
     ColorPickerPopup {
         id: colorPicker
@@ -242,6 +270,44 @@ ColumnLayout {
             return;
         var patch = {};
         patch[role] = value;
+        section.doc.setClipOptions(section.clipId, patch);
+    }
+
+    function entryIndex() {
+        if (section.opts.glowIndex === undefined)
+            return 0;
+        var n = Math.round(Number(section.opts.glowIndex));
+        if (isNaN(n))
+            return 0;
+        return Math.min(32, Math.max(0, n));
+    }
+
+    function entryOptions() {
+        var out = [];
+        var list = (section.targetTop && section.targetTop.glows) || [];
+        for (var i = 0; i < list.length; i++) {
+            var e = list[i] || {};
+            out.push({
+                id: String(i),
+                name: qsTr("Glow ") + (i + 1) + (e.enabled === false ? qsTr(" (off)") : "") + (e.inner === true ? qsTr(" · inner") : "")
+            });
+        }
+        if (out.length === 0)
+            out.push({
+                id: "0",
+                name: qsTr("Glow 1")
+            });
+        return out;
+    }
+
+    // Retarget onto another entry: From reseeds from the live entry
+    // (no jump at clip start), To stays user-edited, one undo entry.
+    function retargetEntry(i) {
+        if (!section.doc || !section.clip || i === section.entryIndex())
+            return;
+        var node = section.doc.findNode(section.clip.targetUid);
+        var tops = node ? [node] : [];
+        var patch = section.entryDefaults.fromPatchForEntry(section.doc.anim.presets, section.doc, tops, "customGlow", i);
         section.doc.setClipOptions(section.clipId, patch);
     }
 

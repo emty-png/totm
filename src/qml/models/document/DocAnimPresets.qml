@@ -297,7 +297,8 @@ QtObject {
                 fromSpread: 0,
                 toSpread: 0,
                 fromInner: false,
-                toInner: false
+                toInner: false,
+                shadowIndex: 0
             };
         if (presetId === "customLayerBlur")
             return {
@@ -322,7 +323,8 @@ QtObject {
                 fromSpread: 4,
                 toSpread: 4,
                 fromInner: false,
-                toInner: false
+                toInner: false,
+                glowIndex: 0
             };
         if (presetId === "customGrain")
             return {
@@ -586,8 +588,8 @@ QtObject {
             return {
                 axis: r.axis === "v" ? "v" : "h"
             };
-        if (presetId === "customShadow")
-            return {
+        if (presetId === "customShadow") {
+            var sh = {
                 fromColor: normalizeHexA(r.fromColor !== undefined ? r.fromColor : "#80000000", "#80000000"),
                 toColor: normalizeHexA(r.toColor !== undefined ? r.toColor : "#80000000", "#80000000"),
                 fromX: clampNum(r.fromX !== undefined ? r.fromX : 0, 0, -500, 500),
@@ -601,6 +603,10 @@ QtObject {
                 fromInner: r.fromInner === undefined ? false : !!r.fromInner,
                 toInner: r.toInner === undefined ? false : !!r.toInner
             };
+            if (r.shadowIndex !== undefined)
+                sh.shadowIndex = normalizeEntryIndex(r.shadowIndex);
+            return sh;
+        }
         if (presetId === "customLayerBlur")
             return {
                 fromRadius: clampNum(r.fromRadius !== undefined ? r.fromRadius : 0, 0, 0, 100),
@@ -615,8 +621,8 @@ QtObject {
                 fromOpacity: clampNum(r.fromOpacity !== undefined ? r.fromOpacity : 0.7, 0.7, 0, 1),
                 toOpacity: clampNum(r.toOpacity !== undefined ? r.toOpacity : 0.7, 0.7, 0, 1)
             };
-        if (presetId === "customGlow")
-            return {
+        if (presetId === "customGlow") {
+            var gl = {
                 fromColor: normalizeHexA(r.fromColor !== undefined ? r.fromColor : "#cc00ffff", "#cc00ffff"),
                 toColor: normalizeHexA(r.toColor !== undefined ? r.toColor : "#cc00ffff", "#cc00ffff"),
                 fromBlur: clampNum(r.fromBlur !== undefined ? r.fromBlur : 16, 16, 0, 100),
@@ -626,6 +632,10 @@ QtObject {
                 fromInner: r.fromInner === undefined ? false : !!r.fromInner,
                 toInner: r.toInner === undefined ? false : !!r.toInner
             };
+            if (r.glowIndex !== undefined)
+                gl.glowIndex = normalizeEntryIndex(r.glowIndex);
+            return gl;
+        }
         if (presetId === "customGrain")
             return {
                 fromAmount: clampNum(r.fromAmount !== undefined ? r.fromAmount : 0, 0, 0, 1),

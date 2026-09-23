@@ -84,8 +84,9 @@ QtObject {
         return "#" + hx(r) + hx(g) + hx(b);
     }
 
-    // Style-clip stack entry index (fillIndex/strokeIndex, 0 = top).
-    // Missing key reads 0 so old clips keep the legacy flat path.
+    // Style/effect-clip stack entry index (fillIndex/strokeIndex/
+    // shadowIndex/glowIndex, 0 = top). Missing key reads 0 so old clips
+    // keep the legacy flat path.
     function entryIndexOf(o, key) {
         if (o[key] === undefined)
             return 0;
@@ -158,6 +159,35 @@ QtObject {
             dash: dash.length === 2 && dash[0] > 0.001 && dash[1] > 0.001 ? dash : [],
             position: (src.position === "inside" || src.position === "outside") ? src.position : "center",
             opacity: clampEntryOpacity(src.opacity)
+        };
+    }
+
+    // Fresh full effect entries from the frozen base (never aliased):
+    // indexed shadow/glow overlays carry complete entry state so clips
+    // on different entries coexist under later-wins.
+    function shadowEntryFromBase(base, i) {
+        var list = (base && base.shadows) || [];
+        var src = i < list.length ? (list[i] ?? {}) : {};
+        return {
+            enabled: src.enabled !== false,
+            inner: src.inner === true,
+            color: String(src.color ?? "#80000000"),
+            x: Number(src.x) || 0,
+            y: src.y !== undefined ? (Number(src.y) || 0) : 4,
+            blur: src.blur !== undefined ? Math.max(0, Number(src.blur) || 0) : 8,
+            spread: src.spread !== undefined ? Math.max(0, Number(src.spread) || 0) : 0
+        };
+    }
+
+    function glowEntryFromBase(base, i) {
+        var list = (base && base.glows) || [];
+        var src = i < list.length ? (list[i] ?? {}) : {};
+        return {
+            enabled: src.enabled !== false,
+            inner: src.inner === true,
+            color: String(src.color ?? "#cc00ffff"),
+            blur: src.blur !== undefined ? Math.max(0, Number(src.blur) || 0) : 16,
+            spread: src.spread !== undefined ? Math.max(0, Number(src.spread) || 0) : 4
         };
     }
 
@@ -508,21 +538,35 @@ QtObject {
                 out["fillEntry" + gIdx] = ge;
             }
         } else if (preset === "customShadow") {
+            var shIdx = entryIndexOf(o, "shadowIndex");
             var sc = lerpColorA(o.fromColor, o.toColor, e);
             if (sc) {
-                out.shadows = [
-                    {
-                        enabled: true,
-                        // Stepped like customHide (bools can't ease): first
-                        // half reads from, second half reads to.
-                        inner: e < 0.5 ? o.fromInner === true : o.toInner === true,
-                        color: sc,
-                        x: lerp(Number(o.fromX) || 0, Number(o.toX) || 0, e),
-                        y: lerp(Number(o.fromY) || 0, Number(o.toY) || 0, e),
-                        blur: Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
-                        spread: Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
-                    }
-                ];
+                var shEntry = {
+                    enabled: true,
+                    // Stepped like customHide (bools can't ease): first
+                    // half reads from, second half reads to.
+                    inner: e < 0.5 ? o.fromInner === true : o.toInner === true,
+                    color: sc,
+                    x: lerp(Number(o.fromX) || 0, Number(o.toX) || 0, e),
+                    y: lerp(Number(o.fromY) || 0, Number(o.toY) || 0, e),
+                    blur: Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
+                    spread: Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
+                };
+                if (shIdx === 0) {
+                    out.shadows = [shEntry];
+                } else {
+                    // Non-top entries travel as complete entry objects
+                    // on index-namespaced keys, like fill/stroke stacks.
+                    var shBase = shadowEntryFromBase(base, shIdx);
+                    shBase.enabled = shEntry.enabled;
+                    shBase.inner = shEntry.inner;
+                    shBase.color = shEntry.color;
+                    shBase.x = shEntry.x;
+                    shBase.y = shEntry.y;
+                    shBase.blur = shEntry.blur;
+                    shBase.spread = shEntry.spread;
+                    out["shadowEntry" + shIdx] = shBase;
+                }
             }
         } else if (preset === "customLayerBlur") {
             out.layerBlur = {
@@ -537,19 +581,29 @@ QtObject {
                 opacity: Math.min(1, Math.max(0, lerp(Number(o.fromOpacity) ?? 0.7, Number(o.toOpacity) ?? 0.7, e)))
             };
         } else if (preset === "customGlow") {
+            var glIdx = entryIndexOf(o, "glowIndex");
             var gc = lerpColorA(o.fromColor, o.toColor, e);
             if (gc) {
-                out.glows = [
-                    {
-                        enabled: true,
-                        // Stepped like customHide (bools can't ease): first
-                        // half reads from, second half reads to.
-                        inner: e < 0.5 ? o.fromInner === true : o.toInner === true,
-                        color: gc,
-                        blur: Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
-                        spread: Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
-                    }
-                ];
+                var glEntry = {
+                    enabled: true,
+                    // Stepped like customHide (bools can't ease): first
+                    // half reads from, second half reads to.
+                    inner: e < 0.5 ? o.fromInner === true : o.toInner === true,
+                    color: gc,
+                    blur: Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
+                    spread: Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
+                };
+                if (glIdx === 0) {
+                    out.glows = [glEntry];
+                } else {
+                    var glBase = glowEntryFromBase(base, glIdx);
+                    glBase.enabled = glEntry.enabled;
+                    glBase.inner = glEntry.inner;
+                    glBase.color = glEntry.color;
+                    glBase.blur = glEntry.blur;
+                    glBase.spread = glEntry.spread;
+                    out["glowEntry" + glIdx] = glBase;
+                }
             }
         } else if (preset === "customGrain") {
             out.grain = {
@@ -893,10 +947,10 @@ QtObject {
                 n.fontSize = ov.fontSize;
             if (ov.textContent !== undefined && n.shapeType === "text")
                 n.textContent = ov.textContent;
-            // Style animation targets the top stack entry (index 0);
-            // whole-stack animation is out of scope for v1. Legacy
-            // single keys from presetOverlay fold onto entry 0 so old
-            // clips keep working.
+            // Style/effect animation targets the top stack entry (index
+            // 0); whole-stack animation rides index-namespaced keys.
+            // Legacy single keys from presetOverlay fold onto entry 0 so
+            // old clips keep working.
             if (ov.fills !== undefined) {
                 n.fills = doc.factory._copyFills(ov.fills, n);
             } else if (ov.fill !== undefined || ov.fillType !== undefined || ov.fillGradient !== undefined || ov.fillOpacity !== undefined) {
@@ -990,21 +1044,45 @@ QtObject {
                 n.strokes = sarr2;
             }
             if (ov.shadows !== undefined) {
-                var shOut = [];
                 var shSrc = ov.shadows || [];
-                for (var si = 0; si < shSrc.length; si++) {
-                    var ss = shSrc[si] || {};
-                    shOut.push({
-                        enabled: ss.enabled !== false,
-                        inner: ss.inner === true,
-                        color: String(ss.color),
-                        x: ss.x,
-                        y: ss.y,
-                        blur: ss.blur,
-                        spread: ss.spread
-                    });
+                if (shSrc.length === 1) {
+                    // Top-entry clips fold onto entry 0 like fill/stroke
+                    // legacy keys, preserving the rest of the stack.
+                    var shBase = doc.factory._copyShadows(n.shadows);
+                    if (shBase.length === 0)
+                        shBase.push(doc.factory.defaultShadow(false));
+                    shBase[0] = doc.factory._copyShadowEntry(shSrc[0]);
+                    n.shadows = shBase;
+                } else {
+                    var shOut = [];
+                    for (var si = 0; si < shSrc.length; si++) {
+                        var ss = shSrc[si] || {};
+                        shOut.push({
+                            enabled: ss.enabled !== false,
+                            inner: ss.inner === true,
+                            color: String(ss.color),
+                            x: ss.x,
+                            y: ss.y,
+                            blur: ss.blur,
+                            spread: ss.spread
+                        });
+                    }
+                    n.shadows = shOut;
                 }
-                n.shadows = shOut;
+            }
+            // Indexed shadow overlays (entry 1+): complete entry objects
+            // on shadowEntry{i} keys. Short stacks pad with defaults so
+            // retargeted clips still land; the pre-play restore puts the
+            // lengths back after.
+            for (var shi = 1; shi <= 32; shi++) {
+                var shk = "shadowEntry" + shi;
+                if (ov[shk] === undefined)
+                    continue;
+                var shArr = doc.factory._copyShadows(n.shadows);
+                while (shArr.length <= shi)
+                    shArr.push(doc.factory.defaultShadow(false));
+                shArr[shi] = doc.factory._copyShadowEntry(ov[shk]);
+                n.shadows = shArr;
             }
             if (ov.layerBlur !== undefined)
                 n.layerBlur = {
@@ -1019,19 +1097,40 @@ QtObject {
                     opacity: Math.min(1, Math.max(0, Number(ov.backgroundBlur.opacity ?? 0.7)))
                 };
             if (ov.glows !== undefined) {
-                var glOut = [];
                 var glSrc = ov.glows || [];
-                for (var gi = 0; gi < glSrc.length; gi++) {
-                    var gs = glSrc[gi] || {};
-                    glOut.push({
-                        enabled: gs.enabled !== false,
-                        inner: gs.inner === true,
-                        color: String(gs.color),
-                        blur: Math.max(0, Number(gs.blur) || 0),
-                        spread: Math.max(0, Number(gs.spread) || 0)
-                    });
+                if (glSrc.length === 1) {
+                    // Top-entry clips fold onto entry 0, preserving rest.
+                    var glBase = doc.factory._copyGlows(n.glows);
+                    if (glBase.length === 0)
+                        glBase.push(doc.factory.defaultGlow(false));
+                    glBase[0] = doc.factory._copyGlowEntry(glSrc[0]);
+                    n.glows = glBase;
+                } else {
+                    var glOut = [];
+                    for (var gi = 0; gi < glSrc.length; gi++) {
+                        var gs = glSrc[gi] || {};
+                        glOut.push({
+                            enabled: gs.enabled !== false,
+                            inner: gs.inner === true,
+                            color: String(gs.color),
+                            blur: Math.max(0, Number(gs.blur) || 0),
+                            spread: Math.max(0, Number(gs.spread) || 0)
+                        });
+                    }
+                    n.glows = glOut;
                 }
-                n.glows = glOut;
+            }
+            // Indexed glow overlays (entry 1+): complete entry objects
+            // on glowEntry{i} keys, padded like shadows above.
+            for (var gli = 1; gli <= 32; gli++) {
+                var glk = "glowEntry" + gli;
+                if (ov[glk] === undefined)
+                    continue;
+                var glArr = doc.factory._copyGlows(n.glows);
+                while (glArr.length <= gli)
+                    glArr.push(doc.factory.defaultGlow(false));
+                glArr[gli] = doc.factory._copyGlowEntry(ov[glk]);
+                n.glows = glArr;
             }
             if (ov.grain !== undefined)
                 n.grain = {

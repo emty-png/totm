@@ -288,8 +288,8 @@ QPointF slideVec(const QString &direction) {
     return {-1, 0};
 }
 
-// Style-clip stack entry index (0 = top); missing key reads 0 so old
-// clips keep the legacy flat path.
+// Style/effect-clip stack entry index (0 = top); missing key reads 0
+// so old clips keep the legacy flat path.
 int entryIndexOf(const QVariantMap &o, const char *key) {
     if (!o.contains(QString::fromLatin1(key)))
         return 0;
@@ -359,6 +359,33 @@ QVariantMap strokeEntryFromBase(const QVariantMap &base, int i) {
         ? pos
         : QString(QStringLiteral("center"));
     out[QStringLiteral("opacity")] = entryOpacityOf(src);
+    return out;
+}
+
+// Fresh full effect entries from the frozen base (never aliased).
+QVariantMap shadowEntryFromBase(const QVariantMap &base, int i) {
+    const QVariantList list = base.value(QStringLiteral("shadows")).toList();
+    const QVariantMap src = (i >= 0 && i < list.size()) ? list.at(i).toMap() : QVariantMap();
+    QVariantMap out;
+    out[QStringLiteral("enabled")] = src.value(QStringLiteral("enabled"), true).toBool();
+    out[QStringLiteral("inner")] = src.value(QStringLiteral("inner"), false).toBool();
+    out[QStringLiteral("color")] = src.value(QStringLiteral("color"), QStringLiteral("#80000000")).toString();
+    out[QStringLiteral("x")] = src.value(QStringLiteral("x"), 0.0).toDouble();
+    out[QStringLiteral("y")] = src.contains(QStringLiteral("y")) ? src.value(QStringLiteral("y")).toDouble() : 4.0;
+    out[QStringLiteral("blur")] = qMax(0.0, src.value(QStringLiteral("blur"), 8.0).toDouble());
+    out[QStringLiteral("spread")] = qMax(0.0, src.value(QStringLiteral("spread"), 0.0).toDouble());
+    return out;
+}
+
+QVariantMap glowEntryFromBase(const QVariantMap &base, int i) {
+    const QVariantList list = base.value(QStringLiteral("glows")).toList();
+    const QVariantMap src = (i >= 0 && i < list.size()) ? list.at(i).toMap() : QVariantMap();
+    QVariantMap out;
+    out[QStringLiteral("enabled")] = src.value(QStringLiteral("enabled"), true).toBool();
+    out[QStringLiteral("inner")] = src.value(QStringLiteral("inner"), false).toBool();
+    out[QStringLiteral("color")] = src.value(QStringLiteral("color"), QStringLiteral("#cc00ffff")).toString();
+    out[QStringLiteral("blur")] = qMax(0.0, src.value(QStringLiteral("blur"), 16.0).toDouble());
+    out[QStringLiteral("spread")] = qMax(0.0, src.value(QStringLiteral("spread"), 4.0).toDouble());
     return out;
 }
 
@@ -634,6 +661,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             out[QStringLiteral("fillEntry") + QString::number(gIdx)] = ge;
         }
     } else if (preset == QLatin1String("customShadow")) {
+        const int shIdx = entryIndexOf(o, "shadowIndex");
         const QString c = lerpColorA(str(o, "fromColor", QStringLiteral("#000000")),
             str(o, "toColor", QStringLiteral("#000000")), e);
         if (!c.isEmpty()) {
@@ -646,7 +674,19 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             sh[QStringLiteral("y")] = num(o, "fromY") + (num(o, "toY") - num(o, "fromY")) * e;
             sh[QStringLiteral("blur")] = qMax(0.0, num(o, "fromBlur") + (num(o, "toBlur") - num(o, "fromBlur")) * e);
             sh[QStringLiteral("spread")] = qMax(0.0, num(o, "fromSpread") + (num(o, "toSpread") - num(o, "fromSpread")) * e);
-            out[QStringLiteral("shadows")] = QVariantList{sh};
+            if (shIdx == 0) {
+                out[QStringLiteral("shadows")] = QVariantList{sh};
+            } else {
+                QVariantMap se = shadowEntryFromBase(base, shIdx);
+                se[QStringLiteral("enabled")] = true;
+                se[QStringLiteral("inner")] = sh.value(QStringLiteral("inner")).toBool();
+                se[QStringLiteral("color")] = c;
+                se[QStringLiteral("x")] = sh.value(QStringLiteral("x")).toDouble();
+                se[QStringLiteral("y")] = sh.value(QStringLiteral("y")).toDouble();
+                se[QStringLiteral("blur")] = sh.value(QStringLiteral("blur")).toDouble();
+                se[QStringLiteral("spread")] = sh.value(QStringLiteral("spread")).toDouble();
+                out[QStringLiteral("shadowEntry") + QString::number(shIdx)] = se;
+            }
         }
     } else if (preset == QLatin1String("customLayerBlur")) {
         QVariantMap b;
@@ -661,6 +701,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         b[QStringLiteral("opacity")] = qBound(0.0, num(o, "fromOpacity", 0.7) + (num(o, "toOpacity", 0.7) - num(o, "fromOpacity", 0.7)) * e, 1.0);
         out[QStringLiteral("backgroundBlur")] = b;
     } else if (preset == QLatin1String("customGlow")) {
+        const int glIdx = entryIndexOf(o, "glowIndex");
         const QString c = lerpColorA(str(o, "fromColor", QStringLiteral("#cc00ffff")),
             str(o, "toColor", QStringLiteral("#cc00ffff")), e);
         if (!c.isEmpty()) {
@@ -671,7 +712,17 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             g[QStringLiteral("color")] = c;
             g[QStringLiteral("blur")] = qMax(0.0, num(o, "fromBlur") + (num(o, "toBlur") - num(o, "fromBlur")) * e);
             g[QStringLiteral("spread")] = qMax(0.0, num(o, "fromSpread") + (num(o, "toSpread") - num(o, "fromSpread")) * e);
-            out[QStringLiteral("glows")] = QVariantList{g};
+            if (glIdx == 0) {
+                out[QStringLiteral("glows")] = QVariantList{g};
+            } else {
+                QVariantMap ge = glowEntryFromBase(base, glIdx);
+                ge[QStringLiteral("enabled")] = true;
+                ge[QStringLiteral("inner")] = g.value(QStringLiteral("inner")).toBool();
+                ge[QStringLiteral("color")] = c;
+                ge[QStringLiteral("blur")] = g.value(QStringLiteral("blur")).toDouble();
+                ge[QStringLiteral("spread")] = g.value(QStringLiteral("spread")).toDouble();
+                out[QStringLiteral("glowEntry") + QString::number(glIdx)] = ge;
+            }
         }
     } else if (preset == QLatin1String("customGrain")) {
         QVariantMap g;
@@ -1099,13 +1150,56 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
                     m[k] = ov.value(k);
             }
         }
-        for (const QString &k : {QStringLiteral("rotation"), QStringLiteral("opacity"), QStringLiteral("shadows"),
-                 QStringLiteral("layerBlur"), QStringLiteral("backgroundBlur"), QStringLiteral("glows"),
+        for (const QString &k : {QStringLiteral("rotation"), QStringLiteral("opacity"),
+                 QStringLiteral("layerBlur"), QStringLiteral("backgroundBlur"),
                  QStringLiteral("grain"), QStringLiteral("visible"), QStringLiteral("radius"),
                  QStringLiteral("fills"), QStringLiteral("strokes"), QStringLiteral("flipH"), QStringLiteral("flipV"),
                  QStringLiteral("textContent")}) {
             if (ov.contains(k))
                 m[k] = ov.value(k);
+        }
+        // Shadow/glow top-entry clips fold onto entry 0 like fill/stroke
+        // legacy keys, preserving the rest of the stack. Multi-entry
+        // arrays (legacy fallback) replace whole.
+        if (ov.contains(QStringLiteral("shadows"))) {
+            const QVariantList src = ov.value(QStringLiteral("shadows")).toList();
+            if (src.size() == 1) {
+                QVariantList l = m.value(QStringLiteral("shadows")).toList();
+                if (l.isEmpty()) {
+                    QVariantMap d;
+                    d[QStringLiteral("enabled")] = true;
+                    d[QStringLiteral("inner")] = false;
+                    d[QStringLiteral("color")] = QStringLiteral("#80000000");
+                    d[QStringLiteral("x")] = 0.0;
+                    d[QStringLiteral("y")] = 4.0;
+                    d[QStringLiteral("blur")] = 8.0;
+                    d[QStringLiteral("spread")] = 0.0;
+                    l.append(d);
+                }
+                l[0] = src.first().toMap();
+                m[QStringLiteral("shadows")] = l;
+            } else {
+                m[QStringLiteral("shadows")] = src;
+            }
+        }
+        if (ov.contains(QStringLiteral("glows"))) {
+            const QVariantList src = ov.value(QStringLiteral("glows")).toList();
+            if (src.size() == 1) {
+                QVariantList l = m.value(QStringLiteral("glows")).toList();
+                if (l.isEmpty()) {
+                    QVariantMap d;
+                    d[QStringLiteral("enabled")] = true;
+                    d[QStringLiteral("inner")] = false;
+                    d[QStringLiteral("color")] = QStringLiteral("#cc00ffff");
+                    d[QStringLiteral("blur")] = 16.0;
+                    d[QStringLiteral("spread")] = 4.0;
+                    l.append(d);
+                }
+                l[0] = src.first().toMap();
+                m[QStringLiteral("glows")] = l;
+            } else {
+                m[QStringLiteral("glows")] = src;
+            }
         }
         // Style clips animate the top stack entry via legacy single
         // keys (customColor/customStroke/etc.): fold them onto
@@ -1176,15 +1270,34 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         }
         // Indexed style overlays (entry 1+): complete entry objects on
         // fillEntry{i}/strokeEntry{i} keys, padding short stacks with
-        // defaults like the canvas writeback.
+        // defaults like the canvas writeback. Shadow/glow entries ride
+        // shadowEntry{i}/glowEntry{i} the same way.
+        auto ensureShadows = [&](QVariantMap &mm) -> QVariantList {
+            QVariantList l = mm.value(QStringLiteral("shadows")).toList();
+            return l;
+        };
+        auto ensureGlows = [&](QVariantMap &mm) -> QVariantList {
+            QVariantList l = mm.value(QStringLiteral("glows")).toList();
+            return l;
+        };
         for (auto it = ov.constBegin(); it != ov.constEnd(); ++it) {
             const QString k = it.key();
             bool isFill = k.startsWith(QStringLiteral("fillEntry"));
             bool isStroke = !isFill && k.startsWith(QStringLiteral("strokeEntry"));
-            if (!isFill && !isStroke)
+            bool isShadow = !isFill && !isStroke && k.startsWith(QStringLiteral("shadowEntry"));
+            bool isGlow = !isFill && !isStroke && !isShadow && k.startsWith(QStringLiteral("glowEntry"));
+            if (!isFill && !isStroke && !isShadow && !isGlow)
                 continue;
             bool ok = false;
-            const int idx = k.mid(isFill ? 9 : 11).toInt(&ok);
+            int idx = -1;
+            if (isFill)
+                idx = k.mid(9).toInt(&ok);
+            else if (isStroke)
+                idx = k.mid(11).toInt(&ok);
+            else if (isShadow)
+                idx = k.mid(11).toInt(&ok);
+            else
+                idx = k.mid(9).toInt(&ok);
             if (!ok || idx < 1 || idx > 32)
                 continue;
             if (isFill) {
@@ -1199,7 +1312,7 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
                 }
                 l[idx] = it.value().toMap();
                 m[QStringLiteral("fills")] = l;
-            } else {
+            } else if (isStroke) {
                 QVariantList l = ensureStrokes(m);
                 while (l.size() <= idx) {
                     QVariantMap d;
@@ -1213,6 +1326,34 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
                 }
                 l[idx] = it.value().toMap();
                 m[QStringLiteral("strokes")] = l;
+            } else if (isShadow) {
+                QVariantList l = ensureShadows(m);
+                while (l.size() <= idx) {
+                    QVariantMap d;
+                    d[QStringLiteral("enabled")] = true;
+                    d[QStringLiteral("inner")] = false;
+                    d[QStringLiteral("color")] = QStringLiteral("#80000000");
+                    d[QStringLiteral("x")] = 0.0;
+                    d[QStringLiteral("y")] = 4.0;
+                    d[QStringLiteral("blur")] = 8.0;
+                    d[QStringLiteral("spread")] = 0.0;
+                    l.append(d);
+                }
+                l[idx] = it.value().toMap();
+                m[QStringLiteral("shadows")] = l;
+            } else {
+                QVariantList l = ensureGlows(m);
+                while (l.size() <= idx) {
+                    QVariantMap d;
+                    d[QStringLiteral("enabled")] = true;
+                    d[QStringLiteral("inner")] = false;
+                    d[QStringLiteral("color")] = QStringLiteral("#cc00ffff");
+                    d[QStringLiteral("blur")] = 16.0;
+                    d[QStringLiteral("spread")] = 4.0;
+                    l.append(d);
+                }
+                l[idx] = it.value().toMap();
+                m[QStringLiteral("glows")] = l;
             }
         }
         if (ov.contains(QStringLiteral("fontSize")) && shapeType == QLatin1String("text"))
