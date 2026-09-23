@@ -194,10 +194,10 @@ ScrollView {
                     Column {
                         anchors {
                             left: parent.left
-                            right: parent.right
+                            right: deleteButton.left
                             verticalCenter: parent.verticalCenter
                             leftMargin: 12
-                            rightMargin: 12
+                            rightMargin: 8
                         }
                         spacing: 2
 
@@ -229,6 +229,23 @@ ScrollView {
                         onClicked: {
                             if (gallery.doc)
                                 gallery.doc.selectClip(modelData.id, false);
+                        }
+                    }
+
+                    PanelIconButton {
+                        id: deleteButton
+
+                        anchors {
+                            right: parent.right
+                            verticalCenter: parent.verticalCenter
+                            rightMargin: 8
+                        }
+                        iconKind: "close"
+                        filled: false
+                        iconSize: 12
+                        onClicked: {
+                            if (gallery.doc)
+                                gallery.doc.deleteClips([modelData.id]);
                         }
                     }
                 }
