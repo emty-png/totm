@@ -27,6 +27,19 @@ namespace FramePaint {
 void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, double oy, double scale,
     int frameNo);
 
+// White alpha silhouette of one sampled mask leaf in frame coords.
+// Vectors use the shared outline path, images a rounded rect, text
+// the glyph ghost; feather blurs the edge, invert flips the alpha.
+// Only alpha carries meaning (DestinationIn); color stays white.
+QImage maskSilhouette(const QVariantMap &mask, double ox, double oy, double scale, const QSize &size);
+
+// Group-aware leaf pass with Figma/Jitter-style masks. Skips isMask
+// leaves, clips masked leaves by their mask silhouette(s) at the same
+// frame time. scene is the full hierarchy (for mask lookup), work is
+// the sampled top-first leaf list. Paints bottom-first like callers did.
+void paintLeaves(QPainter &pt, QImage &frame, const QList<QVariantMap> &work, const QVariantMap &scene,
+    double ox, double oy, double scale, int frameNo);
+
 // Union of rotated leaf bboxes expanded by the canvas effect pads
 // (mirrors EffectItem::updatePad, including the miter-pen rule), in
 // content coords. Empty when no leaf has a positive area.

@@ -61,6 +61,63 @@ QtObject {
         return a + (b - a) * t;
     }
 
+    // Keyed mask values at raw progress p over o.keys (clip-local
+    // 0..1, absolute geometry). The bracketing segment eases by the
+    // target key's easing; clip-level easing is bypassed when keys
+    // drive. Returns null when the clip carries no usable keys, so
+    // callers fall back to from-to. Mirrors AnimSampler (C++).
+    function maskKeysAt(o, p) {
+        var keys = o ? o.keys : null;
+        if (!keys || typeof keys.length !== "number" || keys.length < 2)
+            return null;
+        var p2 = Math.min(1, Math.max(0, Number(p) || 0));
+        var a = keys[0], b = keys[keys.length - 1];
+        if (p2 <= Number(a.t))
+            return {
+                value: a.value || {}
+            };
+        if (p2 >= Number(b.t))
+            return {
+                value: b.value || {}
+            };
+        for (var i = 0; i < keys.length - 1; i++) {
+            if (p2 >= Number(keys[i].t) && p2 <= Number(keys[i + 1].t)) {
+                a = keys[i];
+                b = keys[i + 1];
+                break;
+            }
+        }
+        var span = Math.max(1e-6, Number(b.t) - Number(a.t));
+        var raw = (p2 - Number(a.t)) / span;
+        var ez = b.easing || {};
+        var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, raw);
+        var av = a.value || {}, bv = b.value || {};
+        var out = {};
+        var fields = ["x", "y", "w", "h", "rotation", "opacity", "feather"];
+        for (var f = 0; f < fields.length; f++) {
+            var k = fields[f];
+            var hasA = av[k] !== undefined, hasB = bv[k] !== undefined;
+            if (!hasA && !hasB)
+                continue;
+            var an = hasA ? Number(av[k]) : Number(bv[k]);
+            var bn = hasB ? Number(bv[k]) : Number(av[k]);
+            if (isNaN(an) || isNaN(bn))
+                continue;
+            out[k] = an + (bn - an) * e;
+        }
+        if (av.invert !== undefined || bv.invert !== undefined) {
+            if (av.invert === undefined)
+                out.invert = bv.invert === true;
+            else if (bv.invert === undefined)
+                out.invert = av.invert === true;
+            else
+                out.invert = e < 0.5 ? av.invert === true : bv.invert === true;
+        }
+        return {
+            value: out
+        };
+    }
+
     function parseHex(hex) {
         var t = String(hex || "").trim().toLowerCase();
         if (t.charAt(0) === "#")
@@ -324,6 +381,69 @@ QtObject {
             var dir2 = o.direction === "ccw" ? -1 : 1;
             var env = inward ? 1 - p : p;
             out.rotation = base.rotation + dir2 * 15 * Math.sin(p * 4 * Math.PI) * env;
+        } else if (preset === "maskWipe" || preset === "maskIris") {
+            // Mask reveals: absolute mask geometry (later-wins, never
+            // chained). Targets mask shapes; the renderer clips masked
+            // siblings by the sampled silhouette. Keys drive multi-stop
+            // motion, otherwise direction/feather/invert carry from-to.
+            var kk = maskKeysAt(o, p);
+            if (kk) {
+                var kv = kk.value;
+                out.x = kv.x !== undefined ? kv.x : base.x;
+                out.y = kv.y !== undefined ? kv.y : base.y;
+                out.w = Math.max(0.01, kv.w !== undefined ? kv.w : base.w);
+                out.h = Math.max(0.01, kv.h !== undefined ? kv.h : base.h);
+                if (kv.rotation !== undefined)
+                    out.rotation = kv.rotation;
+                if (kv.opacity !== undefined)
+                    out.opacity = Math.min(1, Math.max(0, kv.opacity));
+                out.maskFeather = Math.max(0, kv.feather !== undefined ? kv.feather : (Number(o.feather) || 0));
+                out.maskInverted = kv.invert !== undefined ? kv.invert === true : o.invert === true;
+            } else {
+                var prog = inward ? e : 1 - e;
+                var bx = base.x, by = base.y;
+                var bw = Math.max(0.01, base.w), bh = Math.max(0.01, base.h);
+                if (preset === "maskWipe") {
+                    var mdir = o.direction === "right" ? "right" : o.direction === "up" ? "up" : o.direction === "down" ? "down" : "left";
+                    if (mdir === "left") {
+                        out.x = bx;
+                        out.y = by;
+                        out.w = Math.max(0.01, bw * prog);
+                        out.h = bh;
+                    } else if (mdir === "right") {
+                        out.x = bx + bw * (1 - prog);
+                        out.y = by;
+                        out.w = Math.max(0.01, bw * prog);
+                        out.h = bh;
+                    } else if (mdir === "up") {
+                        out.x = bx;
+                        out.y = by;
+                        out.w = bw;
+                        out.h = Math.max(0.01, bh * prog);
+                    } else {
+                        out.x = bx;
+                        out.y = by + bh * (1 - prog);
+                        out.w = bw;
+                        out.h = Math.max(0.01, bh * prog);
+                    }
+                } else {
+                    var ms = Math.max(0.001, prog);
+                    var mbox = scaleBox({
+                        x: bx,
+                        y: by,
+                        w: bw,
+                        h: bh
+                    }, cx, cy, ms);
+                    out.x = mbox.x;
+                    out.y = mbox.y;
+                    out.w = mbox.w;
+                    out.h = mbox.h;
+                    if (base.shapeType === "text" && base.fontSize > 0)
+                        out.fontSize = base.fontSize * prog;
+                }
+                out.maskFeather = Math.max(0, Number(o.feather) || 0);
+                out.maskInverted = o.invert === true;
+            }
         } else if (preset === "customScale") {
             // Uniform factor about the target center (group-aware like
             // grow). From/to are factors, base supplies the box.
@@ -1164,6 +1284,10 @@ QtObject {
                     amount: Math.min(1, Math.max(0, Number(ov.grain.amount) || 0)),
                     size: Math.min(10, Math.max(1, Number(ov.grain.size) || 0))
                 };
+            if (ov.maskFeather !== undefined)
+                n.maskFeather = Math.max(0, Number(ov.maskFeather) || 0);
+            if (ov.maskInverted !== undefined)
+                n.maskInverted = ov.maskInverted === true;
             if (ov.visible !== undefined)
                 n.visible = ov.visible;
             if (ov.flipH !== undefined)

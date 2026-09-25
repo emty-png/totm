@@ -508,6 +508,24 @@ QtObject {
     function canUngroup() {
         return grouper.canUngroup();
     }
+    function canUseAsMask() {
+        return grouper.canUseAsMask();
+    }
+    function canReleaseMask() {
+        return grouper.canReleaseMask();
+    }
+    function useAsMask() {
+        return grouper.useAsMask();
+    }
+    function releaseMask() {
+        grouper.releaseMask();
+    }
+    function maskUidsForLeaf(uid) {
+        return tree.maskUidsForLeaf(uid);
+    }
+    function isMaskedLeaf(uid) {
+        return tree.isMaskedLeaf(uid);
+    }
     function groupSelected() {
         history.checkpoint();
         return grouper.groupSelected();

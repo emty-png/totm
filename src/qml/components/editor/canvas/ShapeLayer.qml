@@ -32,6 +32,107 @@ Item {
     // or scrubbing and freezes on a deterministic field otherwise.
     readonly property int grainFrame: layerRoot.doc && layerRoot.doc.anim ? Math.floor(Number(layerRoot.doc.anim.currentTime || 0) * 60) : 0
 
+    // Plain sampled map for the CPU mask preview (same keys as export
+    // snapshots). Reads live nodes so animated mask/content geometry
+    // follows playback without extra sampling.
+    function previewMap(n) {
+        if (!n)
+            return ({});
+        var d = layerRoot.doc;
+        return {
+            uid: n.uid,
+            type: n.shapeType,
+            shapeType: n.shapeType,
+            x: n.x,
+            y: n.y,
+            w: n.w,
+            h: n.h,
+            rotation: n.rotation,
+            opacity: n.opacity,
+            visible: n.visible,
+            fills: d.factory._copyFills(n.fills, n),
+            strokes: d.factory._copyStrokes(n.strokes, n),
+            shadows: d.factory._copyShadows(n.shadows),
+            glows: d.factory._copyGlows(n.glows),
+            layerBlur: d.factory._copyBlur(n.layerBlur, 8, 1),
+            backgroundBlur: d.factory._copyBlur(n.backgroundBlur, 16, 0.7),
+            grain: d.factory._copyGrain(n.grain),
+            radius: n.radius,
+            independentCorners: n.independentCorners === true,
+            cornerRadii: d.factory._copyRadii(n.cornerRadii),
+            points: n.points,
+            pathData: d.factory._copyPath(n.pathData),
+            flipH: n.flipH === true,
+            flipV: n.flipV === true,
+            imageSource: n.imageSource ?? "",
+            textContent: n.textContent ?? "",
+            fontFamily: n.fontFamily || "Inter",
+            fontWeight: n.fontWeight || 400,
+            fontSize: n.fontSize || 16,
+            lineHeightAuto: n.lineHeightAuto !== false,
+            lineHeight: n.lineHeight || 1.2,
+            letterSpacing: n.letterSpacing || 0,
+            hAlign: n.hAlign || "left",
+            vAlign: n.vAlign || "top",
+            autoSize: n.autoSize !== false,
+            penFill: n.penFill !== false,
+            strokeCap: n.strokeCap || "round",
+            strokeJoin: n.strokeJoin || "round",
+            isMask: n.isMask === true,
+            maskFeather: Math.max(0, Number(n.maskFeather) || 0),
+            maskInverted: n.maskInverted === true
+        };
+    }
+
+    // Masked non-mask leaves (structural only: uid + paint depth).
+    // Geometry/style flows per-delegate through live bindings below,
+    // so the Repeater model stays stable across playback ticks and
+    // delegates are never rebuilt at 60Hz.
+    readonly property var maskedStubs: {
+        var d = layerRoot.doc;
+        if (!d)
+            return [];
+        d.rev;
+        d.structRev;
+        var out = [];
+        var leaves = d.leafList || [];
+        for (var i = 0; i < leaves.length; i++) {
+            var n = leaves[i];
+            if (!n || n.kind !== "shape")
+                continue;
+            if (n.isMask === true)
+                continue;
+            var mids = d.maskUidsForLeaf(n.uid);
+            if (!mids || mids.length === 0)
+                continue;
+            out.push({
+                uid: n.uid,
+                z: n.zOrder
+            });
+        }
+        return out;
+    }
+
+    // Live mask maps for one leaf uid. Reads mask node props through
+    // previewMap, so animation writes retrace the binding per frame.
+    function maskMapsFor(uid) {
+        var d = layerRoot.doc;
+        if (!d)
+            return [];
+        d.rev;
+        d.structRev;
+        var mids = d.maskUidsForLeaf(uid);
+        if (!mids || mids.length === 0)
+            return [];
+        var out = [];
+        for (var k = 0; k < mids.length; k++) {
+            var mn = d.findNode(mids[k]);
+            if (mn)
+                out.push(layerRoot.previewMap(mn));
+        }
+        return out;
+    }
+
     x: layerRoot.offsetX
     y: layerRoot.offsetY
     scale: layerRoot.zoom
@@ -94,6 +195,16 @@ Item {
                 }
                 return false;
             });
+            item.isMaskedContent = Qt.binding(() => {
+                if (layerRoot.doc) {
+                    layerRoot.doc.rev;
+                    layerRoot.doc.structRev;
+                }
+                var n = layerRoot.doc ? layerRoot.doc.findNode(item.uid) : null;
+                if (!n || n.kind !== "shape" || n.isMask === true)
+                    return false;
+                return layerRoot.doc ? layerRoot.doc.isMaskedLeaf(item.uid) : false;
+            });
         }
 
         ShapeItem {
@@ -118,6 +229,7 @@ Item {
             backdropItem: layerRoot.backdropItem
             isBackdropCapture: layerRoot.hideBlurShapes
             shapeOpacity: modelData.opacity
+            isMaskShape: modelData.isMask === true
             radius: modelData.radius
             independentCorners: modelData.independentCorners === true
             cornerRadii: modelData.cornerRadii || []
@@ -137,6 +249,34 @@ Item {
             hAlign: modelData.hAlign || "left"
             vAlign: modelData.vAlign || "top"
             autoSize: modelData.autoSize !== false
+        }
+    }
+
+    // CPU preview for masked leaves (one scene-sized item per masked
+    // leaf at its own paintDepth, so z interleaves with GPU leaves).
+    // Shares FramePaint with export, so preview matches video. The
+    // model is structural only; leaf/mask maps bind live per delegate
+    // (DocNode props are notifiable, so playback retargets per frame
+    // without rebuilding delegates).
+    Repeater {
+        model: layerRoot.maskedStubs
+
+        MaskLeafItem {
+            x: 0
+            y: 0
+            width: layerRoot.doc ? layerRoot.doc.sceneWidth : 0
+            height: layerRoot.doc ? layerRoot.doc.sceneHeight : 0
+            z: modelData.z
+            readonly property var leafNode: layerRoot.doc ? layerRoot.doc.findNode(modelData.uid) : null
+            visible: {
+                var d = layerRoot.doc;
+                if (d)
+                    d.rev;
+                return leafNode ? (d ? d.isEffectivelyVisible(leafNode) : true) : false;
+            }
+            leaf: leafNode ? layerRoot.previewMap(leafNode) : ({})
+            masks: layerRoot.maskMapsFor(modelData.uid)
+            frameNo: layerRoot.grainFrame
         }
     }
 }

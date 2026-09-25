@@ -142,6 +142,7 @@ ScrollView {
             Column {
                 width: parent.width
                 spacing: 8
+                visible: modelData.visible !== false
 
                 Text {
                     visible: modelData.title !== ""
@@ -238,6 +239,11 @@ ScrollView {
             {
                 title: "",
                 cards: [gallery.cardFor("spin", qsTr("Spin")), gallery.cardFor("twist", qsTr("Twist")), gallery.cardFor("movescale", qsTr("Move & Scale"))]
+            },
+            {
+                title: qsTr("Mask"),
+                visible: gallery.maskTargetUids().length > 0,
+                cards: [gallery.maskWipeCard(), gallery.maskIrisCard()]
             }
         ];
     }
@@ -446,6 +452,66 @@ ScrollView {
         };
     }
 
+    // Mask reveals: one-click wipe / iris on the selected masks. Thumb
+    // and apply share plain options (direction + soft edge); the clip
+    // editor retargets direction/feather/invert and holds keyframes.
+    function maskWipeCard() {
+        var o = {
+            direction: "left",
+            feather: 0,
+            invert: false
+        };
+        return {
+            id: "maskWipe",
+            name: qsTr("Mask Wipe"),
+            options: o,
+            apply: o,
+            easing: "easeOut",
+            mask: true
+        };
+    }
+
+    function maskIrisCard() {
+        var o = {
+            feather: 0,
+            invert: false
+        };
+        return {
+            id: "maskIris",
+            name: qsTr("Mask Iris"),
+            options: o,
+            apply: o,
+            easing: "easeOut",
+            mask: true
+        };
+    }
+
+    // Mask uids under the current selection: selected mask shapes plus
+    // every direct mask of each selected group (stacked masks each own
+    // a band). Mask cards apply here, never onto content (which would
+    // squash instead of reveal).
+    function maskTargetUids() {
+        var d = gallery.doc;
+        if (!d)
+            return [];
+        d.rev;
+        var out = [];
+        var tops = d.selectedTops();
+        for (var i = 0; i < tops.length; i++) {
+            var t = tops[i];
+            if (t.kind === "shape" && t.isMask === true) {
+                out.push(t.uid);
+            } else if (t.kind === "group") {
+                var kids = t.children || [];
+                for (var k = 0; k < kids.length; k++) {
+                    if (kids[k].kind === "shape" && kids[k].isMask === true)
+                        out.push(kids[k].uid);
+                }
+            }
+        }
+        return out;
+    }
+
     // Longest selected text length in chars (groups count their longest
     // leaf), for auto-sizing Type durations from chars/sec.
     function selectionTextLen() {
@@ -471,12 +537,20 @@ ScrollView {
         var d = gallery.doc;
         if (!d)
             return;
-        var tops = d.selectedTops();
-        if (tops.length === 0)
-            return;
         var uids = [];
-        for (var i = 0; i < tops.length; i++)
-            uids.push(tops[i].uid);
+        if (presetId === "maskWipe" || presetId === "maskIris") {
+            // Mask reveals land on masks, never content: content would
+            // squash its box instead of clipping the reveal.
+            uids = gallery.maskTargetUids();
+            if (uids.length === 0)
+                return;
+        } else {
+            var tops = d.selectedTops();
+            if (tops.length === 0)
+                return;
+            for (var i = 0; i < tops.length; i++)
+                uids.push(tops[i].uid);
+        }
         var t0 = d.anim.currentTime;
         var dur = 0.8;
         if (presetId === "type") {

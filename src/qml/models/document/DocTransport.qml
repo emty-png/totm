@@ -121,7 +121,11 @@ QtObject {
                 penFill: n.penFill !== false,
                 strokeCap: n.strokeCap ?? "round",
                 strokeJoin: n.strokeJoin ?? "round",
-                independentCorners: n.independentCorners
+                independentCorners: n.independentCorners,
+                isMask: n.isMask === true,
+                maskMode: n.maskMode === "luminance" ? "luminance" : "alpha",
+                maskFeather: Math.max(0, Number(n.maskFeather) || 0),
+                maskInverted: n.maskInverted === true
             };
             if (n.shapeType === "pen")
                 entry.pathData = doc.factory._copyPath(n.pathData);
@@ -194,6 +198,10 @@ QtObject {
                 n.pathData = doc.factory._copyPath(b.pathData);
             if (b.cornerRadii !== undefined && n.independentCorners)
                 n.cornerRadii = b.cornerRadii.slice();
+            if (b.maskFeather !== undefined)
+                n.maskFeather = Math.max(0, Number(b.maskFeather) || 0);
+            if (b.maskInverted !== undefined)
+                n.maskInverted = b.maskInverted === true;
         }
     }
 }

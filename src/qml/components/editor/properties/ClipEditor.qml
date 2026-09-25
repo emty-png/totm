@@ -274,6 +274,36 @@ ScrollView {
             }
         }
 
+        // Mask wipe / iris (direction, feather, invert, keyframes).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && (editor.clipData.preset === "maskWipe" || editor.clipData.preset === "maskIris")
+
+            ClipMaskOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
+        // Mask keyframes (header add button captures the live box).
+        PanelSection {
+            width: parent.width
+            title: qsTr("Keyframes")
+            visible: !!editor.clipData && (editor.clipData.preset === "maskWipe" || editor.clipData.preset === "maskIris")
+            showAdd: true
+            onAddClicked: maskKeys.addKey()
+
+            ClipMaskKeys {
+                id: maskKeys
+
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
         // Timing and easing.
         PanelSection {
             width: parent.width

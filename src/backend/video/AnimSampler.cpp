@@ -397,6 +397,83 @@ double lerpOpacityOpt(const QVariantMap &o, double e, bool *present = nullptr) {
         return 1.0;
     return qBound(0.0, num(o, "fromOpacity", 1.0) + (num(o, "toOpacity", 1.0) - num(o, "fromOpacity", 1.0)) * e, 1.0);
 }
+
+// Nearest mask below branchIndex in a top-first sibling list (Figma
+// segmentation: each mask clips siblings directly above it, up to the
+// next mask). Groups never count as masks. Mirrors DocTree.maskBelowIn.
+QVariantMap maskBelowIn(const QVariantList &list, int branchIndex) {
+    for (int i = branchIndex + 1; i < list.size(); ++i) {
+        const QVariantMap n = list.at(i).toMap();
+        if (n.value(QStringLiteral("kind")).toString() != QLatin1String("group")
+            && n.value(QStringLiteral("isMask"), false).toBool())
+            return n;
+    }
+    return {};
+}
+
+// Keyed mask values at raw progress p over o["keys"] (clip-local
+// 0..1, absolute geometry). Bracketing segment eases by the target
+// key's easing. True when usable; value holds interpolated fields.
+// Mirrors DocAnimSample.maskKeysAt.
+bool maskKeysAt(const QVariantMap &o, double p, QVariantMap &value) {
+    QVariantList keys = o.value(QStringLiteral("keys")).toList();
+    if (keys.size() < 2)
+        return false;
+    // Stored sorted by the QML normalizer; sort defensively so
+    // hand-edited scenes bracket correctly too.
+    std::sort(keys.begin(), keys.end(), [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value(QStringLiteral("t"), 0.0).toDouble()
+            < b.toMap().value(QStringLiteral("t"), 0.0).toDouble();
+    });
+    const double p2 = qBound(0.0, p, 1.0);
+    QVariantMap a = keys.first().toMap(), b = keys.last().toMap();
+    if (p2 <= a.value(QStringLiteral("t"), 0.0).toDouble()) {
+        value = a.value(QStringLiteral("value")).toMap();
+        return true;
+    }
+    if (p2 >= b.value(QStringLiteral("t"), 1.0).toDouble()) {
+        value = b.value(QStringLiteral("value")).toMap();
+        return true;
+    }
+    for (int i = 0; i + 1 < keys.size(); ++i) {
+        const double t0 = keys.at(i).toMap().value(QStringLiteral("t"), 0.0).toDouble();
+        const double t1 = keys.at(i + 1).toMap().value(QStringLiteral("t"), 1.0).toDouble();
+        if (p2 >= t0 && p2 <= t1) {
+            a = keys.at(i).toMap();
+            b = keys.at(i + 1).toMap();
+            break;
+        }
+    }
+    const double at = a.value(QStringLiteral("t"), 0.0).toDouble();
+    const double bt = b.value(QStringLiteral("t"), 1.0).toDouble();
+    const double span = qMax(1e-6, bt - at);
+    const double raw = (p2 - at) / span;
+    const QVariantMap ez = b.value(QStringLiteral("easing")).toMap();
+    const double ke = Anims::easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
+        ez.value(QStringLiteral("bezier")).toList(), raw);
+    const QVariantMap av = a.value(QStringLiteral("value")).toMap();
+    const QVariantMap bv = b.value(QStringLiteral("value")).toMap();
+    static const char *fields[] = {"x", "y", "w", "h", "rotation", "opacity", "feather"};
+    for (const char *f : fields) {
+        const QString k = QString::fromLatin1(f);
+        const bool hasA = av.contains(k), hasB = bv.contains(k);
+        if (!hasA && !hasB)
+            continue;
+        const double an = hasA ? av.value(k).toDouble() : bv.value(k).toDouble();
+        const double bn = hasB ? bv.value(k).toDouble() : av.value(k).toDouble();
+        value[k] = an + (bn - an) * ke;
+    }
+    if (av.contains(QStringLiteral("invert")) || bv.contains(QStringLiteral("invert"))) {
+        if (!av.contains(QStringLiteral("invert")))
+            value[QStringLiteral("invert")] = bv.value(QStringLiteral("invert")).toBool();
+        else if (!bv.contains(QStringLiteral("invert")))
+            value[QStringLiteral("invert")] = av.value(QStringLiteral("invert")).toBool();
+        else
+            value[QStringLiteral("invert")] = ke < 0.5 ? av.value(QStringLiteral("invert")).toBool()
+                                                       : bv.value(QStringLiteral("invert")).toBool();
+    }
+    return true;
+}
 } // namespace
 
 QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVariantMap &o,
@@ -455,6 +532,63 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         const double dir = str(o, "direction") == QLatin1String("ccw") ? -1.0 : 1.0;
         const double env = inward ? 1.0 - p : p;
         out[QStringLiteral("rotation")] = num(base, "rotation") + dir * 15.0 * qSin(p * 4.0 * M_PI) * env;
+    } else if (preset == QLatin1String("maskWipe") || preset == QLatin1String("maskIris")) {
+        // Mask reveals: absolute mask geometry (later-wins, never
+        // chained). Mirrors DocAnimSample (keys drive multi-stop).
+        QVariantMap kv;
+        if (maskKeysAt(o, p, kv)) {
+            out[QStringLiteral("x")] = kv.contains(QStringLiteral("x")) ? kv.value(QStringLiteral("x")).toDouble() : num(base, "x");
+            out[QStringLiteral("y")] = kv.contains(QStringLiteral("y")) ? kv.value(QStringLiteral("y")).toDouble() : num(base, "y");
+            out[QStringLiteral("w")] = qMax(0.01, kv.contains(QStringLiteral("w")) ? kv.value(QStringLiteral("w")).toDouble() : num(base, "w"));
+            out[QStringLiteral("h")] = qMax(0.01, kv.contains(QStringLiteral("h")) ? kv.value(QStringLiteral("h")).toDouble() : num(base, "h"));
+            if (kv.contains(QStringLiteral("rotation")))
+                out[QStringLiteral("rotation")] = kv.value(QStringLiteral("rotation")).toDouble();
+            if (kv.contains(QStringLiteral("opacity")))
+                out[QStringLiteral("opacity")] = qBound(0.0, kv.value(QStringLiteral("opacity")).toDouble(), 1.0);
+            out[QStringLiteral("maskFeather")] = qMax(0.0,
+                kv.contains(QStringLiteral("feather")) ? kv.value(QStringLiteral("feather")).toDouble() : num(o, "feather"));
+            out[QStringLiteral("maskInverted")] = kv.contains(QStringLiteral("invert"))
+                ? kv.value(QStringLiteral("invert")).toBool()
+                : o.value(QStringLiteral("invert")).toBool();
+        } else {
+            const double prog = inward ? e : 1.0 - e;
+            const double mx = num(base, "x"), my = num(base, "y");
+            const double mw = qMax(0.01, num(base, "w")), mh = qMax(0.01, num(base, "h"));
+            if (preset == QLatin1String("maskWipe")) {
+                const QString md = str(o, "direction", QStringLiteral("left"));
+                if (md == QLatin1String("right")) {
+                    out[QStringLiteral("x")] = mx + mw * (1.0 - prog);
+                    out[QStringLiteral("y")] = my;
+                    out[QStringLiteral("w")] = qMax(0.01, mw * prog);
+                    out[QStringLiteral("h")] = mh;
+                } else if (md == QLatin1String("up")) {
+                    out[QStringLiteral("x")] = mx;
+                    out[QStringLiteral("y")] = my;
+                    out[QStringLiteral("w")] = mw;
+                    out[QStringLiteral("h")] = qMax(0.01, mh * prog);
+                } else if (md == QLatin1String("down")) {
+                    out[QStringLiteral("x")] = mx;
+                    out[QStringLiteral("y")] = my + mh * (1.0 - prog);
+                    out[QStringLiteral("w")] = mw;
+                    out[QStringLiteral("h")] = qMax(0.01, mh * prog);
+                } else {
+                    out[QStringLiteral("x")] = mx;
+                    out[QStringLiteral("y")] = my;
+                    out[QStringLiteral("w")] = qMax(0.01, mw * prog);
+                    out[QStringLiteral("h")] = mh;
+                }
+            } else {
+                const double ms = qMax(0.001, prog);
+                out[QStringLiteral("x")] = cx + (mx - cx) * ms;
+                out[QStringLiteral("y")] = cy + (my - cy) * ms;
+                out[QStringLiteral("w")] = qMax(0.01, mw * ms);
+                out[QStringLiteral("h")] = qMax(0.01, mh * ms);
+                if (shapeType == QLatin1String("text") && num(base, "fontSize") > 0)
+                    out[QStringLiteral("fontSize")] = num(base, "fontSize") * prog;
+            }
+            out[QStringLiteral("maskFeather")] = qMax(0.0, num(o, "feather"));
+            out[QStringLiteral("maskInverted")] = o.value(QStringLiteral("invert")).toBool();
+        }
     } else if (preset == QLatin1String("customScale")) {
         const double raw = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
         const double sc = qMax(0.001, raw);
@@ -1392,6 +1526,10 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         }
         if (ov.contains(QStringLiteral("fontSize")) && shapeType == QLatin1String("text"))
             m[QStringLiteral("fontSize")] = ov.value(QStringLiteral("fontSize"));
+        if (ov.contains(QStringLiteral("maskFeather")))
+            m[QStringLiteral("maskFeather")] = qMax(0.0, ov.value(QStringLiteral("maskFeather")).toDouble());
+        if (ov.contains(QStringLiteral("maskInverted")))
+            m[QStringLiteral("maskInverted")] = ov.value(QStringLiteral("maskInverted")).toBool();
         if (ov.contains(QStringLiteral("radius")) && m.value(QStringLiteral("independentCorners")).toBool()) {
             const double rv = qMax(0.0, ov.value(QStringLiteral("radius")).toDouble());
             m[QStringLiteral("cornerRadii")] = QVariantList{rv, rv, rv, rv};
@@ -1399,6 +1537,69 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         work[i] = m;
     }
     return work;
+}
+
+bool isMaskMap(const QVariantMap &m) {
+    return m.value(QStringLiteral("isMask"), false).toBool();
+}
+
+QMap<int, QList<int>> maskMapForWork(const QVariantMap &scene, const QList<QVariantMap> &work) {
+    Q_UNUSED(work);
+    // Parent chain from the scene hierarchy (uid -> parentUid/index).
+    QMap<int, QVariantMap> nodeByUid;
+    QMap<int, int> parentByUid;
+    QMap<int, int> indexByUid;
+    QMap<int, QVariantList> childrenByParent;
+    std::function<void(const QVariantList &, int)> walk = [&](const QVariantList &nodes, int parentUid) {
+        childrenByParent[parentUid] = nodes;
+        for (int i = 0; i < nodes.size(); ++i) {
+            const QVariantMap n = nodes.at(i).toMap();
+            const int uid = n.value(QStringLiteral("uid"), -1).toInt();
+            if (uid < 0)
+                continue;
+            nodeByUid[uid] = n;
+            parentByUid[uid] = parentUid;
+            indexByUid[uid] = i;
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+                walk(n.value(QStringLiteral("children")).toList(), uid);
+        }
+    };
+    walk(scene.value(QStringLiteral("nodes")).toList(), -1);
+    QMap<int, QList<int>> out;
+    // Every shape uid in the hierarchy (leaves + masks themselves).
+    QList<int> allUids = nodeByUid.keys();
+    for (int uid : allUids) {
+        const QVariantMap n = nodeByUid.value(uid);
+        if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+            continue;
+        if (isMaskMap(n))
+            continue;
+        QList<int> masks;
+        // Walk up: branch at each level is the child containing uid.
+        int branchUid = uid;
+        int levelParent = parentByUid.value(uid, -1);
+        // Guard against cycles: cap chain length.
+        for (int depth = 0; depth < 64; ++depth) {
+            if (!childrenByParent.contains(levelParent))
+                break;
+            const QVariantList siblings = childrenByParent.value(levelParent);
+            const int branchIdx = indexByUid.value(branchUid, -1);
+            if (branchIdx >= 0) {
+                const QVariantMap mask = maskBelowIn(siblings, branchIdx);
+                if (!mask.isEmpty())
+                    masks.append(mask.value(QStringLiteral("uid"), -1).toInt());
+            }
+            if (levelParent < 0)
+                break;
+            branchUid = levelParent;
+            levelParent = parentByUid.value(levelParent, -2);
+            if (levelParent == -2)
+                break;
+        }
+        if (!masks.isEmpty())
+            out[uid] = masks;
+    }
+    return out;
 }
 
 } // namespace Anims

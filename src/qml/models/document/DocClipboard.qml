@@ -52,6 +52,10 @@ QtObject {
             flipH: node.flipH,
             flipV: node.flipV,
             imageSource: node.imageSource ?? "",
+            isMask: node.isMask === true,
+            maskMode: node.maskMode === "luminance" ? "luminance" : "alpha",
+            maskFeather: Math.max(0, Number(node.maskFeather) || 0),
+            maskInverted: node.maskInverted === true,
             textContent: node.textContent,
             fontFamily: node.fontFamily,
             fontWeight: node.fontWeight,
@@ -261,7 +265,7 @@ QtObject {
             nodes.push(snap);
         }
         return {
-            version: 2,
+            version: 3,
             sceneWidth: doc.sceneWidth,
             sceneHeight: doc.sceneHeight,
             sceneColor: String(doc.sceneColor),
@@ -330,6 +334,10 @@ QtObject {
             snap.backgroundBlur = doc.factory._copyBlur(b.backgroundBlur, 16, 0.7);
         if (snap.grain !== undefined && b.grain !== undefined)
             snap.grain = doc.factory._copyGrain(b.grain);
+        if (snap.maskFeather !== undefined && b.maskFeather !== undefined)
+            snap.maskFeather = Math.max(0, Number(b.maskFeather) || 0);
+        if (snap.maskInverted !== undefined && b.maskInverted !== undefined)
+            snap.maskInverted = b.maskInverted === true;
     }
 
     // Replace the whole tree with a stored scene. Old nodes are

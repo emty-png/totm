@@ -99,6 +99,14 @@ QtObject {
     // shapeType === "image"). Empty means missing; canvas shows a
     // placeholder and export paints a neutral box.
     property string imageSource: ""
+    // Mask role (Figma/Jitter-style): when true on a shape inside a
+    // group, it clips siblings above it in the same group and never
+    // paints itself. maskFeather softens the edge (content px),
+    // maskInverted flips the alpha, maskMode reserves luminance.
+    property bool isMask: false
+    property string maskMode: "alpha"
+    property real maskFeather: 0
+    property bool maskInverted: false
     // Canvas paint order, assigned by Document.renumberZ (top-first DFS).
     property int zOrder: 0
 

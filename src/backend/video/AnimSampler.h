@@ -71,4 +71,12 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves);
 // returned unmodified.
 QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t);
 
+// Masks (Figma/Jitter-style, one active mask per group). Children are
+// top-first: the lowest direct shape child with isMask clips siblings
+// above it in the same parent. Masks never paint themselves.
+bool isMaskMap(const QVariantMap &m);
+// Leaf uid -> mask uids clipping it, walking up the ancestor chain
+// (nested masks intersect). Mirrors DocTree.maskUidsForLeaf.
+QMap<int, QList<int>> maskMapForWork(const QVariantMap &scene, const QList<QVariantMap> &work);
+
 } // namespace Anims

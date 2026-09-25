@@ -148,6 +148,7 @@ ColumnLayout {
                     isGroup: modelData.node.kind === "group"
                     nodeExpanded: modelData.node.expanded
                     indent: modelData.level
+                    isMaskRow: modelData.node.kind === "shape" && modelData.node.isMask === true
                 }
             }
 

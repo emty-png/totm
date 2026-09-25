@@ -33,6 +33,8 @@ qt_add_qml_module(totm
         backend/effects/EffectPainter.cpp
         backend/effects/EffectItem.h
         backend/effects/EffectItem.cpp
+        backend/effects/MaskLeafItem.h
+        backend/effects/MaskLeafItem.cpp
         backend/library/LibraryStore.h
         backend/library/LibraryStore.cpp
         backend/library/AudioPeaks.h
@@ -163,6 +165,8 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ClipSlideOptions.qml
         qml/components/editor/properties/ClipSpinOptions.qml
         qml/components/editor/properties/ClipTextOptions.qml
+        qml/components/editor/properties/ClipMaskOptions.qml
+        qml/components/editor/properties/ClipMaskKeys.qml
         qml/components/editor/properties/ClipTimingOptions.qml
         qml/components/editor/properties/EasingGraph.qml
         qml/components/editor/properties/GraphEditorPopup.qml

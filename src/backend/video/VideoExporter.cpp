@@ -247,15 +247,8 @@ protected:
         const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 60.0);
         const int total = qMax(1, qRound(duration * m_fps));
 
-        // Ancestor visibility comes from the snapshot so hidden subtrees
-        // are skipped before rasterization.
-        const QList<Leaf> leaves = collectLeaves(m_scene);
-        QMap<int, int> leafIndex;
-        for (int i = 0; i < leaves.size(); ++i) {
-            const int uid = leaves.at(i).map.value(QStringLiteral("uid"), -1).toInt();
-            if (uid >= 0)
-                leafIndex[uid] = i;
-        }
+        // Ancestor visibility + masks resolve inside
+        // FramePaint::paintLeaves per frame (collects leaves itself).
 
         const QString ffmpeg = VideoExporter::ffmpegPath();
         if (ffmpeg.isEmpty()) {
@@ -383,16 +376,8 @@ protected:
             img.fill(sceneColor);
             QPainter pt(&img);
             pt.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
-            // Leaf list is top-first; paint bottom-first.
-            for (int li = work.size() - 1; li >= 0; --li) {
-                const QVariantMap m = work[li];
-                const int uid = m.value(QStringLiteral("uid"), -1).toInt();
-                const int srcIdx = leafIndex.value(uid, -1);
-                const bool ancVis = srcIdx >= 0 ? leaves.at(srcIdx).ancestorsVisible : true;
-                if (!ancVis || !m.value(QStringLiteral("visible"), true).toBool())
-                    continue;
-                FramePaint::paintLeaf(pt, img, m, ox, oy, scale, Effects::grainFrameNo(t));
-            }
+            // Mask-aware, bottom-first (work is top-first).
+            FramePaint::paintLeaves(pt, img, work, m_scene, ox, oy, scale, Effects::grainFrameNo(t));
             pt.end();
 
             const char *bits = reinterpret_cast<const char *>(img.constBits());

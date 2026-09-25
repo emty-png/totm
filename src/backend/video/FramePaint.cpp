@@ -387,9 +387,170 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
     pt.restore();
 }
 
+// White alpha silhouette of one sampled mask leaf in frame coords.
+// Vectors use the shared outline path, images a rounded rect, text
+// the glyph ghost; feather blurs the edge, invert flips the alpha.
+// Only alpha carries meaning (DestinationIn); color stays white.
+QImage maskSilhouette(const QVariantMap &mask, double ox, double oy, double scale, const QSize &size) {
+    QImage img(size, QImage::Format_ARGB32_Premultiplied);
+    img.fill(Qt::transparent);
+    const QString shapeType = str(mask, "type", str(mask, "shapeType", QStringLiteral("rectangle")));
+    const double x = ox + num(mask, "x") * scale;
+    const double y = oy + num(mask, "y") * scale;
+    const double w = qMax(0.01, num(mask, "w") * scale);
+    const double h = qMax(0.01, num(mask, "h") * scale);
+    if (w <= 0 || h <= 0 || size.isEmpty())
+        return img;
+    const double opacity = qBound(0.0, num(mask, "opacity", 1.0), 1.0);
+    if (opacity <= 0.001)
+        return img;
+    const double cx = x + w / 2.0, cy = y + h / 2.0;
+    QPainter pt(&img);
+    pt.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+    pt.setOpacity(opacity);
+    pt.translate(cx, cy);
+    pt.rotate(num(mask, "rotation"));
+    pt.scale(mask.value(QStringLiteral("flipH")).toBool() ? -1.0 : 1.0,
+        mask.value(QStringLiteral("flipV")).toBool() ? -1.0 : 1.0);
+    pt.translate(-cx, -cy);
+    pt.setPen(Qt::NoPen);
+    pt.setBrush(Qt::white);
+    if (shapeType == QLatin1String("text")) {
+        QVariantMap tm;
+        tm[QStringLiteral("content")] = str(mask, "textContent");
+        tm[QStringLiteral("family")] = str(mask, "fontFamily", QStringLiteral("Inter"));
+        tm[QStringLiteral("weight")] = mask.value(QStringLiteral("fontWeight"), 400).toInt();
+        tm[QStringLiteral("size")] = num(mask, "fontSize", 16.0);
+        tm[QStringLiteral("spacing")] = num(mask, "letterSpacing");
+        tm[QStringLiteral("halign")] = str(mask, "hAlign", QStringLiteral("left"));
+        tm[QStringLiteral("valign")] = str(mask, "valign", QStringLiteral("top"));
+        tm[QStringLiteral("autoSize")] = mask.value(QStringLiteral("autoSize"), true).toBool();
+        tm[QStringLiteral("lineAuto")] = mask.value(QStringLiteral("lineHeightAuto"), true).toBool();
+        tm[QStringLiteral("leading")] = num(mask, "lineHeight", 1.2);
+        tm[QStringLiteral("boxW")] = num(mask, "w");
+        tm[QStringLiteral("boxH")] = num(mask, "h");
+        tm[QStringLiteral("outlinePx")] = 0.0;
+        const Effects::TextOpts text = Effects::TextOpts::fromMap(tm);
+        const QImage ghost = Effects::textGhost(text, w, h, scale, false);
+        if (!ghost.isNull())
+            pt.drawImage(QRectF(x, y, w, h), ghost);
+        else
+            pt.drawRect(QRectF(x, y, w, h));
+    } else if (shapeType == QLatin1String("image")) {
+        const double r = qMin(qMax(0.0, num(mask, "radius") * scale), qMin(w, h) / 2.0);
+        if (r > 0.01)
+            pt.drawRoundedRect(QRectF(x, y, w, h), r, r);
+        else
+            pt.drawRect(QRectF(x, y, w, h));
+    } else {
+        const QPainterPath path = Effects::outlinePath(shapeType, QRectF(x, y, w, h),
+            Effects::PathOpts::fromMap(mask), Effects::Style::fromMap(mask), scale);
+        if (!path.isEmpty())
+            pt.fillPath(path, Qt::white);
+        else
+            pt.drawRect(QRectF(x, y, w, h));
+    }
+    pt.end();
+    const double feather = qMax(0.0, num(mask, "maskFeather")) * scale;
+    if (feather > 0.01)
+        Effects::blurImage(img, feather);
+    if (mask.value(QStringLiteral("maskInverted"), false).toBool()) {
+        QImage inv(size, QImage::Format_ARGB32_Premultiplied);
+        inv.fill(Qt::white);
+        QPainter ip(&inv);
+        ip.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+        ip.drawImage(0, 0, img);
+        ip.end();
+        return inv;
+    }
+    return img;
+}
+
+void paintLeaves(QPainter &pt, QImage &frame, const QList<QVariantMap> &work, const QVariantMap &scene,
+    double ox, double oy, double scale, int frameNo) {
+    const QList<Leaf> leaves = collectLeaves(scene);
+    QMap<int, int> leafIndex;
+    for (int i = 0; i < leaves.size(); ++i) {
+        const int uid = leaves.at(i).map.value(QStringLiteral("uid"), -1).toInt();
+        if (uid >= 0)
+            leafIndex[uid] = i;
+    }
+    QMap<int, QVariantMap> workByUid;
+    for (const QVariantMap &m : work) {
+        const int uid = m.value(QStringLiteral("uid"), -1).toInt();
+        if (uid >= 0)
+            workByUid[uid] = m;
+    }
+    const QMap<int, QList<int>> maskMap = maskMapForWork(scene, work);
+    QMap<int, QImage> maskCache;
+    QImage layer;
+    for (int li = work.size() - 1; li >= 0; --li) {
+        const QVariantMap m = work.at(li);
+        const int uid = m.value(QStringLiteral("uid"), -1).toInt();
+        if (m.value(QStringLiteral("isMask"), false).toBool())
+            continue;
+        const int srcIdx = leafIndex.value(uid, -1);
+        const bool ancVis = srcIdx >= 0 ? leaves.at(srcIdx).ancestorsVisible : true;
+        if (!ancVis || !m.value(QStringLiteral("visible"), true).toBool())
+            continue;
+        if (qBound(0.0, Anims::num(m, "opacity", 1.0), 1.0) <= 0.001)
+            continue;
+        QList<int> active;
+        for (int mid : maskMap.value(uid)) {
+            const QVariantMap mm = workByUid.value(mid);
+            if (mm.isEmpty())
+                continue;
+            if (!mm.value(QStringLiteral("visible"), true).toBool())
+                continue;
+            const int mSrc = leafIndex.value(mid, -1);
+            if (mSrc >= 0 && !leaves.at(mSrc).ancestorsVisible)
+                continue;
+            active.append(mid);
+        }
+        if (active.isEmpty()) {
+            paintLeaf(pt, frame, m, ox, oy, scale, frameNo);
+            continue;
+        }
+        QImage combined;
+        for (int mid : active) {
+            if (!maskCache.contains(mid))
+                maskCache[mid] = maskSilhouette(workByUid.value(mid), ox, oy, scale, frame.size());
+            const QImage &mi = maskCache[mid];
+            if (combined.isNull()) {
+                combined = mi.copy();
+            } else {
+                QPainter cp(&combined);
+                cp.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+                cp.drawImage(0, 0, mi);
+                cp.end();
+            }
+        }
+        if (combined.isNull())
+            continue;
+        if (layer.size() != frame.size() || layer.format() != QImage::Format_ARGB32_Premultiplied)
+            layer = QImage(frame.size(), QImage::Format_ARGB32_Premultiplied);
+        layer.fill(Qt::transparent);
+        {
+            QPainter lp(&layer);
+            lp.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+            // Backdrop blur inside masks samples the temp (transparent),
+            // not the frame behind: documented v1 limitation, rare combo.
+            paintLeaf(lp, layer, m, ox, oy, scale, frameNo);
+        }
+        {
+            QPainter ap(&layer);
+            ap.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+            ap.drawImage(0, 0, combined);
+        }
+        pt.drawImage(0, 0, layer);
+    }
+}
+
 QRectF selectionBounds(const QList<QVariantMap> &work, double scale) {
     QRectF bounds;
     for (const QVariantMap &m : work) {
+        if (m.value(QStringLiteral("isMask"), false).toBool())
+            continue;
         if (!m.value(QStringLiteral("visible"), true).toBool())
             continue;
         if (qBound(0.0, num(m, "opacity", 1.0), 1.0) <= 0.001)
@@ -446,6 +607,8 @@ QImage renderNodes(const QVariantList &topNodes, double scale, int frameNo, QStr
     QList<QVariantMap> paint;
     paint.reserve(work.size());
     for (const QVariantMap &m : work) {
+        if (m.value(QStringLiteral("isMask"), false).toBool())
+            continue;
         const int uid = m.value(QStringLiteral("uid"), -1).toInt();
         const int srcIdx = leafIndex.value(uid, -1);
         const bool ancVis = srcIdx >= 0 ? leaves.at(srcIdx).ancestorsVisible : true;
@@ -471,10 +634,9 @@ QImage renderNodes(const QVariantList &topNodes, double scale, int frameNo, QStr
     img.fill(Qt::transparent);
     QPainter pt(&img);
     pt.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
-    // Leaves arrive top-first; paint bottom-first.
+    // Mask-aware, bottom-first (work is top-first).
     const double ox = -bounds.left(), oy = -bounds.top();
-    for (int li = paint.size() - 1; li >= 0; --li)
-        paintLeaf(pt, img, paint.at(li), ox, oy, scale, frameNo);
+    paintLeaves(pt, img, work, subset, ox, oy, scale, frameNo);
     pt.end();
     return img;
 }

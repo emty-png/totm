@@ -21,6 +21,8 @@ Item {
     readonly property bool contextValid: menu.computeContextValid()
     readonly property bool canGroup: !!menu.doc && menu.doc.canGroup()
     readonly property bool canUngroup: !!menu.doc && menu.doc.canUngroup()
+    readonly property bool canUseAsMask: !!menu.doc && menu.doc.canUseAsMask()
+    readonly property bool canReleaseMask: !!menu.doc && menu.doc.canReleaseMask()
     readonly property bool canUndo: !!menu.doc && menu.doc.canUndo
     readonly property bool canRedo: !!menu.doc && menu.doc.canRedo
 
@@ -50,7 +52,7 @@ Item {
     function openFor(uid, px, py) {
         menu.contextUid = uid;
         sub.close();
-        var w = 170, h = 370;
+        var w = 170, h = 440;
         main.x = Math.min(Math.max(0, px), Math.max(0, menu.parent.width - w));
         main.y = Math.min(Math.max(0, py), Math.max(0, menu.parent.height - h));
         main.open();
@@ -179,6 +181,22 @@ Item {
                 enabled: menu.canUngroup
                 onClicked: {
                     menu.doc.ungroupSelected();
+                    menu.closeAll();
+                }
+            }
+            MenuItem {
+                label: qsTr("Use as Mask")
+                enabled: menu.canUseAsMask
+                onClicked: {
+                    menu.doc.useAsMask();
+                    menu.closeAll();
+                }
+            }
+            MenuItem {
+                label: qsTr("Release Mask")
+                enabled: menu.canReleaseMask
+                onClicked: {
+                    menu.doc.releaseMask();
                     menu.closeAll();
                 }
             }

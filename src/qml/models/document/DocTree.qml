@@ -125,4 +125,76 @@ QtObject {
         }
         return false;
     }
+
+    // Mask helpers (Figma-style segmentation). Children are top-first:
+    // index 0 paints highest. Each mask clips the siblings directly
+    // above it, up to the next mask (or the top): stacked masks split
+    // the group into bands instead of one mask winning everything.
+    // Masks never paint themselves and never clip sibling masks.
+    function maskBelowIn(list, branchIndex) {
+        var kids = list || [];
+        for (var i = branchIndex + 1; i < kids.length; i++) {
+            var n = kids[i];
+            if (n && n.kind === "shape" && n.isMask === true)
+                return n;
+        }
+        return null;
+    }
+
+    function activeMaskIn(list) {
+        return maskBelowIn(list, -1);
+    }
+
+    function groupHasMask(parentUid) {
+        return activeMaskIn(_childrenOf(parentUid)) !== null;
+    }
+
+    // All mask uids clipping the given leaf uid, walking up the
+    // ancestor chain (nested masks intersect). Empty when unmasked.
+    function maskUidsForLeaf(uid) {
+        var hit = _find(uid);
+        if (!hit)
+            return [];
+        var out = [];
+        // Branch child at each level: leaf itself at its parent, then
+        // each ancestor group at its own parent.
+        var branchUid = hit.node.uid;
+        var branchIndex = hit.index;
+        var parents = hit.ancestors.slice();
+        // Immediate parent first.
+        var levelParentUid = hit.parentUid;
+        var chain = [
+            {
+                parentUid: levelParentUid,
+                branchIndex: branchIndex
+            }
+        ];
+        for (var a = parents.length - 1; a >= 0; a--) {
+            var anc = parents[a];
+            var ancHit = _find(anc.uid);
+            if (!ancHit)
+                continue;
+            chain.push({
+                parentUid: ancHit.parentUid,
+                branchIndex: ancHit.index
+            });
+        }
+        // Root level: branch is a top-level child of rootChildren.
+        // Masks never clip sibling masks at their own level (they can
+        // still be clipped by outer levels on the way up).
+        var isMaskSelf = hit.node.kind === "shape" && hit.node.isMask === true;
+        for (var c = 0; c < chain.length; c++) {
+            if (c === 0 && isMaskSelf)
+                continue;
+            var list = _childrenOf(chain[c].parentUid);
+            var mask = maskBelowIn(list, chain[c].branchIndex);
+            if (mask)
+                out.push(mask.uid);
+        }
+        return out;
+    }
+
+    function isMaskedLeaf(uid) {
+        return maskUidsForLeaf(uid).length > 0;
+    }
 }

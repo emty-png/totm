@@ -167,6 +167,137 @@ struct GradientOut {
     QString def; // <linearGradient .../> or empty
 };
 
+// White text silhouette for masks (luminance/alpha source, never a
+// fill paint): same layout math as the main text branch so glyph
+// coverage registers with canvas and PNG.
+QString maskTextEl(const QVariantMap &m, double x, double y, double w, double h) {
+    const QString content = str(m, "textContent");
+    if (content.isEmpty())
+        return {};
+    const QString family = str(m, "fontFamily", QStringLiteral("Inter"));
+    const int weight = qBound(100, m.value(QStringLiteral("fontWeight"), 400).toInt(), 900);
+    const double size = qMax(1.0, num(m, "fontSize", 16.0));
+    const QString halign = str(m, "hAlign", QStringLiteral("left"));
+    double tx = x;
+    QString anchor;
+    if (halign == QLatin1String("center")) {
+        tx = x + w / 2.0;
+        anchor = QStringLiteral("middle");
+    } else if (halign == QLatin1String("right")) {
+        tx = x + w;
+        anchor = QStringLiteral("end");
+    }
+    const double ty = y + size;
+    QStringList tAttrs;
+    tAttrs.append(QStringLiteral("x=\"%1\"").arg(fmtNum(tx)));
+    tAttrs.append(QStringLiteral("y=\"%1\"").arg(fmtNum(ty)));
+    tAttrs.append(QStringLiteral("font-family=\"%1\"").arg(xmlEscape(family)));
+    tAttrs.append(QStringLiteral("font-size=\"%1\"").arg(fmtNum(size)));
+    tAttrs.append(QStringLiteral("font-weight=\"%1\"").arg(weight));
+    if (!anchor.isEmpty())
+        tAttrs.append(QStringLiteral("text-anchor=\"%1\"").arg(anchor));
+    tAttrs.append(QStringLiteral("fill=\"white\""));
+    const QStringList lines = content.split(QLatin1Char('\n'));
+    QString el = QStringLiteral("<text %1>").arg(tAttrs.join(QLatin1Char(' ')));
+    for (int i = 0; i < lines.size(); ++i) {
+        if (i == 0) {
+            el += xmlEscape(lines.at(i));
+        } else {
+            el += QStringLiteral("<tspan x=\"%1\" dy=\"%2\">%3</tspan>")
+                      .arg(fmtNum(tx))
+                      .arg(fmtNum(size * qMax(0.5, num(m, "lineHeight", 1.2))))
+                      .arg(xmlEscape(lines.at(i)));
+        }
+    }
+    el += QStringLiteral("</text>");
+    return el;
+}
+
+// One mask def for a sampled mask leaf, in scene coords (same space as
+// the existing image clipPath rects: referencing g transforms never
+// apply to mask/clip content). Vector silhouettes reuse outlinePath,
+// images a rounded rect (content alpha stays a raster-only nuance),
+// text the glyph silhouette above. Hard edges emit clipPath; feather
+// or invert need alpha, so they emit mask (mask-type alpha, optional
+// blur + alpha-invert filter). Returns the full g attribute to wrap
+// the leaf in (clip-path="..." / mask="..."), or {} when degenerate,
+// in which case the caller must hide the leaf like the rasterizer does.
+QString buildSvgMask(const QVariantMap &mm, const QRectF &region, QStringList &defs, int &maskSeq) {
+    const QString shapeType = str(mm, "type", str(mm, "shapeType", QStringLiteral("rectangle")));
+    const double x = num(mm, "x"), y = num(mm, "y");
+    const double w = num(mm, "w"), h = num(mm, "h");
+    if (w <= 0 || h <= 0)
+        return {};
+    const double opacity = qBound(0.0, num(mm, "opacity", 1.0), 1.0);
+    if (opacity <= 0.001)
+        return {};
+    const double rot = num(mm, "rotation");
+    const bool flipH = mm.value(QStringLiteral("flipH")).toBool();
+    const bool flipV = mm.value(QStringLiteral("flipV")).toBool();
+    const double feather = qMax(0.0, num(mm, "maskFeather"));
+    const bool inverted = mm.value(QStringLiteral("maskInverted")).toBool();
+
+    QString inner;
+    if (shapeType == QLatin1String("text")) {
+        inner = maskTextEl(mm, x, y, w, h);
+    } else if (shapeType == QLatin1String("image")) {
+        const double r = qMin(qMax(0.0, num(mm, "radius")), qMin(w, h) / 2.0);
+        inner = QStringLiteral("<rect x=\"%1\" y=\"%2\" width=\"%3\" height=\"%4\" rx=\"%5\" fill=\"white\"/>")
+                    .arg(fmtNum(x))
+                    .arg(fmtNum(y))
+                    .arg(fmtNum(w))
+                    .arg(fmtNum(h))
+                    .arg(fmtNum(r));
+    } else {
+        const QPainterPath path = Effects::outlinePath(shapeType, QRectF(x, y, w, h),
+            Effects::PathOpts::fromMap(mm), Effects::Style::fromMap(mm), 1.0);
+        const QString d = pathToSvg(path);
+        if (d.isEmpty())
+            return {};
+        inner = QStringLiteral("<path d=\"%1\" fill=\"white\" stroke=\"none\"/>").arg(xmlEscape(d));
+    }
+    if (inner.isEmpty())
+        return {};
+    const QString xf = leafTransform(x, y, w, h, rot, flipH, flipV, 0.0, 0.0);
+    QStringList gAttrs;
+    if (!xf.isEmpty())
+        gAttrs.append(QStringLiteral("transform=\"%1\"").arg(xf));
+    if (opacity < 0.999)
+        gAttrs.append(QStringLiteral("opacity=\"%1\"").arg(fmtNum(opacity)));
+    if (feather > 0.01 || inverted) {
+        const QString fid = QStringLiteral("svgmff%1").arg(maskSeq);
+        QString f = QStringLiteral("<filter id=\"%1\">").arg(fid);
+        if (feather > 0.01)
+            f += QStringLiteral("<feGaussianBlur stdDeviation=\"%1\"/>").arg(fmtNum(feather));
+        if (inverted)
+            f += QStringLiteral("<feComponentTransfer><feFuncA type=\"table\" tableValues=\"1 0\"/></feComponentTransfer>");
+        f += QStringLiteral("</filter>");
+        defs.append(f);
+        gAttrs.append(QStringLiteral("filter=\"url(#%1)\"").arg(fid));
+    }
+    inner = gAttrs.isEmpty() ? QStringLiteral("<g>%1</g>").arg(inner)
+                             : QStringLiteral("<g %1>%2</g>").arg(gAttrs.join(QLatin1Char(' '))).arg(inner);
+    // Hard edges take the universally-supported clipPath; soft or
+    // inverted edges need a real alpha mask. Returns the full g
+    // attribute (clip-path="..." / mask="...") or {} for degenerate
+    // silhouettes, whose leaf the caller hides like the rasterizer.
+    if (feather <= 0.01 && !inverted) {
+        const QString cid = QStringLiteral("svgmclip%1").arg(maskSeq++);
+        defs.append(QStringLiteral("<clipPath id=\"%1\">%2</clipPath>").arg(cid).arg(inner));
+        return QStringLiteral("clip-path=\"url(#%1)\"").arg(cid);
+    }
+    const QString mid = QStringLiteral("svgmask%1").arg(maskSeq++);
+    defs.append(QStringLiteral("<mask id=\"%1\" maskUnits=\"userSpaceOnUse\" x=\"%2\" y=\"%3\" width=\"%4\" "
+                                "height=\"%5\" mask-type=\"alpha\">%6</mask>")
+                    .arg(mid)
+                    .arg(fmtNum(region.left()))
+                    .arg(fmtNum(region.top()))
+                    .arg(fmtNum(region.width()))
+                    .arg(fmtNum(region.height()))
+                    .arg(inner));
+    return QStringLiteral("mask=\"url(#%1)\"").arg(mid);
+}
+
 // Two-stop linear gradient in the shape's local coords (same space as
 // the path data, so the transform applies to both like QPainter's
 // logical-mode brush).
@@ -598,9 +729,18 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
     }
     // No anim blob rides along, so the frame holds base values.
     const QList<QVariantMap> work = sampleFrame(subset, 0.0);
+    QMap<int, QVariantMap> workByUid;
+    for (const QVariantMap &m : work) {
+        const int uid = m.value(QStringLiteral("uid"), -1).toInt();
+        if (uid >= 0)
+            workByUid[uid] = m;
+    }
+    const QMap<int, QList<int>> maskMap = maskMapForWork(subset, work);
     QList<QVariantMap> paint;
     paint.reserve(work.size());
     for (const QVariantMap &m : work) {
+        if (isMaskMap(m))
+            continue;
         const int uid = m.value(QStringLiteral("uid"), -1).toInt();
         const int srcIdx = leafIndex.value(uid, -1);
         const bool ancVis = srcIdx >= 0 ? leaves.at(srcIdx).ancestorsVisible : true;
@@ -641,6 +781,7 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
     int gradSeq = 0;
     int clipSeq = 0;
     int fxSeq = 0;
+    int maskSeq = 0;
 
     // Leaves arrive top-first; emit bottom-first so document order
     // paints the selection correctly.
@@ -679,6 +820,30 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
             gAttrs.append(QStringLiteral("filter=\"url(#%1)\"").arg(fxId));
         const QString gOpen = gAttrs.isEmpty() ? QStringLiteral("<g>")
                                                : QStringLiteral("<g %1>").arg(gAttrs.join(QLatin1Char(' ')));
+
+        // Mask wraps (nearest first, nesting intersects like the PNG
+        // DestinationIn chain). Degenerate silhouettes hide the leaf,
+        // matching the rasterizer's empty-mask transparency.
+        const int muid = m.value(QStringLiteral("uid"), -1).toInt();
+        QString maskPre, maskPost;
+        bool maskHide = false;
+        for (int mid : maskMap.value(muid)) {
+            const QVariantMap mm = workByUid.value(mid);
+            if (mm.isEmpty() || !mm.value(QStringLiteral("visible"), true).toBool())
+                continue;
+            const int mSrc = leafIndex.value(mid, -1);
+            if (mSrc >= 0 && !leaves.at(mSrc).ancestorsVisible)
+                continue;
+            const QString ref = buildSvgMask(mm, bounds, defs, maskSeq);
+            if (ref.isEmpty()) {
+                maskHide = true;
+                break;
+            }
+            maskPre += QStringLiteral("<g %1>").arg(ref);
+            maskPost.prepend(QStringLiteral("</g>"));
+        }
+        if (maskHide)
+            continue;
 
         if (shapeType == QLatin1String("text")) {
             const QString content = str(m, "textContent");
@@ -751,7 +916,7 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                 }
             }
             const QStringList lines = content.split(QLatin1Char('\n'));
-            QString el = gOpen + QStringLiteral("<text %1>").arg(tAttrs.join(QLatin1Char(' ')));
+            QString el = gOpen + maskPre + QStringLiteral("<text %1>").arg(tAttrs.join(QLatin1Char(' ')));
             for (int li2 = 0; li2 < lines.size(); ++li2) {
                 if (li2 == 0) {
                     el += xmlEscape(lines.at(li2));
@@ -762,7 +927,7 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                               .arg(xmlEscape(lines.at(li2)));
                 }
             }
-            el += QStringLiteral("</text></g>");
+            el += QStringLiteral("</text>") + maskPost + QStringLiteral("</g>");
             body.append(el);
             continue;
         }
@@ -788,27 +953,29 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
             if (bytes.isEmpty() || mime.isEmpty()) {
                 // Missing blobs paint a neutral box so broken imports
                 // never vanish silently (same rule as the PNG path).
-                body.append(gOpen
-                    + QStringLiteral("<rect x=\"%1\" y=\"%2\" width=\"%3\" height=\"%4\" fill=\"#d9d9d9\"/></g>")
+                body.append(gOpen + maskPre
+                    + QStringLiteral("<rect x=\"%1\" y=\"%2\" width=\"%3\" height=\"%4\" fill=\"#d9d9d9\"/>")
                           .arg(fmtNum(x))
                           .arg(fmtNum(y))
                           .arg(fmtNum(w))
-                          .arg(fmtNum(h)));
+                          .arg(fmtNum(h))
+                    + maskPost + QStringLiteral("</g>"));
                 continue;
             }
             const QString href = QStringLiteral("data:%1;base64,%2>")
                                      .arg(mime)
                                      .arg(QString::fromLatin1(bytes.toBase64()));
             // Note: href (SVG2) over xlink:href for modern viewers.
-            body.append(gOpen
+            body.append(gOpen + maskPre
                 + QStringLiteral("<image x=\"%1\" y=\"%2\" width=\"%3\" height=\"%4\" preserveAspectRatio=\"none\"%5 "
-                                 "href=\"%6\"/></g>")
+                                 "href=\"%6\"/>")
                       .arg(fmtNum(x))
                       .arg(fmtNum(y))
                       .arg(fmtNum(w))
                       .arg(fmtNum(h))
                       .arg(clipAttr)
-                      .arg(href));
+                      .arg(href)
+                + maskPost + QStringLiteral("</g>"));
             continue;
         }
 
@@ -884,10 +1051,10 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
         }
         if (layers.isEmpty())
             continue;
-        QString el = gOpen;
+        QString el = gOpen + maskPre;
         for (const QString &layer : layers)
             el += layer;
-        el += QStringLiteral("</g>");
+        el += maskPost + QStringLiteral("</g>");
         body.append(el);
     }
 

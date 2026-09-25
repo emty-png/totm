@@ -87,6 +87,13 @@ Item {
     property bool shapeLocked: false
     property int paintDepth: 0
     property real zoom: 1
+    // Mask role: never paints (export skips isMask leaves too), but
+    // stays hit-testable so the shape remains selectable/editable.
+    // Masked content hides its GPU paint the same way and lands on
+    // the CPU MaskLeafItem instead, so preview matches export.
+    property bool isMaskShape: false
+    property bool isMaskedContent: false
+    readonly property bool paintHidden: shape.isMaskShape === true || shape.isMaskedContent === true
     // False for non-interactive paint reuse (drag-preview ghost): the
     // MouseArea below goes blind so canvas gestures pass through.
     property bool interactive: true
@@ -205,7 +212,7 @@ Item {
     // inside); center/outside/gradient/dashed stacks ride EffectItem.
     Rectangle {
         anchors.fill: parent
-        visible: shape.shapeType === "rectangle" && !shape.independentCorners && !shape.useEffectPaint
+        visible: shape.shapeType === "rectangle" && !shape.independentCorners && !shape.useEffectPaint && !shape.paintHidden
         color: shape.firstFill ? shape.firstFillColor : "transparent"
         radius: shape.radius
         border.width: shape.firstStroke && shape.rectFastStroke ? Number(shape.firstStroke.width) || 0 : 0
@@ -230,7 +237,7 @@ Item {
         y: -effectPaint.pad
         width: shape.sw + effectPaint.pad * 2
         height: shape.sh + effectPaint.pad * 2
-        visible: shape.useEffectPaint
+        visible: shape.useEffectPaint && !shape.paintHidden
         opacity: shape.shapeOpacity
         shapeType: shape.shapeType
         boxW: shape.sw
@@ -282,7 +289,7 @@ Item {
 
         anchors.fill: parent
         z: -1
-        visible: shape.hasBackgroundBlur && shape.backdropItem !== null && !shape.isBackdropCapture
+        visible: shape.hasBackgroundBlur && shape.backdropItem !== null && !shape.isBackdropCapture && !shape.paintHidden
         clip: true
         // Leaf opacity applies to the fill above, never the backdrop
         // (matches the exporter, which resets opacity for the tile).
@@ -372,7 +379,7 @@ Item {
     // Images paint separately below, so they never reach the vector path.
     Shape {
         anchors.fill: parent
-        visible: ((shape.shapeType !== "rectangle" && shape.shapeType !== "text" && shape.shapeType !== "image") || (shape.shapeType === "rectangle" && shape.independentCorners)) && !shape.useEffectPaint
+        visible: (((shape.shapeType !== "rectangle" && shape.shapeType !== "text" && shape.shapeType !== "image") || (shape.shapeType === "rectangle" && shape.independentCorners)) && !shape.useEffectPaint) && !shape.paintHidden
         antialiasing: true
         opacity: shape.shapeOpacity
         transform: Scale {
@@ -401,7 +408,7 @@ Item {
         id: textRoot
 
         anchors.fill: parent
-        visible: shape.shapeType === "text" && !shape.editing
+        visible: shape.shapeType === "text" && !shape.editing && !shape.paintHidden
         opacity: shape.shapeOpacity
         transform: Scale {
             xScale: shape.flipH ? -1 : 1
@@ -480,7 +487,7 @@ Item {
     // tile (no outline, like the export ghost). Hidden while editing.
     GrainOverlay {
         anchors.fill: parent
-        visible: shape.hasGrain && shape.shapeType === "text" && !shape.editing
+        visible: shape.hasGrain && shape.shapeType === "text" && !shape.editing && !shape.paintHidden
         opacity: shape.shapeOpacity
         uid: shape.uid
         frameNo: shape.grainFrame
@@ -518,7 +525,7 @@ Item {
         id: imageRoot
 
         anchors.fill: parent
-        visible: shape.shapeType === "image"
+        visible: shape.shapeType === "image" && !shape.paintHidden
         opacity: shape.shapeOpacity
         transform: Scale {
             xScale: shape.flipH ? -1 : 1
@@ -706,7 +713,7 @@ Item {
     // scales dot alpha like the exporter.
     GrainOverlay {
         anchors.fill: parent
-        visible: shape.hasGrain && shape.shapeType !== "text"
+        visible: shape.hasGrain && shape.shapeType !== "text" && !shape.paintHidden
         opacity: shape.shapeOpacity
         uid: shape.uid
         frameNo: shape.grainFrame

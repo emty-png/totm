@@ -62,12 +62,24 @@ QtObject {
                 name: qsTr("Type"),
                 category: qsTr("Text"),
                 defaultEasing: "linear"
+            },
+            {
+                id: "maskWipe",
+                name: qsTr("Mask Wipe"),
+                category: qsTr("Mask"),
+                defaultEasing: "easeOut"
+            },
+            {
+                id: "maskIris",
+                name: qsTr("Mask Iris"),
+                category: qsTr("Mask"),
+                defaultEasing: "easeOut"
             }
         ];
     }
 
     function presetIds() {
-        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customStrokeGradient", "customFontSize", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "maskWipe", "maskIris", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customStrokeGradient", "customFontSize", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
     }
 
     // Stepped presets render as one diamond at t0 with a locked 0.1s
@@ -92,6 +104,8 @@ QtObject {
             "twist": qsTr("Twist"),
             "movescale": qsTr("Move & Scale"),
             "type": qsTr("Type"),
+            "maskWipe": qsTr("Mask Wipe"),
+            "maskIris": qsTr("Mask Iris"),
             "customScale": qsTr("Scale"),
             "customRotate": qsTr("Rotate"),
             "customMove": qsTr("Move"),
@@ -175,6 +189,15 @@ QtObject {
             unit: "letters",
             cps: 20,
             cursor: false
+        },
+        "maskWipe": {
+            direction: "left",
+            feather: 0,
+            invert: false
+        },
+        "maskIris": {
+            feather: 0,
+            invert: false
         },
         "customScale": {
             from: 0,
@@ -424,6 +447,8 @@ QtObject {
             "twist": presets._normalizeTwist,
             "movescale": presets._normalizeMovescale,
             "type": presets._normalizeType,
+            "maskWipe": presets._normalizeMaskWipe,
+            "maskIris": presets._normalizeMaskIris,
             "customScale": presets._normalizeCustomScale,
             "customRotate": presets._normalizeCustomRotate,
             "customMove": presets._normalizeCustomMove,
@@ -483,6 +508,85 @@ QtObject {
             cps: clampNum(r.cps !== undefined ? r.cps : 20, 20, 1, 120),
             cursor: r.cursor === true
         };
+    }
+
+    function maskWipeDirection(v) {
+        return v === "right" || v === "up" || v === "down" ? v : "left";
+    }
+
+    // Keyframe list for mask clips: [{t, value:{x,y,w,h,rotation,
+    // opacity,feather,invert}, easing:{id,bezier}}]. t is clip-local
+    // 0..1, values are absolute (base-relative boxes resolve at sample
+    // time). Sorted by t, capped at 32; entries missing t/value drop.
+    // One key stores (so the first + press shows a row) but only 2+
+    // drive interpolation; shorter lists read as plain from-to, so old
+    // clips without keys never gain them on rebuild.
+    function normalizeMaskKeys(r) {
+        var raw = r && r.keys;
+        if (!raw || typeof raw.length !== "number" || raw.length < 1)
+            return undefined;
+        var out = [];
+        for (var i = 0; i < raw.length && out.length < 32; i++) {
+            var k = raw[i] || {};
+            var t = Number(k.t);
+            if (isNaN(t))
+                continue;
+            t = Math.min(1, Math.max(0, t));
+            var v = k.value || {};
+            var entry = {
+                t: Math.round(t * 1000) / 1000,
+                value: {}
+            };
+            if (v.x !== undefined)
+                entry.value.x = clampNum(v.x, 0, -4000, 4000);
+            if (v.y !== undefined)
+                entry.value.y = clampNum(v.y, 0, -4000, 4000);
+            if (v.w !== undefined)
+                entry.value.w = clampNum(v.w, 10, 0.01, 4000);
+            if (v.h !== undefined)
+                entry.value.h = clampNum(v.h, 10, 0.01, 4000);
+            if (v.rotation !== undefined)
+                entry.value.rotation = clampNum(v.rotation, 0, -1440, 1440);
+            if (v.opacity !== undefined)
+                entry.value.opacity = normalizeOpacity(v.opacity, 1);
+            if (v.feather !== undefined)
+                entry.value.feather = clampNum(v.feather, 0, 0, 100);
+            if (v.invert !== undefined)
+                entry.value.invert = v.invert === true;
+            var ez = k.easing || {};
+            entry.easing = {
+                id: typeof ez.id === "string" && ez.id !== "" ? ez.id : "easeOut",
+                bezier: ez.bezier
+            };
+            out.push(entry);
+        }
+        if (out.length < 1)
+            return undefined;
+        out.sort((a, b) => a.t - b.t);
+        return out;
+    }
+
+    function _normalizeMaskWipe(r) {
+        var o = {
+            direction: maskWipeDirection(r.direction !== undefined ? r.direction : "left"),
+            feather: clampNum(r.feather !== undefined ? r.feather : 0, 0, 0, 100),
+            invert: r.invert === true
+        };
+        var keys = normalizeMaskKeys(r);
+        if (keys !== undefined)
+            o.keys = keys;
+        return o;
+    }
+
+    function _normalizeMaskIris(r) {
+        var o = {
+            feather: clampNum(r.feather !== undefined ? r.feather : 0, 0, 0, 100),
+            invert: r.invert === true
+        };
+        var keys = normalizeMaskKeys(r);
+        if (keys !== undefined)
+            o.keys = keys;
+        return o;
     }
 
     function _normalizeCustomScale(r) {

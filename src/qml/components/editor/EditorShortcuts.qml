@@ -239,6 +239,30 @@ Item {
     }
 
     Shortcut {
+        sequences: ["Ctrl+Alt+M"]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            var d = shortcuts.doc();
+            if (d && d.canUseAsMask())
+                d.useAsMask();
+        }
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+Alt+Shift+M"]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            var d = shortcuts.doc();
+            if (d && d.canReleaseMask())
+                d.releaseMask();
+        }
+    }
+
+    Shortcut {
         sequences: [ShortcutState.arrangeFront]
         enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
         onActivated: {

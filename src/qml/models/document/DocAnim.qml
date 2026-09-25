@@ -559,6 +559,24 @@ QtObject {
                     });
                 }
                 o[k] = pts;
+            } else if (k === "keys" && Array.isArray(s[k])) {
+                // Mask keyframes: deep-copy so duplicate/paste/undo
+                // never alias the source list.
+                var keys = [];
+                for (var j = 0; j < s[k].length; j++) {
+                    var kk = s[k][j] || {};
+                    var kv = kk.value || {};
+                    var ke = kk.easing || {};
+                    keys.push({
+                        t: kk.t,
+                        value: JSON.parse(JSON.stringify(kv)),
+                        easing: {
+                            id: ke.id,
+                            bezier: ke.bezier ? ke.bezier.slice() : ke.bezier
+                        }
+                    });
+                }
+                o[k] = keys;
             } else {
                 o[k] = s[k];
             }

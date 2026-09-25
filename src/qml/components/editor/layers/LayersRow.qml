@@ -18,6 +18,7 @@ Item {
     property bool isGroup: false
     property bool nodeExpanded: true
     property int indent: 0
+    property bool isMaskRow: false
     property var togglePolicy: null
     property string editOrig: ""
     property var clickPolicy: null
@@ -125,6 +126,14 @@ Item {
                 if (rowRoot.cancelPolicy)
                     rowRoot.cancelPolicy(rowRoot.rowUid);
             }
+        }
+
+        Text {
+            Layout.alignment: Qt.AlignVCenter
+            visible: rowRoot.isMaskRow && !rowRoot.isGroup
+            text: qsTr("Mask")
+            font.pixelSize: 11
+            color: AppTheme.muted
         }
 
         LayerToggles {
