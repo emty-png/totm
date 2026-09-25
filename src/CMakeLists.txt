@@ -166,7 +166,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ClipSpinOptions.qml
         qml/components/editor/properties/ClipTextOptions.qml
         qml/components/editor/properties/ClipMaskOptions.qml
-        qml/components/editor/properties/ClipMaskKeys.qml
+        qml/components/editor/properties/ClipKeys.qml
         qml/components/editor/properties/ClipTimingOptions.qml
         qml/components/editor/properties/EasingGraph.qml
         qml/components/editor/properties/GraphEditorPopup.qml

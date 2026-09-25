@@ -88,6 +88,17 @@ QtObject {
         return presetId === "appear" || presetId === "customHide" || presetId === "customFlip";
     }
 
+    // Keyframeable presets: custom from-to clips plus mask reveals.
+    // Stepped clips (appear/hide/flip), path clips (own pts geometry)
+    // and non-custom presets stay from-to only.
+    function isKeyframeable(presetId) {
+        if (presetId === "maskWipe" || presetId === "maskIris")
+            return true;
+        if (!isCustom(presetId))
+            return false;
+        return presetId !== "customHide" && presetId !== "customFlip" && presetId !== "customPath";
+    }
+
     // Custom from-to clips reuse the preset pipeline; later clips win
     // per property, matching Figma Smart Animate merge behavior.
     function isCustom(presetId) {
@@ -514,14 +525,18 @@ QtObject {
         return v === "right" || v === "up" || v === "down" ? v : "left";
     }
 
-    // Keyframe list for mask clips: [{t, value:{x,y,w,h,rotation,
-    // opacity,feather,invert}, easing:{id,bezier}}]. t is clip-local
-    // 0..1, values are absolute (base-relative boxes resolve at sample
-    // time). Sorted by t, capped at 32; entries missing t/value drop.
-    // One key stores (so the first + press shows a row) but only 2+
-    // drive interpolation; shorter lists read as plain from-to, so old
-    // clips without keys never gain them on rebuild.
+    // Keyframe lists for keyframeable clips: [{t, value:{...},
+    // easing:{id,bezier}}]. t is clip-local 0..1, values are canonical
+    // per-preset fields (see _normalizeKeyValue). Sorted by t, capped
+    // at 32; entries missing t/value drop. One key stores (so the first
+    // + press shows a row) but only 2+ drive interpolation; shorter
+    // lists read as plain from-to, so old clips without keys never gain
+    // them on rebuild.
     function normalizeMaskKeys(r) {
+        return normalizeKeysFor("maskWipe", r);
+    }
+
+    function normalizeKeysFor(presetId, r) {
         var raw = r && r.keys;
         if (!raw || typeof raw.length !== "number" || raw.length < 1)
             return undefined;
@@ -532,38 +547,140 @@ QtObject {
             if (isNaN(t))
                 continue;
             t = Math.min(1, Math.max(0, t));
-            var v = k.value || {};
-            var entry = {
-                t: Math.round(t * 1000) / 1000,
-                value: {}
-            };
-            if (v.x !== undefined)
-                entry.value.x = clampNum(v.x, 0, -4000, 4000);
-            if (v.y !== undefined)
-                entry.value.y = clampNum(v.y, 0, -4000, 4000);
-            if (v.w !== undefined)
-                entry.value.w = clampNum(v.w, 10, 0.01, 4000);
-            if (v.h !== undefined)
-                entry.value.h = clampNum(v.h, 10, 0.01, 4000);
-            if (v.rotation !== undefined)
-                entry.value.rotation = clampNum(v.rotation, 0, -1440, 1440);
-            if (v.opacity !== undefined)
-                entry.value.opacity = normalizeOpacity(v.opacity, 1);
-            if (v.feather !== undefined)
-                entry.value.feather = clampNum(v.feather, 0, 0, 100);
-            if (v.invert !== undefined)
-                entry.value.invert = v.invert === true;
+            var v = presets._normalizeKeyValue(presetId, k.value || {});
+            if (!v)
+                continue;
             var ez = k.easing || {};
-            entry.easing = {
-                id: typeof ez.id === "string" && ez.id !== "" ? ez.id : "easeOut",
-                bezier: ez.bezier
-            };
-            out.push(entry);
+            out.push({
+                t: Math.round(t * 1000) / 1000,
+                value: v,
+                easing: {
+                    id: typeof ez.id === "string" && ez.id !== "" ? ez.id : "easeOut",
+                    bezier: ez.bezier
+                }
+            });
         }
         if (out.length < 1)
             return undefined;
         out.sort((a, b) => a.t - b.t);
         return out;
+    }
+
+    function _keyNum(v, fallback, lo, hi) {
+        if (v === undefined)
+            return undefined;
+        var n = Number(v);
+        if (isNaN(n))
+            return fallback;
+        return Math.min(hi, Math.max(lo, n));
+    }
+
+    // Per-preset canonical key value. Only known fields survive; partial
+    // values are fine (missing fields fall back at sample time). Returns
+    // null when nothing usable was stored.
+    function _normalizeKeyValue(presetId, v) {
+        var o = {};
+        var n = 0;
+        function put(k, val) {
+            if (val !== undefined) {
+                o[k] = val;
+                n++;
+            }
+        }
+        if (presetId === "maskWipe" || presetId === "maskIris") {
+            put("x", _keyNum(v.x, 0, -4000, 4000));
+            put("y", _keyNum(v.y, 0, -4000, 4000));
+            put("w", v.w !== undefined ? clampNum(v.w, 10, 0.01, 4000) : undefined);
+            put("h", v.h !== undefined ? clampNum(v.h, 10, 0.01, 4000) : undefined);
+            put("rotation", _keyNum(v.rotation, 0, -1440, 1440));
+            put("opacity", v.opacity !== undefined ? normalizeOpacity(v.opacity, 1) : undefined);
+            put("feather", v.feather !== undefined ? clampNum(v.feather, 0, 0, 100) : undefined);
+            if (v.invert !== undefined) {
+                o.invert = v.invert === true;
+                n++;
+            }
+        } else if (presetId === "customMove") {
+            put("dx", _keyNum(v.dx !== undefined ? v.dx : v.x, 0, -2000, 2000));
+            put("dy", _keyNum(v.dy !== undefined ? v.dy : v.y, 0, -2000, 2000));
+            // Accept legacy absolute-style captures storing x/y offsets.
+            if (o.dx === undefined && o.dy === undefined)
+                return null;
+            if (o.dx === undefined) {
+                o.dx = 0;
+                n++;
+            }
+            if (o.dy === undefined) {
+                o.dy = 0;
+                n++;
+            }
+        } else if (presetId === "customScale") {
+            put("s", v.s !== undefined ? clampNum(v.s, 0.001, 0.001, 10) : undefined);
+        } else if (presetId === "customRotate") {
+            put("r", v.r !== undefined ? clampNum(v.r, 0, -1440, 1440) : undefined);
+        } else if (presetId === "customOpacity") {
+            put("v", v.v !== undefined ? clampNum(v.v, 0, 0, 1) : undefined);
+        } else if (presetId === "customResize") {
+            put("w", v.w !== undefined ? clampNum(v.w, 10, 1, 4000) : undefined);
+            put("h", v.h !== undefined ? clampNum(v.h, 10, 1, 4000) : undefined);
+        } else if (presetId === "customCorner" || presetId === "customFontSize") {
+            put("v", v.v !== undefined ? clampNum(v.v, 0, presetId === "customFontSize" ? 1 : 0, presetId === "customFontSize" ? 500 : 500) : undefined);
+        } else if (presetId === "customColor" || presetId === "customStrokeColor") {
+            if (v.color !== undefined)
+                put("color", normalizeHex(v.color, "#000000"));
+            put("opacity", v.opacity !== undefined ? normalizeOpacity(v.opacity, 1) : undefined);
+        } else if (presetId === "customGradient" || presetId === "customStrokeGradient") {
+            if (v.c1 !== undefined)
+                put("c1", normalizeHex(v.c1, "#000000"));
+            if (v.c2 !== undefined)
+                put("c2", normalizeHex(v.c2, "#ffffff"));
+            put("angle", v.angle !== undefined ? clampNum(v.angle, 90, 0, 360) : undefined);
+            put("opacity", v.opacity !== undefined ? normalizeOpacity(v.opacity, 1) : undefined);
+            if (presetId === "customStrokeGradient") {
+                put("width", v.width !== undefined ? clampNum(v.width, 0, 0, 100) : undefined);
+                put("dash", v.dash !== undefined ? clampNum(v.dash, 0, 0, 100) : undefined);
+                put("gap", v.gap !== undefined ? clampNum(v.gap, 0, 0, 100) : undefined);
+                if (v.position !== undefined)
+                    put("position", normalizeStrokePosition(v.position));
+            }
+        } else if (presetId === "customStroke") {
+            put("width", v.width !== undefined ? clampNum(v.width, 0, 0, 100) : undefined);
+            put("opacity", v.opacity !== undefined ? normalizeOpacity(v.opacity, 1) : undefined);
+            put("dash", v.dash !== undefined ? clampNum(v.dash, 0, 0, 100) : undefined);
+            put("gap", v.gap !== undefined ? clampNum(v.gap, 0, 0, 100) : undefined);
+            if (v.position !== undefined)
+                put("position", normalizeStrokePosition(v.position));
+        } else if (presetId === "customShadow" || presetId === "customGlow") {
+            if (v.color !== undefined)
+                put("color", normalizeHexA(v.color, presetId === "customShadow" ? "#80000000" : "#cc00ffff"));
+            if (presetId === "customShadow") {
+                put("x", _keyNum(v.x, 0, -500, 500));
+                put("y", _keyNum(v.y, 0, -500, 500));
+            }
+            put("blur", v.blur !== undefined ? clampNum(v.blur, 0, 0, 100) : undefined);
+            put("spread", v.spread !== undefined ? clampNum(v.spread, 0, 0, 50) : undefined);
+            if (v.inner !== undefined) {
+                o.inner = v.inner === true;
+                n++;
+            }
+        } else if (presetId === "customLayerBlur" || presetId === "customBackgroundBlur") {
+            put("radius", v.radius !== undefined ? clampNum(v.radius, 0, 0, 100) : undefined);
+            put("opacity", v.opacity !== undefined ? normalizeOpacity(v.opacity, 1) : undefined);
+        } else if (presetId === "customGrain") {
+            put("amount", v.amount !== undefined ? clampNum(v.amount, 0, 0, 1) : undefined);
+            put("size", v.size !== undefined ? clampNum(v.size, 2, 1, 10) : undefined);
+        } else {
+            return null;
+        }
+        return n > 0 ? o : null;
+    }
+
+    function _withKeys(presetId, o, r) {
+        if (!isKeyframeable(presetId))
+            return o;
+        var keys = normalizeKeysFor(presetId, r);
+        if (keys !== undefined)
+            o.keys = keys;
+        return o;
     }
 
     function _normalizeMaskWipe(r) {
@@ -572,10 +689,7 @@ QtObject {
             feather: clampNum(r.feather !== undefined ? r.feather : 0, 0, 0, 100),
             invert: r.invert === true
         };
-        var keys = normalizeMaskKeys(r);
-        if (keys !== undefined)
-            o.keys = keys;
-        return o;
+        return _withKeys("maskWipe", o, r);
     }
 
     function _normalizeMaskIris(r) {
@@ -583,40 +697,41 @@ QtObject {
             feather: clampNum(r.feather !== undefined ? r.feather : 0, 0, 0, 100),
             invert: r.invert === true
         };
-        var keys = normalizeMaskKeys(r);
-        if (keys !== undefined)
-            o.keys = keys;
-        return o;
+        return _withKeys("maskIris", o, r);
     }
 
     function _normalizeCustomScale(r) {
-        return {
+        var o = {
             from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 10),
             to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 10)
         };
+        return _withKeys("customScale", o, r);
     }
 
     function _normalizeCustomRotate(r) {
-        return {
+        var o = {
             from: clampNum(r.from !== undefined ? r.from : 0, 0, -1440, 1440),
             to: clampNum(r.to !== undefined ? r.to : 90, 90, -1440, 1440)
         };
+        return _withKeys("customRotate", o, r);
     }
 
     function _normalizeCustomMove(r) {
-        return {
+        var o = {
             fromX: clampNum(r.fromX !== undefined ? r.fromX : 0, 0, -2000, 2000),
             fromY: clampNum(r.fromY !== undefined ? r.fromY : 0, 0, -2000, 2000),
             toX: clampNum(r.toX !== undefined ? r.toX : 200, 200, -2000, 2000),
             toY: clampNum(r.toY !== undefined ? r.toY : 0, 0, -2000, 2000)
         };
+        return _withKeys("customMove", o, r);
     }
 
     function _normalizeCustomOpacity(r) {
-        return {
+        var o = {
             from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 1),
             to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 1)
         };
+        return _withKeys("customOpacity", o, r);
     }
 
     function _normalizeCustomColor(r) {
@@ -630,7 +745,7 @@ QtObject {
         }
         if (r.fillIndex !== undefined)
             co.fillIndex = normalizeEntryIndex(r.fillIndex);
-        return co;
+        return _withKeys("customColor", co, r);
     }
 
     function _normalizeCustomGradient(r) {
@@ -648,7 +763,7 @@ QtObject {
         }
         if (r.fillIndex !== undefined)
             cg.fillIndex = normalizeEntryIndex(r.fillIndex);
-        return cg;
+        return _withKeys("customGradient", cg, r);
     }
 
     function _normalizeCustomHide(r) {
@@ -659,19 +774,21 @@ QtObject {
     }
 
     function _normalizeCustomResize(r) {
-        return {
+        var o = {
             fromW: clampNum(r.fromW !== undefined ? r.fromW : 100, 100, 1, 4000),
             fromH: clampNum(r.fromH !== undefined ? r.fromH : 100, 100, 1, 4000),
             toW: clampNum(r.toW !== undefined ? r.toW : 200, 200, 1, 4000),
             toH: clampNum(r.toH !== undefined ? r.toH : 200, 200, 1, 4000)
         };
+        return _withKeys("customResize", o, r);
     }
 
     function _normalizeCustomCorner(r) {
-        return {
+        var o = {
             from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 500),
             to: clampNum(r.to !== undefined ? r.to : 24, 24, 0, 500)
         };
+        return _withKeys("customCorner", o, r);
     }
 
     function _normalizeCustomStroke(r) {
@@ -695,7 +812,7 @@ QtObject {
         }
         if (r.strokeIndex !== undefined)
             cs.strokeIndex = normalizeEntryIndex(r.strokeIndex);
-        return cs;
+        return _withKeys("customStroke", cs, r);
     }
 
     function _normalizeCustomStrokeColor(r) {
@@ -709,7 +826,7 @@ QtObject {
         }
         if (r.strokeIndex !== undefined)
             cc.strokeIndex = normalizeEntryIndex(r.strokeIndex);
-        return cc;
+        return _withKeys("customStrokeColor", cc, r);
     }
 
     function _normalizeCustomStrokeGradient(r) {
@@ -739,14 +856,15 @@ QtObject {
         }
         if (r.strokeIndex !== undefined)
             sg.strokeIndex = normalizeEntryIndex(r.strokeIndex);
-        return sg;
+        return _withKeys("customStrokeGradient", sg, r);
     }
 
     function _normalizeCustomFontSize(r) {
-        return {
+        var o = {
             from: clampNum(r.from !== undefined ? r.from : 16, 16, 1, 500),
             to: clampNum(r.to !== undefined ? r.to : 32, 32, 1, 500)
         };
+        return _withKeys("customFontSize", o, r);
     }
 
     function _normalizeCustomFlip(r) {
@@ -772,25 +890,27 @@ QtObject {
         };
         if (r.shadowIndex !== undefined)
             sh.shadowIndex = normalizeEntryIndex(r.shadowIndex);
-        return sh;
+        return _withKeys("customShadow", sh, r);
     }
 
     function _normalizeCustomLayerBlur(r) {
-        return {
+        var o = {
             fromRadius: clampNum(r.fromRadius !== undefined ? r.fromRadius : 0, 0, 0, 100),
             toRadius: clampNum(r.toRadius !== undefined ? r.toRadius : 12, 12, 0, 100),
             fromOpacity: clampNum(r.fromOpacity !== undefined ? r.fromOpacity : 1, 1, 0, 1),
             toOpacity: clampNum(r.toOpacity !== undefined ? r.toOpacity : 1, 1, 0, 1)
         };
+        return _withKeys("customLayerBlur", o, r);
     }
 
     function _normalizeCustomBackgroundBlur(r) {
-        return {
+        var o = {
             fromRadius: clampNum(r.fromRadius !== undefined ? r.fromRadius : 0, 0, 0, 100),
             toRadius: clampNum(r.toRadius !== undefined ? r.toRadius : 16, 16, 0, 100),
             fromOpacity: clampNum(r.fromOpacity !== undefined ? r.fromOpacity : 0.7, 0.7, 0, 1),
             toOpacity: clampNum(r.toOpacity !== undefined ? r.toOpacity : 0.7, 0.7, 0, 1)
         };
+        return _withKeys("customBackgroundBlur", o, r);
     }
 
     function _normalizeCustomGlow(r) {
@@ -806,16 +926,17 @@ QtObject {
         };
         if (r.glowIndex !== undefined)
             gl.glowIndex = normalizeEntryIndex(r.glowIndex);
-        return gl;
+        return _withKeys("customGlow", gl, r);
     }
 
     function _normalizeCustomGrain(r) {
-        return {
+        var o = {
             fromAmount: clampNum(r.fromAmount !== undefined ? r.fromAmount : 0, 0, 0, 1),
             toAmount: clampNum(r.toAmount !== undefined ? r.toAmount : 0.5, 0.5, 0, 1),
             fromSize: clampNum(r.fromSize !== undefined ? r.fromSize : 2, 2, 1, 10),
             toSize: clampNum(r.toSize !== undefined ? r.toSize : 2, 2, 1, 10)
         };
+        return _withKeys("customGrain", o, r);
     }
 
     function _normalizeCustomPath(r) {

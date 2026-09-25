@@ -287,16 +287,19 @@ ScrollView {
             }
         }
 
-        // Mask keyframes (header add button captures the live box).
+        // Keyframes (header add button captures the live look at the
+        // playhead). Available on mask reveals and custom from-to clips;
+        // one key stores, two or more drive multi-stop motion with
+        // per-key easing. From-to stays as the fallback.
         PanelSection {
             width: parent.width
             title: qsTr("Keyframes")
-            visible: !!editor.clipData && (editor.clipData.preset === "maskWipe" || editor.clipData.preset === "maskIris")
+            visible: !!editor.clipData && !!editor.doc && editor.doc.anim.presets.isKeyframeable(editor.clipData.preset)
             showAdd: true
-            onAddClicked: maskKeys.addKey()
+            onAddClicked: clipKeys.addKey()
 
-            ClipMaskKeys {
-                id: maskKeys
+            ClipKeys {
+                id: clipKeys
 
                 Layout.fillWidth: true
                 doc: editor.doc

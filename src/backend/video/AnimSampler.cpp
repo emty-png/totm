@@ -1,6 +1,7 @@
 #include "AnimSampler.h"
 
 #include <QPointF>
+#include <QSet>
 #include <QtMath>
 
 #include <algorithm>
@@ -414,7 +415,8 @@ QVariantMap maskBelowIn(const QVariantList &list, int branchIndex) {
 // Keyed mask values at raw progress p over o["keys"] (clip-local
 // 0..1, absolute geometry). Bracketing segment eases by the target
 // key's easing. True when usable; value holds interpolated fields.
-// Mirrors DocAnimSample.maskKeysAt.
+// Mirrors DocAnimSample.maskKeysAt. Kept for masks; customs use the
+// generic interpolator below.
 bool maskKeysAt(const QVariantMap &o, double p, QVariantMap &value) {
     QVariantList keys = o.value(QStringLiteral("keys")).toList();
     if (keys.size() < 2)
@@ -471,6 +473,116 @@ bool maskKeysAt(const QVariantMap &o, double p, QVariantMap &value) {
         else
             value[QStringLiteral("invert")] = ke < 0.5 ? av.value(QStringLiteral("invert")).toBool()
                                                        : bv.value(QStringLiteral("invert")).toBool();
+    }
+    return true;
+}
+
+bool isHexLikeStr(const QString &s) {
+    QString t = s.trimmed().toLower();
+    if (t.startsWith(QLatin1Char('#')))
+        t = t.mid(1);
+    if (t.size() == 3 || t.size() == 6 || t.size() == 8) {
+        for (QChar c : t) {
+            if (!((c >= QLatin1Char('0') && c <= QLatin1Char('9')) || (c >= QLatin1Char('a') && c <= QLatin1Char('f'))))
+                return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+bool hasAlphaHexStr(const QString &s) {
+    QString t = s.trimmed().toLower();
+    if (t.startsWith(QLatin1Char('#')))
+        t = t.mid(1);
+    return t.size() == 8;
+}
+
+// Generic keyed values at raw progress p over o["keys"] (clip-local
+// 0..1). Numbers lerp, hex colors lerp (alpha-aware), bools/strings
+// step at the midpoint. Missing fields carry. True when 2+ keys.
+// Mirrors DocAnimSample.genericKeysAt.
+bool genericKeysAt(const QVariantMap &o, double p, QVariantMap &value) {
+    QVariantList keys = o.value(QStringLiteral("keys")).toList();
+    if (keys.size() < 2)
+        return false;
+    std::sort(keys.begin(), keys.end(), [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value(QStringLiteral("t"), 0.0).toDouble()
+            < b.toMap().value(QStringLiteral("t"), 0.0).toDouble();
+    });
+    const double p2 = qBound(0.0, p, 1.0);
+    QVariantMap a = keys.first().toMap(), b = keys.last().toMap();
+    if (p2 <= a.value(QStringLiteral("t"), 0.0).toDouble()) {
+        value = a.value(QStringLiteral("value")).toMap();
+        return true;
+    }
+    if (p2 >= b.value(QStringLiteral("t"), 1.0).toDouble()) {
+        value = b.value(QStringLiteral("value")).toMap();
+        return true;
+    }
+    for (int i = 0; i + 1 < keys.size(); ++i) {
+        const double t0 = keys.at(i).toMap().value(QStringLiteral("t"), 0.0).toDouble();
+        const double t1 = keys.at(i + 1).toMap().value(QStringLiteral("t"), 1.0).toDouble();
+        if (p2 >= t0 && p2 <= t1) {
+            a = keys.at(i).toMap();
+            b = keys.at(i + 1).toMap();
+            break;
+        }
+    }
+    const double at = a.value(QStringLiteral("t"), 0.0).toDouble();
+    const double bt = b.value(QStringLiteral("t"), 1.0).toDouble();
+    const double span = qMax(1e-6, bt - at);
+    const double raw = (p2 - at) / span;
+    const QVariantMap ez = b.value(QStringLiteral("easing")).toMap();
+    const double ke = Anims::easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
+        ez.value(QStringLiteral("bezier")).toList(), raw);
+    const QVariantMap av = a.value(QStringLiteral("value")).toMap();
+    const QVariantMap bv = b.value(QStringLiteral("value")).toMap();
+    QSet<QString> seen;
+    for (auto k : av.keys())
+        seen.insert(k);
+    for (auto k : bv.keys())
+        seen.insert(k);
+    for (const QString &k : seen) {
+        const bool hasA = av.contains(k), hasB = bv.contains(k);
+        if (!hasA) {
+            value[k] = bv.value(k);
+            continue;
+        }
+        if (!hasB) {
+            value[k] = av.value(k);
+            continue;
+        }
+        const QVariant va = av.value(k), vb = bv.value(k);
+        if (va.typeId() == QMetaType::Bool || vb.typeId() == QMetaType::Bool) {
+            value[k] = ke < 0.5 ? va.toBool() : vb.toBool();
+            continue;
+        }
+        const QString sa = va.toString(), sb = vb.toString();
+        const bool vaIsStr = va.typeId() == QMetaType::QString;
+        const bool vbIsStr = vb.typeId() == QMetaType::QString;
+        if (vaIsStr && vbIsStr && (isHexLikeStr(sa) || isHexLikeStr(sb))) {
+            QString cc;
+            if (hasAlphaHexStr(sa) || hasAlphaHexStr(sb))
+                cc = Anims::lerpColorA(sa, sb, ke);
+            else
+                cc = Anims::lerpColor(sa, sb, ke);
+            if (!cc.isEmpty()) {
+                value[k] = cc;
+                continue;
+            }
+        }
+        if (vaIsStr || vbIsStr) {
+            value[k] = ke < 0.5 ? va : vb;
+            continue;
+        }
+        bool okA = false, okB = false;
+        const double an = va.toDouble(&okA), bn = vb.toDouble(&okB);
+        if (!okA || !okB) {
+            value[k] = ke < 0.5 ? va : vb;
+            continue;
+        }
+        value[k] = an + (bn - an) * ke;
     }
     return true;
 }
@@ -590,7 +702,11 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             out[QStringLiteral("maskInverted")] = o.value(QStringLiteral("invert")).toBool();
         }
     } else if (preset == QLatin1String("customScale")) {
-        const double raw = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+        QVariantMap scKv;
+        const bool hasScKeys = genericKeysAt(o, p, scKv);
+        const double raw = hasScKeys && scKv.contains(QStringLiteral("s"))
+            ? scKv.value(QStringLiteral("s")).toDouble()
+            : num(o, "from") + (num(o, "to") - num(o, "from")) * e;
         const double sc = qMax(0.001, raw);
         out[QStringLiteral("x")] = cx + (bx - cx) * sc;
         out[QStringLiteral("y")] = cy + (by - cy) * sc;
@@ -600,17 +716,45 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         if (shapeType == QLatin1String("text") && num(base, "fontSize") > 0)
             out[QStringLiteral("fontSize")] = num(base, "fontSize") * sc;
     } else if (preset == QLatin1String("customRotate")) {
-        out[QStringLiteral("rotation")] = num(base, "rotation") + (num(o, "from") + (num(o, "to") - num(o, "from")) * e);
+        QVariantMap rotKv;
+        if (genericKeysAt(o, p, rotKv) && rotKv.contains(QStringLiteral("r")))
+            out[QStringLiteral("rotation")] = num(base, "rotation") + rotKv.value(QStringLiteral("r")).toDouble();
+        else
+            out[QStringLiteral("rotation")] = num(base, "rotation") + (num(o, "from") + (num(o, "to") - num(o, "from")) * e);
     } else if (preset == QLatin1String("customMove")) {
-        out[QStringLiteral("x")] = num(base, "x") + (num(o, "fromX") + (num(o, "toX") - num(o, "fromX")) * e);
-        out[QStringLiteral("y")] = num(base, "y") + (num(o, "fromY") + (num(o, "toY") - num(o, "fromY")) * e);
+        QVariantMap mvKv;
+        if (genericKeysAt(o, p, mvKv)) {
+            const double mdx = mvKv.contains(QStringLiteral("dx")) ? mvKv.value(QStringLiteral("dx")).toDouble()
+                : (mvKv.contains(QStringLiteral("x")) ? mvKv.value(QStringLiteral("x")).toDouble() : 0.0);
+            const double mdy = mvKv.contains(QStringLiteral("dy")) ? mvKv.value(QStringLiteral("dy")).toDouble()
+                : (mvKv.contains(QStringLiteral("y")) ? mvKv.value(QStringLiteral("y")).toDouble() : 0.0);
+            out[QStringLiteral("x")] = num(base, "x") + mdx;
+            out[QStringLiteral("y")] = num(base, "y") + mdy;
+        } else {
+            out[QStringLiteral("x")] = num(base, "x") + (num(o, "fromX") + (num(o, "toX") - num(o, "fromX")) * e);
+            out[QStringLiteral("y")] = num(base, "y") + (num(o, "fromY") + (num(o, "toY") - num(o, "fromY")) * e);
+        }
     } else if (preset == QLatin1String("customOpacity")) {
-        out[QStringLiteral("opacity")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+        QVariantMap opKv;
+        if (genericKeysAt(o, p, opKv) && opKv.contains(QStringLiteral("v")))
+            out[QStringLiteral("opacity")] = qBound(0.0, opKv.value(QStringLiteral("v")).toDouble(), 1.0);
+        else
+            out[QStringLiteral("opacity")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
     } else if (preset == QLatin1String("customColor")) {
         const int fIdx = entryIndexOf(o, "fillIndex");
-        const QString c = lerpColor(str(o, "from", QStringLiteral("#000000")), str(o, "to", QStringLiteral("#ff0000")), e);
+        QVariantMap colKv;
+        const bool hasColKeys = genericKeysAt(o, p, colKv);
+        const QString c = hasColKeys && colKv.contains(QStringLiteral("color"))
+            ? colKv.value(QStringLiteral("color")).toString()
+            : lerpColor(str(o, "from", QStringLiteral("#000000")), str(o, "to", QStringLiteral("#ff0000")), e);
         bool hasOp = false;
-        const double fo = lerpOpacityOpt(o, e, &hasOp);
+        double fo = 1.0;
+        if (hasColKeys && colKv.contains(QStringLiteral("opacity"))) {
+            hasOp = true;
+            fo = qBound(0.0, colKv.value(QStringLiteral("opacity")).toDouble(), 1.0);
+        } else {
+            fo = lerpOpacityOpt(o, e, &hasOp);
+        }
         if (fIdx == 0) {
             if (!c.isEmpty())
                 out[QStringLiteral("fill")] = c;
@@ -628,8 +772,14 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         out[QStringLiteral("visible")] = e < 0.5 ? o.value(QStringLiteral("fromVisible"), true).toBool()
                                                  : o.value(QStringLiteral("toVisible"), false).toBool();
     } else if (preset == QLatin1String("customResize")) {
-        const double nw = qMax(1.0, num(o, "fromW") + (num(o, "toW") - num(o, "fromW")) * e);
-        const double nh = qMax(1.0, num(o, "fromH") + (num(o, "toH") - num(o, "fromH")) * e);
+        QVariantMap rsKv;
+        const bool hasRsKeys = genericKeysAt(o, p, rsKv);
+        const double nw = hasRsKeys && rsKv.contains(QStringLiteral("w"))
+            ? qMax(1.0, rsKv.value(QStringLiteral("w")).toDouble())
+            : qMax(1.0, num(o, "fromW") + (num(o, "toW") - num(o, "fromW")) * e);
+        const double nh = hasRsKeys && rsKv.contains(QStringLiteral("h"))
+            ? qMax(1.0, rsKv.value(QStringLiteral("h")).toDouble())
+            : qMax(1.0, num(o, "fromH") + (num(o, "toH") - num(o, "fromH")) * e);
         const double lcx = num(base, "x") + num(base, "w") / 2.0;
         const double lcy = num(base, "y") + num(base, "h") / 2.0;
         out[QStringLiteral("x")] = lcx - nw / 2.0;
@@ -637,24 +787,50 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         out[QStringLiteral("w")] = nw;
         out[QStringLiteral("h")] = nh;
     } else if (preset == QLatin1String("customCorner")) {
-        out[QStringLiteral("radius")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+        QVariantMap cornKv;
+        if (genericKeysAt(o, p, cornKv) && cornKv.contains(QStringLiteral("v")))
+            out[QStringLiteral("radius")] = qMax(0.0, cornKv.value(QStringLiteral("v")).toDouble());
+        else
+            out[QStringLiteral("radius")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
     } else if (preset == QLatin1String("customStroke")) {
         const int sIdx = entryIndexOf(o, "strokeIndex");
-        const double w = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+        QVariantMap stKv;
+        const bool hasStKeys = genericKeysAt(o, p, stKv);
+        const double w = hasStKeys && stKv.contains(QStringLiteral("width"))
+            ? qMax(0.0, stKv.value(QStringLiteral("width")).toDouble())
+            : num(o, "from") + (num(o, "to") - num(o, "from")) * e;
         bool hasOp = false;
-        const double so = lerpOpacityOpt(o, e, &hasOp);
-        const bool hasDash = o.contains(QStringLiteral("fromDash")) || o.contains(QStringLiteral("toDash"))
-            || o.contains(QStringLiteral("fromGap")) || o.contains(QStringLiteral("toGap"));
+        double so = 1.0;
+        if (hasStKeys && stKv.contains(QStringLiteral("opacity"))) {
+            hasOp = true;
+            so = qBound(0.0, stKv.value(QStringLiteral("opacity")).toDouble(), 1.0);
+        } else {
+            so = lerpOpacityOpt(o, e, &hasOp);
+        }
+        bool hasDash = hasStKeys
+            ? (stKv.contains(QStringLiteral("dash")) || stKv.contains(QStringLiteral("gap")))
+            : (o.contains(QStringLiteral("fromDash")) || o.contains(QStringLiteral("toDash"))
+                || o.contains(QStringLiteral("fromGap")) || o.contains(QStringLiteral("toGap")));
         QVariantList dashOut;
         if (hasDash) {
-            const double dd = qMax(0.0, num(o, "fromDash") + (num(o, "toDash") - num(o, "fromDash")) * e);
-            const double gg = qMax(0.0, num(o, "fromGap") + (num(o, "toGap") - num(o, "fromGap")) * e);
+            double dd = 0.0, gg = 0.0;
+            if (hasStKeys && (stKv.contains(QStringLiteral("dash")) || stKv.contains(QStringLiteral("gap")))) {
+                dd = qMax(0.0, stKv.value(QStringLiteral("dash"), 0.0).toDouble());
+                gg = qMax(0.0, stKv.value(QStringLiteral("gap"), 0.0).toDouble());
+            } else {
+                dd = qMax(0.0, num(o, "fromDash") + (num(o, "toDash") - num(o, "fromDash")) * e);
+                gg = qMax(0.0, num(o, "fromGap") + (num(o, "toGap") - num(o, "fromGap")) * e);
+            }
             if (dd > 0.001 && gg > 0.001)
                 dashOut = QVariantList{dd, gg};
         }
         bool hasPos = false;
         QString posOut;
-        if (o.contains(QStringLiteral("fromPosition")) || o.contains(QStringLiteral("toPosition"))) {
+        if (hasStKeys && stKv.contains(QStringLiteral("position"))) {
+            hasPos = true;
+            const QString v = stKv.value(QStringLiteral("position")).toString();
+            posOut = (v == QLatin1String("inside") || v == QLatin1String("outside")) ? v : QString(QStringLiteral("center"));
+        } else if (o.contains(QStringLiteral("fromPosition")) || o.contains(QStringLiteral("toPosition"))) {
             hasPos = true;
             const QString fp = str(o, "fromPosition", QStringLiteral("center"));
             const QString tp = str(o, "toPosition", QStringLiteral("center"));
@@ -684,9 +860,19 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         }
     } else if (preset == QLatin1String("customStrokeColor")) {
         const int scIdx = entryIndexOf(o, "strokeIndex");
-        const QString c = lerpColor(str(o, "from", QStringLiteral("#000000")), str(o, "to", QStringLiteral("#ff0000")), e);
+        QVariantMap sccKv;
+        const bool hasSccKeys = genericKeysAt(o, p, sccKv);
+        const QString c = hasSccKeys && sccKv.contains(QStringLiteral("color"))
+            ? sccKv.value(QStringLiteral("color")).toString()
+            : lerpColor(str(o, "from", QStringLiteral("#000000")), str(o, "to", QStringLiteral("#ff0000")), e);
         bool hasOp2 = false;
-        const double so2 = lerpOpacityOpt(o, e, &hasOp2);
+        double so2 = 1.0;
+        if (hasSccKeys && sccKv.contains(QStringLiteral("opacity"))) {
+            hasOp2 = true;
+            so2 = qBound(0.0, sccKv.value(QStringLiteral("opacity")).toDouble(), 1.0);
+        } else {
+            so2 = lerpOpacityOpt(o, e, &hasOp2);
+        }
         if (scIdx == 0) {
             if (!c.isEmpty())
                 out[QStringLiteral("stroke")] = c;
@@ -702,15 +888,23 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         }
     } else if (preset == QLatin1String("customStrokeGradient")) {
         const int sgIdx = entryIndexOf(o, "strokeIndex");
-        const QString c1 = lerpColor(str(o, "fromC1", QStringLiteral("#000000")),
-            str(o, "toC1", QStringLiteral("#000000")), e);
-        const QString c2 = lerpColor(str(o, "fromC2", QStringLiteral("#ffffff")),
-            str(o, "toC2", QStringLiteral("#ffffff")), e);
+        QVariantMap sgKv;
+        const bool hasSgKeys = genericKeysAt(o, p, sgKv);
+        const QString c1 = hasSgKeys && sgKv.contains(QStringLiteral("c1"))
+            ? sgKv.value(QStringLiteral("c1")).toString()
+            : lerpColor(str(o, "fromC1", QStringLiteral("#000000")),
+                str(o, "toC1", QStringLiteral("#000000")), e);
+        const QString c2 = hasSgKeys && sgKv.contains(QStringLiteral("c2"))
+            ? sgKv.value(QStringLiteral("c2")).toString()
+            : lerpColor(str(o, "fromC2", QStringLiteral("#ffffff")),
+                str(o, "toC2", QStringLiteral("#ffffff")), e);
         bool hasGrad = false;
         QVariantMap grad;
         if (!c1.isEmpty() && !c2.isEmpty()) {
             hasGrad = true;
-            const double ang = num(o, "fromAngle") + (num(o, "toAngle") - num(o, "fromAngle")) * e;
+            const double ang = hasSgKeys && sgKv.contains(QStringLiteral("angle"))
+                ? sgKv.value(QStringLiteral("angle")).toDouble()
+                : num(o, "fromAngle") + (num(o, "toAngle") - num(o, "fromAngle")) * e;
             grad[QStringLiteral("angle")] = ang;
             QVariantList stops;
             QVariantMap s1;
@@ -723,21 +917,43 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             grad[QStringLiteral("stops")] = stops;
         }
         bool hasOp3 = false;
-        const double so3 = lerpOpacityOpt(o, e, &hasOp3);
-        const bool hasW = o.contains(QStringLiteral("from")) || o.contains(QStringLiteral("to"));
-        const double wOut = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
-        const bool hasDash = o.contains(QStringLiteral("fromDash")) || o.contains(QStringLiteral("toDash"))
+        double so3 = 1.0;
+        if (hasSgKeys && sgKv.contains(QStringLiteral("opacity"))) {
+            hasOp3 = true;
+            so3 = qBound(0.0, sgKv.value(QStringLiteral("opacity")).toDouble(), 1.0);
+        } else {
+            so3 = lerpOpacityOpt(o, e, &hasOp3);
+        }
+        const bool hasW = (hasSgKeys && sgKv.contains(QStringLiteral("width")))
+            || o.contains(QStringLiteral("from")) || o.contains(QStringLiteral("to"));
+        double wOut = 0.0;
+        if (hasSgKeys && sgKv.contains(QStringLiteral("width")))
+            wOut = qMax(0.0, sgKv.value(QStringLiteral("width")).toDouble());
+        else
+            wOut = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+        const bool hasDash = (hasSgKeys && (sgKv.contains(QStringLiteral("dash")) || sgKv.contains(QStringLiteral("gap"))))
+            || o.contains(QStringLiteral("fromDash")) || o.contains(QStringLiteral("toDash"))
             || o.contains(QStringLiteral("fromGap")) || o.contains(QStringLiteral("toGap"));
         QVariantList dashOut;
         if (hasDash) {
-            const double dd = qMax(0.0, num(o, "fromDash") + (num(o, "toDash") - num(o, "fromDash")) * e);
-            const double gg = qMax(0.0, num(o, "fromGap") + (num(o, "toGap") - num(o, "fromGap")) * e);
+            double dd = 0.0, gg = 0.0;
+            if (hasSgKeys && (sgKv.contains(QStringLiteral("dash")) || sgKv.contains(QStringLiteral("gap")))) {
+                dd = qMax(0.0, sgKv.value(QStringLiteral("dash"), 0.0).toDouble());
+                gg = qMax(0.0, sgKv.value(QStringLiteral("gap"), 0.0).toDouble());
+            } else {
+                dd = qMax(0.0, num(o, "fromDash") + (num(o, "toDash") - num(o, "fromDash")) * e);
+                gg = qMax(0.0, num(o, "fromGap") + (num(o, "toGap") - num(o, "fromGap")) * e);
+            }
             if (dd > 0.001 && gg > 0.001)
                 dashOut = QVariantList{dd, gg};
         }
         bool hasPos = false;
         QString posOut;
-        if (o.contains(QStringLiteral("fromPosition")) || o.contains(QStringLiteral("toPosition"))) {
+        if (hasSgKeys && sgKv.contains(QStringLiteral("position"))) {
+            hasPos = true;
+            const QString v = sgKv.value(QStringLiteral("position")).toString();
+            posOut = (v == QLatin1String("inside") || v == QLatin1String("outside")) ? v : QString(QStringLiteral("center"));
+        } else if (o.contains(QStringLiteral("fromPosition")) || o.contains(QStringLiteral("toPosition"))) {
             hasPos = true;
             const QString fp = str(o, "fromPosition", QStringLiteral("center"));
             const QString tp = str(o, "toPosition", QStringLiteral("center"));
@@ -776,7 +992,11 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             out[QStringLiteral("strokeEntry") + QString::number(sgIdx)] = sge;
         }
     } else if (preset == QLatin1String("customFontSize")) {
-        out[QStringLiteral("fontSize")] = qMax(1.0, num(o, "from") + (num(o, "to") - num(o, "from")) * e);
+        QVariantMap fsKv;
+        if (genericKeysAt(o, p, fsKv) && fsKv.contains(QStringLiteral("v")))
+            out[QStringLiteral("fontSize")] = qMax(1.0, fsKv.value(QStringLiteral("v")).toDouble());
+        else
+            out[QStringLiteral("fontSize")] = qMax(1.0, num(o, "from") + (num(o, "to") - num(o, "from")) * e);
     } else if (preset == QLatin1String("customFlip")) {
         // Stepped mirror flip about the base state (mirrors DocAnimSample).
         if (str(o, "axis", QStringLiteral("h")) == QLatin1String("v"))
@@ -789,15 +1009,23 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         // Fill gradient from-to: stop colors lerp in sRGB, angle lerps
         // linearly. Mirrors DocAnimSample (which also flips fillType).
         const int gIdx = entryIndexOf(o, "fillIndex");
-        const QString c1 = lerpColor(str(o, "fromC1", QStringLiteral("#000000")),
-            str(o, "toC1", QStringLiteral("#000000")), e);
-        const QString c2 = lerpColor(str(o, "fromC2", QStringLiteral("#ffffff")),
-            str(o, "toC2", QStringLiteral("#ffffff")), e);
+        QVariantMap grKv;
+        const bool hasGrKeys = genericKeysAt(o, p, grKv);
+        const QString c1 = hasGrKeys && grKv.contains(QStringLiteral("c1"))
+            ? grKv.value(QStringLiteral("c1")).toString()
+            : lerpColor(str(o, "fromC1", QStringLiteral("#000000")),
+                str(o, "toC1", QStringLiteral("#000000")), e);
+        const QString c2 = hasGrKeys && grKv.contains(QStringLiteral("c2"))
+            ? grKv.value(QStringLiteral("c2")).toString()
+            : lerpColor(str(o, "fromC2", QStringLiteral("#ffffff")),
+                str(o, "toC2", QStringLiteral("#ffffff")), e);
         bool hasGrad = false;
         QVariantMap grad;
         if (!c1.isEmpty() && !c2.isEmpty()) {
             hasGrad = true;
-            const double ang = num(o, "fromAngle") + (num(o, "toAngle") - num(o, "fromAngle")) * e;
+            const double ang = hasGrKeys && grKv.contains(QStringLiteral("angle"))
+                ? grKv.value(QStringLiteral("angle")).toDouble()
+                : num(o, "fromAngle") + (num(o, "toAngle") - num(o, "fromAngle")) * e;
             grad[QStringLiteral("angle")] = ang;
             QVariantList stops;
             QVariantMap s1;
@@ -810,7 +1038,13 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             grad[QStringLiteral("stops")] = stops;
         }
         bool hasOp = false;
-        const double fo = lerpOpacityOpt(o, e, &hasOp);
+        double fo = 1.0;
+        if (hasGrKeys && grKv.contains(QStringLiteral("opacity"))) {
+            hasOp = true;
+            fo = qBound(0.0, grKv.value(QStringLiteral("opacity")).toDouble(), 1.0);
+        } else {
+            fo = lerpOpacityOpt(o, e, &hasOp);
+        }
         if (gIdx == 0) {
             if (hasGrad) {
                 out[QStringLiteral("fillGradient")] = grad;
@@ -830,18 +1064,33 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         }
     } else if (preset == QLatin1String("customShadow")) {
         const int shIdx = entryIndexOf(o, "shadowIndex");
-        const QString c = lerpColorA(str(o, "fromColor", QStringLiteral("#000000")),
-            str(o, "toColor", QStringLiteral("#000000")), e);
+        QVariantMap shKv;
+        const bool hasShKeys = genericKeysAt(o, p, shKv);
+        const QString c = hasShKeys && shKv.contains(QStringLiteral("color"))
+            ? shKv.value(QStringLiteral("color")).toString()
+            : lerpColorA(str(o, "fromColor", QStringLiteral("#000000")),
+                str(o, "toColor", QStringLiteral("#000000")), e);
         if (!c.isEmpty()) {
             QVariantMap sh;
             sh[QStringLiteral("enabled")] = true;
             // Stepped like customHide (mirrors DocAnimSample).
-            sh[QStringLiteral("inner")] = e < 0.5 ? o.value(QStringLiteral("fromInner")).toBool() : o.value(QStringLiteral("toInner")).toBool();
+            if (hasShKeys && shKv.contains(QStringLiteral("inner")))
+                sh[QStringLiteral("inner")] = shKv.value(QStringLiteral("inner")).toBool();
+            else
+                sh[QStringLiteral("inner")] = e < 0.5 ? o.value(QStringLiteral("fromInner")).toBool() : o.value(QStringLiteral("toInner")).toBool();
             sh[QStringLiteral("color")] = c;
-            sh[QStringLiteral("x")] = num(o, "fromX") + (num(o, "toX") - num(o, "fromX")) * e;
-            sh[QStringLiteral("y")] = num(o, "fromY") + (num(o, "toY") - num(o, "fromY")) * e;
-            sh[QStringLiteral("blur")] = qMax(0.0, num(o, "fromBlur") + (num(o, "toBlur") - num(o, "fromBlur")) * e);
-            sh[QStringLiteral("spread")] = qMax(0.0, num(o, "fromSpread") + (num(o, "toSpread") - num(o, "fromSpread")) * e);
+            sh[QStringLiteral("x")] = hasShKeys && shKv.contains(QStringLiteral("x"))
+                ? shKv.value(QStringLiteral("x")).toDouble()
+                : num(o, "fromX") + (num(o, "toX") - num(o, "fromX")) * e;
+            sh[QStringLiteral("y")] = hasShKeys && shKv.contains(QStringLiteral("y"))
+                ? shKv.value(QStringLiteral("y")).toDouble()
+                : num(o, "fromY") + (num(o, "toY") - num(o, "fromY")) * e;
+            sh[QStringLiteral("blur")] = hasShKeys && shKv.contains(QStringLiteral("blur"))
+                ? qMax(0.0, shKv.value(QStringLiteral("blur")).toDouble())
+                : qMax(0.0, num(o, "fromBlur") + (num(o, "toBlur") - num(o, "fromBlur")) * e);
+            sh[QStringLiteral("spread")] = hasShKeys && shKv.contains(QStringLiteral("spread"))
+                ? qMax(0.0, shKv.value(QStringLiteral("spread")).toDouble())
+                : qMax(0.0, num(o, "fromSpread") + (num(o, "toSpread") - num(o, "fromSpread")) * e);
             if (shIdx == 0) {
                 out[QStringLiteral("shadows")] = QVariantList{sh};
             } else {
@@ -858,28 +1107,51 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         }
     } else if (preset == QLatin1String("customLayerBlur")) {
         QVariantMap b;
+        QVariantMap lbKv;
+        const bool hasLbKeys = genericKeysAt(o, p, lbKv);
         b[QStringLiteral("enabled")] = true;
-        b[QStringLiteral("radius")] = qMax(0.0, num(o, "fromRadius") + (num(o, "toRadius") - num(o, "fromRadius")) * e);
-        b[QStringLiteral("opacity")] = qBound(0.0, num(o, "fromOpacity", 1.0) + (num(o, "toOpacity", 1.0) - num(o, "fromOpacity", 1.0)) * e, 1.0);
+        b[QStringLiteral("radius")] = hasLbKeys && lbKv.contains(QStringLiteral("radius"))
+            ? qMax(0.0, lbKv.value(QStringLiteral("radius")).toDouble())
+            : qMax(0.0, num(o, "fromRadius") + (num(o, "toRadius") - num(o, "fromRadius")) * e);
+        b[QStringLiteral("opacity")] = hasLbKeys && lbKv.contains(QStringLiteral("opacity"))
+            ? qBound(0.0, lbKv.value(QStringLiteral("opacity")).toDouble(), 1.0)
+            : qBound(0.0, num(o, "fromOpacity", 1.0) + (num(o, "toOpacity", 1.0) - num(o, "fromOpacity", 1.0)) * e, 1.0);
         out[QStringLiteral("layerBlur")] = b;
     } else if (preset == QLatin1String("customBackgroundBlur")) {
         QVariantMap b;
+        QVariantMap bbKv;
+        const bool hasBbKeys = genericKeysAt(o, p, bbKv);
         b[QStringLiteral("enabled")] = true;
-        b[QStringLiteral("radius")] = qMax(0.0, num(o, "fromRadius") + (num(o, "toRadius") - num(o, "fromRadius")) * e);
-        b[QStringLiteral("opacity")] = qBound(0.0, num(o, "fromOpacity", 0.7) + (num(o, "toOpacity", 0.7) - num(o, "fromOpacity", 0.7)) * e, 1.0);
+        b[QStringLiteral("radius")] = hasBbKeys && bbKv.contains(QStringLiteral("radius"))
+            ? qMax(0.0, bbKv.value(QStringLiteral("radius")).toDouble())
+            : qMax(0.0, num(o, "fromRadius") + (num(o, "toRadius") - num(o, "fromRadius")) * e);
+        b[QStringLiteral("opacity")] = hasBbKeys && bbKv.contains(QStringLiteral("opacity"))
+            ? qBound(0.0, bbKv.value(QStringLiteral("opacity")).toDouble(), 1.0)
+            : qBound(0.0, num(o, "fromOpacity", 0.7) + (num(o, "toOpacity", 0.7) - num(o, "fromOpacity", 0.7)) * e, 1.0);
         out[QStringLiteral("backgroundBlur")] = b;
     } else if (preset == QLatin1String("customGlow")) {
         const int glIdx = entryIndexOf(o, "glowIndex");
-        const QString c = lerpColorA(str(o, "fromColor", QStringLiteral("#cc00ffff")),
-            str(o, "toColor", QStringLiteral("#cc00ffff")), e);
+        QVariantMap glKv;
+        const bool hasGlKeys = genericKeysAt(o, p, glKv);
+        const QString c = hasGlKeys && glKv.contains(QStringLiteral("color"))
+            ? glKv.value(QStringLiteral("color")).toString()
+            : lerpColorA(str(o, "fromColor", QStringLiteral("#cc00ffff")),
+                str(o, "toColor", QStringLiteral("#cc00ffff")), e);
         if (!c.isEmpty()) {
             QVariantMap g;
             g[QStringLiteral("enabled")] = true;
             // Stepped like customHide (mirrors DocAnimSample).
-            g[QStringLiteral("inner")] = e < 0.5 ? o.value(QStringLiteral("fromInner")).toBool() : o.value(QStringLiteral("toInner")).toBool();
+            if (hasGlKeys && glKv.contains(QStringLiteral("inner")))
+                g[QStringLiteral("inner")] = glKv.value(QStringLiteral("inner")).toBool();
+            else
+                g[QStringLiteral("inner")] = e < 0.5 ? o.value(QStringLiteral("fromInner")).toBool() : o.value(QStringLiteral("toInner")).toBool();
             g[QStringLiteral("color")] = c;
-            g[QStringLiteral("blur")] = qMax(0.0, num(o, "fromBlur") + (num(o, "toBlur") - num(o, "fromBlur")) * e);
-            g[QStringLiteral("spread")] = qMax(0.0, num(o, "fromSpread") + (num(o, "toSpread") - num(o, "fromSpread")) * e);
+            g[QStringLiteral("blur")] = hasGlKeys && glKv.contains(QStringLiteral("blur"))
+                ? qMax(0.0, glKv.value(QStringLiteral("blur")).toDouble())
+                : qMax(0.0, num(o, "fromBlur") + (num(o, "toBlur") - num(o, "fromBlur")) * e);
+            g[QStringLiteral("spread")] = hasGlKeys && glKv.contains(QStringLiteral("spread"))
+                ? qMax(0.0, glKv.value(QStringLiteral("spread")).toDouble())
+                : qMax(0.0, num(o, "fromSpread") + (num(o, "toSpread") - num(o, "fromSpread")) * e);
             if (glIdx == 0) {
                 out[QStringLiteral("glows")] = QVariantList{g};
             } else {
@@ -894,9 +1166,15 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         }
     } else if (preset == QLatin1String("customGrain")) {
         QVariantMap g;
+        QVariantMap grnKv;
+        const bool hasGrnKeys = genericKeysAt(o, p, grnKv);
         g[QStringLiteral("enabled")] = true;
-        g[QStringLiteral("amount")] = qBound(0.0, num(o, "fromAmount") + (num(o, "toAmount") - num(o, "fromAmount")) * e, 1.0);
-        g[QStringLiteral("size")] = qBound(1.0, num(o, "fromSize", 2.0) + (num(o, "toSize", 2.0) - num(o, "fromSize", 2.0)) * e, 10.0);
+        g[QStringLiteral("amount")] = hasGrnKeys && grnKv.contains(QStringLiteral("amount"))
+            ? qBound(0.0, grnKv.value(QStringLiteral("amount")).toDouble(), 1.0)
+            : qBound(0.0, num(o, "fromAmount") + (num(o, "toAmount") - num(o, "fromAmount")) * e, 1.0);
+        g[QStringLiteral("size")] = hasGrnKeys && grnKv.contains(QStringLiteral("size"))
+            ? qBound(1.0, grnKv.value(QStringLiteral("size")).toDouble(), 10.0)
+            : qBound(1.0, num(o, "fromSize", 2.0) + (num(o, "toSize", 2.0) - num(o, "fromSize", 2.0)) * e, 10.0);
         out[QStringLiteral("grain")] = g;
     } else if (preset == QLatin1String("customPath")) {
         const PathSample s = samplePath(o.value(QStringLiteral("pts")).toList(), o.value(QStringLiteral("closed")).toBool(), e);

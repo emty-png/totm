@@ -118,6 +118,106 @@ QtObject {
         };
     }
 
+    // Generic keyed values at raw progress p over o.keys (clip-local
+    // 0..1). Bracketing segment eases by the target key's easing; the
+    // clip-level easing is bypassed when keys drive. Numbers lerp,
+    // hex colors lerp in sRGB (alpha-aware when either side carries
+    // it), bools/strings step at the midpoint. Missing fields carry
+    // from the side that has them. Returns null when fewer than 2
+    // keys, so callers fall back to from-to. Mirrors AnimSampler (C++).
+    function genericKeysAt(o, p) {
+        var keys = o ? o.keys : null;
+        if (!keys || typeof keys.length !== "number" || keys.length < 2)
+            return null;
+        var p2 = Math.min(1, Math.max(0, Number(p) || 0));
+        var a = keys[0], b = keys[keys.length - 1];
+        if (p2 <= Number(a.t))
+            return {
+                value: JSON.parse(JSON.stringify((a.value || {})))
+            };
+        if (p2 >= Number(b.t))
+            return {
+                value: JSON.parse(JSON.stringify((b.value || {})))
+            };
+        for (var i = 0; i < keys.length - 1; i++) {
+            if (p2 >= Number(keys[i].t) && p2 <= Number(keys[i + 1].t)) {
+                a = keys[i];
+                b = keys[i + 1];
+                break;
+            }
+        }
+        var span = Math.max(1e-6, Number(b.t) - Number(a.t));
+        var raw = (p2 - Number(a.t)) / span;
+        var ez = b.easing || {};
+        var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, raw);
+        var av = a.value || {}, bv = b.value || {};
+        var out = {};
+        var seen = {};
+        var k;
+        for (k in av)
+            seen[k] = true;
+        for (k in bv)
+            seen[k] = true;
+        for (k in seen) {
+            var hasA = av[k] !== undefined, hasB = bv[k] !== undefined;
+            if (!hasA) {
+                out[k] = bv[k];
+                continue;
+            }
+            if (!hasB) {
+                out[k] = av[k];
+                continue;
+            }
+            var va = av[k], vb = bv[k];
+            if (typeof va === "boolean" || typeof vb === "boolean") {
+                // Booleans step at the midpoint (invert/inner).
+                out[k] = e < 0.5 ? (av[k] === true) : (bv[k] === true);
+                continue;
+            }
+            if (typeof va === "string" && typeof vb === "string" && (isHexLike(va) || isHexLike(vb))) {
+                var cc = lerpColorMaybeAlpha(va, vb, e);
+                if (cc !== null) {
+                    out[k] = cc;
+                    continue;
+                }
+            }
+            if (typeof va === "string" || typeof vb === "string") {
+                // Positions (center/inside/outside) and other enums step.
+                out[k] = e < 0.5 ? va : vb;
+                continue;
+            }
+            var an = Number(va), bn = Number(vb);
+            if (isNaN(an) || isNaN(bn)) {
+                out[k] = e < 0.5 ? va : vb;
+                continue;
+            }
+            out[k] = an + (bn - an) * e;
+        }
+        return {
+            value: out
+        };
+    }
+
+    function isHexLike(s) {
+        var t = String(s || "").trim().toLowerCase();
+        if (t.charAt(0) === "#")
+            t = t.slice(1);
+        return /^[0-9a-f]{3}$/.test(t) || /^[0-9a-f]{6}$/.test(t) || /^[0-9a-f]{8}$/.test(t);
+    }
+
+    function hasAlphaHex(s) {
+        var t = String(s || "").trim().toLowerCase();
+        if (t.charAt(0) === "#")
+            t = t.slice(1);
+        return t.length === 8;
+    }
+
+    function lerpColorMaybeAlpha(fromHex, to, t) {
+        if (hasAlphaHex(fromHex) || hasAlphaHex(to))
+            return lerpColorA(fromHex, to, t);
+        return lerpColor(fromHex, to, t);
+    }
+
     function parseHex(hex) {
         var t = String(hex || "").trim().toLowerCase();
         if (t.charAt(0) === "#")
@@ -309,6 +409,49 @@ QtObject {
         return "#" + (h.length === 1 ? "0" + h : h) + body;
     }
 
+    function isKeyframeablePreset(preset) {
+        if (preset === "maskWipe" || preset === "maskIris")
+            return true;
+        if (typeof preset !== "string" || preset.slice(0, 6) !== "custom")
+            return false;
+        return preset !== "customHide" && preset !== "customFlip" && preset !== "customPath";
+    }
+
+    // Keyed overlay builders: each takes the interpolated key value (kv)
+    // plus base/cx/cy and writes the same overlay keys as the from-to
+    // path, so keyed and from-to clips merge identically downstream.
+    function keyedScaleOverlay(base, cx, cy, kv) {
+        var sc = Math.max(0.001, Number(kv.s !== undefined ? kv.s : 1) || 0.001);
+        var g = scaleBox({
+            x: base.x,
+            y: base.y,
+            w: base.w,
+            h: base.h
+        }, cx, cy, sc);
+        var out = {
+            x: g.x,
+            y: g.y,
+            w: g.w,
+            h: g.h
+        };
+        if (base.shapeType === "text" && base.fontSize > 0)
+            out.fontSize = base.fontSize * sc;
+        return out;
+    }
+
+    function keyedResizeOverlay(base, kv) {
+        var nw = Math.max(1, Number(kv.w !== undefined ? kv.w : base.w) || 1);
+        var nh = Math.max(1, Number(kv.h !== undefined ? kv.h : base.h) || 1);
+        var lcx = (Number(base.x) || 0) + (Number(base.w) || 0) / 2;
+        var lcy = (Number(base.y) || 0) + (Number(base.h) || 0) / 2;
+        return {
+            x: lcx - nw / 2,
+            y: lcy - nh / 2,
+            w: nw,
+            h: nh
+        };
+    }
+
     // One clip's contribution for a single leaf. base holds the leaf's
     // captured values ({x, y, w, h, rotation, opacity, fontSize,
     // shapeType}) and is the ONLY read source: deriving frames from live
@@ -447,32 +590,71 @@ QtObject {
         } else if (preset === "customScale") {
             // Uniform factor about the target center (group-aware like
             // grow). From/to are factors, base supplies the box.
-            var sc = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
-            var cgs = scaleBox({
-                x: base.x,
-                y: base.y,
-                w: base.w,
-                h: base.h
-            }, cx, cy, Math.max(0.001, sc));
-            out.x = cgs.x;
-            out.y = cgs.y;
-            out.w = cgs.w;
-            out.h = cgs.h;
-            if (base.shapeType === "text" && base.fontSize > 0)
-                out.fontSize = base.fontSize * Math.max(0.001, sc);
+            // Keys hold {s} and bypass from-to when 2+ are stored.
+            var scKeys = genericKeysAt(o, p);
+            if (scKeys) {
+                var scKv = scKeys.value || {};
+                var scFromKeys = Math.max(0.001, Number(scKv.s !== undefined ? scKv.s : 1) || 0.001);
+                var cgsKeys = scaleBox({
+                    x: base.x,
+                    y: base.y,
+                    w: base.w,
+                    h: base.h
+                }, cx, cy, scFromKeys);
+                out.x = cgsKeys.x;
+                out.y = cgsKeys.y;
+                out.w = cgsKeys.w;
+                out.h = cgsKeys.h;
+                if (base.shapeType === "text" && base.fontSize > 0)
+                    out.fontSize = base.fontSize * scFromKeys;
+            } else {
+                var sc = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+                var cgs = scaleBox({
+                    x: base.x,
+                    y: base.y,
+                    w: base.w,
+                    h: base.h
+                }, cx, cy, Math.max(0.001, sc));
+                out.x = cgs.x;
+                out.y = cgs.y;
+                out.w = cgs.w;
+                out.h = cgs.h;
+                if (base.shapeType === "text" && base.fontSize > 0)
+                    out.fontSize = base.fontSize * Math.max(0.001, sc);
+            }
         } else if (preset === "customRotate") {
             // Offset degrees from base (no jump, stays valid on move).
-            out.rotation = (Number(base.rotation) || 0) + lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+            // Keys hold {r}.
+            var rotKeys = genericKeysAt(o, p);
+            if (rotKeys)
+                out.rotation = (Number(base.rotation) || 0) + (Number((rotKeys.value || {}).r) || 0);
+            else
+                out.rotation = (Number(base.rotation) || 0) + lerp(Number(o.from) || 0, Number(o.to) || 0, e);
         } else if (preset === "customMove") {
             // Relative offset from base (drawn paths stay valid on move).
-            out.x = (Number(base.x) || 0) + lerp(Number(o.fromX) || 0, Number(o.toX) || 0, e);
-            out.y = (Number(base.y) || 0) + lerp(Number(o.fromY) || 0, Number(o.toY) || 0, e);
+            // Keys hold {dx,dy} offsets.
+            var mvKeys = genericKeysAt(o, p);
+            if (mvKeys) {
+                var mvKv = mvKeys.value || {};
+                out.x = (Number(base.x) || 0) + (Number(mvKv.dx !== undefined ? mvKv.dx : (mvKv.x !== undefined ? mvKv.x : 0)) || 0);
+                out.y = (Number(base.y) || 0) + (Number(mvKv.dy !== undefined ? mvKv.dy : (mvKv.y !== undefined ? mvKv.y : 0)) || 0);
+            } else {
+                out.x = (Number(base.x) || 0) + lerp(Number(o.fromX) || 0, Number(o.toX) || 0, e);
+                out.y = (Number(base.y) || 0) + lerp(Number(o.fromY) || 0, Number(o.toY) || 0, e);
+            }
         } else if (preset === "customOpacity") {
-            out.opacity = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+            var opKeys = genericKeysAt(o, p);
+            if (opKeys) {
+                var opV = (opKeys.value || {}).v;
+                out.opacity = opV !== undefined ? Math.min(1, Math.max(0, Number(opV))) : Number(base.opacity);
+            } else
+                out.opacity = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
         } else if (preset === "customColor") {
             var fIdx = entryIndexOf(o, "fillIndex");
-            var cc = lerpColor(o.from, o.to, e);
-            var fOp = (o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined;
+            var colKeys = genericKeysAt(o, p);
+            var colKv = colKeys ? (colKeys.value || {}) : null;
+            var cc = colKv && colKv.color !== undefined ? String(colKv.color) : lerpColor(o.from, o.to, e);
+            var fOp = colKv ? (colKv.opacity !== undefined ? clampEntryOpacity(colKv.opacity) : undefined) : ((o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined);
             if (fIdx === 0) {
                 if (cc)
                     out.fill = cc;
@@ -499,8 +681,11 @@ QtObject {
         } else if (preset === "customResize") {
             // Absolute box centered on the leaf's own center (shape-only
             // semantics; groups equalize per leaf but keep centers).
-            var nw = Math.max(1, lerp(Number(o.fromW) || 0, Number(o.toW) || 0, e));
-            var nh = Math.max(1, lerp(Number(o.fromH) || 0, Number(o.toH) || 0, e));
+            // Keys hold {w,h}.
+            var rsKeys = genericKeysAt(o, p);
+            var rsKv2 = rsKeys ? (rsKeys.value || {}) : null;
+            var nw = rsKv2 ? Math.max(1, Number(rsKv2.w !== undefined ? rsKv2.w : base.w) || 1) : Math.max(1, lerp(Number(o.fromW) || 0, Number(o.toW) || 0, e));
+            var nh = rsKv2 ? Math.max(1, Number(rsKv2.h !== undefined ? rsKv2.h : base.h) || 1) : Math.max(1, lerp(Number(o.fromH) || 0, Number(o.toH) || 0, e));
             var lcx = (Number(base.x) || 0) + (Number(base.w) || 0) / 2;
             var lcy = (Number(base.y) || 0) + (Number(base.h) || 0) / 2;
             out.x = lcx - nw / 2;
@@ -508,13 +693,27 @@ QtObject {
             out.w = nw;
             out.h = nh;
         } else if (preset === "customCorner") {
-            out.radius = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+            var cornKeys = genericKeysAt(o, p);
+            if (cornKeys) {
+                var cornV = (cornKeys.value || {}).v;
+                out.radius = cornV !== undefined ? Math.max(0, Number(cornV) || 0) : Number(base.radius);
+            } else
+                out.radius = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
         } else if (preset === "customStroke") {
             var sIdx = entryIndexOf(o, "strokeIndex");
-            var sW = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
-            var sOp = (o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined;
+            var stKeys = genericKeysAt(o, p);
+            var stKv = stKeys ? (stKeys.value || {}) : null;
+            var sW = stKv && stKv.width !== undefined ? Math.max(0, Number(stKv.width) || 0) : lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+            var sOp = stKv ? (stKv.opacity !== undefined ? clampEntryOpacity(stKv.opacity) : undefined) : ((o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined);
             var sD = null, sP = undefined;
-            if (o.fromDash !== undefined || o.toDash !== undefined || o.fromGap !== undefined || o.toGap !== undefined) {
+            if (stKv && (stKv.dash !== undefined || stKv.gap !== undefined)) {
+                var stDd = Math.max(0, Number(stKv.dash) || 0);
+                var stGg = Math.max(0, Number(stKv.gap) || 0);
+                if (stDd > 0.001 && stGg > 0.001)
+                    sD = [stDd, stGg];
+                else
+                    sD = [];
+            } else if (o.fromDash !== undefined || o.toDash !== undefined || o.fromGap !== undefined || o.toGap !== undefined) {
                 // Dash pair lerps continuously (width units); solid is
                 // [0,0] so a solid<->dashed morph passes through dots.
                 var dd = Math.max(0, lerp(Number(o.fromDash) || 0, Number(o.toDash) || 0, e));
@@ -525,7 +724,9 @@ QtObject {
                     sD = [];
             }
             // Position can't ease: stepped like customHide.
-            if (o.fromPosition !== undefined || o.toPosition !== undefined)
+            if (stKv && stKv.position !== undefined)
+                sP = (stKv.position === "inside" || stKv.position === "outside") ? stKv.position : "center";
+            else if (o.fromPosition !== undefined || o.toPosition !== undefined)
                 sP = e < 0.5 ? (o.fromPosition === "inside" || o.fromPosition === "outside" ? o.fromPosition : "center") : (o.toPosition === "inside" || o.toPosition === "outside" ? o.toPosition : "center");
             if (sIdx === 0) {
                 out.strokeWidth = sW;
@@ -551,8 +752,10 @@ QtObject {
             }
         } else if (preset === "customStrokeColor") {
             var scIdx = entryIndexOf(o, "strokeIndex");
-            var sc = lerpColor(o.from, o.to, e);
-            var scOp = (o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined;
+            var scKeys = genericKeysAt(o, p);
+            var scKv2 = scKeys ? (scKeys.value || {}) : null;
+            var sc = scKv2 && scKv2.color !== undefined ? String(scKv2.color) : lerpColor(o.from, o.to, e);
+            var scOp = scKv2 ? (scKv2.opacity !== undefined ? clampEntryOpacity(scKv2.opacity) : undefined) : ((o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined);
             if (scIdx === 0) {
                 if (sc)
                     out.stroke = sc;
@@ -572,13 +775,15 @@ QtObject {
             // Width/dash ride like customStroke, position steps at the
             // midpoint. Flips strokeType so a solid base renders gradient.
             var sgIdx = entryIndexOf(o, "strokeIndex");
-            var sgc1 = lerpColor(o.fromC1, o.toC1, e);
-            var sgc2 = lerpColor(o.fromC2, o.toC2, e);
-            var sgOp = (o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined;
+            var sgKeys = genericKeysAt(o, p);
+            var sgKv = sgKeys ? (sgKeys.value || {}) : null;
+            var sgc1 = sgKv && sgKv.c1 !== undefined ? String(sgKv.c1) : lerpColor(o.fromC1, o.toC1, e);
+            var sgc2 = sgKv && sgKv.c2 !== undefined ? String(sgKv.c2) : lerpColor(o.fromC2, o.toC2, e);
+            var sgOp = sgKv ? (sgKv.opacity !== undefined ? clampEntryOpacity(sgKv.opacity) : undefined) : ((o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined);
             var sgGrad = null;
             if (sgc1 && sgc2) {
                 sgGrad = {
-                    angle: lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e),
+                    angle: sgKv && sgKv.angle !== undefined ? (Number(sgKv.angle) || 0) : lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e),
                     stops: [
                         {
                             color: sgc1,
@@ -592,17 +797,28 @@ QtObject {
                 };
             }
             var sgW = undefined, sgD = null, sgP = undefined;
-            if (o.from !== undefined || o.to !== undefined)
+            if (sgKv && sgKv.width !== undefined)
+                sgW = Math.max(0, Number(sgKv.width) || 0);
+            else if (o.from !== undefined || o.to !== undefined)
                 sgW = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
-            if (o.fromDash !== undefined || o.toDash !== undefined || o.fromGap !== undefined || o.toGap !== undefined) {
-                var sgdd = Math.max(0, lerp(Number(o.fromDash) || 0, Number(o.toDash) || 0, e));
-                var sggg = Math.max(0, lerp(Number(o.fromGap) || 0, Number(o.toGap) || 0, e));
+            if (sgKv && (sgKv.dash !== undefined || sgKv.gap !== undefined)) {
+                var sgdd = Math.max(0, Number(sgKv.dash) || 0);
+                var sggg = Math.max(0, Number(sgKv.gap) || 0);
                 if (sgdd > 0.001 && sggg > 0.001)
                     sgD = [sgdd, sggg];
                 else
                     sgD = [];
+            } else if (o.fromDash !== undefined || o.toDash !== undefined || o.fromGap !== undefined || o.toGap !== undefined) {
+                var sgdd2 = Math.max(0, lerp(Number(o.fromDash) || 0, Number(o.toDash) || 0, e));
+                var sggg2 = Math.max(0, lerp(Number(o.fromGap) || 0, Number(o.toGap) || 0, e));
+                if (sgdd2 > 0.001 && sggg2 > 0.001)
+                    sgD = [sgdd2, sggg2];
+                else
+                    sgD = [];
             }
-            if (o.fromPosition !== undefined || o.toPosition !== undefined)
+            if (sgKv && sgKv.position !== undefined)
+                sgP = (sgKv.position === "inside" || sgKv.position === "outside") ? sgKv.position : "center";
+            else if (o.fromPosition !== undefined || o.toPosition !== undefined)
                 sgP = e < 0.5 ? (o.fromPosition === "inside" || o.fromPosition === "outside" ? o.fromPosition : "center") : (o.toPosition === "inside" || o.toPosition === "outside" ? o.toPosition : "center");
             if (sgIdx === 0) {
                 if (sgGrad) {
@@ -634,7 +850,12 @@ QtObject {
                 out["strokeEntry" + sgIdx] = sge;
             }
         } else if (preset === "customFontSize") {
-            out.fontSize = Math.max(1, lerp(Number(o.from) || 0, Number(o.to) || 0, e));
+            var fsKeys = genericKeysAt(o, p);
+            if (fsKeys) {
+                var fsV = (fsKeys.value || {}).v;
+                out.fontSize = fsV !== undefined ? Math.max(1, Number(fsV) || 1) : Number(base.fontSize);
+            } else
+                out.fontSize = Math.max(1, lerp(Number(o.from) || 0, Number(o.to) || 0, e));
         } else if (preset === "customFlip") {
             // Stepped mirror flip about the base state (bools can't
             // ease): first half reads base, second half reads toggled.
@@ -647,13 +868,15 @@ QtObject {
             // linearly. Ports to AnimSampler; also flips fillType so a
             // solid base renders the gradient from the first frame.
             var gIdx = entryIndexOf(o, "fillIndex");
-            var gc1 = lerpColor(o.fromC1, o.toC1, e);
-            var gc2 = lerpColor(o.fromC2, o.toC2, e);
-            var gOp = (o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined;
+            var grKeys = genericKeysAt(o, p);
+            var grKv = grKeys ? (grKeys.value || {}) : null;
+            var gc1 = grKv && grKv.c1 !== undefined ? String(grKv.c1) : lerpColor(o.fromC1, o.toC1, e);
+            var gc2 = grKv && grKv.c2 !== undefined ? String(grKv.c2) : lerpColor(o.fromC2, o.toC2, e);
+            var gOp = grKv ? (grKv.opacity !== undefined ? clampEntryOpacity(grKv.opacity) : undefined) : ((o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined);
             var gGrad = null;
             if (gc1 && gc2) {
                 gGrad = {
-                    angle: lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e),
+                    angle: grKv && grKv.angle !== undefined ? (Number(grKv.angle) || 0) : lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e),
                     stops: [
                         {
                             color: gc1,
@@ -685,18 +908,20 @@ QtObject {
             }
         } else if (preset === "customShadow") {
             var shIdx = entryIndexOf(o, "shadowIndex");
-            var sc = lerpColorA(o.fromColor, o.toColor, e);
+            var shKeys = genericKeysAt(o, p);
+            var shKv = shKeys ? (shKeys.value || {}) : null;
+            var sc = shKv && shKv.color !== undefined ? String(shKv.color) : lerpColorA(o.fromColor, o.toColor, e);
             if (sc) {
                 var shEntry = {
                     enabled: true,
                     // Stepped like customHide (bools can't ease): first
                     // half reads from, second half reads to.
-                    inner: e < 0.5 ? o.fromInner === true : o.toInner === true,
+                    inner: shKv && shKv.inner !== undefined ? shKv.inner === true : (e < 0.5 ? o.fromInner === true : o.toInner === true),
                     color: sc,
-                    x: lerp(Number(o.fromX) || 0, Number(o.toX) || 0, e),
-                    y: lerp(Number(o.fromY) || 0, Number(o.toY) || 0, e),
-                    blur: Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
-                    spread: Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
+                    x: shKv && shKv.x !== undefined ? (Number(shKv.x) || 0) : lerp(Number(o.fromX) || 0, Number(o.toX) || 0, e),
+                    y: shKv && shKv.y !== undefined ? (Number(shKv.y) || 0) : lerp(Number(o.fromY) || 0, Number(o.toY) || 0, e),
+                    blur: shKv && shKv.blur !== undefined ? Math.max(0, Number(shKv.blur) || 0) : Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
+                    spread: shKv && shKv.spread !== undefined ? Math.max(0, Number(shKv.spread) || 0) : Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
                 };
                 if (shIdx === 0) {
                     out.shadows = [shEntry];
@@ -715,29 +940,35 @@ QtObject {
                 }
             }
         } else if (preset === "customLayerBlur") {
+            var lbKeys = genericKeysAt(o, p);
+            var lbKv = lbKeys ? (lbKeys.value || {}) : null;
             out.layerBlur = {
                 enabled: true,
-                radius: Math.max(0, lerp(Number(o.fromRadius) || 0, Number(o.toRadius) || 0, e)),
-                opacity: Math.min(1, Math.max(0, lerp(Number(o.fromOpacity) ?? 1, Number(o.toOpacity) ?? 1, e)))
+                radius: lbKv && lbKv.radius !== undefined ? Math.max(0, Number(lbKv.radius) || 0) : Math.max(0, lerp(Number(o.fromRadius) || 0, Number(o.toRadius) || 0, e)),
+                opacity: lbKv && lbKv.opacity !== undefined ? Math.min(1, Math.max(0, Number(lbKv.opacity))) : Math.min(1, Math.max(0, lerp(Number(o.fromOpacity) ?? 1, Number(o.toOpacity) ?? 1, e)))
             };
         } else if (preset === "customBackgroundBlur") {
+            var bbKeys = genericKeysAt(o, p);
+            var bbKv = bbKeys ? (bbKeys.value || {}) : null;
             out.backgroundBlur = {
                 enabled: true,
-                radius: Math.max(0, lerp(Number(o.fromRadius) || 0, Number(o.toRadius) || 0, e)),
-                opacity: Math.min(1, Math.max(0, lerp(Number(o.fromOpacity) ?? 0.7, Number(o.toOpacity) ?? 0.7, e)))
+                radius: bbKv && bbKv.radius !== undefined ? Math.max(0, Number(bbKv.radius) || 0) : Math.max(0, lerp(Number(o.fromRadius) || 0, Number(o.toRadius) || 0, e)),
+                opacity: bbKv && bbKv.opacity !== undefined ? Math.min(1, Math.max(0, Number(bbKv.opacity))) : Math.min(1, Math.max(0, lerp(Number(o.fromOpacity) ?? 0.7, Number(o.toOpacity) ?? 0.7, e)))
             };
         } else if (preset === "customGlow") {
             var glIdx = entryIndexOf(o, "glowIndex");
-            var gc = lerpColorA(o.fromColor, o.toColor, e);
+            var glKeys = genericKeysAt(o, p);
+            var glKv = glKeys ? (glKeys.value || {}) : null;
+            var gc = glKv && glKv.color !== undefined ? String(glKv.color) : lerpColorA(o.fromColor, o.toColor, e);
             if (gc) {
                 var glEntry = {
                     enabled: true,
                     // Stepped like customHide (bools can't ease): first
                     // half reads from, second half reads to.
-                    inner: e < 0.5 ? o.fromInner === true : o.toInner === true,
+                    inner: glKv && glKv.inner !== undefined ? glKv.inner === true : (e < 0.5 ? o.fromInner === true : o.toInner === true),
                     color: gc,
-                    blur: Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
-                    spread: Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
+                    blur: glKv && glKv.blur !== undefined ? Math.max(0, Number(glKv.blur) || 0) : Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
+                    spread: glKv && glKv.spread !== undefined ? Math.max(0, Number(glKv.spread) || 0) : Math.max(0, lerp(Number(o.fromSpread) || 0, Number(o.toSpread) || 0, e))
                 };
                 if (glIdx === 0) {
                     out.glows = [glEntry];
@@ -752,10 +983,12 @@ QtObject {
                 }
             }
         } else if (preset === "customGrain") {
+            var grnKeys = genericKeysAt(o, p);
+            var grnKv = grnKeys ? (grnKeys.value || {}) : null;
             out.grain = {
                 enabled: true,
-                amount: Math.min(1, Math.max(0, lerp(Number(o.fromAmount) || 0, Number(o.toAmount) || 0, e))),
-                size: Math.min(10, Math.max(1, lerp(Number(o.fromSize) || 0, Number(o.toSize) || 0, e)))
+                amount: grnKv && grnKv.amount !== undefined ? Math.min(1, Math.max(0, Number(grnKv.amount))) : Math.min(1, Math.max(0, lerp(Number(o.fromAmount) || 0, Number(o.toAmount) || 0, e))),
+                size: grnKv && grnKv.size !== undefined ? Math.min(10, Math.max(1, Number(grnKv.size) || 1)) : Math.min(10, Math.max(1, lerp(Number(o.fromSize) || 0, Number(o.toSize) || 0, e)))
             };
         } else if (preset === "customPath") {
             var sampled = samplerPath.samplePath(o.pts, o.closed === true, e);
