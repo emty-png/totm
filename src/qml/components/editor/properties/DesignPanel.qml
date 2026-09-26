@@ -48,6 +48,7 @@ ScrollView {
         spacing: 0
 
         RowLayout {
+            visible: panel.snapshot.sel.length > 0
             Layout.fillWidth: true
             Layout.preferredHeight: 36
             Layout.leftMargin: 12
