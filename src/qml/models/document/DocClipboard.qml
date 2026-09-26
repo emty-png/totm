@@ -293,6 +293,20 @@ QtObject {
         snap.h = b.h;
         snap.rotation = b.rotation;
         snap.opacity = b.opacity;
+        // Authored eye/flip/corner state survives preview frames: hide,
+        // flip and corner clips write live values, and without this the
+        // frame leaks into saves and video exports (the sampler gates
+        // non-hide clips on static visibility, freezing the component).
+        if (snap.visible !== undefined && b.visible !== undefined)
+            snap.visible = b.visible === true;
+        if (snap.flipH !== undefined && b.flipH !== undefined)
+            snap.flipH = b.flipH === true;
+        if (snap.flipV !== undefined && b.flipV !== undefined)
+            snap.flipV = b.flipV === true;
+        if (snap.radius !== undefined && b.radius !== undefined)
+            snap.radius = Math.max(0, Number(b.radius) || 0);
+        if (snap.cornerRadii !== undefined && b.cornerRadii !== undefined)
+            snap.cornerRadii = (b.cornerRadii || []).slice();
         if (snap.pathData !== undefined && b.pathData !== undefined)
             snap.pathData = doc.factory._copyPath(b.pathData);
         // Text snapshots carry fontSize (grow/shrink animate it): rebase
