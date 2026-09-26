@@ -20,6 +20,17 @@ ScrollView {
         panel.pluginSections = PluginStore.designSections();
     }
 
+    // Header name: selected shape's layer name (like the left
+    // sidebar), count for multi-selections, fallback when empty.
+    function headerName() {
+        var tops = panel.snapshot.tops;
+        if (tops.length === 1)
+            return tops[0].name || qsTr("Design");
+        if (tops.length > 1)
+            return qsTr("%1 selected").arg(tops.length);
+        return qsTr("Design");
+    }
+
     Component.onCompleted: panel.refreshPlugins()
 
     contentWidth: availableWidth
@@ -35,6 +46,40 @@ ScrollView {
     ColumnLayout {
         width: panel.availableWidth
         spacing: 0
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 36
+            Layout.leftMargin: 12
+            Layout.rightMargin: 4
+            spacing: 4
+
+            Text {
+                Layout.fillWidth: true
+                text: panel.headerName()
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: AppTheme.foreground
+                elide: Text.ElideRight
+            }
+
+            PanelIconButton {
+                id: dotsBtn
+
+                iconKind: "dots"
+                filled: false
+                iconSize: 14
+                enabled: !!panel.doc
+                onClicked: copyMenu.openNear(dotsBtn, dotsBtn.width / 2, dotsBtn.height / 2)
+            }
+        }
+
+        PropCopyMenu {
+            id: copyMenu
+
+            doc: panel.doc
+            scope: "design"
+        }
 
         Text {
             Layout.fillWidth: true

@@ -96,6 +96,7 @@ qt_add_qml_module(totm
         qml/models/document/DocEasing.qml
         qml/models/document/DocPathSample.qml
         qml/models/document/DocAnim.qml
+        qml/models/document/DocPropCopy.qml
         qml/models/document/DocAudio.qml
         # Canvas + snapping
         qml/components/editor/snap/SnapEngine.qml
@@ -167,6 +168,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ClipTextOptions.qml
         qml/components/editor/properties/ClipMaskOptions.qml
         qml/components/editor/properties/ClipKeys.qml
+        qml/components/editor/properties/PropCopyMenu.qml
         qml/components/editor/properties/ClipTimingOptions.qml
         qml/components/editor/properties/EasingGraph.qml
         qml/components/editor/properties/GraphEditorPopup.qml

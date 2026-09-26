@@ -87,6 +87,9 @@ QtObject {
     property var audio: DocAudio {
         doc: root
     }
+    property var propCopy: DocPropCopy {
+        doc: root
+    }
 
     readonly property bool canUndo: root.history.canUndo
     readonly property bool canRedo: root.history.canRedo
@@ -242,6 +245,32 @@ QtObject {
     }
     function pasteClips(templates, targetUids, baseTime) {
         return anim.pasteClips(templates, targetUids, baseTime);
+    }
+    // Panel three-dot copy/paste (DocPropCopy checkpoints internally
+    // after validating, so these stay thin pass-throughs).
+    function canCopyDesign() {
+        return propCopy.canCopyDesign();
+    }
+    function copyDesignProps(mode) {
+        return propCopy.copyDesign(mode);
+    }
+    function canPasteDesign() {
+        return propCopy.canPasteDesign();
+    }
+    function pasteDesignProps(mode) {
+        return propCopy.pasteDesign(mode);
+    }
+    function canCopyAnimClips(ids) {
+        return propCopy.canCopyAnim(ids);
+    }
+    function copyAnimClips(mode, ids) {
+        return propCopy.copyAnim(mode, ids);
+    }
+    function canPasteAnimClips(targetUids) {
+        return propCopy.canPasteAnim(targetUids);
+    }
+    function pasteAnimClips(mode, targetUids) {
+        return propCopy.pasteAnim(mode, targetUids);
     }
     function setAnimDuration(v) {
         return anim.setDuration(v);

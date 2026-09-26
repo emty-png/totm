@@ -26,6 +26,42 @@ ScrollView {
             height: 4
         }
 
+        Row {
+            width: parent.width - 24
+            x: 12
+            height: 28
+            spacing: 4
+
+            Text {
+                width: parent.width - 28
+                anchors.verticalCenter: parent.verticalCenter
+                text: panel.headerName()
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: AppTheme.foreground
+                elide: Text.ElideRight
+            }
+
+            PanelIconButton {
+                id: dotsBtn
+
+                iconKind: "dots"
+                filled: false
+                iconSize: 14
+                enabled: !!panel.doc
+                onClicked: copyMenu.openNear(dotsBtn, dotsBtn.width / 2, dotsBtn.height / 2)
+            }
+        }
+
+        PropCopyMenu {
+            id: copyMenu
+
+            doc: panel.doc
+            scope: "anim"
+            clipIds: panel.copySourceIds()
+            targetUids: panel.targetTopUids()
+        }
+
         // Primary action: pick another preset from the gallery.
         Rectangle {
             width: parent.width - 24
@@ -148,6 +184,48 @@ ScrollView {
             width: parent.width
             height: 12
         }
+    }
+
+    // Clip ids to copy: the selection when clips are selected,
+    // else every card on the current selection.
+    function copySourceIds() {
+        var d = panel.doc;
+        if (!d)
+            return [];
+        if (d.anim.selectedClipIds.length > 0)
+            return d.anim.selectedClipIds.slice();
+        var out = [];
+        var cards = panel.cards;
+        for (var i = 0; i < cards.length; i++)
+            out.push(cards[i].id);
+        return out;
+    }
+
+    function targetTopUids() {
+        var d = panel.doc;
+        if (!d)
+            return [];
+        d.rev;
+        var out = [];
+        var tops = d.selectedTops();
+        for (var i = 0; i < tops.length; i++)
+            out.push(tops[i].uid);
+        return out;
+    }
+
+    // Header name: selected shape's layer name (like the left
+    // sidebar), count for multi-selections, fallback when empty.
+    function headerName() {
+        var d = panel.doc;
+        if (!d)
+            return qsTr("Animations");
+        d.rev;
+        var tops = d.selectedTops();
+        if (tops.length === 1)
+            return tops[0].name || qsTr("Animations");
+        if (tops.length > 1)
+            return qsTr("%1 selected").arg(tops.length);
+        return qsTr("Animations");
     }
 
     // Clips on the selected tops, earliest first. Reads rev (selection)

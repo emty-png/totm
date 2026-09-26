@@ -78,6 +78,16 @@ ScrollView {
             }
 
             PanelIconButton {
+                id: dotsBtn
+
+                iconKind: "dots"
+                filled: false
+                iconSize: 12
+                enabled: !!editor.doc
+                onClicked: copyMenu.openNear(dotsBtn, dotsBtn.width / 2, dotsBtn.height / 2)
+            }
+
+            PanelIconButton {
                 Layout.rightMargin: 4
                 iconKind: "close"
                 filled: false
@@ -324,6 +334,15 @@ ScrollView {
             width: parent.width
             height: 12
         }
+
+        PropCopyMenu {
+            id: copyMenu
+
+            doc: editor.doc
+            scope: "anim"
+            clipIds: [editor.clipId]
+            targetUids: editor.targetTopUids()
+        }
     }
 
     GraphEditorPopup {
@@ -337,6 +356,17 @@ ScrollView {
         if (!editor.clipData || !editor.doc)
             return "";
         return editor.doc.anim.presets.presetName(editor.clipData.preset) + editor.doc.anim.presets.entrySuffix(editor.clipData.preset, editor.clipData.options);
+    }
+
+    function targetTopUids() {
+        if (!editor.doc)
+            return [];
+        editor.doc.rev;
+        var out = [];
+        var tops = editor.doc.selectedTops();
+        for (var i = 0; i < tops.length; i++)
+            out.push(tops[i].uid);
+        return out;
     }
 
     function setMode(mode) {

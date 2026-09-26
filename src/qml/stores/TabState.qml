@@ -24,6 +24,11 @@ QtObject {
     // loop/options/easing, no ids or targets) app-wide so clips paste
     // across shapes and designs. Reassigned wholesale like clipboard.
     property var animClipboard: []
+    // Properties clipboard for the panel three-dot menus (design values /
+    // style structure / both, animation clip values / shell / both).
+    // {scope: "design"|"anim", mode: "values"|"props"|"both", payload}.
+    // Null when empty. Reassigned wholesale so bindings update.
+    property var propClipboard: null
     readonly property Component documentFactory: Component {
         Document {}
     }
