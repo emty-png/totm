@@ -16,6 +16,9 @@ Rectangle {
     property string title: "Untitled"
     property bool active: false
     property bool collapsed: false
+    // Rail side for the active blend strip ("left" puts it on the row's
+    // right edge, "right" on the left edge).
+    property string side: "left"
     property real gapShift: 0
     property real dragOffset: 0
     property bool animateGap: true
@@ -94,6 +97,22 @@ Rectangle {
         }
         height: 1
         color: AppTheme.border
+    }
+
+    // Active blend strip: 1px of content background over the rail's
+    // outer-border segment, so the active row melts into the content
+    // like the top bar's bottom-border cover. It rides inside the row,
+    // so it tracks scrolling with zero math (and scrolls away with an
+    // off-screen active row, correctly showing no cover).
+    Rectangle {
+        anchors {
+            top: parent.top
+            bottom: parent.bottom
+        }
+        x: docTab.side === "left" ? docTab.width - 1 : 0
+        width: 1
+        visible: docTab.active
+        color: AppTheme.background
     }
 
     MouseArea {

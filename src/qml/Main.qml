@@ -157,6 +157,7 @@ ApplicationWindow {
                 VerticalTabBar {
                     anchors.fill: parent
                     collapsed: SettingsStore.tabRailCollapsed
+                    side: "left"
                 }
             }
 
@@ -203,6 +204,7 @@ ApplicationWindow {
                 VerticalTabBar {
                     anchors.fill: parent
                     collapsed: SettingsStore.tabRailCollapsed
+                    side: "right"
                 }
             }
         }

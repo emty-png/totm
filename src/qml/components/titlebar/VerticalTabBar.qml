@@ -13,16 +13,20 @@ ColumnLayout {
     id: tabBar
 
     property bool collapsed: false
+    // Rail side for the active blend strips ("left" or "right").
+    property string side: "left"
     readonly property int rowHeight: 40
     readonly property int railWidth: tabBar.collapsed ? 52 : 192
 
     // Drag state: source model index, press y in column coords, last
-    // cursor y for the drop glide, live target slot.
+    // cursor y for the drop glide, live target slot. scrollDirection
+    // drives edge autoscroll while dragging (-1 up, 0 off, 1 down).
     property int dragFrom: -1
     property real pressBarY: 0
     property real lastBarY: 0
     property bool tabDragging: false
     property int dropTarget: -1
+    property int scrollDirection: 0
 
     spacing: 0
 
@@ -69,6 +73,18 @@ ColumnLayout {
             color: AppTheme.border
         }
 
+        // Active blend strip, same language as the doc rows below.
+        Rectangle {
+            anchors {
+                top: parent.top
+                bottom: parent.bottom
+            }
+            x: tabBar.side === "left" ? homeRow.width - 1 : 0
+            width: 1
+            visible: homeRow.active
+            color: AppTheme.background
+        }
+
         MouseArea {
             id: homeMouse
             anchors.fill: parent
@@ -82,18 +98,22 @@ ColumnLayout {
         ToolTip.delay: 500
     }
 
-    ScrollView {
-        id: docScroll
+    // Scrollable document rows. A bare Flickable (not ScrollView) so
+    // drag autoscroll can read and drive contentY directly.
+    Flickable {
+        id: docFlick
 
         Layout.fillWidth: true
         Layout.fillHeight: true
-        contentWidth: availableWidth
+        contentWidth: width
+        contentHeight: docColumn.height
         clip: true
-        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar {}
 
         ColumnLayout {
             id: docColumn
-            width: docScroll.availableWidth
+            width: docFlick.width
             spacing: 0
 
             Repeater {
@@ -111,10 +131,27 @@ ColumnLayout {
                     title: TabState.titleAt(index + 1)
                     active: TabState.currentIndex === index + 1
                     collapsed: tabBar.collapsed
+                    side: tabBar.side
                     onClicked: TabState.select(index + 1)
                     onCloseRequested: TabState.closeTab(index + 1)
                 }
             }
+        }
+    }
+
+    // Edge autoscroll: while a dragged tab parks within 24px of the
+    // viewport edge, the list scrolls under it so far tabs stay
+    // reachable. Each step re-runs target adoption at the held cursor.
+    Timer {
+        id: scrollTimer
+
+        interval: 16
+        repeat: true
+        running: tabBar.tabDragging && tabBar.scrollDirection !== 0
+        onTriggered: {
+            var maxY = Math.max(0, docFlick.contentHeight - docFlick.height);
+            docFlick.contentY = Math.min(maxY, Math.max(0, docFlick.contentY + tabBar.scrollDirection * 10));
+            tabBar.updateTargets(tabBar.lastBarY);
         }
     }
 
@@ -234,6 +271,11 @@ ColumnLayout {
         if (!tabBar.tabDragging && Math.abs(deltaY) <= 6)
             return;
         tabBar.tabDragging = true;
+        tabBar.updateTargets(barY);
+        tabBar.updateScroll(barY);
+    }
+
+    function updateTargets(barY) {
         tabBar.adoptSlot(barY);
         for (var i = 0; i < TabState.docCount; i++) {
             var item = rows.itemAt(i);
@@ -254,6 +296,23 @@ ColumnLayout {
                 item.dragOffset = 0;
             }
         }
+    }
+
+    // Edge zones (24px) steer the autoscroll timer; barY and contentY
+    // share docColumn coords, so no mapping is needed.
+    function updateScroll(barY) {
+        if (!tabBar.tabDragging) {
+            tabBar.scrollDirection = 0;
+            return;
+        }
+        var viewTop = docFlick.contentY;
+        var viewBottom = viewTop + docFlick.height;
+        if (barY < viewTop + 24)
+            tabBar.scrollDirection = -1;
+        else if (barY > viewBottom - 24)
+            tabBar.scrollDirection = 1;
+        else
+            tabBar.scrollDirection = 0;
     }
 
     // Hysteresis: a neighboring slot only wins past 12px penetration.
@@ -291,6 +350,7 @@ ColumnLayout {
         tabBar.dragFrom = -1;
         tabBar.tabDragging = false;
         tabBar.dropTarget = -1;
+        tabBar.scrollDirection = 0;
         for (var i = 0; i < TabState.docCount; i++) {
             var item = rows.itemAt(i);
             if (!item)
