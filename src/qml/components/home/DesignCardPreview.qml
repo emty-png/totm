@@ -18,6 +18,13 @@ Item {
     readonly property real sceneW: preview.scene && preview.scene.sceneWidth > 0 ? preview.scene.sceneWidth : 1920
     readonly property real sceneH: preview.scene && preview.scene.sceneHeight > 0 ? preview.scene.sceneHeight : 1080
     readonly property var leaves: preview.collectLeaves()
+    // Snapshot tree index for mask resolution ({byUid, kids}),
+    // rebuilt with the scene. Mirrors the DocTree structure over
+    // plain snapshot nodes.
+    readonly property var treeIndex: preview.buildIndex()
+    // Masked non-mask leaves (uid + paint depth matching the main
+    // repeater), driving the MaskLeafItem repeater below.
+    readonly property var maskedStubs: preview.collectMaskedStubs()
     // Union box of visible leaves with a 6% pad, or null when it cannot
     // apply (disabled, empty scene): callers fall back to full-scene fit.
     readonly property var contentBox: preview.fitContent ? preview.unionBox() : null
@@ -97,6 +104,8 @@ Item {
                         grain: modelData.grain
                         grainFrame: 0
                         isBackdropCapture: true
+                        isMaskShape: modelData.isMask === true
+                        isMaskedContent: preview.isMaskedUid(modelData.uid ?? -1)
                         shapeOpacity: modelData.opacity !== undefined ? modelData.opacity : 1
                         radius: modelData.radius || 0
                         independentCorners: modelData.independentCorners === true
@@ -150,6 +159,8 @@ Item {
                     grainFrame: 0
                     backdropItem: preview.hasBackdrop ? backdropSrc : null
                     isBackdropCapture: false
+                    isMaskShape: modelData.isMask === true
+                    isMaskedContent: preview.isMaskedUid(modelData.uid ?? -1)
                     shapeOpacity: modelData.opacity !== undefined ? modelData.opacity : 1
                     radius: modelData.radius || 0
                     independentCorners: modelData.independentCorners === true
@@ -175,6 +186,24 @@ Item {
                     shapeVisible: true
                     shapeLocked: false
                     zoom: 1
+                }
+            }
+
+            // CPU preview for masked leaves (one scene-sized item per
+            // masked leaf at its own paint depth, like the canvas
+            // layer): masks never paint, masked content paints here.
+            Repeater {
+                model: preview.maskedStubs
+
+                MaskLeafItem {
+                    x: 0
+                    y: 0
+                    width: preview.sceneW
+                    height: preview.sceneH
+                    z: modelData.z
+                    leaf: preview.previewMapFor(modelData.uid)
+                    masks: preview.maskMapsFor(modelData.uid)
+                    frameNo: 0
                 }
             }
         }
@@ -297,6 +326,180 @@ Item {
             return false;
         var b = n ? n.backgroundBlur : null;
         return !!b && b.enabled === true && Number(b.radius) > 0;
+    }
+
+    // Snapshot tree index: uid -> {node, parentUid, index} plus
+    // per-parent child lists ("root" for top level). Skips hidden
+    // branches and caps at 150 leaves, like collectLeaves.
+    function buildIndex() {
+        var byUid = {};
+        var kids = {
+            "root": []
+        };
+        var s = preview.scene;
+        if (!s || !s.nodes)
+            return {
+                byUid: byUid,
+                kids: kids
+            };
+        var leaves = 0;
+        var walk = (list, parentUid) => {
+            if (!list || leaves >= 150)
+                return;
+            var arr = [];
+            for (var i = 0; i < list.length && leaves < 150; i++) {
+                var n = list[i];
+                if (!n || n.visible === false)
+                    continue;
+                var entry = {
+                    node: n,
+                    parentUid: parentUid,
+                    index: arr.length
+                };
+                arr.push(entry);
+                byUid[n.uid] = entry;
+                if (n.kind === "group")
+                    walk(n.children || [], n.uid);
+                else
+                    leaves++;
+            }
+            kids[parentUid] = arr;
+        };
+        walk(s.nodes, "root");
+        return {
+            byUid: byUid,
+            kids: kids
+        };
+    }
+
+    // Nearest mask below branchIndex in a top-first child list
+    // (Figma segmentation, mirrors DocTree.maskBelowIn).
+    function maskBelowIn(list, branchIndex) {
+        var kids = list || [];
+        for (var i = branchIndex + 1; i < kids.length; i++) {
+            var n = kids[i] ? kids[i].node : null;
+            if (n && n.kind === "shape" && n.isMask === true)
+                return kids[i];
+        }
+        return null;
+    }
+
+    // All mask uids clipping the given leaf uid, walking up the
+    // ancestor chain (nested masks intersect). Masks never clip
+    // sibling masks at their own level. Mirrors DocTree.
+    function maskUidsForUid(uid) {
+        var idx = preview.treeIndex;
+        var hit = idx.byUid[uid];
+        if (!hit)
+            return [];
+        var out = [];
+        var selfIsMask = hit.node.kind === "shape" && hit.node.isMask === true;
+        var parentUid = hit.parentUid, branchIndex = hit.index, level = 0;
+        while (true) {
+            if (!(level === 0 && selfIsMask)) {
+                var m = preview.maskBelowIn(idx.kids[parentUid] || [], branchIndex);
+                if (m)
+                    out.push(m.node.uid);
+            }
+            if (parentUid === "root")
+                break;
+            var parentHit = idx.byUid[parentUid];
+            if (!parentHit)
+                break;
+            branchIndex = parentHit.index;
+            parentUid = parentHit.parentUid;
+            level++;
+        }
+        return out;
+    }
+
+    function isMaskedUid(uid) {
+        return preview.maskUidsForUid(uid).length > 0;
+    }
+
+    function collectMaskedStubs() {
+        var out = [];
+        var leaves = preview.leaves;
+        for (var i = 0; i < leaves.length; i++) {
+            var n = leaves[i];
+            if (!n || n.kind === "group" || n.isMask === true)
+                continue;
+            if (preview.maskUidsForUid(n.uid).length === 0)
+                continue;
+            out.push({
+                uid: n.uid,
+                z: leaves.length - i
+            });
+        }
+        return out;
+    }
+
+    function leafByUid(uid) {
+        var leaves = preview.leaves;
+        for (var i = 0; i < leaves.length; i++) {
+            if (leaves[i] && leaves[i].uid === uid)
+                return leaves[i];
+        }
+        return null;
+    }
+
+    // Plain sampled map for the CPU mask preview (same keys as the
+    // canvas previewMap / export snapshots).
+    function previewMapFor(uid) {
+        var n = preview.leafByUid(uid);
+        if (!n)
+            return ({});
+        return {
+            uid: n.uid,
+            type: n.type || n.shapeType || "rectangle",
+            shapeType: n.type || n.shapeType || "rectangle",
+            x: n.x || 0,
+            y: n.y || 0,
+            w: Math.max(1, n.w || 10),
+            h: Math.max(1, n.h || 10),
+            rotation: n.rotation || 0,
+            opacity: n.opacity !== undefined ? n.opacity : 1,
+            visible: n.visible !== false,
+            fills: n.fills ?? [],
+            strokes: n.strokes ?? [],
+            shadows: n.shadows ?? [],
+            glows: n.glows ?? [],
+            layerBlur: n.layerBlur,
+            backgroundBlur: n.backgroundBlur,
+            grain: n.grain,
+            radius: n.radius || 0,
+            independentCorners: n.independentCorners === true,
+            cornerRadii: n.cornerRadii || [],
+            points: n.points || 5,
+            pathData: n.pathData || [],
+            flipH: n.flipH === true,
+            flipV: n.flipV === true,
+            imageSource: n.imageSource ?? "",
+            textContent: n.textContent !== undefined ? n.textContent : "",
+            fontFamily: n.fontFamily || "Inter",
+            fontWeight: n.fontWeight || 400,
+            fontSize: n.fontSize || 16,
+            lineHeightAuto: n.lineHeightAuto !== false,
+            lineHeight: n.lineHeight || 1.2,
+            letterSpacing: n.letterSpacing || 0,
+            hAlign: n.hAlign || "left",
+            vAlign: n.vAlign || "top",
+            autoSize: n.autoSize !== false,
+            penFill: n.penFill !== false,
+            strokeCap: n.strokeCap || "round",
+            strokeJoin: n.strokeJoin || "round",
+            isMask: n.isMask === true,
+            maskFeather: Math.max(0, Number(n.maskFeather) || 0),
+            maskInverted: n.maskInverted === true
+        };
+    }
+
+    function maskMapsFor(uid) {
+        var out = [];
+        var mids = preview.maskUidsForUid(uid);
+        for (var k = 0; k < mids.length; k++)
+            out.push(preview.previewMapFor(mids[k]));
+        return out;
     }
 
     // Union box of the visible leaves (rotation ignored, like the
