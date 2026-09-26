@@ -219,6 +219,9 @@ QtObject {
     function nudgeClip(id, t0, duration) {
         return anim.nudgeClip(id, t0, duration);
     }
+    function nudgeKey(id, keyIndex, t) {
+        return anim.nudgeKey(id, keyIndex, t);
+    }
     function setClipEasing(id, easing) {
         return anim.setClipEasing(id, easing);
     }
@@ -590,6 +593,18 @@ QtObject {
     function moveBackward() {
         history.checkpoint();
         reorderer.moveBackward();
+    }
+    function canBringToFront() {
+        return reorderer.canBringToFront();
+    }
+    function canSendToBack() {
+        return reorderer.canSendToBack();
+    }
+    function canMoveForward() {
+        return reorderer.canMoveForward();
+    }
+    function canMoveBackward() {
+        return reorderer.canMoveBackward();
     }
     function moveWithinParent(parentUid, from, to) {
         history.checkpoint();

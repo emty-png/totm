@@ -4,7 +4,9 @@ import Totm
 // One timeline lane: span bars per clip plus draggable diamond keyframes
 // at each clip end. Start diamonds and bars move the whole clip, end
 // diamonds stretch its duration (6px snap to playhead, zero and sibling
-// ends); clicks still select, Delete still removes. Stepped clips
+// ends); clicks still select, Delete still removes. Stored animation
+// keys show as small ticks on their bar: click selects and seeks,
+// drag retimes between neighbors. Stepped clips
 // (hide/show, appear, flip) are instants: one diamond at t0, no bar,
 // nothing to stretch. Empty lane space falls through to the view marquee
 // below for multi-select. Drag state lives here while delegates stay
@@ -45,6 +47,12 @@ Item {
     property real dragT0: 0
     property real dragDur: 0
     property real pressLx: 0
+    // Key-drag state (dragMode "key"): press-time clip-local t plus
+    // the live absolute time the tick follows.
+    property int dragKeyIndex: -1
+    property real snapKeyT: 0
+    property real snapKeyAbs: 0
+    property real dragKeyAbs: 0
 
     implicitHeight: 30
 
@@ -192,6 +200,39 @@ Item {
         }
     }
 
+    // Keyframe ticks, one small diamond per stored key at its
+    // absolute time. Click selects the clip and seeks; drag retimes
+    // the key between its neighbors (single undo entry, snapped).
+    Repeater {
+        model: lane.keyTicks()
+
+        Rectangle {
+            x: lane.tickX(modelData) - width / 2
+            y: (parent.height - height) / 2
+            width: 8
+            height: 8
+            rotation: 45
+            radius: 2
+            color: AppTheme.foreground
+            border.width: 1
+            border.color: AppTheme.fieldBorder
+
+            MouseArea {
+                id: keyMouse
+
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                preventStealing: true
+                onPressed: mouse => lane.keyPress(modelData.clipId, modelData.keyIndex, lane.mapFromItem(keyMouse, mouse.x, mouse.y).x)
+                onPositionChanged: mouse => lane.keyMove(lane.mapFromItem(keyMouse, mouse.x, mouse.y).x)
+                onReleased: lane.keyRelease()
+                onClicked: mouse => lane.keyClick(modelData.clipId, modelData.keyIndex, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)))
+            }
+        }
+    }
+
     // Bar geometry, following the drag while one is active on its clip.
     // Joint clips ride the shared delta off their press-time snapshot
     // (the model mutates silently, so only these scalars stay stable).
@@ -220,6 +261,7 @@ Item {
 
     // Both ends of every clip as {clipId, x seconds, end}. Stepped
     // clips expose only their start: one keyframe, nothing to stretch.
+
     function keyEnds() {
         var out = [];
         var list = lane.clips || [];
@@ -247,6 +289,120 @@ Item {
                 return list[i];
         }
         return null;
+    }
+
+    // Stored keys as {clipId, keyIndex, x seconds}. Stepped clips
+    // carry no keys; single stored keys show too (they mark time
+    // even before driving interpolation).
+    function keyTicks() {
+        var out = [];
+        var list = lane.clips || [];
+        for (var i = 0; i < list.length; i++) {
+            if (lane.isStepped(list[i].preset))
+                continue;
+            var keys = list[i].options ? list[i].options.keys : null;
+            if (!keys || typeof keys.length !== "number")
+                continue;
+            for (var k = 0; k < keys.length; k++) {
+                out.push({
+                    clipId: list[i].id,
+                    keyIndex: k,
+                    x: list[i].t0 + Number(keys[k].t) * list[i].duration
+                });
+            }
+        }
+        return out;
+    }
+
+    // Tick geometry, following clip drags (move/stretch/joint) plus
+    // the active key drag's own live time.
+    function tickX(tick) {
+        if (lane.dragging && tick.clipId === lane.dragClipId) {
+            if (lane.dragMode === "key" && tick.keyIndex === lane.dragKeyIndex)
+                return lane.laneX(lane.dragKeyAbs);
+            if (lane.dragMode === "move")
+                return lane.laneX(tick.x + lane.dragT0 - lane.snapT0);
+            if (lane.dragMode === "stretch") {
+                var c = lane.findClip(tick.clipId);
+                var kt = (c && c.options && c.options.keys && c.options.keys[tick.keyIndex]) ? Number(c.options.keys[tick.keyIndex].t) : 0;
+                return lane.laneX(lane.dragT0 + kt * lane.dragDur);
+            }
+        }
+        if (lane.jointActive && lane.jointOrig[tick.clipId] !== undefined)
+            return lane.laneX(tick.x + lane.jointDx);
+        return lane.laneX(tick.x);
+    }
+
+    function keyClipAt(clipId, keyIndex) {
+        var c = lane.findClip(clipId);
+        if (!c || !c.options || !c.options.keys || keyIndex < 0 || keyIndex >= c.options.keys.length)
+            return null;
+        return c;
+    }
+
+    function keyPress(clipId, keyIndex, lx) {
+        var c = lane.keyClipAt(clipId, keyIndex);
+        if (!c || !lane.doc)
+            return;
+        lane.doc.beginPassiveTransaction();
+        lane.dragClipId = clipId;
+        lane.dragMode = "key";
+        lane.dragKeyIndex = keyIndex;
+        lane.snapKeyT = Number(c.options.keys[keyIndex].t);
+        lane.snapKeyAbs = c.t0 + lane.snapKeyT * c.duration;
+        lane.dragKeyAbs = lane.snapKeyAbs;
+        lane.pressLx = lx;
+        lane.dragging = false;
+    }
+
+    function keyMove(lx) {
+        if (lane.dragClipId < 0 || lane.dragKeyIndex < 0 || !lane.doc)
+            return;
+        if (!lane.dragging && Math.abs(lx - lane.pressLx) < 4)
+            return;
+        if (!lane.dragging)
+            lane.doc.anim.settlePreview();
+        lane.dragging = true;
+        var c = lane.keyClipAt(lane.dragClipId, lane.dragKeyIndex);
+        if (!c)
+            return;
+        var raw = lane.snapKeyAbs + (lx - lane.pressLx) / lane.pxPerSec;
+        var local = (lane.snapTime(raw) - c.t0) / Math.max(0.001, c.duration);
+        if (lane.doc.nudgeKey(lane.dragClipId, lane.dragKeyIndex, local))
+            lane.dragKeyAbs = c.t0 + Number(c.options.keys[lane.dragKeyIndex].t) * c.duration;
+        if (!lane.doc.anim.playing)
+            lane.doc.seekPlayhead(lane.doc.anim.currentTime);
+    }
+
+    function keyRelease() {
+        var d = lane.doc;
+        var id = lane.dragClipId, idx = lane.dragKeyIndex;
+        if (id < 0)
+            return;
+        var moved = lane.dragging;
+        var abs = lane.dragKeyAbs;
+        lane.dragging = false;
+        lane.dragClipId = -1;
+        lane.dragMode = "move";
+        lane.dragKeyIndex = -1;
+        if (!d)
+            return;
+        if (moved) {
+            var c = lane.keyClipAt(id, idx);
+            if (c)
+                d.nudgeKey(id, idx, (abs - c.t0) / Math.max(0.001, c.duration));
+            d.touch();
+        }
+        d.endTransaction();
+    }
+
+    function keyClick(clipId, keyIndex, additive) {
+        var c = lane.keyClipAt(clipId, keyIndex);
+        if (!c || !lane.doc)
+            return;
+        if (lane.diamondPolicy)
+            lane.diamondPolicy(clipId, additive);
+        lane.doc.seekPlayhead(c.t0 + Number(c.options.keys[keyIndex].t) * c.duration);
     }
 
     // Snap to zero, the playhead and every other clip end in the

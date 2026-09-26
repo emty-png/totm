@@ -200,4 +200,106 @@ QtObject {
         doc._setChildren(parentUid, list);
         doc._refreshStructural();
     }
+
+    // Pure edge queries for menu gating (no mutation): true when the
+    // matching move would reorder something. Locked tops stay pinned,
+    // so only unlocked selected tops count.
+    function unlockedTops() {
+        var out = [];
+        var every = doc.selectedTops();
+        for (var i = 0; i < every.length; i++) {
+            if (!doc.isEffectivelyLocked(every[i]))
+                out.push(every[i]);
+        }
+        return out;
+    }
+
+    function groupedTops() {
+        var byParent = {};
+        var tops = docReorder.unlockedTops();
+        for (var i = 0; i < tops.length; i++) {
+            var hit = doc._find(tops[i].uid);
+            if (!hit)
+                continue;
+            var key = String(hit.parentUid);
+            if (!byParent[key])
+                byParent[key] = [];
+            byParent[key].push(hit);
+        }
+        return byParent;
+    }
+
+    // Exact no-op check: rebuild the order like bringToFront /
+    // sendToBack would and compare uids.
+    function wouldReorder(toFront) {
+        var byParent = docReorder.groupedTops();
+        var any = false;
+        for (var key in byParent)
+            any = true;
+        if (!any)
+            return false;
+        for (var k in byParent) {
+            var list = doc._childrenOf(Number(k));
+            var ids = {};
+            var sel = byParent[k];
+            for (var a = 0; a < sel.length; a++)
+                ids[sel[a].node.uid] = true;
+            var rest = [], ordered = [];
+            for (var b = 0; b < list.length; b++) {
+                if (ids[list[b].uid])
+                    ordered.push(list[b].uid);
+                else
+                    rest.push(list[b].uid);
+            }
+            var next = toFront ? ordered.concat(rest) : rest.concat(ordered);
+            for (var c = 0; c < list.length; c++) {
+                if (list[c].uid !== next[c])
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    function canBringToFront() {
+        return docReorder.wouldReorder(true);
+    }
+
+    function canSendToBack() {
+        return docReorder.wouldReorder(false);
+    }
+
+    // Step queries mirror the swap loops in moveForward /
+    // moveBackward: a selected top with an unselected neighbor to
+    // step around.
+    function canMoveForward() {
+        var byParent = docReorder.groupedTops();
+        for (var key in byParent) {
+            var hits = byParent[key];
+            var list = doc._childrenOf(hits[0].parentUid);
+            var selIds = {};
+            for (var a = 0; a < hits.length; a++)
+                selIds[hits[a].node.uid] = true;
+            for (var idx = 1; idx < list.length; idx++) {
+                if (selIds[list[idx].uid] && !selIds[list[idx - 1].uid])
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    function canMoveBackward() {
+        var byParent = docReorder.groupedTops();
+        for (var key in byParent) {
+            var hits = byParent[key];
+            var list = doc._childrenOf(hits[0].parentUid);
+            var selIds = {};
+            for (var a = 0; a < hits.length; a++)
+                selIds[hits[a].node.uid] = true;
+            for (var idx = list.length - 2; idx >= 0; idx--) {
+                if (selIds[list[idx].uid] && !selIds[list[idx + 1].uid])
+                    return true;
+            }
+        }
+        return false;
+    }
 }

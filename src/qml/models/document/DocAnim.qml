@@ -195,6 +195,38 @@ QtObject {
         return true;
     }
 
+    // Silent in-place key retime for timeline key drags: no
+    // checkpoint, no touch, so delegates survive the gesture while
+    // ticks follow live. The press-time begin() holds the undo image;
+    // release touches once and ends for a single entry. t is
+    // clip-local 0..1, clamped between neighbors so order never
+    // flips. Mirrors nudgeClip.
+    function nudgeKey(id, keyIndex, t) {
+        var at = -1;
+        for (var i = 0; i < anim.clips.length; i++) {
+            if (anim.clips[i].id === id)
+                at = i;
+        }
+        if (at < 0)
+            return false;
+        var c = anim.clips[at];
+        var keys = c.options ? c.options.keys : null;
+        if (!keys || typeof keys.length !== "number" || keyIndex < 0 || keyIndex >= keys.length)
+            return false;
+        var nt = Math.min(1, Math.max(0, Number(t)));
+        if (isNaN(nt))
+            return false;
+        var lo = keyIndex > 0 ? Number(keys[keyIndex - 1].t) : 0;
+        var hi = keyIndex < keys.length - 1 ? Number(keys[keyIndex + 1].t) : 1;
+        nt = Math.min(hi, Math.max(lo, nt));
+        nt = Math.round(nt * 1000) / 1000;
+        if (keys[keyIndex].t === nt)
+            return false;
+        keys[keyIndex].t = nt;
+        anim.clipRev++;
+        return true;
+    }
+
     function setClipEasing(id, easing) {
         var at = -1;
         for (var i = 0; i < anim.clips.length; i++) {

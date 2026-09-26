@@ -27,6 +27,10 @@ Item {
     readonly property bool canReleaseMask: !!menu.doc && menu.doc.canReleaseMask()
     readonly property bool canUndo: !!menu.doc && menu.doc.canUndo
     readonly property bool canRedo: !!menu.doc && menu.doc.canRedo
+    readonly property bool canBringToFront: !!menu.doc && menu.doc.canBringToFront()
+    readonly property bool canSendToBack: !!menu.doc && menu.doc.canSendToBack()
+    readonly property bool canMoveForward: !!menu.doc && menu.doc.canMoveForward()
+    readonly property bool canMoveBackward: !!menu.doc && menu.doc.canMoveBackward()
 
     function computeHasSelection() {
         var d = menu.doc;
@@ -302,6 +306,7 @@ Item {
 
                         MenuItem {
                             label: qsTr("Bring to the front")
+                            visible: menu.canBringToFront
                             onClicked: {
                                 menu.doc.bringToFront();
                                 menu.closeAll();
@@ -309,6 +314,7 @@ Item {
                         }
                         MenuItem {
                             label: qsTr("Move to the back")
+                            visible: menu.canSendToBack
                             onClicked: {
                                 menu.doc.sendToBack();
                                 menu.closeAll();
@@ -316,6 +322,7 @@ Item {
                         }
                         MenuItem {
                             label: qsTr("Move forward")
+                            visible: menu.canMoveForward
                             onClicked: {
                                 menu.doc.moveForward();
                                 menu.closeAll();
@@ -323,6 +330,7 @@ Item {
                         }
                         MenuItem {
                             label: qsTr("Move backward")
+                            visible: menu.canMoveBackward
                             onClicked: {
                                 menu.doc.moveBackward();
                                 menu.closeAll();
