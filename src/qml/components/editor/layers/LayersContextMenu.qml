@@ -6,9 +6,11 @@ import Totm
 
 // Layers context menu (sidebar only): Undo / Redo / Copy / Paste /
 // Duplicate / Group / Ungroup / Arrange (side submenu) / Rename /
-// Delete. Custom popups in the shapes-dropdown style so the theme
-// carries over; text rows like Figma (no icons). Actions run straight
-// against the document.
+// Delete. Rows hide when their action can't apply (instead of
+// showing disabled), so the popup stays compact; its height derives
+// from the visible row count. Custom popups in the shapes-dropdown
+// style so the theme carries over; text rows like Figma (no icons).
+// Actions run straight against the document.
 Item {
     id: menu
 
@@ -47,12 +49,46 @@ Item {
             TabState.clipboard = menu.doc.copySelected();
     }
 
+    // Visible row count for popup placement: one 32px row plus
+    // 2px spacing each, matching MenuItem + the column below.
+    // Order mirrors the rows: Undo, Redo, Copy, Duplicate, Paste,
+    // Group, Ungroup, Use as Mask, Release Mask, Arrange, Rename,
+    // Delete.
+    function visibleRowCount() {
+        var n = 0;
+        if (menu.canUndo)
+            n++;
+        if (menu.canRedo)
+            n++;
+        if (menu.hasSelection)
+            n += 2;
+        if (menu.canPaste)
+            n++;
+        if (menu.canGroup)
+            n++;
+        if (menu.canUngroup)
+            n++;
+        if (menu.canUseAsMask)
+            n++;
+        if (menu.canReleaseMask)
+            n++;
+        if (menu.hasSelection)
+            n++;
+        if (menu.contextValid)
+            n++;
+        if (menu.hasSelection)
+            n++;
+        return n;
+    }
+
     // Opens from a row (uid) or empty area (-1). Esc and outside presses
-    // dismiss via closePolicy.
+    // dismiss via closePolicy. Stays shut when nothing applies.
     function openFor(uid, px, py) {
         menu.contextUid = uid;
         sub.close();
-        var w = 170, h = 440;
+        if (menu.visibleRowCount() === 0)
+            return;
+        var w = 170, h = menu.visibleRowCount() * 34 + 30;
         main.x = Math.min(Math.max(0, px), Math.max(0, menu.parent.width - w));
         main.y = Math.min(Math.max(0, py), Math.max(0, menu.parent.height - h));
         main.open();
@@ -129,6 +165,7 @@ Item {
             MenuItem {
                 label: qsTr("Undo")
                 hint: qsTr("Ctrl+Z")
+                visible: menu.canUndo
                 enabled: menu.canUndo
                 onClicked: {
                     menu.doc.undo();
@@ -138,6 +175,7 @@ Item {
             MenuItem {
                 label: qsTr("Redo")
                 hint: qsTr("Ctrl+Y")
+                visible: menu.canRedo
                 enabled: menu.canRedo
                 onClicked: {
                     menu.doc.redo();
@@ -146,6 +184,7 @@ Item {
             }
             MenuItem {
                 label: qsTr("Copy")
+                visible: menu.hasSelection
                 enabled: menu.hasSelection
                 onClicked: {
                     menu.doCopy();
@@ -154,6 +193,7 @@ Item {
             }
             MenuItem {
                 label: qsTr("Paste")
+                visible: menu.canPaste
                 enabled: menu.canPaste
                 onClicked: {
                     menu.doc.insertCopies(TabState.clipboard);
@@ -162,6 +202,7 @@ Item {
             }
             MenuItem {
                 label: qsTr("Duplicate")
+                visible: menu.hasSelection
                 enabled: menu.hasSelection
                 onClicked: {
                     menu.doc.duplicateSelected();
@@ -170,6 +211,7 @@ Item {
             }
             MenuItem {
                 label: qsTr("Group")
+                visible: menu.canGroup
                 enabled: menu.canGroup
                 onClicked: {
                     menu.doc.groupSelected();
@@ -178,6 +220,7 @@ Item {
             }
             MenuItem {
                 label: qsTr("Ungroup")
+                visible: menu.canUngroup
                 enabled: menu.canUngroup
                 onClicked: {
                     menu.doc.ungroupSelected();
@@ -186,6 +229,7 @@ Item {
             }
             MenuItem {
                 label: qsTr("Use as Mask")
+                visible: menu.canUseAsMask
                 enabled: menu.canUseAsMask
                 onClicked: {
                     menu.doc.useAsMask();
@@ -194,6 +238,7 @@ Item {
             }
             MenuItem {
                 label: qsTr("Release Mask")
+                visible: menu.canReleaseMask
                 enabled: menu.canReleaseMask
                 onClicked: {
                     menu.doc.releaseMask();
@@ -204,6 +249,7 @@ Item {
                 id: arrangeItem
                 label: qsTr("Arrange")
                 hint: qsTr("›")
+                visible: menu.hasSelection
                 enabled: menu.hasSelection
                 onClicked: {
                     if (sub.opened)
@@ -287,6 +333,7 @@ Item {
             }
             MenuItem {
                 label: qsTr("Rename")
+                visible: menu.contextValid
                 enabled: menu.contextValid
                 onClicked: {
                     menu.doc.beginRename(menu.contextUid);
@@ -295,6 +342,7 @@ Item {
             }
             MenuItem {
                 label: qsTr("Delete")
+                visible: menu.hasSelection
                 enabled: menu.hasSelection
                 onClicked: {
                     menu.doc.deleteSelected();
