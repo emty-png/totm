@@ -45,7 +45,10 @@ QtObject {
     }
 
     // One frame step, driven by the editor's 16ms timer. Wall-clock dt
-    // clamped so tab-switch stalls never jump the playhead.
+    // clamped so tab-switch stalls never jump the playhead. Loop wraps
+    // restore authored values first (see seek): without it the new
+    // loop inherits the old loop's frame (notably a stale hidden flag
+    // that gates every other clip off).
     function tick() {
         if (!transport.playing)
             return;
@@ -56,20 +59,33 @@ QtObject {
         var anim = transport.doc.anim;
         var d = Math.max(0.5, anim.duration);
         var t = transport.currentTime + dt;
-        if (t >= d)
+        var wrapped = false;
+        if (t >= d) {
             t = t % d;
+            wrapped = true;
+        }
         transport.currentTime = t;
+        if (wrapped)
+            transport.restoreBaseValues();
         anim.sampler.applySample(transport.doc, anim.sampler.sampleAnim(transport.doc, t, transport.playBase));
     }
 
     // Jump the playhead (ruler click/drag). Captures base on first use
     // so seeking previews without a transport press; silent like ticks.
+    // Backward jumps restore authored values first: samples only carry
+    // active clips, so a seek before a clip's start would otherwise
+    // leave that clip's stale frame behind — and a stale hidden flag
+    // gates every other clip off, freezing the shape. The restore makes
+    // the new frame absolute, like export.
     function seek(t) {
         var anim = transport.doc.anim;
         var d = Math.max(0.5, anim.duration);
         var nt = Math.min(d, Math.max(0, Number(t) || 0));
+        var hadBase = !!transport.playBase;
         if (!transport.playBase)
             transport.playBase = captureBase();
+        if (hadBase && nt < transport.currentTime)
+            transport.restoreBaseValues();
         transport.currentTime = nt;
         anim.sampler.applySample(transport.doc, anim.sampler.sampleAnim(transport.doc, nt, transport.playBase));
     }
@@ -137,10 +153,17 @@ QtObject {
     }
 
     function restoreBase() {
-        var doc = transport.doc;
-        var base = transport.playBase;
+        transport.restoreBaseValues();
         transport.playBase = null;
         transport.lastTick = 0;
+    }
+
+    // Silent authored-value restore that keeps the preview open
+    // (playBase stays): tick wraps and backward seeks call this so the
+    // next sample applies onto clean values instead of the old frame.
+    function restoreBaseValues() {
+        var doc = transport.doc;
+        var base = transport.playBase;
         if (!base)
             return;
         for (var uid in base) {
