@@ -3,6 +3,22 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.3.1] - 2026-09-26
+
+### Added
+
+* Mask layers — any shape doubles as a mask over siblings above it via Use as Mask (`Ctrl+Alt+M`, layers context menu), Figma-style: stacked masks split the group into bands, nested groups intersect, masks never paint. Masked leaves share one CPU painter between canvas and export so they match; Mask Wipe (directional) and Mask Iris presets animate the mask box with feather and invert, and SVG component export emits clipPath for hard edges and alpha masks for feather/invert. Scenes bump to v3, old files load untouched.
+* Keyframes on every custom clip — move, scale, rotate, opacity, resize, corner, font size, color, gradient, stroke, shadow, glow, blur and grain clips take clip-local keys with per-key easing (one key stores, two or more drive interpolation with the clip easing bypassed, shorter lists read as plain from-to so old clips never change behavior). The clip editor grows a generic Keyframes section that captures the live look at the playhead, and the C++ sampler mirrors the interpolation so export matches preview.
+* Panel copy/paste for properties and clips — design and animation panel headers grow a three-dot menu with copy and paste in values, properties and both flavors on an app-wide clipboard, so styles and clips travel across shapes and designs. Design values land on same-index entries, properties rebuild structure, animation pastes match same-preset clips (missing ones are created at the playhead); every paste checkpoints once.
+* Mask-aware home previews — design cards render masks through the same band rules as the editor instead of raw rectangles.
+* Timeline keyframe ticks — lanes show a tick per stored key; clicking selects the clip and seeks to the key, dragging retimes it between neighbors with snapping in one undo entry. The Arrange submenu hides moves that can't reorder, like the main menu.
+* Tab rail positions plus window-chrome toggles — tabs dock Top, Bottom, Left or Right from a new Settings → Appearance → Tabs card (side rails collapse to icons, scroll on overflow, keep vertical drag-reorder). The Window card gains top-bar, theme-button and top-bar-dragging switches; a hidden top bar falls back Top tabs to the bottom rail. Everything persists with Reset all coverage while theme packs leave it alone.
+
+### Fixed
+
+* Layers context menu bloat — every row hides when its action can't apply instead of sitting disabled, so single selections show ~9 rows and empty areas show just Paste; the popup height follows the visible rows and it stays shut when nothing applies.
+* Preview hide frames leaking into snapshots — exporting or saving past a hide clip baked `visible=false` into the scene, and the sampler gates non-hide clips on static visibility, so the component rendered frozen with no further animations. Eye, flip and corner radius now rebase from the pre-play base like the other animated props (old saves keep their baked eye state: toggle the layer eye once to heal them).
+
 ## [0.3.0] - 2026-09-23
 
 ### Added
