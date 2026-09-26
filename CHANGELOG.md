@@ -3,6 +3,21 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.3.2] - 2026-09-26
+
+### Added
+
+* Theme-aware Bibata mouse cursors — every cursor (arrow, hand, resize grips, text beam, grabs, drag badges) renders from the Bibata set through `QCursor` pixmaps: Modern Ice for the light theme, Modern Classic for dark, repainting live on theme toggle. Wait/busy keep the system spinners (Bibata ships those animated); credited under GPL-3.0 in the Credits page.
+* Doc-page favicons — the maker guide, credits, contributors and changelog pages carry the totm mark as an inline SVG favicon, so tabs stay recognizable with no extra files.
+* Side-rail active blend plus tab-drag autoscroll — the active tab row blends into content like the top bar, and holding a dragged tab near the rail edge scrolls the list.
+
+### Fixed
+
+* Backward seeks and loop wraps freezing shapes — seeking before a clip's start (or wrapping) left stale authored values on the live nodes; the frame restores the pre-play base first now, matching export.
+* Tab strip scrolled out of view — the strip used layouts inside a Flickable whose viewport shifts with scroll buttons; plain Row/Column pins every tab, and scrolls are instant instead of fighting the animation.
+* Design context menu bloat — same compact treatment as layers: dead rows hide, and single-workspace menus show just Rename, Star, Export and Delete.
+* Design header with nothing selected — the panel header only shows for a live selection; the empty state keeps its centered text.
+
 ## [0.3.1] - 2026-09-26
 
 ### Added
