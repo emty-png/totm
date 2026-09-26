@@ -14,6 +14,16 @@ ScrollView {
 
     readonly property var cards: panel.collectCards()
 
+    // Selected top-level shape count. Touches rev so the header and the
+    // button gate follow selection changes.
+    readonly property int selCount: {
+        var d = panel.doc;
+        if (!d)
+            return 0;
+        d.rev;
+        return d.selectedTops().length;
+    }
+
     contentWidth: availableWidth
     clip: true
 
@@ -27,6 +37,7 @@ ScrollView {
         }
 
         Row {
+            visible: panel.selCount > 0
             width: parent.width - 24
             x: 12
             height: 28
@@ -62,15 +73,17 @@ ScrollView {
             targetUids: panel.targetTopUids()
         }
 
-        // Primary action: pick another preset from the gallery.
+        // Primary action: pick another preset from the gallery. Gated on
+        // a live selection; without one it sits dimmed and ignores clicks.
         Rectangle {
             width: parent.width - 24
             x: 12
             height: 40
             radius: AppTheme.radiusMedium
-            scale: newMouse.pressed ? 0.98 : 1
+            scale: newMouse.pressed && panel.selCount > 0 ? 0.98 : 1
             transformOrigin: Item.Center
             color: AppTheme.foreground
+            opacity: panel.selCount > 0 ? 1 : 0.45
 
             Behavior on scale {
                 NumberAnimation {
@@ -93,12 +106,23 @@ ScrollView {
                 anchors.fill: parent
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
-                cursorShape: Qt.PointingHandCursor
+                cursorShape: panel.selCount > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
                 onClicked: {
-                    if (panel.newPolicy)
+                    if (panel.selCount > 0 && panel.newPolicy)
                         panel.newPolicy();
                 }
             }
+        }
+
+        Text {
+            width: parent.width - 32
+            x: 16
+            horizontalAlignment: Text.AlignHCenter
+            visible: panel.selCount === 0
+            text: qsTr("Nothing to see here...")
+            font.pixelSize: 13
+            wrapMode: Text.WordWrap
+            color: AppTheme.muted
         }
 
         Repeater {
