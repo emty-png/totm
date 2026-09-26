@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import Totm
 
 // Vertical document tab: full-width row, fixed 40px height. Mirrors
@@ -31,9 +30,12 @@ Rectangle {
     signal clicked
     signal closeRequested
 
-    Layout.fillWidth: true
-    Layout.preferredHeight: 40
+    // Fixed row height: the parent is a plain Column (see
+    // VerticalTabBar), which positions children by width/height instead
+    // of negotiating Layout props. Width comes from the delegate
+    // instance (docColumn.width).
     implicitHeight: 40
+    height: 40
     transform: Translate {
         y: docTab.gapShift + docTab.dragOffset
     }

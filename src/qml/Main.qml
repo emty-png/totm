@@ -248,6 +248,7 @@ ApplicationWindow {
             }
 
             Rectangle {
+                visible: bottomTabBar.activeVisible
                 x: bottomTabBar.x + bottomTabBar.activeX
                 y: 0
                 width: bottomTabBar.activeWidth

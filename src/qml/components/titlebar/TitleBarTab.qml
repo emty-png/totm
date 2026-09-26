@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import Totm
 
 // Document tab: 4x the 46px home tab = 184px. Same hover behavior as
@@ -28,8 +27,10 @@ Rectangle {
     signal clicked
     signal closeRequested
 
-    Layout.preferredWidth: 184
-    Layout.fillHeight: true
+    // Fixed width: the strip parent is a plain Row (see TitleBarTabBar),
+    // which positions children by width instead of negotiating Layout
+    // props. Height comes from the delegate instance (docRow.height).
+    width: 184
     // No scaling while dragging: fractional scales make the tab title
     // shimmer as it slides. The z-lift alone carries the dragged look.
     transform: Translate {

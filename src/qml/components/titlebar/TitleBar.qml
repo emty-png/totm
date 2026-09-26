@@ -76,8 +76,9 @@ Item {
     // Active-tab blend cover, painted over the border. Offset by the
     // tab bar's x so mac traffic lights don't shift it off the tab.
     // Only for the top-tabs mode; side/bottom rails paint their own.
+    // Hidden while the active tab is scrolled out of the viewport.
     Rectangle {
-        visible: titleBar.showTabs
+        visible: titleBar.showTabs && tabBar.activeVisible
         x: tabBar.x + tabBar.activeX
         y: 44
         width: tabBar.activeWidth

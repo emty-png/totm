@@ -12,6 +12,8 @@ Rectangle {
     property color hoverColor: AppTheme.hover
     property color pressedColor: AppTheme.pressed
     property color hoverTextColor: AppTheme.foreground
+    // Rotation for directional icons (e.g. caret left/right).
+    property real iconRotation: 0
 
     signal clicked
 
@@ -33,6 +35,7 @@ Rectangle {
     AppIcon {
         anchors.centerIn: parent
         kind: button.iconKind
+        rotation: button.iconRotation
         iconColor: mouse.containsMouse || mouse.pressed ? button.hoverTextColor : button.textColor
 
         Behavior on iconColor {

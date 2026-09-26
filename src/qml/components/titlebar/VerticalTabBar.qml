@@ -28,6 +28,16 @@ ColumnLayout {
     property int dropTarget: -1
     property int scrollDirection: 0
 
+    // Overflow: scroll buttons appear only when the doc rows exceed
+    // the viewport. Each click scrolls one row (40px); the active row
+    // auto-scrolls into view. Compared against the base height (without
+    // buttons) so hiding the buttons always exits overflow (no stuck-on).
+    readonly property real baseAvailableHeight: Math.max(0, tabBar.height - 3 * tabBar.rowHeight)
+    readonly property bool overflowing: docColumn.height > tabBar.baseAvailableHeight + 0.5
+    readonly property real maxScrollY: Math.max(0, docFlick.contentHeight - docFlick.height)
+    readonly property bool canScrollUp: tabBar.overflowing && docFlick.contentY > 0.5
+    readonly property bool canScrollDown: tabBar.overflowing && docFlick.contentY < tabBar.maxScrollY - 0.5
+
     spacing: 0
 
     // Pinned home row. Same hover language as the horizontal home tab;
@@ -98,6 +108,56 @@ ColumnLayout {
         ToolTip.delay: 500
     }
 
+    // Scroll-up overflow button: one row per click, only when overflowing.
+    Rectangle {
+        Layout.fillWidth: true
+        Layout.preferredHeight: tabBar.rowHeight
+        visible: tabBar.overflowing
+        opacity: tabBar.canScrollUp ? 1 : 0.35
+        color: upMouse.pressed ? AppTheme.pressed : upMouse.containsMouse ? AppTheme.hover : "transparent"
+
+        Behavior on color {
+            ColorAnimation {
+                duration: 120
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Rectangle {
+            anchors {
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+            }
+            height: 1
+            color: AppTheme.border
+        }
+
+        AppIcon {
+            anchors.centerIn: parent
+            kind: "caret"
+            width: 16
+            height: 16
+            rotation: 180
+            iconColor: upMouse.containsMouse || upMouse.pressed ? AppTheme.foreground : AppTheme.muted
+        }
+
+        MouseArea {
+            id: upMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton
+            onClicked: {
+                if (tabBar.canScrollUp)
+                    tabBar.scrollBy(-tabBar.rowHeight);
+            }
+        }
+
+        ToolTip.visible: upMouse.containsMouse
+        ToolTip.text: qsTr("Scroll tabs up")
+        ToolTip.delay: 500
+    }
+
     // Scrollable document rows. A bare Flickable (not ScrollView) so
     // drag autoscroll can read and drive contentY directly.
     Flickable {
@@ -110,10 +170,17 @@ ColumnLayout {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar {}
+        // No Behavior on contentY (see TitleBarTabBar): programmatic
+        // scrolls stay instant so auto-reveal/clamping always converge.
 
-        ColumnLayout {
+        Column {
             id: docColumn
             width: docFlick.width
+            // Explicit height: a plain Column (not a layout) stacks rows
+            // deterministically at y = index * rowHeight, independent of
+            // viewport height or scroll-button visibility. This also feeds
+            // contentHeight/overflowing below.
+            height: TabState.docCount * tabBar.rowHeight
             spacing: 0
 
             Repeater {
@@ -128,6 +195,10 @@ ColumnLayout {
                     item.releasePolicy = () => tabBar.dragRelease();
                 }
                 VerticalTab {
+                    // Explicit size: plain Column parent positions by
+                    // width/height instead of Layout props.
+                    width: docColumn.width
+                    height: tabBar.rowHeight
                     title: TabState.titleAt(index + 1)
                     active: TabState.currentIndex === index + 1
                     collapsed: tabBar.collapsed
@@ -153,6 +224,56 @@ ColumnLayout {
             docFlick.contentY = Math.min(maxY, Math.max(0, docFlick.contentY + tabBar.scrollDirection * 10));
             tabBar.updateTargets(tabBar.lastBarY);
         }
+    }
+
+    // Scroll-down overflow button: one row per click, only when overflowing.
+    Rectangle {
+        Layout.fillWidth: true
+        Layout.preferredHeight: tabBar.rowHeight
+        visible: tabBar.overflowing
+        opacity: tabBar.canScrollDown ? 1 : 0.35
+        color: downMouse.pressed ? AppTheme.pressed : downMouse.containsMouse ? AppTheme.hover : "transparent"
+
+        Behavior on color {
+            ColorAnimation {
+                duration: 120
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Rectangle {
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+            }
+            height: 1
+            color: AppTheme.border
+        }
+
+        AppIcon {
+            anchors.centerIn: parent
+            kind: "caret"
+            width: 16
+            height: 16
+            rotation: 0
+            iconColor: downMouse.containsMouse || downMouse.pressed ? AppTheme.foreground : AppTheme.muted
+        }
+
+        MouseArea {
+            id: downMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton
+            onClicked: {
+                if (tabBar.canScrollDown)
+                    tabBar.scrollBy(tabBar.rowHeight);
+            }
+        }
+
+        ToolTip.visible: downMouse.containsMouse
+        ToolTip.text: qsTr("Scroll tabs down")
+        ToolTip.delay: 500
     }
 
     // New-tab row.
@@ -242,6 +363,49 @@ ColumnLayout {
         ToolTip.visible: collapseMouse.containsMouse
         ToolTip.text: tabBar.collapsed ? qsTr("Expand tabs") : qsTr("Collapse tabs")
         ToolTip.delay: 500
+    }
+
+    // Clamp scroll when tabs close and auto-reveal selection changes.
+    onMaxScrollYChanged: {
+        if (docFlick.contentY > tabBar.maxScrollY)
+            docFlick.contentY = tabBar.maxScrollY;
+    }
+
+    Connections {
+        target: TabState
+        function onCurrentIndexChanged() {
+            if (!tabBar.tabDragging)
+                tabBar.ensureVisible(TabState.currentIndex);
+        }
+        function onDocCountChanged() {
+            if (!tabBar.tabDragging)
+                tabBar.ensureVisible(TabState.currentIndex);
+        }
+    }
+    onHeightChanged: {
+        if (!tabBar.tabDragging)
+            tabBar.ensureVisible(TabState.currentIndex);
+    }
+
+    function scrollBy(delta) {
+        docFlick.contentY = Math.min(tabBar.maxScrollY, Math.max(0, docFlick.contentY + delta));
+    }
+
+    function ensureVisible(modelIndex) {
+        if (modelIndex < 1 || modelIndex > TabState.docCount)
+            return;
+        // Skip while the viewport is still zero (first polish after a
+        // tab add); the height handler re-runs this once it settles.
+        if (docFlick.height <= 0)
+            return;
+        var top = tabBar.slotY(modelIndex);
+        var bottom = top + tabBar.rowHeight;
+        var viewTop = docFlick.contentY;
+        var viewBottom = viewTop + docFlick.height;
+        if (top < viewTop)
+            docFlick.contentY = Math.min(tabBar.maxScrollY, Math.max(0, top));
+        else if (bottom > viewBottom)
+            docFlick.contentY = Math.min(tabBar.maxScrollY, Math.max(0, bottom - docFlick.height));
     }
 
     // Doc slot k (0-based) spans [k*rowHeight, (k+1)*rowHeight) inside
