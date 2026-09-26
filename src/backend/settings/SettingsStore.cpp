@@ -49,6 +49,7 @@ constexpr char kThemeToggleKey[] = "appearance/showThemeToggle";
 constexpr char kWindowDragKey[] = "appearance/windowDragEnabled";
 constexpr char kTabPositionKey[] = "appearance/tabPosition";
 constexpr char kTabRailCollapsedKey[] = "appearance/tabRailCollapsed";
+constexpr char kCursorSizeKey[] = "appearance/cursorSize";
 
 constexpr char kGenSceneWKey[] = "general/sceneWidth";
 constexpr char kGenSceneHKey[] = "general/sceneHeight";
@@ -429,6 +430,7 @@ void SettingsStore::loadAppearance() {
     const QString tabPos = settings.value(QString::fromLatin1(kTabPositionKey), QStringLiteral("top")).toString().trimmed().toLower();
     m_tabPosition = isKnownTabPosition(tabPos) ? tabPos : QStringLiteral("top");
     m_tabRailCollapsed = settings.value(QString::fromLatin1(kTabRailCollapsedKey), false).toBool();
+    m_cursorSize = qBound(12, settings.value(QString::fromLatin1(kCursorSizeKey), 20).toInt(), 32);
 }
 
 void SettingsStore::persistAppearance() {
@@ -446,6 +448,7 @@ void SettingsStore::persistAppearance() {
     settings.setValue(QString::fromLatin1(kWindowDragKey), m_windowDragEnabled);
     settings.setValue(QString::fromLatin1(kTabPositionKey), m_tabPosition);
     settings.setValue(QString::fromLatin1(kTabRailCollapsedKey), m_tabRailCollapsed);
+    settings.setValue(QString::fromLatin1(kCursorSizeKey), m_cursorSize);
     settings.sync();
 }
 
@@ -691,6 +694,19 @@ void SettingsStore::setTabRailCollapsed(bool collapsed) {
     emit appearanceChanged();
 }
 
+int SettingsStore::cursorSize() const {
+    return m_cursorSize;
+}
+
+void SettingsStore::setCursorSize(int pixels) {
+    pixels = qBound(12, pixels, 32);
+    if (m_cursorSize == pixels)
+        return;
+    m_cursorSize = pixels;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
 void SettingsStore::refreshFontMissing() {
     // Empty means system default, always available. Otherwise the family
     // must exist in QFontDatabase (system or imported); anything else
@@ -827,6 +843,7 @@ void SettingsStore::resetAppearance() {
     m_windowDragEnabled = true;
     m_tabPosition = QStringLiteral("top");
     m_tabRailCollapsed = false;
+    m_cursorSize = 20;
     QSettings settings;
     settings.beginGroup(QStringLiteral("appearanceColorsLight"));
     settings.remove(QString());

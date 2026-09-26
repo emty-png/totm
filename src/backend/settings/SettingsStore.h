@@ -82,6 +82,9 @@ class SettingsStore : public QObject {
     Q_PROPERTY(QString tabPosition READ tabPosition WRITE setTabPosition NOTIFY appearanceChanged)
     // Collapses left/right rails to icon width. Ignored for top/bottom.
     Q_PROPERTY(bool tabRailCollapsed READ tabRailCollapsed WRITE setTabRailCollapsed NOTIFY appearanceChanged)
+    // Bibata cursor size in logical pixels (12..32, default 20). Applied
+    // to CursorStore; the Theme card offers Small/Medium/Large presets.
+    Q_PROPERTY(int cursorSize READ cursorSize WRITE setCursorSize NOTIFY appearanceChanged)
     // General: defaults for new designs (canvas size, background, timeline
     // length) plus the video-export picker defaults. Only non-default
     // values are stored; the export popup loads these on open and writes
@@ -154,8 +157,7 @@ public:
     // to fixed values in AppTheme (sharp 0, rounded 6/8/10/12,
     // pill 14/18/22/28).
     QString radiusPreset() const;
-    void setRadiusPreset(const QString &preset);
-    int customRadiusSmall() const;
+    void setRadiusPreset(const QString &preset);    int customRadiusSmall() const;
     void setCustomRadiusSmall(int v);
     int customRadiusMedium() const;
     void setCustomRadiusMedium(int v);
@@ -186,6 +188,8 @@ public:
     void setTabPosition(const QString &position);
     bool tabRailCollapsed() const;
     void setTabRailCollapsed(bool collapsed);
+    int cursorSize() const;
+    void setCursorSize(int pixels);
     Q_INVOKABLE QStringList importedFontFamilies() const;
     Q_INVOKABLE QString importFont(const QUrl &fileUrl);
     Q_INVOKABLE void removeImportedFont(const QString &fileName);
@@ -290,6 +294,7 @@ private:
     bool m_windowDragEnabled = true;
     QString m_tabPosition = QStringLiteral("top");
     bool m_tabRailCollapsed = false;
+    int m_cursorSize = 20;
     QStringList m_importedFonts;
     // Detected family per imported file name. Populated at load/import
     // from the QFontDatabase id so QML never needs per-row FontLoaders.

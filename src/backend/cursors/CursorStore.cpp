@@ -9,8 +9,6 @@
 #include <QSvgRenderer>
 
 namespace {
-// Render size in logical pixels.
-constexpr int kCursorSize = 20;
 // ViewBox of the vendored Bibata SVGs; hotspots below are in this space.
 constexpr int kSvgSpace = 256;
 } // namespace
@@ -86,6 +84,20 @@ void CursorStore::refresh(bool dark)
     }
     if (!themeChanged && !m_cache.isEmpty())
         return;
+    reapply();
+}
+
+void CursorStore::setSize(int pixels)
+{
+    pixels = qBound(12, pixels, 32);
+    if (pixels == m_size)
+        return;
+    m_size = pixels;
+    reapply();
+}
+
+void CursorStore::reapply()
+{
     m_cache.clear();
     m_guard = true;
     for (QWindow *window : QGuiApplication::allWindows()) {
@@ -164,7 +176,7 @@ QCursor CursorStore::loadSvg(const QString &resource, int hotX256, int hotY256)
     qreal dpr = 1.0;
     if (QGuiApplication::primaryScreen())
         dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
-    const int px = qMax(1, qRound(kCursorSize * dpr));
+    const int px = qMax(1, qRound(m_size * dpr));
     QImage image(px, px, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
     QPainter painter(&image);

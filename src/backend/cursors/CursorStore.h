@@ -42,6 +42,10 @@ public:
     // Ice) to every known window. Called from Main.qml on launch and on
     // SettingsStore.isDarkChanged. Cheap when the theme did not change.
     Q_INVOKABLE void refresh(bool dark);
+    // Cursor size in logical pixels (clamped 12..32). Called from Main.qml
+    // on launch and on appearance changes; repaints immediately. Cheap
+    // when the size did not change.
+    Q_INVOKABLE void setSize(int pixels);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -56,6 +60,7 @@ private:
 
     void attach(QWindow *window);
     void detach(QWindow *window);
+    void reapply();
     QCursor cursorFor(int shape);
     QCursor loadSvg(const QString &resource, int hotX256, int hotY256);
 
@@ -63,6 +68,8 @@ private:
     // Active theme. Defaults to dark so pre-QML windows get Classic until
     // Main.qml reports the real SettingsStore theme on launch.
     bool m_dark = true;
+    // Render size in logical pixels. Follows SettingsStore.cursorSize.
+    int m_size = 20;
     QHash<int, QCursor> m_cache;
     // Logical standard shape per window (pixmap cursors report BitmapCursor,
     // so the requested shape must be remembered for theme repaints).
