@@ -16,6 +16,12 @@ Window {
     title: qsTr("totm crashed")
     color: AppTheme.background
 
+    Component.onCompleted: {
+        // Same Bibata set as the main window (own process, so own store).
+        CursorStore.setSize(SettingsStore.cursorSize);
+        CursorStore.refresh(SettingsStore.isDark);
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
