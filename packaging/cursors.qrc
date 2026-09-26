@@ -1,0 +1,39 @@
+<RCC version="1.0">
+    <!-- Bibata mouse cursors (GPL-3.0, see src/docs/CREDITS.html).
+         Light theme uses Modern Ice, dark theme uses Modern Classic.
+         Recolored from upstream SVGs; hotspots live in CursorStore. -->
+    <qresource prefix="/cursors">
+        <file alias="light/arrow.svg">cursors/light/arrow.svg</file>
+        <file alias="light/hand.svg">cursors/light/hand.svg</file>
+        <file alias="light/open-hand.svg">cursors/light/open-hand.svg</file>
+        <file alias="light/grabbing.svg">cursors/light/grabbing.svg</file>
+        <file alias="light/ibeam.svg">cursors/light/ibeam.svg</file>
+        <file alias="light/cross.svg">cursors/light/cross.svg</file>
+        <file alias="light/size-hor.svg">cursors/light/size-hor.svg</file>
+        <file alias="light/size-ver.svg">cursors/light/size-ver.svg</file>
+        <file alias="light/size-fdiag.svg">cursors/light/size-fdiag.svg</file>
+        <file alias="light/size-bdiag.svg">cursors/light/size-bdiag.svg</file>
+        <file alias="light/size-all.svg">cursors/light/size-all.svg</file>
+        <file alias="light/forbidden.svg">cursors/light/forbidden.svg</file>
+        <file alias="light/drag-copy.svg">cursors/light/drag-copy.svg</file>
+        <file alias="light/drag-link.svg">cursors/light/drag-link.svg</file>
+        <file alias="light/whatsthis.svg">cursors/light/whatsthis.svg</file>
+        <file alias="light/up-arrow.svg">cursors/light/up-arrow.svg</file>
+        <file alias="dark/arrow.svg">cursors/dark/arrow.svg</file>
+        <file alias="dark/hand.svg">cursors/dark/hand.svg</file>
+        <file alias="dark/open-hand.svg">cursors/dark/open-hand.svg</file>
+        <file alias="dark/grabbing.svg">cursors/dark/grabbing.svg</file>
+        <file alias="dark/ibeam.svg">cursors/dark/ibeam.svg</file>
+        <file alias="dark/cross.svg">cursors/dark/cross.svg</file>
+        <file alias="dark/size-hor.svg">cursors/dark/size-hor.svg</file>
+        <file alias="dark/size-ver.svg">cursors/dark/size-ver.svg</file>
+        <file alias="dark/size-fdiag.svg">cursors/dark/size-fdiag.svg</file>
+        <file alias="dark/size-bdiag.svg">cursors/dark/size-bdiag.svg</file>
+        <file alias="dark/size-all.svg">cursors/dark/size-all.svg</file>
+        <file alias="dark/forbidden.svg">cursors/dark/forbidden.svg</file>
+        <file alias="dark/drag-copy.svg">cursors/dark/drag-copy.svg</file>
+        <file alias="dark/drag-link.svg">cursors/dark/drag-link.svg</file>
+        <file alias="dark/whatsthis.svg">cursors/dark/whatsthis.svg</file>
+        <file alias="dark/up-arrow.svg">cursors/dark/up-arrow.svg</file>
+    </qresource>
+</RCC>

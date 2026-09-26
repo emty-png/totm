@@ -23,6 +23,9 @@ ApplicationWindow {
     Component.onCompleted: {
         root.restoreWindow();
         PluginStore.scan();
+        // Themed Bibata cursors (Ice for light, Classic for dark); the
+        // store swaps every QML cursorShape via QCursor pixmaps.
+        CursorStore.refresh(SettingsStore.isDark);
         // File association: import .totm bundles passed on the command
         // line (double-click / Open With) into the default workspace and
         // open each in its own tab. Failures surface in the error bar.
@@ -51,6 +54,14 @@ ApplicationWindow {
             root.openTotmFiles(urls || []);
             root.raise();
             root.requestActivate();
+        }
+    }
+
+    // Cursor theme follows the app theme (Bibata Ice / Classic).
+    Connections {
+        target: SettingsStore
+        function onIsDarkChanged() {
+            CursorStore.refresh(SettingsStore.isDark);
         }
     }
 

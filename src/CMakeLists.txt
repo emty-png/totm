@@ -1,6 +1,7 @@
 qt_add_executable(totm
     main.cpp
     "${PROJECT_SOURCE_DIR}/packaging/icons.qrc"
+    "${PROJECT_SOURCE_DIR}/packaging/cursors.qrc"
     "${PROJECT_SOURCE_DIR}/packaging/official-plugins.qrc"
 )
 
@@ -60,6 +61,8 @@ qt_add_qml_module(totm
         backend/crash/CrashReporter.cpp
         backend/crash/CrashHandler.h
         backend/crash/CrashHandler.cpp
+        backend/cursors/CursorStore.h
+        backend/cursors/CursorStore.cpp
         backend/files/FileBrowser.h
         backend/files/FileBrowser.cpp
     QML_FILES
@@ -311,6 +314,7 @@ target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/svg
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/plugins
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/crash
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/cursors
 )
 
 # Cross-platform desktop bundle settings.
