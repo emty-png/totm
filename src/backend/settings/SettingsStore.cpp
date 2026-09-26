@@ -44,6 +44,11 @@ constexpr char kRadiusXLargeKey[] = "appearance/radiusXLarge";
 constexpr char kFontFamilyKey[] = "appearance/fontFamily";
 constexpr char kZoomPillKey[] = "appearance/showZoomPill";
 constexpr char kWindowControlsKey[] = "appearance/showWindowControls";
+constexpr char kTopBarKey[] = "appearance/showTopBar";
+constexpr char kThemeToggleKey[] = "appearance/showThemeToggle";
+constexpr char kWindowDragKey[] = "appearance/windowDragEnabled";
+constexpr char kTabPositionKey[] = "appearance/tabPosition";
+constexpr char kTabRailCollapsedKey[] = "appearance/tabRailCollapsed";
 
 constexpr char kGenSceneWKey[] = "general/sceneWidth";
 constexpr char kGenSceneHKey[] = "general/sceneHeight";
@@ -166,6 +171,11 @@ bool isKnownAppearanceColor(const QString &key) {
 bool isKnownRadiusPreset(const QString &preset) {
     return preset == QStringLiteral("sharp") || preset == QStringLiteral("rounded") || preset == QStringLiteral("pill")
         || preset == QStringLiteral("custom");
+}
+
+bool isKnownTabPosition(const QString &position) {
+    return position == QStringLiteral("top") || position == QStringLiteral("bottom") || position == QStringLiteral("left")
+        || position == QStringLiteral("right");
 }
 
 // Canonical #rrggbb (opaque) or #aarrggbb (translucent) form, lowercase.
@@ -413,6 +423,12 @@ void SettingsStore::loadAppearance() {
     m_fontFamily = settings.value(QString::fromLatin1(kFontFamilyKey), QString()).toString().trimmed();
     m_showZoomPill = settings.value(QString::fromLatin1(kZoomPillKey), true).toBool();
     m_showWindowControls = settings.value(QString::fromLatin1(kWindowControlsKey), true).toBool();
+    m_showTopBar = settings.value(QString::fromLatin1(kTopBarKey), true).toBool();
+    m_showThemeToggle = settings.value(QString::fromLatin1(kThemeToggleKey), true).toBool();
+    m_windowDragEnabled = settings.value(QString::fromLatin1(kWindowDragKey), true).toBool();
+    const QString tabPos = settings.value(QString::fromLatin1(kTabPositionKey), QStringLiteral("top")).toString().trimmed().toLower();
+    m_tabPosition = isKnownTabPosition(tabPos) ? tabPos : QStringLiteral("top");
+    m_tabRailCollapsed = settings.value(QString::fromLatin1(kTabRailCollapsedKey), false).toBool();
 }
 
 void SettingsStore::persistAppearance() {
@@ -425,6 +441,11 @@ void SettingsStore::persistAppearance() {
     settings.setValue(QString::fromLatin1(kFontFamilyKey), m_fontFamily);
     settings.setValue(QString::fromLatin1(kZoomPillKey), m_showZoomPill);
     settings.setValue(QString::fromLatin1(kWindowControlsKey), m_showWindowControls);
+    settings.setValue(QString::fromLatin1(kTopBarKey), m_showTopBar);
+    settings.setValue(QString::fromLatin1(kThemeToggleKey), m_showThemeToggle);
+    settings.setValue(QString::fromLatin1(kWindowDragKey), m_windowDragEnabled);
+    settings.setValue(QString::fromLatin1(kTabPositionKey), m_tabPosition);
+    settings.setValue(QString::fromLatin1(kTabRailCollapsedKey), m_tabRailCollapsed);
     settings.sync();
 }
 
@@ -609,6 +630,67 @@ void SettingsStore::setShowWindowControls(bool show) {
     emit appearanceChanged();
 }
 
+bool SettingsStore::showTopBar() const {
+    return m_showTopBar;
+}
+
+void SettingsStore::setShowTopBar(bool show) {
+    if (m_showTopBar == show)
+        return;
+    m_showTopBar = show;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
+bool SettingsStore::showThemeToggle() const {
+    return m_showThemeToggle;
+}
+
+void SettingsStore::setShowThemeToggle(bool show) {
+    if (m_showThemeToggle == show)
+        return;
+    m_showThemeToggle = show;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
+bool SettingsStore::windowDragEnabled() const {
+    return m_windowDragEnabled;
+}
+
+void SettingsStore::setWindowDragEnabled(bool enabled) {
+    if (m_windowDragEnabled == enabled)
+        return;
+    m_windowDragEnabled = enabled;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
+QString SettingsStore::tabPosition() const {
+    return m_tabPosition;
+}
+
+void SettingsStore::setTabPosition(const QString &position) {
+    const QString pos = position.trimmed().toLower();
+    if (!isKnownTabPosition(pos) || m_tabPosition == pos)
+        return;
+    m_tabPosition = pos;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
+bool SettingsStore::tabRailCollapsed() const {
+    return m_tabRailCollapsed;
+}
+
+void SettingsStore::setTabRailCollapsed(bool collapsed) {
+    if (m_tabRailCollapsed == collapsed)
+        return;
+    m_tabRailCollapsed = collapsed;
+    persistAppearance();
+    emit appearanceChanged();
+}
+
 void SettingsStore::refreshFontMissing() {
     // Empty means system default, always available. Otherwise the family
     // must exist in QFontDatabase (system or imported); anything else
@@ -740,6 +822,11 @@ void SettingsStore::resetAppearance() {
     m_fontMissing = false;
     m_showZoomPill = true;
     m_showWindowControls = true;
+    m_showTopBar = true;
+    m_showThemeToggle = true;
+    m_windowDragEnabled = true;
+    m_tabPosition = QStringLiteral("top");
+    m_tabRailCollapsed = false;
     QSettings settings;
     settings.beginGroup(QStringLiteral("appearanceColorsLight"));
     settings.remove(QString());

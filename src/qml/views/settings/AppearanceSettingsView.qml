@@ -115,6 +115,8 @@ ColumnLayout {
 
             AppearanceWindowSection {}
 
+            AppearanceTabsSection {}
+
             AppearanceColorsSection {}
 
             AppearanceRadiusSection {}

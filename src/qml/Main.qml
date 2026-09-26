@@ -54,14 +54,20 @@ ApplicationWindow {
         }
     }
 
+    // Effective tab position: with the top bar hidden, Top tabs fall
+    // back to the bottom rail so tab switching stays reachable.
+    readonly property string effectiveTabPosition: (!SettingsStore.showTopBar && SettingsStore.tabPosition === "top") ? "bottom" : SettingsStore.tabPosition
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
         TitleBar {
+            visible: SettingsStore.showTopBar
             Layout.fillWidth: true
             Layout.preferredHeight: 45
             window: root
+            showTabs: root.effectiveTabPosition === "top"
         }
 
         // Library/persistence errors. Hidden when clear; dismiss calls
@@ -126,21 +132,126 @@ ApplicationWindow {
             }
         }
 
-        // Home tab content
-        HomeView {
-            visible: TabState.isHomeSelected
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            spacing: 0
+
+            // Left vertical tab rail.
+            Rectangle {
+                visible: root.effectiveTabPosition === "left"
+                Layout.preferredWidth: SettingsStore.tabRailCollapsed ? 52 : 192
+                Layout.fillHeight: true
+                color: AppTheme.surface
+
+                Rectangle {
+                    anchors {
+                        right: parent.right
+                        top: parent.top
+                        bottom: parent.bottom
+                    }
+                    width: 1
+                    color: AppTheme.border
+                }
+
+                VerticalTabBar {
+                    anchors.fill: parent
+                    collapsed: SettingsStore.tabRailCollapsed
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 0
+
+                // Home tab content
+                HomeView {
+                    visible: TabState.isHomeSelected
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                }
+
+                // Document tab content
+                EditorView {
+                    id: editorView
+
+                    visible: !TabState.isHomeSelected
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    externalDrop: dropIntake
+                }
+            }
+
+            // Right vertical tab rail.
+            Rectangle {
+                visible: root.effectiveTabPosition === "right"
+                Layout.preferredWidth: SettingsStore.tabRailCollapsed ? 52 : 192
+                Layout.fillHeight: true
+                color: AppTheme.surface
+
+                Rectangle {
+                    anchors {
+                        left: parent.left
+                        top: parent.top
+                        bottom: parent.bottom
+                    }
+                    width: 1
+                    color: AppTheme.border
+                }
+
+                VerticalTabBar {
+                    anchors.fill: parent
+                    collapsed: SettingsStore.tabRailCollapsed
+                }
+            }
         }
 
-        // Document tab content
-        EditorView {
-            id: editorView
-
-            visible: !TabState.isHomeSelected
+        // Bottom horizontal tab bar. Reuses the top tab cluster with a
+        // top-border blend cover under the active tab.
+        Item {
+            visible: root.effectiveTabPosition === "bottom"
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            externalDrop: dropIntake
+            Layout.preferredHeight: 45
+
+            Column {
+                anchors.fill: parent
+                spacing: 0
+
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: AppTheme.border
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 44
+                    color: AppTheme.surface
+
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: 0
+
+                        TitleBarTabBar {
+                            id: bottomTabBar
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                x: bottomTabBar.x + bottomTabBar.activeX
+                y: 0
+                width: bottomTabBar.activeWidth
+                height: 1
+                color: AppTheme.background
+            }
         }
     }
 

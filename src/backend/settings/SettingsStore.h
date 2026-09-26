@@ -65,6 +65,23 @@ class SettingsStore : public QObject {
     // close elsewhere). Tiling-WM users can hide them so the app
     // matches their environment. On by default; Appearance tab.
     Q_PROPERTY(bool showWindowControls READ showWindowControls WRITE setShowWindowControls NOTIFY appearanceChanged)
+    // Full top bar visibility. Hiding suits tiling window managers or
+    // minimal setups; if tabs are on top they fall back to the bottom
+    // rail so tab switching stays reachable. On by default.
+    Q_PROPERTY(bool showTopBar READ showTopBar WRITE setShowTopBar NOTIFY appearanceChanged)
+    // Sun/moon theme toggle in the top bar. On by default; the theme
+    // can still change in Appearance settings or via shortcuts.
+    Q_PROPERTY(bool showThemeToggle READ showThemeToggle WRITE setShowThemeToggle NOTIFY appearanceChanged)
+    // Window dragging from the top-bar empty area (press-move plus
+    // double-click maximize). Off by default-on; disabling suits
+    // setups where the compositor owns window moves.
+    Q_PROPERTY(bool windowDragEnabled READ windowDragEnabled WRITE setWindowDragEnabled NOTIFY appearanceChanged)
+    // Tab rail position: "top" (classic titlebar tabs), "bottom" (tabs
+    // below content), "left" / "right" (vertical rail beside content).
+    // Unknown values fall back to "top". On by default top; Appearance tab.
+    Q_PROPERTY(QString tabPosition READ tabPosition WRITE setTabPosition NOTIFY appearanceChanged)
+    // Collapses left/right rails to icon width. Ignored for top/bottom.
+    Q_PROPERTY(bool tabRailCollapsed READ tabRailCollapsed WRITE setTabRailCollapsed NOTIFY appearanceChanged)
     // General: defaults for new designs (canvas size, background, timeline
     // length) plus the video-export picker defaults. Only non-default
     // values are stored; the export popup loads these on open and writes
@@ -159,6 +176,16 @@ public:
     void setShowZoomPill(bool show);
     bool showWindowControls() const;
     void setShowWindowControls(bool show);
+    bool showTopBar() const;
+    void setShowTopBar(bool show);
+    bool showThemeToggle() const;
+    void setShowThemeToggle(bool show);
+    bool windowDragEnabled() const;
+    void setWindowDragEnabled(bool enabled);
+    QString tabPosition() const;
+    void setTabPosition(const QString &position);
+    bool tabRailCollapsed() const;
+    void setTabRailCollapsed(bool collapsed);
     Q_INVOKABLE QStringList importedFontFamilies() const;
     Q_INVOKABLE QString importFont(const QUrl &fileUrl);
     Q_INVOKABLE void removeImportedFont(const QString &fileName);
@@ -258,6 +285,11 @@ private:
     QString m_fontFamily;
     bool m_showZoomPill = true;
     bool m_showWindowControls = true;
+    bool m_showTopBar = true;
+    bool m_showThemeToggle = true;
+    bool m_windowDragEnabled = true;
+    QString m_tabPosition = QStringLiteral("top");
+    bool m_tabRailCollapsed = false;
     QStringList m_importedFonts;
     // Detected family per imported file name. Populated at load/import
     // from the QFontDatabase id so QML never needs per-row FontLoaders.

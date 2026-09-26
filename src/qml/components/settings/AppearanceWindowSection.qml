@@ -2,9 +2,10 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Window chrome card: native-feeling window-button visibility. Hiding
-// suits tiling window managers, where the compositor owns chrome.
-// Reads SettingsStore directly like the theme card (data-only).
+// Window chrome card: top-bar, window-button, theme-toggle visibility
+// plus top-bar window dragging. Hiding suits tiling window managers,
+// where the compositor owns chrome. Reads SettingsStore directly like
+// the theme card (data-only).
 Rectangle {
     id: windowCard
 
@@ -36,6 +37,40 @@ Rectangle {
 
         Text {
             Layout.fillWidth: true
+            text: qsTr("Top bar")
+            font.pixelSize: 11
+            elide: Text.ElideRight
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Shown")
+                active: SettingsStore.showTopBar
+                onClicked: SettingsStore.showTopBar = true
+            }
+
+            SegmentedOption {
+                label: qsTr("Hidden")
+                active: !SettingsStore.showTopBar
+                onClicked: SettingsStore.showTopBar = false
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: !SettingsStore.showTopBar
+            text: qsTr("With the top bar hidden, Top tabs fall back to the bottom rail.")
+            font.pixelSize: 11
+            wrapMode: Text.WordWrap
+            color: AppTheme.muted
+        }
+
+        Text {
+            Layout.fillWidth: true
             text: qsTr("Window controls")
             font.pixelSize: 11
             elide: Text.ElideRight
@@ -56,6 +91,56 @@ Rectangle {
                 label: qsTr("Hidden")
                 active: !SettingsStore.showWindowControls
                 onClicked: SettingsStore.showWindowControls = false
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Theme button")
+            font.pixelSize: 11
+            elide: Text.ElideRight
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Shown")
+                active: SettingsStore.showThemeToggle
+                onClicked: SettingsStore.showThemeToggle = true
+            }
+
+            SegmentedOption {
+                label: qsTr("Hidden")
+                active: !SettingsStore.showThemeToggle
+                onClicked: SettingsStore.showThemeToggle = false
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Window dragging from the top bar")
+            font.pixelSize: 11
+            elide: Text.ElideRight
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Enabled")
+                active: SettingsStore.windowDragEnabled
+                onClicked: SettingsStore.windowDragEnabled = true
+            }
+
+            SegmentedOption {
+                label: qsTr("Disabled")
+                active: !SettingsStore.windowDragEnabled
+                onClicked: SettingsStore.windowDragEnabled = false
             }
         }
     }

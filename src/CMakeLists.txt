@@ -189,6 +189,8 @@ qt_add_qml_module(totm
         qml/components/titlebar/MacTrafficLights.qml
         qml/components/titlebar/TitleBarTabBar.qml
         qml/components/titlebar/TitleBarTab.qml
+        qml/components/titlebar/VerticalTabBar.qml
+        qml/components/titlebar/VerticalTab.qml
         qml/components/titlebar/TitleBarHomeTab.qml
         qml/components/titlebar/TitleBarButton.qml
         qml/components/titlebar/TitleBarControls.qml
@@ -278,6 +280,7 @@ qt_add_qml_module(totm
         qml/components/settings/AppearanceThemeSection.qml
         qml/components/settings/AppearanceCanvasSection.qml
         qml/components/settings/AppearanceWindowSection.qml
+        qml/components/settings/AppearanceTabsSection.qml
         qml/components/settings/AppearanceColorRow.qml
         qml/components/settings/AppearanceColorsSection.qml
         qml/components/settings/AppearanceRadiusSection.qml
