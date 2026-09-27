@@ -559,7 +559,7 @@ Item {
         // stroker dilate). Bottom-first so index 0 paints topmost.
         // Paint under outer glows (Figma order).
         Repeater {
-            model: shape.shapeType === "image" ? shape.outerShadows.slice().reverse() : []
+            model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.outerShadows.slice().reverse() : []
 
             Rectangle {
                 anchors.fill: parent
@@ -586,7 +586,7 @@ Item {
         // the pixels (spread grows the rect like the stroker dilate).
         // Bottom-first so index 0 paints topmost.
         Repeater {
-            model: shape.shapeType === "image" ? shape.outerGlows.slice().reverse() : []
+            model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.outerGlows.slice().reverse() : []
 
             Rectangle {
                 anchors.fill: parent
@@ -670,7 +670,7 @@ Item {
         // own blurred offset inset silhouette (inverted mask) into an
         // edge band. Paint below inner glows (Figma order).
         Repeater {
-            model: shape.shapeType === "image" ? shape.innerShadows.slice().reverse() : []
+            model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.innerShadows.slice().reverse() : []
 
             Item {
                 anchors.fill: parent
@@ -723,7 +723,7 @@ Item {
         // Inner glows: glow washes over the pixels, each cut by its own
         // blurred inset silhouette (inverted mask) into an edge band.
         Repeater {
-            model: shape.shapeType === "image" ? shape.innerGlows.slice().reverse() : []
+            model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.innerGlows.slice().reverse() : []
 
             Item {
                 anchors.fill: parent
@@ -774,7 +774,7 @@ Item {
         // straddles it, outside grows past it. Gradient strokes fall
         // back to their first stop in v1; entry opacity rides the item.
         Repeater {
-            model: shape.shapeType === "image" ? shape.enabledStrokes.slice().reverse() : []
+            model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.enabledStrokes.slice().reverse() : []
 
             Rectangle {
                 anchors.fill: parent

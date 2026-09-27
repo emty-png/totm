@@ -61,10 +61,13 @@ Item {
                     anchors.margins: 1
                     clip: true
 
-                    DesignCardPreview {
+                    Image {
                         anchors.fill: parent
-                        scene: card.scene
-                        fitContent: true
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                        source: card.hasPreview ? ComponentExporter.thumbnailFile(
+                                                      card.scene, "tpl_" + card.templateId, card.templateId, 400,
+                                                      true) : ""
                     }
                 }
 

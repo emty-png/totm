@@ -85,6 +85,8 @@ ColumnLayout {
 
             GeneralExportSection {}
 
+            GeneralPerformanceSection {}
+
             GeneralStorageSection {}
 
             Item {

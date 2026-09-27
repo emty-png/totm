@@ -30,7 +30,8 @@ Item {
     // Animated-grain frame number (floor(seconds * 60), shared with the
     // exporter). Reads the transport clock, so it shimmers while playing
     // or scrubbing and freezes on a deterministic field otherwise.
-    readonly property int grainFrame: layerRoot.doc && layerRoot.doc.anim ? Math.floor(Number(layerRoot.doc.anim.currentTime || 0) * 60) : 0
+    // Low-spec mode pins it at zero: static grain, no per-frame churn.
+    readonly property int grainFrame: SettingsStore.lowSpecMode ? 0 : (layerRoot.doc && layerRoot.doc.anim ? Math.floor(Number(layerRoot.doc.anim.currentTime || 0) * 60) : 0)
 
     // Plain sampled map for the CPU mask preview (same keys as export
     // snapshots). Reads live nodes so animated mask/content geometry

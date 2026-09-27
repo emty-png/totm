@@ -10,11 +10,40 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QSaveFile>
+#include <QStandardPaths>
 #include <QSet>
 
 #include <algorithm>
 
 namespace {
+
+// Thumbnail cache dir (<AppData>/totm/thumbs). Mirrors the image-blob
+// layout in FramePaint so thumbnails sweep with the app data.
+QString thumbsDir()
+{
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (dir.isEmpty())
+        dir = QDir::homePath() + QStringLiteral("/.totm");
+    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
+        dir += QStringLiteral("/totm");
+    return dir + QStringLiteral("/thumbs");
+}
+
+// Filename-safe stem: ids and ISO stamps carry characters the FS
+// dislikes (colons, slashes), so keep alnum plus -/_ only.
+QString thumbStem(const QString &s)
+{
+    QString out;
+    out.reserve(s.size());
+    for (QChar c : s) {
+        const uint u = c.unicode();
+        if ((u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || c == u'-' || c == u'_')
+            out.append(c);
+        else
+            out.append(u'_');
+    }
+    return out.isEmpty() ? QStringLiteral("x") : out.left(120);
+}
 
 // Max tops per export (64 x 3 scales stays instant).
 constexpr int kMaxTops = 64;
@@ -273,6 +302,45 @@ QVariantMap ComponentExporter::planExport(
 bool ComponentExporter::destinationExists(const QUrl &destination, const QString &suffix) const {
     const QString path = resolvedPath(destination, suffix);
     return !path.isEmpty() && QFile::exists(path);
+}
+
+QString ComponentExporter::thumbnailFile(
+    const QVariantMap &scene, const QString &designId, const QString &stamp, int targetW, bool tight) {
+    // No lastError chatter: empty scenes are routine (the card shows
+    // its placeholder) and must not overwrite export errors.
+    if (scene.isEmpty() || designId.isEmpty())
+        return {};
+    const QString stem = thumbStem(designId) + QStringLiteral("_") + QString::number(qBound(64, targetW, 1024))
+        + (tight ? QStringLiteral("_t_") : QStringLiteral("_f_")) + thumbStem(stamp);
+    const QString dir = thumbsDir();
+    const QString path = dir + QStringLiteral("/") + stem + QStringLiteral(".png");
+    if (QFile::exists(path))
+        return QUrl::fromLocalFile(path).toString();
+    const double sceneW = qMax(1.0, scene.value(QStringLiteral("sceneWidth"), 1920.0).toDouble());
+    const QVariantList tops = scene.value(QStringLiteral("nodes")).toList();
+    if (tops.isEmpty())
+        return {};
+    QString error;
+    QImage img;
+    if (tight) {
+        img = FramePaint::renderNodes(tops, qBound(64, targetW, 1024) / sceneW, 0, &error);
+    } else {
+        img = FramePaint::renderScene(scene, qBound(64, targetW, 1024) / sceneW, 0, &error);
+    }
+    if (img.isNull())
+        return {};
+    QDir().mkpath(dir);
+    // Stale stamps for this design die here, so renames/saves never
+    // orphan files; deleted designs sweep in deleteDesign.
+    const QString prefix = thumbStem(designId) + QStringLiteral("_");
+    const QStringList stale = QDir(dir).entryList({prefix + QStringLiteral("*.png")}, QDir::Files);
+    for (const QString &f : stale) {
+        if (f != QFileInfo(path).fileName())
+            QFile::remove(dir + QStringLiteral("/") + f);
+    }
+    if (!img.save(path, "PNG"))
+        return {};
+    return QUrl::fromLocalFile(path).toString();
 }
 
 bool ComponentExporter::exportSelection(const QVariantList &topNodes, const QStringList &names,

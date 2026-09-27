@@ -53,4 +53,11 @@ QRectF selectionBounds(const QList<QVariantMap> &work, double scale);
 // input, nothing visible, or over the pixel cap.
 QImage renderNodes(const QVariantList &topNodes, double scale, int frameNo, QString *error = nullptr);
 
+// Renders a whole library scene ({nodes, sceneWidth, sceneHeight}) to
+// a transparent image at scale: full scene rect, authored visibility
+// (hidden tops stay hidden, like the canvas), base values, grain
+// frozen at frameNo. Backs home-grid thumbnails so cards show a plain
+// Image instead of live scene items. Null + *error when empty.
+QImage renderScene(const QVariantMap &scene, double scale, int frameNo, QString *error = nullptr);
+
 } // namespace FramePaint

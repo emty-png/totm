@@ -44,14 +44,16 @@ ColumnLayout {
     // Canvas item for window-level drop mapping (Main wires it in).
     property alias canvas: canvasView
 
-    // Playback clock: one 16ms timer for the visible tab. Transport state
-    // lives per document, so tab switches park and resume with no
-    // bookkeeping here. Audio preview conducts itself off the same
-    // transport clock beside it.
+    // Playback clock: one timer for the visible tab (16ms, 32ms in
+    // low-spec mode — tick() advances on wall-clock dt, so speed is
+    // unchanged at half the sample rate). Transport state lives per
+    // document, so tab switches park and resume with no bookkeeping
+    // here. Audio preview conducts itself off the same transport
+    // clock beside it.
     Timer {
         id: playTimer
 
-        interval: 16
+        interval: SettingsStore.lowSpecMode ? 32 : 16
         repeat: true
         running: !!view.playDoc && view.playDoc.anim.playing
         onTriggered: {

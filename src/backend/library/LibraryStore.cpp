@@ -225,6 +225,27 @@ bool LibraryStore::deleteDesign(const QString &id) {
     m_designEntries.removeAt(at);
     // Best effort: a leftover file is swept next boot and never blocks.
     QFile::remove(designsDir() + QStringLiteral("/") + id + QStringLiteral(".json"));
+    // Drop cached home-grid thumbnails (stale stamps sweep on render).
+    QString thumbs = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (thumbs.isEmpty())
+        thumbs = QDir::homePath() + QStringLiteral("/.totm");
+    if (!thumbs.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
+        thumbs += QStringLiteral("/totm");
+    thumbs += QStringLiteral("/thumbs");
+    QString safe;
+    safe.reserve(id.size());
+    for (QChar c : id) {
+        const uint u = c.unicode();
+        if ((u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || c == u'-' || c == u'_')
+            safe.append(c);
+        else
+            safe.append(u'_');
+    }
+    const QStringList stale = QDir(thumbs).entryList(QDir::Files);
+    for (const QString &f : stale) {
+        if (f.startsWith(safe + QStringLiteral("_")) && f.endsWith(QStringLiteral(".png")))
+            QFile::remove(thumbs + QStringLiteral("/") + f);
+    }
     if (!persist())
         return false;
     rebuild();

@@ -59,6 +59,7 @@ constexpr char kGenQualityKey[] = "general/quality";
 constexpr char kGenFpsKey[] = "general/fps";
 constexpr char kGenPerformanceKey[] = "general/performance";
 constexpr char kGenFormatKey[] = "general/format";
+constexpr char kGenLowSpecKey[] = "general/lowSpec";
 
 constexpr int kSceneMin = 16;
 constexpr int kSceneMax = 7680;
@@ -902,6 +903,7 @@ void SettingsStore::loadGeneral() {
     m_defaultPerformance = isKnownPerformance(performance) ? performance : QStringLiteral("normal");
     const QString format = settings.value(QString::fromLatin1(kGenFormatKey), QStringLiteral("mp4")).toString().trimmed().toLower();
     m_defaultFormat = isKnownFormat(format) ? format : QStringLiteral("mp4");
+    m_lowSpecMode = settings.value(QString::fromLatin1(kGenLowSpecKey), false).toBool();
 }
 
 void SettingsStore::persistGeneral() {
@@ -914,6 +916,7 @@ void SettingsStore::persistGeneral() {
     settings.setValue(QString::fromLatin1(kGenFpsKey), m_defaultFps);
     settings.setValue(QString::fromLatin1(kGenPerformanceKey), m_defaultPerformance);
     settings.setValue(QString::fromLatin1(kGenFormatKey), m_defaultFormat);
+    settings.setValue(QString::fromLatin1(kGenLowSpecKey), m_lowSpecMode);
     settings.sync();
 }
 
@@ -1023,6 +1026,18 @@ void SettingsStore::setDefaultFormat(const QString &format) {
     emit generalChanged();
 }
 
+bool SettingsStore::lowSpecMode() const {
+    return m_lowSpecMode;
+}
+
+void SettingsStore::setLowSpecMode(bool on) {
+    if (m_lowSpecMode == on)
+        return;
+    m_lowSpecMode = on;
+    persistGeneral();
+    emit generalChanged();
+}
+
 void SettingsStore::applyScenePreset(const QString &name) {
     const QString n = name.trimmed().toLower();
     int w = m_defaultSceneWidth;
@@ -1048,7 +1063,8 @@ void SettingsStore::applyScenePreset(const QString &name) {
 void SettingsStore::resetGeneral() {
     if (m_defaultSceneWidth == 1920 && m_defaultSceneHeight == 1080 && m_defaultSceneColor == QStringLiteral("#ffffff")
         && qFuzzyCompare(m_defaultDuration, 4.0) && m_defaultQuality == QStringLiteral("hd") && m_defaultFps == 30
-        && m_defaultPerformance == QStringLiteral("normal") && m_defaultFormat == QStringLiteral("mp4"))
+        && m_defaultPerformance == QStringLiteral("normal") && m_defaultFormat == QStringLiteral("mp4")
+        && m_lowSpecMode == false)
         return;
     m_defaultSceneWidth = 1920;
     m_defaultSceneHeight = 1080;
@@ -1058,6 +1074,7 @@ void SettingsStore::resetGeneral() {
     m_defaultFps = 30;
     m_defaultPerformance = QStringLiteral("normal");
     m_defaultFormat = QStringLiteral("mp4");
+    m_lowSpecMode = false;
     persistGeneral();
     emit generalChanged();
 }

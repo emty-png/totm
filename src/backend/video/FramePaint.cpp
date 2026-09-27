@@ -5,6 +5,7 @@
 
 #include <QCache>
 #include <QCoreApplication>
+#include <QDataStream>
 #include <QDir>
 #include <QFile>
 #include <QImageReader>
@@ -112,11 +113,40 @@ void paintBackdropBlur(QPainter &pt, QImage &frame, double x, double y, double w
     pt.restore();
 }
 
+// Shared blurred-raster cache for export and masked preview: the same
+// content-derived keys the canvas memoizes per item, lifted to the
+// thread so identical halos across sibling leaves and across video
+// frames blur once. Thread-local: export renders on its worker, the
+// canvas masked preview on the GUI thread, never shared across threads.
+// Keys fully determine the raster (geometry, spread, blur, offset,
+// scale); tints and offsets apply per paint.
+QCache<QByteArray, QImage> &sharedBlurCache()
+{
+    thread_local QCache<QByteArray, QImage> c(16 * 1024 * 1024);
+    return c;
+}
+
+// Fingerprint for one image halo/cutter raster. w/h/rad are device px
+// box geometry (position-free: rasters are area-relative); spread,
+// blur, offset and scale drive the silhouette and blur exactly.
+QByteArray imageMaskKey(
+    char tag, double w, double h, double rad, double spread, double blur, double ox, double oy, double s)
+{
+    QByteArray key;
+    QDataStream ds(&key, QIODevice::WriteOnly);
+    ds.setVersion(QDataStream::Qt_6_0);
+    ds << tag << w << h << rad << spread << blur << ox << oy << s;
+    return key;
+}
+
 // Outer image shadow: the clip silhouette dilated by spread, blurred,
 // tinted, drawn under the raster at the shadow offset.
-void paintImageShadow(QPainter &pt, const QPainterPath &clip, const Effects::Shadow &sh, double s) {
+void paintImageShadow(QPainter &pt, const QPainterPath &clip, double w, double h, double rad,
+    const Effects::Shadow &sh, double s, QCache<QByteArray, QImage> *cache)
+{
     if (sh.color.alpha() <= 0)
         return;
+    const QByteArray key = imageMaskKey('S', w, h, rad, sh.spread, sh.blur, sh.x, sh.y, s);
     QPainterPath silhouette = clip;
     if (sh.spread * s > 0.01) {
         QPainterPathStroker stroker;
@@ -128,28 +158,46 @@ void paintImageShadow(QPainter &pt, const QPainterPath &clip, const Effects::Sha
     const double m = sh.blur * s * 2.0 + 1.0;
     QRectF area = silhouette.boundingRect();
     area.adjust(-m, -m, m, m);
-    QImage mask(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())), QImage::Format_ARGB32_Premultiplied);
-    mask.fill(0);
-    {
-        QPainter mp(&mask);
-        mp.setRenderHint(QPainter::Antialiasing, true);
-        mp.translate(-area.topLeft());
-        mp.fillPath(silhouette, Qt::black);
+    // Blurred pre-tint raster memoizes; tint and offset stay per paint
+    // so same-geometry entries share it.
+    QImage mask;
+    if (cache) {
+        if (QImage *hit = cache->object(key))
+            mask = *hit;
     }
-    Effects::blurImage(mask, sh.blur * s);
+    if (mask.isNull()) {
+        QImage fresh(
+            qMax(1, qRound(area.width())), qMax(1, qRound(area.height())), QImage::Format_ARGB32_Premultiplied);
+        fresh.fill(0);
+        {
+            QPainter mp(&fresh);
+            mp.setRenderHint(QPainter::Antialiasing, true);
+            mp.translate(-area.topLeft());
+            mp.fillPath(silhouette, Qt::black);
+        }
+        Effects::blurImage(fresh, sh.blur * s);
+        if (cache && !fresh.isNull())
+            cache->insert(key, new QImage(fresh), qMax(1, int(fresh.sizeInBytes())));
+        mask = fresh;
+    }
     {
-        QPainter mp(&mask);
+        QImage tinted = mask.copy();
+        QPainter mp(&tinted);
         mp.setCompositionMode(QPainter::CompositionMode_SourceIn);
-        mp.fillRect(mask.rect(), sh.color);
+        mp.fillRect(tinted.rect(), sh.color);
+        mp.end();
+        pt.drawImage(area.topLeft() + QPointF(sh.x * s, sh.y * s), tinted);
     }
-    pt.drawImage(area.topLeft() + QPointF(sh.x * s, sh.y * s), mask);
 }
 
 // Outer image glow: the clip silhouette dilated by spread, blurred,
 // tinted, drawn under the raster.
-void paintImageGlow(QPainter &pt, const QPainterPath &clip, const Effects::Glow &glow, double s) {
+void paintImageGlow(QPainter &pt, const QPainterPath &clip, double w, double h, double rad,
+    const Effects::Glow &glow, double s, QCache<QByteArray, QImage> *cache)
+{
     if (glow.color.alpha() <= 0)
         return;
+    const QByteArray key = imageMaskKey('G', w, h, rad, glow.spread, glow.blur, 0.0, 0.0, s);
     QPainterPath silhouette = clip;
     if (glow.spread * s > 0.01) {
         QPainterPathStroker stroker;
@@ -161,49 +209,76 @@ void paintImageGlow(QPainter &pt, const QPainterPath &clip, const Effects::Glow 
     const double m = glow.blur * s * 2.0 + 1.0;
     QRectF area = silhouette.boundingRect();
     area.adjust(-m, -m, m, m);
-    QImage mask(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())), QImage::Format_ARGB32_Premultiplied);
-    mask.fill(0);
-    {
-        QPainter mp(&mask);
-        mp.setRenderHint(QPainter::Antialiasing, true);
-        mp.translate(-area.topLeft());
-        mp.fillPath(silhouette, Qt::black);
+    QImage mask;
+    if (cache) {
+        if (QImage *hit = cache->object(key))
+            mask = *hit;
     }
-    Effects::blurImage(mask, glow.blur * s);
+    if (mask.isNull()) {
+        QImage fresh(
+            qMax(1, qRound(area.width())), qMax(1, qRound(area.height())), QImage::Format_ARGB32_Premultiplied);
+        fresh.fill(0);
+        {
+            QPainter mp(&fresh);
+            mp.setRenderHint(QPainter::Antialiasing, true);
+            mp.translate(-area.topLeft());
+            mp.fillPath(silhouette, Qt::black);
+        }
+        Effects::blurImage(fresh, glow.blur * s);
+        if (cache && !fresh.isNull())
+            cache->insert(key, new QImage(fresh), qMax(1, int(fresh.sizeInBytes())));
+        mask = fresh;
+    }
     {
-        QPainter mp(&mask);
+        QImage tinted = mask.copy();
+        QPainter mp(&tinted);
         mp.setCompositionMode(QPainter::CompositionMode_SourceIn);
-        mp.fillRect(mask.rect(), glow.color);
+        mp.fillRect(tinted.rect(), glow.color);
+        mp.end();
+        pt.drawImage(area.topLeft(), tinted);
     }
-    pt.drawImage(area.topLeft(), mask);
 }
 
 // Inner image shadow: tinted clip with the blurred offset eroded copy
 // cut out, leaving the halo band at the inside edges (above the pixels).
-void paintImageShadowInner(QPainter &pt, const QPainterPath &clip, const Effects::Shadow &sh, double s) {
+void paintImageShadowInner(QPainter &pt, const QPainterPath &clip, double w, double h, double rad,
+    const Effects::Shadow &sh, double s, QCache<QByteArray, QImage> *cache)
+{
     if (sh.color.alpha() <= 0)
         return;
-    QPainterPath eroded = clip;
-    if (sh.spread * s > 0.01) {
-        QPainterPathStroker stroker;
-        stroker.setWidth(sh.spread * 2.0 * s);
-        stroker.setCapStyle(Qt::RoundCap);
-        stroker.setJoinStyle(Qt::RoundJoin);
-        eroded = clip.subtracted(stroker.createStroke(clip));
-    }
+    const QByteArray key = imageMaskKey('s', w, h, rad, sh.spread, sh.blur, sh.x, sh.y, s);
     const double m = sh.blur * s * 2.0 + 1.0 + qHypot(sh.x * s, sh.y * s);
     QRectF area = clip.boundingRect();
     area.adjust(-m, -m, m, m);
     const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
-    QImage cutter(size, QImage::Format_ARGB32_Premultiplied);
-    cutter.fill(0);
-    {
-        QPainter mp(&cutter);
-        mp.setRenderHint(QPainter::Antialiasing, true);
-        mp.translate(-area.topLeft() + QPointF(sh.x * s, sh.y * s));
-        mp.fillPath(eroded, Qt::black);
+    // Blurred cutter memoizes; the tinted composite stays per paint.
+    QImage cutter;
+    if (cache) {
+        if (QImage *hit = cache->object(key))
+            cutter = *hit;
     }
-    Effects::blurImage(cutter, sh.blur * s);
+    if (cutter.isNull()) {
+        QPainterPath eroded = clip;
+        if (sh.spread * s > 0.01) {
+            QPainterPathStroker stroker;
+            stroker.setWidth(sh.spread * 2.0 * s);
+            stroker.setCapStyle(Qt::RoundCap);
+            stroker.setJoinStyle(Qt::RoundJoin);
+            eroded = clip.subtracted(stroker.createStroke(clip));
+        }
+        QImage fresh(size, QImage::Format_ARGB32_Premultiplied);
+        fresh.fill(0);
+        {
+            QPainter mp(&fresh);
+            mp.setRenderHint(QPainter::Antialiasing, true);
+            mp.translate(-area.topLeft() + QPointF(sh.x * s, sh.y * s));
+            mp.fillPath(eroded, Qt::black);
+        }
+        Effects::blurImage(fresh, sh.blur * s);
+        if (cache && !fresh.isNull())
+            cache->insert(key, new QImage(fresh), qMax(1, int(fresh.sizeInBytes())));
+        cutter = fresh;
+    }
     QImage mask(size, QImage::Format_ARGB32_Premultiplied);
     mask.fill(0);
     {
@@ -220,30 +295,43 @@ void paintImageShadowInner(QPainter &pt, const QPainterPath &clip, const Effects
 
 // Inner image glow: tinted clip with the blurred eroded copy cut out,
 // leaving the halo band at the inside edges (above the pixels).
-void paintImageGlowInner(QPainter &pt, const QPainterPath &clip, const Effects::Glow &glow, double s) {
+void paintImageGlowInner(QPainter &pt, const QPainterPath &clip, double w, double h, double rad,
+    const Effects::Glow &glow, double s, QCache<QByteArray, QImage> *cache)
+{
     if (glow.color.alpha() <= 0)
         return;
-    QPainterPath eroded = clip;
-    if (glow.spread * s > 0.01) {
-        QPainterPathStroker stroker;
-        stroker.setWidth(glow.spread * 2.0 * s);
-        stroker.setCapStyle(Qt::RoundCap);
-        stroker.setJoinStyle(Qt::RoundJoin);
-        eroded = clip.subtracted(stroker.createStroke(clip));
-    }
+    const QByteArray key = imageMaskKey('g', w, h, rad, glow.spread, glow.blur, 0.0, 0.0, s);
     const double m = glow.blur * s * 2.0 + 1.0;
     QRectF area = clip.boundingRect();
     area.adjust(-m, -m, m, m);
     const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
-    QImage cutter(size, QImage::Format_ARGB32_Premultiplied);
-    cutter.fill(0);
-    {
-        QPainter mp(&cutter);
-        mp.setRenderHint(QPainter::Antialiasing, true);
-        mp.translate(-area.topLeft());
-        mp.fillPath(eroded, Qt::black);
+    QImage cutter;
+    if (cache) {
+        if (QImage *hit = cache->object(key))
+            cutter = *hit;
     }
-    Effects::blurImage(cutter, glow.blur * s);
+    if (cutter.isNull()) {
+        QPainterPath eroded = clip;
+        if (glow.spread * s > 0.01) {
+            QPainterPathStroker stroker;
+            stroker.setWidth(glow.spread * 2.0 * s);
+            stroker.setCapStyle(Qt::RoundCap);
+            stroker.setJoinStyle(Qt::RoundJoin);
+            eroded = clip.subtracted(stroker.createStroke(clip));
+        }
+        QImage fresh(size, QImage::Format_ARGB32_Premultiplied);
+        fresh.fill(0);
+        {
+            QPainter mp(&fresh);
+            mp.setRenderHint(QPainter::Antialiasing, true);
+            mp.translate(-area.topLeft());
+            mp.fillPath(eroded, Qt::black);
+        }
+        Effects::blurImage(fresh, glow.blur * s);
+        if (cache && !fresh.isNull())
+            cache->insert(key, new QImage(fresh), qMax(1, int(fresh.sizeInBytes())));
+        cutter = fresh;
+    }
     QImage mask(size, QImage::Format_ARGB32_Premultiplied);
     mask.fill(0);
     {
@@ -262,7 +350,9 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
     const QList<Effects::StrokeEntry> &strokes, const Effects::Blur &layerBlur = Effects::Blur(),
     const QList<Effects::Glow> &glows = QList<Effects::Glow>(),
     const QList<Effects::Shadow> &shadows = QList<Effects::Shadow>(),
-    const Effects::Grain &grain = Effects::Grain(), int uid = -1, int frameNo = 0) {
+    const Effects::Grain &grain = Effects::Grain(), int uid = -1, int frameNo = 0,
+    QCache<QByteArray, QImage> *cache = nullptr)
+{
     const QString name = str(m, "imageSource", str(m, "image", QString()));
     const double r = qMin(qMax(0.0, num(m, "radius") * s), qMin(w, h) / 2.0);
     QPainterPath clip;
@@ -275,13 +365,13 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Effects::Shadow &sh = shadows.at(i);
         if (sh.enabled && !sh.inner && sh.color.alpha() > 0)
-            paintImageShadow(pt, clip, sh, s);
+            paintImageShadow(pt, clip, w, h, r, sh, s, cache);
     }
     // Outer glows: bottom-first so index 0 paints topmost.
     for (int i = glows.size() - 1; i >= 0; --i) {
         const Effects::Glow &g = glows.at(i);
         if (g.enabled && !g.inner && g.color.alpha() > 0)
-            paintImageGlow(pt, clip, g, s);
+            paintImageGlow(pt, clip, w, h, r, g, s, cache);
     }
     QImage img = loadExportImage(name, qMax(1, qRound(w)), qMax(1, qRound(h)));
     if (img.isNull()) {
@@ -289,10 +379,28 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
         tile.fill(QColor(QStringLiteral("#d9d9d9")));
         img = tile;
     }
-    // Layer blur on images: blur the raster then mix by opacity.
+    // Layer blur on images: blur the raster then mix by opacity. The
+    // blurred raster memoizes on blob + raster size + radius (the mix
+    // stays per paint so opacity edits skip the blur).
     if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
-        QImage blurred = img.copy();
-        Effects::blurImage(blurred, layerBlur.radius * s);
+        const double rad = layerBlur.radius * s;
+        QByteArray bkey;
+        {
+            QDataStream ds(&bkey, QIODevice::WriteOnly);
+            ds.setVersion(QDataStream::Qt_6_0);
+            ds << quint8('B') << name << img.width() << img.height() << rad;
+        }
+        QImage blurred;
+        if (cache) {
+            if (QImage *hit = cache->object(bkey))
+                blurred = *hit;
+        }
+        if (blurred.isNull()) {
+            blurred = img.copy();
+            Effects::blurImage(blurred, rad);
+            if (cache && !blurred.isNull())
+                cache->insert(bkey, new QImage(blurred), qMax(1, int(blurred.sizeInBytes())));
+        }
         QImage sharp = img.copy();
         Effects::mixBlurred(sharp, blurred, layerBlur.opacity);
         img = sharp;
@@ -306,13 +414,13 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Effects::Shadow &sh = shadows.at(i);
         if (sh.enabled && sh.inner && sh.color.alpha() > 0)
-            paintImageShadowInner(pt, clip, sh, s);
+            paintImageShadowInner(pt, clip, w, h, r, sh, s, cache);
     }
     // Inner glows over the pixels, index 0 topmost.
     for (int i = glows.size() - 1; i >= 0; --i) {
         const Effects::Glow &g = glows.at(i);
         if (g.enabled && g.inner && g.color.alpha() > 0)
-            paintImageGlowInner(pt, clip, g, s);
+            paintImageGlowInner(pt, clip, w, h, r, g, s, cache);
     }
     // Stacked strokes as rect borders, bottom-first so index 0 paints
     // topmost. Position maps to border placement: inside rides the
@@ -379,7 +487,7 @@ void paintText(QPainter &pt, const QVariantMap &m, double x, double y, double w,
     tm[QStringLiteral("boxH")] = num(m, "h");
     tm[QStringLiteral("outlinePx")] = style.maxStrokeWidth() > 0.0 ? style.maxStrokeWidth() : 0.0;
     const Effects::TextOpts text = Effects::TextOpts::fromMap(tm);
-    Effects::paintTextLeaf(&pt, QRectF(x, y, w, h), text, style, shadows, glows, layerBlur, s, nullptr);
+    Effects::paintTextLeaf(&pt, QRectF(x, y, w, h), text, style, shadows, glows, layerBlur, s, &sharedBlurCache());
     // Grain confined to the glyphs: ghost the coverage, keep dots
     // where the ghost is opaque (preview masks its tile the same way).
     if (grain.enabled && grain.amount > 0.001) {
@@ -483,7 +591,7 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
         if (useBackground)
             paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale, backgroundBlur.opacity);
         paintImage(pt, m, x, y, w, h, scale, style.strokes, layerBlur, glows, shadows,
-            useGrain ? grain : Effects::Grain(), uid, frameNo);
+            useGrain ? grain : Effects::Grain(), uid, frameNo, &sharedBlurCache());
         pt.restore();
         return;
     }
@@ -501,7 +609,7 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
         paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale, backgroundBlur.opacity, clip);
     }
     Effects::paintLeaf(&pt, shapeType, QRectF(x, y, w, h), Effects::PathOpts::fromMap(m),
-        Effects::Style::fromMap(m), shadows, glows, layerBlur, scale);
+        Effects::Style::fromMap(m), shadows, glows, layerBlur, scale, &sharedBlurCache());
     // Grain sits over fill and stroke on every kind (preview layers
     // its tile the same way, under the same leaf opacity).
     if (useGrain) {
@@ -763,6 +871,57 @@ QImage renderNodes(const QVariantList &topNodes, double scale, int frameNo, QStr
     // Mask-aware, bottom-first (work is top-first).
     const double ox = -bounds.left(), oy = -bounds.top();
     paintLeaves(pt, img, work, subset, ox, oy, scale, frameNo);
+    pt.end();
+    return img;
+}
+
+QImage renderScene(const QVariantMap &scene, double scale, int frameNo, QString *error) {
+    auto fail = [&](const QString &message) {
+        if (error)
+            *error = message;
+        return QImage();
+    };
+    if (!(scale > 0))
+        return fail(QCoreApplication::translate("FramePaint", "Export scale must be positive."));
+    const double sw = qMax(1.0, Anims::num(scene, "sceneWidth", 1920.0));
+    const double sh = qMax(1.0, Anims::num(scene, "sceneHeight", 1080.0));
+    QVariantMap subset;
+    subset[QStringLiteral("nodes")] = scene.value(QStringLiteral("nodes")).toList();
+    // No anim blob rides along, so the frame holds base values.
+    const QList<Leaf> leaves = collectLeaves(subset);
+    QMap<int, int> leafIndex;
+    for (int i = 0; i < leaves.size(); ++i) {
+        const int uid = leaves.at(i).map.value(QStringLiteral("uid"), -1).toInt();
+        if (uid >= 0)
+            leafIndex[uid] = i;
+    }
+    const QList<QVariantMap> work = sampleFrame(subset, 0.0);
+    QList<QVariantMap> paint;
+    paint.reserve(work.size());
+    for (const QVariantMap &m : work) {
+        if (m.value(QStringLiteral("isMask"), false).toBool())
+            continue;
+        const int uid = m.value(QStringLiteral("uid"), -1).toInt();
+        const int srcIdx = leafIndex.value(uid, -1);
+        const bool ancVis = srcIdx >= 0 ? leaves.at(srcIdx).ancestorsVisible : true;
+        if (!ancVis || !m.value(QStringLiteral("visible"), true).toBool())
+            continue;
+        if (qBound(0.0, Anims::num(m, "opacity", 1.0), 1.0) <= 0.001)
+            continue;
+        paint.append(m);
+    }
+    if (paint.isEmpty())
+        return fail(QCoreApplication::translate("FramePaint", "Nothing visible to export."));
+    constexpr int kMaxSide = 2048;
+    const int W = qMax(1, qRound(sw * scale)), H = qMax(1, qRound(sh * scale));
+    if (W > kMaxSide || H > kMaxSide)
+        return fail(QCoreApplication::translate("FramePaint", "Scene is too large to thumbnail."));
+    QImage img(W, H, QImage::Format_ARGB32_Premultiplied);
+    img.fill(Qt::transparent);
+    QPainter pt(&img);
+    pt.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+    // Full scene rect at scale; mask-aware, bottom-first like export.
+    paintLeaves(pt, img, work, subset, 0.0, 0.0, scale, frameNo);
     pt.end();
     return img;
 }

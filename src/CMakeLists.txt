@@ -255,7 +255,6 @@ qt_add_qml_module(totm
         qml/components/home/WorkspacePanel.qml
         qml/components/home/WorkspaceRow.qml
         qml/components/home/DesignCard.qml
-        qml/components/home/DesignCardPreview.qml
         qml/components/home/DesignContextMenu.qml
         qml/components/home/TemplateLibrary.qml
         qml/components/home/TemplateCard.qml
@@ -281,6 +280,7 @@ qt_add_qml_module(totm
         qml/components/settings/ShortcutRow.qml
         qml/components/settings/GeneralNewDesignSection.qml
         qml/components/settings/GeneralExportSection.qml
+        qml/components/settings/GeneralPerformanceSection.qml
         qml/components/settings/GeneralStorageSection.qml
         qml/components/settings/AppearanceThemeSection.qml
         qml/components/settings/AppearanceCanvasSection.qml

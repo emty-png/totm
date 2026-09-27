@@ -56,6 +56,19 @@ public:
         const QString &format = QStringLiteral("png"));
     Q_INVOKABLE bool destinationExists(const QUrl &destination, const QString &suffix) const;
 
+    // Home-grid thumbnail for one library scene: renders once at tile
+    // width through FramePaint (frozen grain, base values) and caches
+    // the PNG under <AppData>/totm/thumbs keyed by design id + stamp,
+    // returning its file URL ("" when the scene has nothing visible).
+    // Cards show a plain Image over the scene-color rect instead of
+    // live scene items, so heavy effect stacks cost one tile-scale
+    // raster per content change instead of full-res CPU items per
+    // rebuild. stamp should change with content (designs pass
+    // updatedAt; templates a fixed id). tight renders union bounds
+    // (template content fit) instead of the full scene rect.
+    Q_INVOKABLE QString thumbnailFile(
+        const QVariantMap &scene, const QString &designId, const QString &stamp, int targetW, bool tight);
+
 signals:
     void lastErrorChanged();
 

@@ -98,6 +98,10 @@ class SettingsStore : public QObject {
     Q_PROPERTY(int defaultFps READ defaultFps WRITE setDefaultFps NOTIFY generalChanged)
     Q_PROPERTY(QString defaultPerformance READ defaultPerformance WRITE setDefaultPerformance NOTIFY generalChanged)
     Q_PROPERTY(QString defaultFormat READ defaultFormat WRITE setDefaultFormat NOTIFY generalChanged)
+    // Low-spec mode for weak hardware: static preview grain, 30fps
+    // playback ticks, single-threaded scene graph (applied at startup,
+    // so toggling notes a restart). Off by default; General tab.
+    Q_PROPERTY(bool lowSpecMode READ lowSpecMode WRITE setLowSpecMode NOTIFY generalChanged)
 
 public:
     static SettingsStore *create(QQmlEngine *engine, QJSEngine *scriptEngine);
@@ -233,6 +237,8 @@ public:
     Q_INVOKABLE void setDefaultPerformance(const QString &performance);
     Q_INVOKABLE QString defaultFormat() const;
     Q_INVOKABLE void setDefaultFormat(const QString &format);
+    Q_INVOKABLE bool lowSpecMode() const;
+    Q_INVOKABLE void setLowSpecMode(bool on);
     // Applies one canvas preset (16:9, 9:16, 1:1, 4:3) to both defaults
     // in a single change; unknown names are ignored.
     Q_INVOKABLE void applyScenePreset(const QString &name);
@@ -309,4 +315,5 @@ private:
     int m_defaultFps = 30;
     QString m_defaultPerformance = QStringLiteral("normal");
     QString m_defaultFormat = QStringLiteral("mp4");
+    bool m_lowSpecMode = false;
 };

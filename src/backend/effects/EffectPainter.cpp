@@ -490,13 +490,56 @@ QBrush strokeBrushFor(const QRectF &box, const StrokeEntry &s)
 
 // Fast separable box blur (3 passes ~= gaussian) on premultiplied data.
 // Radius is in device px; kept small by the pad cap.
+//
+// Two exact fast paths (output bit-identical to naive division):
+// - Row-sequential vertical accumulation (column sums): each tmp row
+//   is read twice total instead of once per column with strided access.
+// - Fixed-point reciprocal for interior pixels (window fully inside,
+//   n = 2r+1 constant): 1 multiply + correction instead of 4 integer
+//   divisions per pixel. Edge pixels keep plain division (rare).
+// - Thread-local scratch tile reused across calls (stacked halos on
+//   one item usually share dimensions).
 void blurImageImpl(QImage &img, double radius)
 {
     const int r = qBound(0, qRound(radius), 64);
     if (r < 1 || img.isNull())
         return;
     const int w = img.width(), h = img.height();
-    QImage tmp(w, h, QImage::Format_ARGB32_Premultiplied);
+    thread_local QImage s_tmp;
+    if (s_tmp.size() != img.size() || s_tmp.format() != QImage::Format_ARGB32_Premultiplied)
+        s_tmp = QImage(img.size(), QImage::Format_ARGB32_Premultiplied);
+    QImage &tmp = s_tmp;
+    // Column sums reused across the 3 passes (cleared per vertical).
+    QVector<long> csr(w), csg(w), csb(w), csa(w);
+    // ceil(2^24 / nMid): approximate quotient overestimates by < 2, the
+    // correction loops below make the result exact. Products fit in
+    // 64-bit (max sum 255*129, inv <= 2^24).
+    const int nMid = 2 * r + 1;
+    const long invMid = ((1L << 24) + nMid - 1) / nMid;
+    auto div4 = [&](long sr, long sg, long sb, long sa, int n, QRgb &out) {
+        out = qRgba(int(sr / n), int(sg / n), int(sb / n), int(sa / n));
+    };
+    auto recip4 = [&](long sr, long sg, long sb, long sa, QRgb &out) {
+        long qr = (sr * invMid) >> 24, qg = (sg * invMid) >> 24;
+        long qb = (sb * invMid) >> 24, qa = (sa * invMid) >> 24;
+        while ((qr + 1) * nMid <= sr)
+            ++qr;
+        while (qr * nMid > sr)
+            --qr;
+        while ((qg + 1) * nMid <= sg)
+            ++qg;
+        while (qg * nMid > sg)
+            --qg;
+        while ((qb + 1) * nMid <= sb)
+            ++qb;
+        while (qb * nMid > sb)
+            --qb;
+        while ((qa + 1) * nMid <= sa)
+            ++qa;
+        while (qa * nMid > sa)
+            --qa;
+        out = qRgba(int(qr), int(qg), int(qb), int(qa));
+    };
     for (int pass = 0; pass < 3; ++pass) {
         // Horizontal.
         for (int y = 0; y < h; ++y) {
@@ -519,33 +562,48 @@ void blurImageImpl(QImage &img, double radius)
                     sa -= qAlpha(ps);
                 }
                 if (x >= 0 && x < w) {
-                    const int n = qMin(x + r, w - 1) - qMax(x - r - 1, -1);
-                    dst[x] = qRgba(sr / n, sg / n, sb / n, sa / n);
+                    if (x >= r && x < w - r) {
+                        recip4(sr, sg, sb, sa, dst[x]);
+                    } else {
+                        const int n = qMin(x + r, w - 1) - qMax(x - r - 1, -1);
+                        div4(sr, sg, sb, sa, n, dst[x]);
+                    }
                 }
             }
         }
-        // Vertical.
-        for (int x = 0; x < w; ++x) {
-            long sr = 0, sg = 0, sb = 0, sa = 0;
-            for (int y = -r; y < h + r; ++y) {
-                const int add = qBound(0, y + r, h - 1);
-                const QRgb *row = reinterpret_cast<const QRgb *>(tmp.constScanLine(add));
-                sr += qRed(row[x]);
-                sg += qGreen(row[x]);
-                sb += qBlue(row[x]);
-                sa += qAlpha(row[x]);
-                const int sub = y - r - 1;
-                if (sub >= 0) {
-                    const QRgb *srow = reinterpret_cast<const QRgb *>(tmp.constScanLine(sub));
-                    sr -= qRed(srow[x]);
-                    sg -= qGreen(srow[x]);
-                    sb -= qBlue(srow[x]);
-                    sa -= qAlpha(srow[x]);
+        // Vertical (row-sequential): column sums over a sliding window,
+        // each tmp row read twice total instead of per-column strided
+        // fetches. Bit-identical output to the old column-major loop.
+        csr.fill(0);
+        csg.fill(0);
+        csb.fill(0);
+        csa.fill(0);
+        for (int y = -r; y < h + r; ++y) {
+            const int add = qBound(0, y + r, h - 1);
+            const QRgb *addRow = reinterpret_cast<const QRgb *>(tmp.constScanLine(add));
+            const int sub = y - r - 1;
+            const QRgb *subRow = sub >= 0 ? reinterpret_cast<const QRgb *>(tmp.constScanLine(sub)) : nullptr;
+            QRgb *drow = (y >= 0 && y < h) ? reinterpret_cast<QRgb *>(img.scanLine(y)) : nullptr;
+            const bool midRow = y >= r && y < h - r;
+            const int n = midRow ? nMid : qMin(y + r, h - 1) - qMax(y - r - 1, -1);
+            for (int x = 0; x < w; ++x) {
+                const QRgb pa = addRow[x];
+                csr[x] += qRed(pa);
+                csg[x] += qGreen(pa);
+                csb[x] += qBlue(pa);
+                csa[x] += qAlpha(pa);
+                if (subRow) {
+                    const QRgb ps = subRow[x];
+                    csr[x] -= qRed(ps);
+                    csg[x] -= qGreen(ps);
+                    csb[x] -= qBlue(ps);
+                    csa[x] -= qAlpha(ps);
                 }
-                if (y >= 0 && y < h) {
-                    const int n = qMin(y + r, h - 1) - qMax(y - r - 1, -1);
-                    QRgb *drow = reinterpret_cast<QRgb *>(img.scanLine(y));
-                    drow[x] = qRgba(sr / n, sg / n, sb / n, sa / n);
+                if (drow) {
+                    if (midRow)
+                        recip4(csr[x], csg[x], csb[x], csa[x], drow[x]);
+                    else
+                        div4(csr[x], csg[x], csb[x], csa[x], n, drow[x]);
                 }
             }
         }
@@ -618,6 +676,54 @@ QByteArray innerKey(const QByteArray &geom, double spread, double blur, double o
     QDataStream ds(&key, QIODevice::WriteOnly);
     ds.setVersion(QDataStream::Qt_6_0);
     ds << quint8('I') << spread << blur << ox << oy << s << geom;
+    return key;
+}
+
+// Full-stack fingerprints for the layer-blur sharp tile: geometry plus
+// every paint input (tints, offsets, fills, strokes). Radius/margin
+// enter (they size and shift the tile); opacity does not (mix is per
+// paint, so opacity-only edits reuse the tile).
+void streamShadowKey(QDataStream &ds, const Shadow &sh)
+{
+    ds << sh.enabled << sh.inner << sh.color.rgba() << sh.x << sh.y << sh.blur << sh.spread;
+}
+
+void streamGlowKey(QDataStream &ds, const Glow &g)
+{
+    ds << g.enabled << g.inner << g.color.rgba() << g.blur << g.spread;
+}
+
+void streamStyleKey(QDataStream &ds, const Style &st)
+{
+    ds << st.radius << st.penFill << st.strokeCap << st.strokeJoin;
+    ds << st.fills.size();
+    for (const FillEntry &f : st.fills)
+        ds << f.enabled << f.color.rgba() << f.type << f.gradient << f.opacity;
+    ds << st.strokes.size();
+    for (const StrokeEntry &s : st.strokes)
+        ds << s.enabled << s.color.rgba() << s.type << s.gradient << s.width << s.dash << s.position
+           << s.opacity;
+}
+
+QByteArray sharpKey(const QByteArray &geom, const Style &st, const QList<Shadow> &shadows,
+    const QList<Glow> &glows, double radius, double s)
+{
+    QByteArray key;
+    QDataStream ds(&key, QIODevice::WriteOnly);
+    ds.setVersion(QDataStream::Qt_6_0);
+    ds << quint8('L') << geom << radius << s;
+    ds << shadows.size();
+    for (const Shadow &sh : shadows)
+        streamShadowKey(ds, sh);
+    ds << glows.size();
+    for (const Glow &g : glows)
+        streamGlowKey(ds, g);
+    streamStyleKey(ds, st);
+    // Gradient maps cross through QVariant streaming: an exotic stored
+    // type would truncate the key and risk false sharing, so a bad
+    // stream disables the memo instead of keying on it.
+    if (ds.status() != QDataStream::Ok)
+        return {};
     return key;
 }
 
@@ -983,6 +1089,36 @@ QImage grainDots(const QSize &px, double cellD, uint32_t seed, double amount)
     if (k <= 0.001)
         return out;
     const uint32_t salt = seed ^ 974634211u;
+    // Integer cells (the common case: size 1..10 at whole scales) share
+    // one hash per cell: compute once, fill the block. Bit-identical to
+    // the per-pixel path since floor(x/cell) is constant in the block.
+    const long cellI = qRound(cell);
+    if (cellI >= 1 && qAbs(cell - double(cellI)) < 1e-9) {
+        const int cw = qMax(1, int(cellI));
+        const int W = out.width(), H = out.height();
+        for (int cy = 0, y0 = 0; y0 < H; ++cy, y0 += cw) {
+            const int y1 = qMin(H, y0 + cw);
+            for (int cx = 0, x0 = 0; x0 < W; ++cx, x0 += cw) {
+                const int x1 = qMin(W, x0 + cw);
+                const uint32_t h1 = grainHash(uint32_t(cx), uint32_t(cy), seed);
+                const uint32_t h2 = grainHash(uint32_t(cx), uint32_t(cy), salt);
+                // 65535 is odd so pick never lands exactly on 0.5: the GLSL
+                // twin compares the same float ratio with the same outcome.
+                const bool white = (h1 & 0xffffu) >= 32768u;
+                const double b = double(h2 & 0xffffu) / 65535.0;
+                const int v = qRound(k * (0.25 + 0.75 * b) * 255.0);
+                if (v <= 0)
+                    continue;
+                const QRgb dot = white ? qRgba(v, v, v, v) : qRgba(0, 0, 0, v);
+                for (int y = y0; y < y1; ++y) {
+                    QRgb *row = reinterpret_cast<QRgb *>(out.scanLine(y));
+                    for (int x = x0; x < x1; ++x)
+                        row[x] = dot;
+                }
+            }
+        }
+        return out;
+    }
     for (int y = 0; y < out.height(); ++y) {
         QRgb *row = reinterpret_cast<QRgb *>(out.scanLine(y));
         const uint32_t cy = uint32_t(double(y) / cell);
@@ -1278,14 +1414,29 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
         const double rad = qMax(0.0, layerBlur.radius) * s;
         const double margin = qMin(256.0, rad * 2.0) + 1.0;
         const QSize tsz(qMax(1, qRound(box.width() + margin * 2.0)), qMax(1, qRound(box.height() + margin * 2.0)));
-        QImage sharp(tsz, QImage::Format_ARGB32_Premultiplied);
-        sharp.fill(0);
-        {
-            QPainter tp(&sharp);
-            tp.setRenderHint(QPainter::Antialiasing, true);
-            tp.translate(-box.topLeft() + QPointF(margin, margin));
-            Blur off;
-            paintLeaf(&tp, kind, box, opts, st, shadows, glows, off, scale, maskCache);
+        // The sharp stack memoizes on geometry + full style (radius
+        // sizes the tile, so it enters the key; opacity mixes per
+        // paint). Re-blur + mix still run, the offscreen re-render does
+        // not.
+        const QByteArray geom = geometryKey(kind, box.width(), box.height(), opts, st.radius);
+        const QByteArray skey = maskCache ? sharpKey(geom, st, shadows, glows, rad, s) : QByteArray();
+        QImage sharp;
+        if (!skey.isEmpty()) {
+            if (QImage *hit = maskCache->object(skey))
+                sharp = *hit;
+        }
+        if (sharp.isNull()) {
+            sharp = QImage(tsz, QImage::Format_ARGB32_Premultiplied);
+            sharp.fill(0);
+            {
+                QPainter tp(&sharp);
+                tp.setRenderHint(QPainter::Antialiasing, true);
+                tp.translate(-box.topLeft() + QPointF(margin, margin));
+                Blur off;
+                paintLeaf(&tp, kind, box, opts, st, shadows, glows, off, scale, maskCache);
+            }
+            if (!skey.isEmpty() && !sharp.isNull())
+                maskCache->insert(skey, new QImage(sharp), qMax(1, int(sharp.sizeInBytes())));
         }
         QImage blurred = sharp.copy();
         blurImageImpl(blurred, rad);
@@ -1601,19 +1752,48 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
         return;
     const double s = scale > 0 ? scale : 1.0;
     // Whole-stack layer blur first (mirrors the vector leaf): the sharp
-    // stack renders offscreen, blurs, mixes, composites.
+    // stack renders offscreen, blurs, mixes, composites. The sharp tile
+    // memoizes on layout + full style like vectors.
     if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
         const double rad = qMax(0.0, layerBlur.radius) * s;
         const double margin = qMin(256.0, rad * 2.0) + 1.0;
         const QSize tsz(qMax(1, qRound(box.width() + margin * 2.0)), qMax(1, qRound(box.height() + margin * 2.0)));
-        QImage sharp(tsz, QImage::Format_ARGB32_Premultiplied);
-        sharp.fill(0);
-        {
-            QPainter tp(&sharp);
-            tp.setRenderHint(QPainter::Antialiasing, true);
-            tp.translate(-box.topLeft() + QPointF(margin, margin));
-            Blur off;
-            paintTextLeaf(&tp, box, text, st, shadows, glows, off, scale, maskCache);
+        QByteArray skey;
+        if (maskCache) {
+            // textKey covers the full layout (content, font, box); style
+            // and effect lists cover paint inputs; radius sizes the tile.
+            const QByteArray tkey = textKey(text, s);
+            QByteArray key;
+            QDataStream ds(&key, QIODevice::WriteOnly);
+            ds.setVersion(QDataStream::Qt_6_0);
+            ds << quint8('L') << tkey << rad << s;
+            ds << shadows.size();
+            for (const Shadow &sh : shadows)
+                streamShadowKey(ds, sh);
+            ds << glows.size();
+            for (const Glow &g : glows)
+                streamGlowKey(ds, g);
+            streamStyleKey(ds, st);
+            if (ds.status() == QDataStream::Ok)
+                skey = key;
+        }
+        QImage sharp;
+        if (!skey.isEmpty()) {
+            if (QImage *hit = maskCache->object(skey))
+                sharp = *hit;
+        }
+        if (sharp.isNull()) {
+            sharp = QImage(tsz, QImage::Format_ARGB32_Premultiplied);
+            sharp.fill(0);
+            {
+                QPainter tp(&sharp);
+                tp.setRenderHint(QPainter::Antialiasing, true);
+                tp.translate(-box.topLeft() + QPointF(margin, margin));
+                Blur off;
+                paintTextLeaf(&tp, box, text, st, shadows, glows, off, scale, maskCache);
+            }
+            if (!skey.isEmpty() && !sharp.isNull())
+                maskCache->insert(skey, new QImage(sharp), qMax(1, int(sharp.sizeInBytes())));
         }
         QImage blurred = sharp.copy();
         blurImageImpl(blurred, rad);

@@ -73,7 +73,7 @@ Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 104
             radius: AppTheme.radiusMedium
-            color: AppTheme.canvas
+            color: card.scene && card.scene.sceneColor !== undefined ? card.scene.sceneColor : AppTheme.canvas
 
             // Clipping happens a pixel inside so content never touches
             // the outline below.
@@ -82,9 +82,39 @@ Item {
                 anchors.margins: 1
                 clip: true
 
-                DesignCardPreview {
+                // Snapshot thumbnail (tile-scale PNG cached per content
+                // stamp) instead of live scene items: heavy effect
+                // stacks cost one small raster per change, and library
+                // refreshes never rebuild scene delegates.
+                Image {
+                    id: thumbImg
+
                     anchors.fill: parent
-                    scene: card.scene
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    source: ComponentExporter.thumbnailFile(card.scene ?? {}, card.designId, card.updatedAt, 400, false)
+                    visible: status === Image.Ready
+                }
+
+                Column {
+                    anchors.centerIn: parent
+                    visible: thumbImg.status !== Image.Ready
+                    spacing: 4
+
+                    AppIcon {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 22
+                        height: 22
+                        kind: "image"
+                        iconColor: AppTheme.muted
+                    }
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: qsTr("Empty canvas")
+                        font.pixelSize: 11
+                        color: AppTheme.muted
+                    }
                 }
             }
 

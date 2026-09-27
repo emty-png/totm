@@ -9,6 +9,7 @@
 #include <QProcess>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -166,6 +167,16 @@ void totMessageHandler(QtMsgType type, const QMessageLogContext &context, const 
 int main(int argc, char *argv[])
 {
     qInstallMessageHandler(totMessageHandler);
+
+    // Low-spec mode applies the single-threaded scene-graph loop, which
+    // is read at Qt init: resolve it from storage before the application
+    // object exists (explicit org/app match SettingsStore's identity).
+    // An explicit env export always wins over the stored toggle.
+    if (qEnvironmentVariableIsEmpty("QSG_RENDER_LOOP")) {
+        const QSettings early(QStringLiteral("tot"), QStringLiteral("totm"));
+        if (early.value(QStringLiteral("general/lowSpec"), false).toBool())
+            qputenv("QSG_RENDER_LOOP", QByteArrayLiteral("basic"));
+    }
 
     QGuiApplication app(argc, argv);
     // Identity drives QSettings (org "tot", app "totm") and QStandardPaths.
