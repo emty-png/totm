@@ -150,6 +150,19 @@ ScrollView {
             }
         }
 
+        // Grow / Shrink options (sized end of the gesture).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && (editor.clipData.preset === "grow" || editor.clipData.preset === "shrink")
+
+            ClipGrowOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
         // Typewriter options (reveal unit, speed, cursor).
         PanelSection {
             width: parent.width

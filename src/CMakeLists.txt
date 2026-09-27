@@ -169,6 +169,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ClipEditor.qml
         qml/components/editor/properties/SegmentedOption.qml
         qml/components/editor/properties/ClipSlideOptions.qml
+        qml/components/editor/properties/ClipGrowOptions.qml
         qml/components/editor/properties/ClipSpinOptions.qml
         qml/components/editor/properties/ClipTextOptions.qml
         qml/components/editor/properties/ClipMaskOptions.qml

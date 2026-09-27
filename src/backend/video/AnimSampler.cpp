@@ -625,10 +625,17 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             out[QStringLiteral("h")] = nh;
         }
     } else if (preset == QLatin1String("grow") || preset == QLatin1String("shrink")) {
-        const double end = preset == QLatin1String("grow") ? 0.0 : 1.5;
+        const bool isGrow = preset == QLatin1String("grow");
+        // Sized ends mirroring DocAnimSample: grow runs 0 <-> amount
+        // (default 1x), shrink runs amount <-> 1 (default 1.5x).
+        const double amt = qMax(0.0, num(o, "amount", isGrow ? 1.0 : 1.5));
+        const double gsSmall = isGrow ? 0.0 : 1.0;
+        const double gsBig = amt;
+        const double g0 = inward ? (isGrow ? gsSmall : gsBig) : (isGrow ? gsBig : gsSmall);
+        const double g1 = inward ? (isGrow ? gsBig : gsSmall) : (isGrow ? gsSmall : gsBig);
+        const double raw = g0 + (g1 - g0) * e;
         // Parity: QML clamps only the box; glyphs use the raw factor, so
         // both are preserved here.
-        const double raw = inward ? end + (1.0 - end) * e : 1.0 + (end - 1.0) * e;
         const double sc = qMax(0.001, raw);
         out[QStringLiteral("x")] = cx + (bx - cx) * sc;
         out[QStringLiteral("y")] = cy + (by - cy) * sc;

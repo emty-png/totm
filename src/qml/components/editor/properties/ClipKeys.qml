@@ -219,7 +219,7 @@ ColumnLayout {
             var bh = Number(base.h) || 0, lh = Number(leaf.h) || 0;
             var s = bw > 0.001 ? lw / bw : (bh > 0.001 ? lh / bh : 1);
             return {
-                s: Math.min(10, Math.max(0.001, section.round2(s)))
+                s: Math.min(100, Math.max(0.001, section.round2(s)))
             };
         }
         if (preset === "customRotate") {

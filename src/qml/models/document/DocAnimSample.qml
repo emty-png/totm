@@ -499,8 +499,17 @@ QtObject {
                 out.h = bh;
             }
         } else if (preset === "grow" || preset === "shrink") {
-            var end = preset === "grow" ? 0 : 1.5;
-            var sc = inward ? end + (1 - end) * e : 1 + (end - 1) * e;
+            // Sized ends: grow runs 0 <-> amount (default 1x, the old
+            // full-size behavior), shrink runs amount <-> 1 (default
+            // 1.5x, the old overshoot). Times past the clip hold the
+            // end state, so grow-in lands on the chosen size.
+            var isGrow = preset === "grow";
+            var amt = Math.max(0, Number(o.amount !== undefined ? o.amount : (isGrow ? 1 : 1.5)) || 0);
+            var gsSmall = isGrow ? 0 : 1;
+            var gsBig = amt;
+            var g0 = inward ? (isGrow ? gsSmall : gsBig) : (isGrow ? gsBig : gsSmall);
+            var g1 = inward ? (isGrow ? gsBig : gsSmall) : (isGrow ? gsSmall : gsBig);
+            var sc = g0 + (g1 - g0) * e;
             var gs = scaleBox({
                 x: base.x,
                 y: base.y,

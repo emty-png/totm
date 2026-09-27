@@ -197,6 +197,12 @@ QtObject {
             distance: 200,
             scale: 0
         },
+        "grow": {
+            amount: 1
+        },
+        "shrink": {
+            amount: 1.5
+        },
         "type": {
             unit: "letters",
             cps: 20,
@@ -460,6 +466,8 @@ QtObject {
 
     function _normalizerFor(presetId) {
         var table = {
+            "grow": presets._normalizeGrow,
+            "shrink": presets._normalizeShrink,
             "slide": presets._normalizeSlide,
             "spin": presets._normalizeSpin,
             "twist": presets._normalizeTwist,
@@ -490,6 +498,18 @@ QtObject {
             "customPath": presets._normalizeCustomPath
         };
         return table[presetId];
+    }
+
+    function _normalizeGrow(r) {
+        return {
+            amount: clampNum(r.amount !== undefined ? r.amount : 1, 1, 0, 100)
+        };
+    }
+
+    function _normalizeShrink(r) {
+        return {
+            amount: clampNum(r.amount !== undefined ? r.amount : 1.5, 1.5, 0, 100)
+        };
     }
 
     function _normalizeSlide(r) {
@@ -622,7 +642,7 @@ QtObject {
                 n++;
             }
         } else if (presetId === "customScale") {
-            put("s", v.s !== undefined ? clampNum(v.s, 0.001, 0.001, 10) : undefined);
+            put("s", v.s !== undefined ? clampNum(v.s, 0.001, 0.001, 100) : undefined);
         } else if (presetId === "customRotate") {
             put("r", v.r !== undefined ? clampNum(v.r, 0, -1440, 1440) : undefined);
         } else if (presetId === "customOpacity") {
@@ -717,8 +737,8 @@ QtObject {
 
     function _normalizeCustomScale(r) {
         var o = {
-            from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 10),
-            to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 10)
+            from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 100),
+            to: clampNum(r.to !== undefined ? r.to : 1, 1, 0, 100)
         };
         return _withKeys("customScale", o, r);
     }

@@ -30,7 +30,7 @@ ColumnLayout {
         Layout.fillWidth: true
         suffix: "×"
         minimum: 0
-        maximum: 10
+        maximum: 100
         scrubStep: 0.05
         value: Number(section.opts.from) || 0
         onCommitted: v => section.setOption("from", v)
@@ -62,7 +62,7 @@ ColumnLayout {
         Layout.fillWidth: true
         suffix: "×"
         minimum: 0
-        maximum: 10
+        maximum: 100
         scrubStep: 0.05
         value: Number(section.opts.to) || 0
         onCommitted: v => section.setOption("to", v)
