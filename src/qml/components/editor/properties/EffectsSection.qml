@@ -123,6 +123,10 @@ PanelSection {
 
         EffectBlurFields {
             Layout.fillWidth: true
+            // GPU rig ceiling (MultiEffect blurMax): preview saturates
+            // past 64, so the field stops there to keep preview/export
+            // in agreement. Layer blur rides the CPU painter to 500.
+            sizeMaximum: 64
             radiusValue: section.backgroundCommon.value.radius
             radiusMixed: section.backgroundCommon.mixedRadius
             opacityValue: section.backgroundCommon.value.opacity

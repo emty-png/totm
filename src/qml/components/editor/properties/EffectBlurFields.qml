@@ -13,7 +13,9 @@ ColumnLayout {
     required property real opacityValue
     required property bool opacityMixed
     property string sizePrefix: "R"
-    property real sizeMaximum: 100
+    // Layer blur scales to Figma-like radii; background blur stays on
+    // the GPU rig (64px ceiling) and grain reuses this for size (1..10).
+    property real sizeMaximum: 500
 
     signal radiusCommitted(real value)
     signal opacityCommitted(real value)

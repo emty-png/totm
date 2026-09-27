@@ -67,7 +67,7 @@ void ImageEffectItem::updatePad()
     // halo the shared pad does not cover for images.
     double next = Effects::effectPad(shadows, glows, lb, st.strokes);
     next = qMax(next, Effects::glowsPad(glows));
-    next = qMin(256.0, qMax(0.0, next));
+    next = qMin(1024.0, qMax(0.0, next));
     if (qFuzzyCompare(m_pad, next))
         return;
     m_pad = next;

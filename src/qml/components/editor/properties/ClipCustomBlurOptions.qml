@@ -34,7 +34,7 @@ ColumnLayout {
             prefix: "R"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 100
+            maximum: section.isBackground ? 64 : 500
             value: Number(section.opts.fromRadius) || 0
             onCommitted: v => section.setOption("fromRadius", v)
             onScrubStarted: section.beginScrub()
@@ -71,7 +71,7 @@ ColumnLayout {
             prefix: "R"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 100
+            maximum: section.isBackground ? 64 : 500
             value: Number(section.opts.toRadius) || 0
             onCommitted: v => section.setOption("toRadius", v)
             onScrubStarted: section.beginScrub()

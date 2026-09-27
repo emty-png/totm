@@ -183,8 +183,8 @@ ColumnLayout {
             Layout.preferredWidth: 0
             prefix: "X"
             suffix: qsTr("px")
-            minimum: -500
-            maximum: 500
+            minimum: -2000
+            maximum: 2000
             value: card.current.value.x
             mixed: card.current.mixedX
             commitOnRelease: true
@@ -208,8 +208,8 @@ ColumnLayout {
             Layout.preferredWidth: 0
             prefix: "Y"
             suffix: qsTr("px")
-            minimum: -500
-            maximum: 500
+            minimum: -2000
+            maximum: 2000
             value: card.current.value.y
             mixed: card.current.mixedY
             commitOnRelease: true
@@ -239,7 +239,7 @@ ColumnLayout {
             prefix: "B"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 100
+            maximum: 500
             value: card.current.value.blur
             mixed: card.current.mixedBlur
             commitOnRelease: true
@@ -264,7 +264,7 @@ ColumnLayout {
             prefix: "S"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 50
+            maximum: 500
             value: card.current.value.spread
             mixed: card.current.mixedSpread
             commitOnRelease: true

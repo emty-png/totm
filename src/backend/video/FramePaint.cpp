@@ -89,7 +89,7 @@ void paintBackdropBlur(QPainter &pt, QImage &frame, double x, double y, double w
     double opacity, const QPainterPath &clip = QPainterPath()) {
     if (radius <= 0.01 || opacity <= 0.001)
         return;
-    const double margin = qMin(128.0, radius * 2.0);
+    const double margin = qMin(256.0, radius * 2.0);
     const QRect srcRect(qMax(0, qRound(x - margin)), qMax(0, qRound(y - margin)), qRound(w + margin * 2.0),
         qRound(h + margin * 2.0));
     const QRect bounded = srcRect.intersected(frame.rect());
@@ -122,7 +122,9 @@ void paintBackdropBlur(QPainter &pt, QImage &frame, double x, double y, double w
 // scale); tints and offsets apply per paint.
 QCache<QByteArray, QImage> &sharedBlurCache()
 {
-    thread_local QCache<QByteArray, QImage> c(16 * 1024 * 1024);
+    // 64MB: max-range tiles (2248px ≈ 20MB) must survive for repeat
+    // hits; the cap is a ceiling, not an allocation.
+    thread_local QCache<QByteArray, QImage> c(64 * 1024 * 1024);
     return c;
 }
 

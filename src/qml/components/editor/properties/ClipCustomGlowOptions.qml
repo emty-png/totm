@@ -66,7 +66,7 @@ ColumnLayout {
             prefix: "B"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 100
+            maximum: 500
             value: Number(section.opts.fromBlur) || 0
             onCommitted: v => section.setOption("fromBlur", v)
             onScrubStarted: section.beginScrub()
@@ -80,7 +80,7 @@ ColumnLayout {
             prefix: "S"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 50
+            maximum: 500
             value: Number(section.opts.fromSpread) || 0
             onCommitted: v => section.setOption("fromSpread", v)
             onScrubStarted: section.beginScrub()
@@ -149,7 +149,7 @@ ColumnLayout {
             prefix: "B"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 100
+            maximum: 500
             value: Number(section.opts.toBlur) || 0
             onCommitted: v => section.setOption("toBlur", v)
             onScrubStarted: section.beginScrub()
@@ -163,7 +163,7 @@ ColumnLayout {
             prefix: "S"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 50
+            maximum: 500
             value: Number(section.opts.toSpread) || 0
             onCommitted: v => section.setOption("toSpread", v)
             onScrubStarted: section.beginScrub()

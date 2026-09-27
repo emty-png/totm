@@ -82,7 +82,7 @@ ColumnLayout {
             prefix: "B"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 100
+            maximum: 500
             value: fields.blurValue
             mixed: fields.blurMixed
             commitOnRelease: true
@@ -98,7 +98,7 @@ ColumnLayout {
             prefix: "S"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 50
+            maximum: 500
             value: fields.spreadValue
             mixed: fields.spreadMixed
             commitOnRelease: true

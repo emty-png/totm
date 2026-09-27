@@ -65,8 +65,8 @@ ColumnLayout {
             Layout.preferredWidth: 0
             prefix: "X"
             suffix: qsTr("px")
-            minimum: -500
-            maximum: 500
+            minimum: -2000
+            maximum: 2000
             value: Number(section.opts.fromX) || 0
             onCommitted: v => section.setOption("fromX", v)
             onScrubStarted: section.beginScrub()
@@ -79,8 +79,8 @@ ColumnLayout {
             Layout.preferredWidth: 0
             prefix: "Y"
             suffix: qsTr("px")
-            minimum: -500
-            maximum: 500
+            minimum: -2000
+            maximum: 2000
             value: Number(section.opts.fromY) || 0
             onCommitted: v => section.setOption("fromY", v)
             onScrubStarted: section.beginScrub()
@@ -134,7 +134,7 @@ ColumnLayout {
             prefix: "B"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 100
+            maximum: 500
             value: Number(section.opts.fromBlur) || 0
             onCommitted: v => section.setOption("fromBlur", v)
             onScrubStarted: section.beginScrub()
@@ -148,7 +148,7 @@ ColumnLayout {
             prefix: "S"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 50
+            maximum: 500
             value: Number(section.opts.fromSpread) || 0
             onCommitted: v => section.setOption("fromSpread", v)
             onScrubStarted: section.beginScrub()
@@ -180,8 +180,8 @@ ColumnLayout {
             Layout.preferredWidth: 0
             prefix: "X"
             suffix: qsTr("px")
-            minimum: -500
-            maximum: 500
+            minimum: -2000
+            maximum: 2000
             value: Number(section.opts.toX) || 0
             onCommitted: v => section.setOption("toX", v)
             onScrubStarted: section.beginScrub()
@@ -194,8 +194,8 @@ ColumnLayout {
             Layout.preferredWidth: 0
             prefix: "Y"
             suffix: qsTr("px")
-            minimum: -500
-            maximum: 500
+            minimum: -2000
+            maximum: 2000
             value: Number(section.opts.toY) || 0
             onCommitted: v => section.setOption("toY", v)
             onScrubStarted: section.beginScrub()
@@ -249,7 +249,7 @@ ColumnLayout {
             prefix: "B"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 100
+            maximum: 500
             value: Number(section.opts.toBlur) || 0
             onCommitted: v => section.setOption("toBlur", v)
             onScrubStarted: section.beginScrub()
@@ -263,7 +263,7 @@ ColumnLayout {
             prefix: "S"
             suffix: qsTr("px")
             minimum: 0
-            maximum: 50
+            maximum: 500
             value: Number(section.opts.toSpread) || 0
             onCommitted: v => section.setOption("toSpread", v)
             onScrubStarted: section.beginScrub()

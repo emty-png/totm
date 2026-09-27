@@ -501,7 +501,7 @@ QBrush strokeBrushFor(const QRectF &box, const StrokeEntry &s)
 //   one item usually share dimensions).
 void blurImageImpl(QImage &img, double radius)
 {
-    const int r = qBound(0, qRound(radius), 64);
+    const int r = qBound(0, qRound(radius), 256);
     if (r < 1 || img.isNull())
         return;
     const int w = img.width(), h = img.height();
@@ -513,7 +513,7 @@ void blurImageImpl(QImage &img, double radius)
     QVector<long> csr(w), csg(w), csb(w), csa(w);
     // ceil(2^24 / nMid): approximate quotient overestimates by < 2, the
     // correction loops below make the result exact. Products fit in
-    // 64-bit (max sum 255*129, inv <= 2^24).
+    // 64-bit (max sum 255*513, inv <= 2^24).
     const int nMid = 2 * r + 1;
     const long invMid = ((1L << 24) + nMid - 1) / nMid;
     auto div4 = [&](long sr, long sg, long sb, long sa, int n, QRgb &out) {
@@ -972,14 +972,14 @@ double shadowPad(const Shadow &sh, double strokeWidth)
     if (!sh.enabled || sh.color.alpha() <= 0)
         return 0.0;
     const double pad = sh.spread + sh.blur * 2.0 + qHypot(sh.x, sh.y) + qMax(0.0, strokeWidth);
-    return qMin(256.0, qMax(0.0, pad));
+    return qMin(1024.0, qMax(0.0, pad));
 }
 
 double blurPad(const Blur &b)
 {
     if (!b.enabled || b.opacity <= 0.001 || b.radius <= 0.01)
         return 0.0;
-    return qMin(256.0, qMax(0.0, b.radius * 2.0));
+    return qMin(1024.0, qMax(0.0, b.radius * 2.0));
 }
 
 double shadowsPad(const QList<Shadow> &shadows, double strokeWidth)
@@ -1020,23 +1020,23 @@ double strokesPad(const QList<StrokeEntry> &strokes)
         else
             pad = qMax(pad, s.width / 2.0);
     }
-    return qMin(256.0, qMax(0.0, pad));
+    return qMin(1024.0, qMax(0.0, pad));
 }
 
 double effectPad(const Shadow &sh, const Blur &b, double strokeWidth)
 {
-    return qMin(256.0, qMax(shadowPad(sh, strokeWidth), blurPad(b)));
+    return qMin(1024.0, qMax(shadowPad(sh, strokeWidth), blurPad(b)));
 }
 
 double effectPad(const Shadow &sh, const Blur &b, const Glow &g, double strokeWidth)
 {
-    return qMin(256.0, qMax(effectPad(sh, b, strokeWidth), glowPad(g)));
+    return qMin(1024.0, qMax(effectPad(sh, b, strokeWidth), glowPad(g)));
 }
 
 double effectPad(const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &b,
     double strokeWidth)
 {
-    return qMin(256.0, qMax(shadowsPad(shadows, strokeWidth), qMax(glowsPad(glows), blurPad(b))));
+    return qMin(1024.0, qMax(shadowsPad(shadows, strokeWidth), qMax(glowsPad(glows), blurPad(b))));
 }
 
 double effectPad(const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &b,
@@ -1045,7 +1045,7 @@ double effectPad(const QList<Shadow> &shadows, const QList<Glow> &glows, const B
     double maxW = 0.0;
     for (const StrokeEntry &s : strokes)
         maxW = qMax(maxW, s.enabled ? s.width : 0.0);
-    return qMin(256.0,
+    return qMin(1024.0,
         qMax(effectPad(shadows, glows, b, maxW), strokesPad(strokes)));
 }
 
@@ -1180,7 +1180,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
     if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
         const double s = scale > 0 ? scale : 1.0;
         const double rad = qMax(0.0, layerBlur.radius) * s;
-        const double margin = qMin(256.0, rad * 2.0) + 1.0;
+        const double margin = qMin(1024.0, rad * 2.0) + 1.0;
         const QSize tsz(qMax(1, qRound(box.width() + margin * 2.0)), qMax(1, qRound(box.height() + margin * 2.0)));
         QImage sharp(tsz, QImage::Format_ARGB32_Premultiplied);
         sharp.fill(0);
@@ -1213,7 +1213,7 @@ double glowPad(const Glow &g)
 {
     if (!g.enabled || g.color.alpha() <= 0)
         return 0.0;
-    return qMin(256.0, qMax(0.0, g.spread + g.blur * 2.0));
+    return qMin(1024.0, qMax(0.0, g.spread + g.blur * 2.0));
 }
 
 void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathOpts &opts,
@@ -1412,7 +1412,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
     if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
         const double s = scale > 0 ? scale : 1.0;
         const double rad = qMax(0.0, layerBlur.radius) * s;
-        const double margin = qMin(256.0, rad * 2.0) + 1.0;
+        const double margin = qMin(1024.0, rad * 2.0) + 1.0;
         const QSize tsz(qMax(1, qRound(box.width() + margin * 2.0)), qMax(1, qRound(box.height() + margin * 2.0)));
         // The sharp stack memoizes on geometry + full style (radius
         // sizes the tile, so it enters the key; opacity mixes per
@@ -1657,7 +1657,7 @@ QImage textCoverage(const TextOpts &t, double w, double h, double s, bool withOu
 QImage textHalo(const QImage &outlined, const QByteArray &tkey, double spread, double blur, double s,
     QCache<QByteArray, QImage> *cache, double *marginOut)
 {
-    const double margin = qMin(256.0, spread * s + blur * s * 2.0) + 1.0;
+    const double margin = qMin(1024.0, spread * s + blur * s * 2.0) + 1.0;
     if (marginOut)
         *marginOut = margin;
     const QByteArray key = textOuterKey(tkey, true, spread, blur, s);
@@ -1687,7 +1687,7 @@ QImage textHalo(const QImage &outlined, const QByteArray &tkey, double spread, d
 QImage textCutter(const QImage &base, const QByteArray &tkey, double spread, double blur, double ox,
     double oy, double s, QCache<QByteArray, QImage> *cache, double *marginOut)
 {
-    const double margin = qMin(256.0, spread * s + blur * s * 2.0) + 1.0 + qHypot(ox * s, oy * s);
+    const double margin = qMin(1024.0, spread * s + blur * s * 2.0) + 1.0 + qHypot(ox * s, oy * s);
     if (marginOut)
         *marginOut = margin;
     const QByteArray key = textInnerKey(tkey, spread, blur, ox, oy, s);
@@ -1756,7 +1756,7 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
     // memoizes on layout + full style like vectors.
     if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
         const double rad = qMax(0.0, layerBlur.radius) * s;
-        const double margin = qMin(256.0, rad * 2.0) + 1.0;
+        const double margin = qMin(1024.0, rad * 2.0) + 1.0;
         const QSize tsz(qMax(1, qRound(box.width() + margin * 2.0)), qMax(1, qRound(box.height() + margin * 2.0)));
         QByteArray skey;
         if (maskCache) {
