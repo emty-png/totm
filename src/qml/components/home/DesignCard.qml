@@ -2,8 +2,9 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// One design card: bordered live scene tile with a hover-revealed
-// star toggle, divider, then name and edited stamp. Click selects just
+// One design card: bordered live scene tile with a star toggle
+// (always visible when starred, else hover-revealed), divider, then
+// name and edited stamp. Click selects just
 // this card, Ctrl-click toggles selection, double-click opens the design,
 // drag onto a sidebar workspace moves, right-click opens the card menu.
 // Marquee selection draws an outline. Rename lives in the context menu
@@ -158,7 +159,7 @@ Item {
         width: 22
         height: 22
         z: 10
-        visible: (cardMouse.containsMouse || starMouse.containsMouse) && !card.editing
+        visible: (card.starred || cardMouse.containsMouse || starMouse.containsMouse) && !card.editing
 
         Rectangle {
             anchors.fill: parent

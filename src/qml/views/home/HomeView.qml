@@ -522,6 +522,7 @@ RowLayout {
                 font.pixelSize: 12
                 color: AppTheme.foreground
                 selectByMouse: true
+                rightPadding: 28
                 onTextChanged: {
                     if (homeView.searchText !== text)
                         homeView.searchText = text;
@@ -539,6 +540,38 @@ RowLayout {
                         searchField.text = "";
                         homeView.forceActiveFocus();
                         event.accepted = true;
+                    }
+                }
+
+                AppIcon {
+                    anchors {
+                        right: parent.right
+                        verticalCenter: parent.verticalCenter
+                        rightMargin: 8
+                    }
+                    width: 12
+                    height: 12
+                    visible: searchField.text !== ""
+                    kind: "close"
+                    iconColor: clearMouse.containsMouse ? AppTheme.foreground : AppTheme.muted
+                }
+
+                MouseArea {
+                    id: clearMouse
+
+                    anchors {
+                        right: parent.right
+                        top: parent.top
+                        bottom: parent.bottom
+                    }
+                    width: 28
+                    visible: searchField.text !== ""
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        searchField.text = "";
+                        searchField.forceActiveFocus();
                     }
                 }
             }
@@ -577,18 +610,97 @@ RowLayout {
             }
         }
 
-        Text {
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.leftMargin: 16
             Layout.rightMargin: 16
             visible: !homeView.settingsSelected && homeView.filteredDesigns.length === 0
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            wrapMode: Text.WordWrap
-            text: String(homeView.searchText || "").trim() !== "" ? qsTr("No designs match your search...") : qsTr("Nothing to see here...")
-            font.pixelSize: 13
-            color: AppTheme.muted
+            spacing: 12
+
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: String(homeView.searchText || "").trim() !== "" ? qsTr("No designs match your search...") : qsTr("Nothing to see here...")
+                font.pixelSize: 13
+                color: AppTheme.muted
+            }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 8
+
+                Rectangle {
+                    Layout.preferredWidth: newText.implicitWidth + 24
+                    Layout.preferredHeight: 28
+                    radius: AppTheme.radiusSmall
+                    border.width: 1
+                    border.color: AppTheme.fieldBorder
+                    color: newMouse.containsMouse || newMouse.pressed ? AppTheme.hover : AppTheme.surface
+
+                    Text {
+                        id: newText
+
+                        anchors.centerIn: parent
+                        text: qsTr("New design")
+                        font.pixelSize: 12
+                        color: newMouse.containsMouse || newMouse.pressed ? AppTheme.foreground : AppTheme.muted
+                    }
+
+                    MouseArea {
+                        id: newMouse
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: homeView.homeNewDesign()
+                    }
+                }
+
+                Rectangle {
+                    visible: String(homeView.searchText || "").trim() !== ""
+                    Layout.preferredWidth: clearText.implicitWidth + 24
+                    Layout.preferredHeight: 28
+                    radius: AppTheme.radiusSmall
+                    border.width: 1
+                    border.color: AppTheme.fieldBorder
+                    color: clearSearchMouse.containsMouse || clearSearchMouse.pressed ? AppTheme.hover : AppTheme.surface
+
+                    Text {
+                        id: clearText
+
+                        anchors.centerIn: parent
+                        text: qsTr("Clear search")
+                        font.pixelSize: 12
+                        color: clearSearchMouse.containsMouse || clearSearchMouse.pressed ? AppTheme.foreground : AppTheme.muted
+                    }
+
+                    MouseArea {
+                        id: clearSearchMouse
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            searchField.text = "";
+                            searchField.forceActiveFocus();
+                        }
+                    }
+                }
+            }
+
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+            }
         }
 
         SettingsView {
