@@ -3,10 +3,13 @@
 #include "AnimSampler.h"
 #include "EffectPainter.h"
 
+#include <QCache>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QImageReader>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QPainterPathStroker>
 #include <QStandardPaths>
 #include <QSvgRenderer>
@@ -36,20 +39,42 @@ QImage loadExportImage(const QString &name, int targetW, int targetH) {
     const QString path = exportImagesDir() + QStringLiteral("/") + name;
     if (!QFile::exists(path))
         return {};
-    if (name.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive)) {
+    const bool isSvg = name.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive);
+    // Raster decode + SVG render cached: video export hits this per leaf
+    // per frame, preview per repaint. 64MB holds ~16 1080p tiles.
+    static QCache<QString, QImage> s_cache(64 * 1024 * 1024);
+    static QMutex s_mutex;
+    const QString key = isSvg
+        ? name + QStringLiteral("@") + QString::number(qMax(1, targetW)) + QStringLiteral("x")
+            + QString::number(qMax(1, targetH))
+        : name;
+    {
+        QMutexLocker lock(&s_mutex);
+        if (QImage *hit = s_cache.object(key))
+            return *hit;
+    }
+    QImage img;
+    if (isSvg) {
         QSvgRenderer renderer(path);
         if (!renderer.isValid())
             return {};
         const int w = qMax(1, targetW), h = qMax(1, targetH);
-        QImage img(w, h, QImage::Format_ARGB32_Premultiplied);
+        img = QImage(w, h, QImage::Format_ARGB32_Premultiplied);
         img.fill(Qt::transparent);
         QPainter p(&img);
         renderer.render(&p, QRectF(0, 0, w, h));
-        return img;
+    } else {
+        QImageReader reader(path);
+        reader.setAutoTransform(true);
+        img = reader.read();
     }
-    QImageReader reader(path);
-    reader.setAutoTransform(true);
-    return reader.read();
+    if (!img.isNull()) {
+        if (img.format() != QImage::Format_ARGB32_Premultiplied)
+            img.convertTo(QImage::Format_ARGB32_Premultiplied);
+        QMutexLocker lock(&s_mutex);
+        s_cache.insert(key, new QImage(img), qMax(1, int(img.sizeInBytes())));
+    }
+    return img;
 }
 
 // Frosted-glass backdrop: blur the already-painted frame under the
@@ -87,9 +112,44 @@ void paintBackdropBlur(QPainter &pt, QImage &frame, double x, double y, double w
     pt.restore();
 }
 
+// Outer image shadow: the clip silhouette dilated by spread, blurred,
+// tinted, drawn under the raster at the shadow offset.
+void paintImageShadow(QPainter &pt, const QPainterPath &clip, const Effects::Shadow &sh, double s) {
+    if (sh.color.alpha() <= 0)
+        return;
+    QPainterPath silhouette = clip;
+    if (sh.spread * s > 0.01) {
+        QPainterPathStroker stroker;
+        stroker.setWidth(sh.spread * 2.0 * s);
+        stroker.setCapStyle(Qt::RoundCap);
+        stroker.setJoinStyle(Qt::RoundJoin);
+        silhouette = stroker.createStroke(clip).united(clip);
+    }
+    const double m = sh.blur * s * 2.0 + 1.0;
+    QRectF area = silhouette.boundingRect();
+    area.adjust(-m, -m, m, m);
+    QImage mask(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())), QImage::Format_ARGB32_Premultiplied);
+    mask.fill(0);
+    {
+        QPainter mp(&mask);
+        mp.setRenderHint(QPainter::Antialiasing, true);
+        mp.translate(-area.topLeft());
+        mp.fillPath(silhouette, Qt::black);
+    }
+    Effects::blurImage(mask, sh.blur * s);
+    {
+        QPainter mp(&mask);
+        mp.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        mp.fillRect(mask.rect(), sh.color);
+    }
+    pt.drawImage(area.topLeft() + QPointF(sh.x * s, sh.y * s), mask);
+}
+
 // Outer image glow: the clip silhouette dilated by spread, blurred,
 // tinted, drawn under the raster.
 void paintImageGlow(QPainter &pt, const QPainterPath &clip, const Effects::Glow &glow, double s) {
+    if (glow.color.alpha() <= 0)
+        return;
     QPainterPath silhouette = clip;
     if (glow.spread * s > 0.01) {
         QPainterPathStroker stroker;
@@ -118,9 +178,51 @@ void paintImageGlow(QPainter &pt, const QPainterPath &clip, const Effects::Glow 
     pt.drawImage(area.topLeft(), mask);
 }
 
+// Inner image shadow: tinted clip with the blurred offset eroded copy
+// cut out, leaving the halo band at the inside edges (above the pixels).
+void paintImageShadowInner(QPainter &pt, const QPainterPath &clip, const Effects::Shadow &sh, double s) {
+    if (sh.color.alpha() <= 0)
+        return;
+    QPainterPath eroded = clip;
+    if (sh.spread * s > 0.01) {
+        QPainterPathStroker stroker;
+        stroker.setWidth(sh.spread * 2.0 * s);
+        stroker.setCapStyle(Qt::RoundCap);
+        stroker.setJoinStyle(Qt::RoundJoin);
+        eroded = clip.subtracted(stroker.createStroke(clip));
+    }
+    const double m = sh.blur * s * 2.0 + 1.0 + qHypot(sh.x * s, sh.y * s);
+    QRectF area = clip.boundingRect();
+    area.adjust(-m, -m, m, m);
+    const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
+    QImage cutter(size, QImage::Format_ARGB32_Premultiplied);
+    cutter.fill(0);
+    {
+        QPainter mp(&cutter);
+        mp.setRenderHint(QPainter::Antialiasing, true);
+        mp.translate(-area.topLeft() + QPointF(sh.x * s, sh.y * s));
+        mp.fillPath(eroded, Qt::black);
+    }
+    Effects::blurImage(cutter, sh.blur * s);
+    QImage mask(size, QImage::Format_ARGB32_Premultiplied);
+    mask.fill(0);
+    {
+        QPainter mp(&mask);
+        mp.setRenderHint(QPainter::Antialiasing, true);
+        mp.translate(-area.topLeft());
+        mp.fillPath(clip, sh.color);
+        mp.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+        mp.resetTransform();
+        mp.drawImage(0, 0, cutter);
+    }
+    pt.drawImage(area.topLeft(), mask);
+}
+
 // Inner image glow: tinted clip with the blurred eroded copy cut out,
 // leaving the halo band at the inside edges (above the pixels).
 void paintImageGlowInner(QPainter &pt, const QPainterPath &clip, const Effects::Glow &glow, double s) {
+    if (glow.color.alpha() <= 0)
+        return;
     QPainterPath eroded = clip;
     if (glow.spread * s > 0.01) {
         QPainterPathStroker stroker;
@@ -158,8 +260,9 @@ void paintImageGlowInner(QPainter &pt, const QPainterPath &clip, const Effects::
 
 void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h, double s,
     const QList<Effects::StrokeEntry> &strokes, const Effects::Blur &layerBlur = Effects::Blur(),
-    const QList<Effects::Glow> &glows = QList<Effects::Glow>(), const Effects::Grain &grain = Effects::Grain(),
-    int uid = -1, int frameNo = 0) {
+    const QList<Effects::Glow> &glows = QList<Effects::Glow>(),
+    const QList<Effects::Shadow> &shadows = QList<Effects::Shadow>(),
+    const Effects::Grain &grain = Effects::Grain(), int uid = -1, int frameNo = 0) {
     const QString name = str(m, "imageSource", str(m, "image", QString()));
     const double r = qMin(qMax(0.0, num(m, "radius") * s), qMin(w, h) / 2.0);
     QPainterPath clip;
@@ -167,10 +270,17 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
         clip.addRoundedRect(QRectF(x, y, w, h), r, r);
     else
         clip.addRect(QRectF(x, y, w, h));
+    // Outer shadows under everything (Figma order), bottom-first so
+    // index 0 paints topmost.
+    for (int i = shadows.size() - 1; i >= 0; --i) {
+        const Effects::Shadow &sh = shadows.at(i);
+        if (sh.enabled && !sh.inner && sh.color.alpha() > 0)
+            paintImageShadow(pt, clip, sh, s);
+    }
     // Outer glows: bottom-first so index 0 paints topmost.
     for (int i = glows.size() - 1; i >= 0; --i) {
         const Effects::Glow &g = glows.at(i);
-        if (g.enabled && !g.inner)
+        if (g.enabled && !g.inner && g.color.alpha() > 0)
             paintImageGlow(pt, clip, g, s);
     }
     QImage img = loadExportImage(name, qMax(1, qRound(w)), qMax(1, qRound(h)));
@@ -180,7 +290,7 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
         img = tile;
     }
     // Layer blur on images: blur the raster then mix by opacity.
-    if (layerBlur.enabled && layerBlur.radius > 0.01) {
+    if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
         QImage blurred = img.copy();
         Effects::blurImage(blurred, layerBlur.radius * s);
         QImage sharp = img.copy();
@@ -191,10 +301,17 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
     pt.setClipPath(clip, Qt::IntersectClip);
     pt.drawImage(QRectF(x, y, w, h), img);
     pt.restore();
+    // Inner shadows over the pixels, then inner glows (Figma order),
+    // index 0 topmost inside each group.
+    for (int i = shadows.size() - 1; i >= 0; --i) {
+        const Effects::Shadow &sh = shadows.at(i);
+        if (sh.enabled && sh.inner && sh.color.alpha() > 0)
+            paintImageShadowInner(pt, clip, sh, s);
+    }
     // Inner glows over the pixels, index 0 topmost.
     for (int i = glows.size() - 1; i >= 0; --i) {
         const Effects::Glow &g = glows.at(i);
-        if (g.enabled && g.inner)
+        if (g.enabled && g.inner && g.color.alpha() > 0)
             paintImageGlowInner(pt, clip, g, s);
     }
     // Stacked strokes as rect borders, bottom-first so index 0 paints
@@ -215,14 +332,23 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
             pen.setDashPattern(se.dash);
         }
         QRectF rect(x, y, w, h);
-        if (se.position == QLatin1String("outside"))
+        double rr = r;
+        if (se.position == QLatin1String("outside")) {
             rect.adjust(-sw / 2.0, -sw / 2.0, sw / 2.0, sw / 2.0);
-        else if (se.position == QLatin1String("center"))
+            rr = r + sw / 2.0;
+        } else if (se.position == QLatin1String("center")) {
             rect.adjust(0, 0, 0, 0);
-        // inside: default clip rect (border paints inside in Qt).
+        } else {
+            // Inside: inset by half width so the centered pen lands
+            // inside the clip (matches the QML Rectangle border).
+            rect.adjust(sw / 2.0, sw / 2.0, -sw / 2.0, -sw / 2.0);
+            rr = qMax(0.0, r - sw / 2.0);
+        }
+        if (rect.width() <= 0 || rect.height() <= 0)
+            continue;
         pt.setPen(pen);
         pt.setBrush(Qt::NoBrush);
-        pt.drawRoundedRect(rect, r, r);
+        pt.drawRoundedRect(rect, rr, rr);
     }
     // Grain over pixels and stroke (preview tiles the same way).
     if (grain.enabled && grain.amount > 0.001)
@@ -356,7 +482,7 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
     if (shapeType == QLatin1String("image")) {
         if (useBackground)
             paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale, backgroundBlur.opacity);
-        paintImage(pt, m, x, y, w, h, scale, style.strokes, layerBlur, glows,
+        paintImage(pt, m, x, y, w, h, scale, style.strokes, layerBlur, glows, shadows,
             useGrain ? grain : Effects::Grain(), uid, frameNo);
         pt.restore();
         return;

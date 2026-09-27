@@ -118,6 +118,18 @@ void MaskLeafItem::setFrameNo(int v) {
     if (m_frameNo == v)
         return;
     m_frameNo = v;
+    // Grain shimmer is the only frame-dependent input: static or
+    // grain-free leaves must not repaint at 60Hz during playback.
+    bool grainOn = false;
+    const QVariant g = m_leaf.value(QStringLiteral("grain"));
+    if (g.isValid()) {
+        const QVariantMap gm = g.toMap();
+        if (!gm.isEmpty())
+            grainOn = gm.value(QStringLiteral("enabled"), false).toBool()
+                && gm.value(QStringLiteral("amount"), 0.0).toDouble() > 0.001;
+    }
+    if (!grainOn)
+        return;
     emit contentChanged();
     update();
 }

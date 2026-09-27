@@ -149,6 +149,8 @@ QVariantList EffectItem::cornerRadii() const
 
 void EffectItem::setCornerRadii(const QVariantList &v)
 {
+    if (m_cornerRadii == v)
+        return;
     m_cornerRadii = v;
     m_masks.clear();
     emit shapeChanged();
@@ -177,6 +179,8 @@ QVariantList EffectItem::pathData() const
 
 void EffectItem::setPathData(const QVariantList &v)
 {
+    if (m_pathData == v)
+        return;
     m_pathData = v;
     m_masks.clear();
     emit shapeChanged();
@@ -226,6 +230,8 @@ QVariantList EffectItem::fills() const
 
 void EffectItem::setFills(const QVariantList &v)
 {
+    if (m_fills == v)
+        return;
     m_fills = v;
     emit fillChanged();
     updatePad();
@@ -239,6 +245,8 @@ QVariantList EffectItem::strokes() const
 
 void EffectItem::setStrokes(const QVariantList &v)
 {
+    if (m_strokes == v)
+        return;
     m_strokes = v;
     m_masks.clear();
     emit strokeChanged();
@@ -301,6 +309,8 @@ QVariantList EffectItem::shadows() const
 
 void EffectItem::setShadows(const QVariantList &v)
 {
+    if (m_shadows == v)
+        return;
     m_shadows = v;
     emit shadowChanged();
     updatePad();
@@ -316,6 +326,8 @@ QVariantMap EffectItem::layerBlur() const
 
 void EffectItem::setLayerBlur(const QVariantMap &v)
 {
+    if (m_layerBlur == v)
+        return;
     m_layerBlur = v;
     emit blurChanged();
     updatePad();
@@ -329,6 +341,8 @@ QVariantMap EffectItem::backgroundBlur() const
 
 void EffectItem::setBackgroundBlur(const QVariantMap &v)
 {
+    if (m_backgroundBlur == v)
+        return;
     // Backdrop sampling lives in QML/export; stored here so pad and
     // repaints stay in sync when the effect switches.
     m_backgroundBlur = v;
@@ -343,6 +357,8 @@ QVariantList EffectItem::glows() const
 
 void EffectItem::setGlows(const QVariantList &v)
 {
+    if (m_glows == v)
+        return;
     m_glows = v;
     emit glowChanged();
     updatePad();

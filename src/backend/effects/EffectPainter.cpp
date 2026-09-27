@@ -863,7 +863,7 @@ void paintStrokes(QPainter *pt, const QPainterPath &path, const QRectF &fillBox,
 
 double shadowPad(const Shadow &sh, double strokeWidth)
 {
-    if (!sh.enabled)
+    if (!sh.enabled || sh.color.alpha() <= 0)
         return 0.0;
     const double pad = sh.spread + sh.blur * 2.0 + qHypot(sh.x, sh.y) + qMax(0.0, strokeWidth);
     return qMin(256.0, qMax(0.0, pad));
@@ -871,7 +871,7 @@ double shadowPad(const Shadow &sh, double strokeWidth)
 
 double blurPad(const Blur &b)
 {
-    if (!b.enabled)
+    if (!b.enabled || b.opacity <= 0.001 || b.radius <= 0.01)
         return 0.0;
     return qMin(256.0, qMax(0.0, b.radius * 2.0));
 }
@@ -1041,7 +1041,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
     // Layer blur (single-effect: shadow stays off): render sharp
     // offscreen, blur a copy, mix by opacity, then composite. Margin
     // keeps the blur from clipping; pad from effectPad covers it.
-    if (layerBlur.enabled && layerBlur.radius > 0.01) {
+    if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
         const double s = scale > 0 ? scale : 1.0;
         const double rad = qMax(0.0, layerBlur.radius) * s;
         const double margin = qMin(256.0, rad * 2.0) + 1.0;
@@ -1075,7 +1075,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
 
 double glowPad(const Glow &g)
 {
-    if (!g.enabled)
+    if (!g.enabled || g.color.alpha() <= 0)
         return 0.0;
     return qMin(256.0, qMax(0.0, g.spread + g.blur * 2.0));
 }
@@ -1098,7 +1098,7 @@ namespace {
 void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
     const Style &st, const Shadow &sh, double s)
 {
-    if (sh.enabled && !sh.inner) {
+    if (sh.enabled && !sh.inner && sh.color.alpha() > 0) {
         QPainterPath silhouette = path;
         if (sh.spread * s > 0.01) {
             QPainterPathStroker stroker;
@@ -1128,7 +1128,7 @@ void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillB
         pt->drawImage(area.topLeft() + QPointF(sh.x * s, sh.y * s), mask);
     }
     paintFills(pt, path, fillBox, kind, st);
-    if (sh.enabled && sh.inner)
+    if (sh.enabled && sh.inner && sh.color.alpha() > 0)
         paintInner(pt, path, sh, s, QByteArray(), nullptr);
     paintStrokes(pt, path, fillBox, kind, st, s);
 }
@@ -1141,7 +1141,8 @@ void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillB
 void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double s,
     const QByteArray &geom, QCache<QByteArray, QImage> *cache)
 {
-    QRectF area;
+    if (sh.color.alpha() <= 0)
+        return;    QRectF area;
     const QImage cutter = innerCutter(path, geom, sh.spread, sh.blur, sh.x, sh.y, s, cache, &area);
     const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
     // Tinted shape minus the blurred copy: the edge band. The cutter is
@@ -1170,7 +1171,7 @@ void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double
 void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
     const Style &st, const Glow &glow, double s)
 {
-    if (glow.enabled && !glow.inner) {
+    if (glow.enabled && !glow.inner && glow.color.alpha() > 0) {
         QPainterPath silhouette = path;
         if (glow.spread * s > 0.01) {
             QPainterPathStroker stroker;
@@ -1200,7 +1201,7 @@ void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox
         pt->drawImage(area.topLeft(), mask);
     }
     paintFills(pt, path, fillBox, kind, st);
-    if (glow.enabled && glow.inner)
+    if (glow.enabled && glow.inner && glow.color.alpha() > 0)
         paintGlowInner(pt, path, glow, s, QByteArray(), nullptr);
     paintStrokes(pt, path, fillBox, kind, st, s);
 }
@@ -1210,7 +1211,8 @@ void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox
 void paintGlowInner(QPainter *pt, const QPainterPath &path, const Glow &glow, double s,
     const QByteArray &geom, QCache<QByteArray, QImage> *cache)
 {
-    QRectF area;
+    if (glow.color.alpha() <= 0)
+        return;    QRectF area;
     const QImage cutter = innerCutter(path, geom, glow.spread, glow.blur, 0.0, 0.0, s, cache, &area);
     const QSize size(qMax(1, qRound(area.width())), qMax(1, qRound(area.height())));
     QImage mask(size, QImage::Format_ARGB32_Premultiplied);
@@ -1230,7 +1232,7 @@ void paintGlowInner(QPainter *pt, const QPainterPath &path, const Glow &glow, do
 void paintOuterShadow(QPainter *pt, const QPainterPath &path, const Shadow &sh, double s,
     const QByteArray &geom, QCache<QByteArray, QImage> *cache)
 {
-    if (!sh.enabled || sh.inner)
+    if (!sh.enabled || sh.inner || sh.color.alpha() <= 0)
         return;
     QRectF area;
     QImage mask = outerMask(path, geom, sh.spread, sh.blur, s, cache, &area);
@@ -1245,7 +1247,7 @@ void paintOuterShadow(QPainter *pt, const QPainterPath &path, const Shadow &sh, 
 void paintOuterGlow(QPainter *pt, const QPainterPath &path, const Glow &glow, double s,
     const QByteArray &geom, QCache<QByteArray, QImage> *cache)
 {
-    if (!glow.enabled || glow.inner)
+    if (!glow.enabled || glow.inner || glow.color.alpha() <= 0)
         return;
     QRectF area;
     QImage mask = outerMask(path, geom, glow.spread, glow.blur, s, cache, &area);
@@ -1271,7 +1273,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
 {
     if (!pt || box.width() <= 0 || box.height() <= 0)
         return;
-    if (layerBlur.enabled && layerBlur.radius > 0.01) {
+    if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
         const double s = scale > 0 ? scale : 1.0;
         const double rad = qMax(0.0, layerBlur.radius) * s;
         const double margin = qMin(256.0, rad * 2.0) + 1.0;
@@ -1304,12 +1306,12 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
     paintFills(pt, o.path, o.fillBox, kind, st);
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Shadow &sh = shadows.at(i);
-        if (sh.enabled && sh.inner)
+        if (sh.enabled && sh.inner && sh.color.alpha() > 0)
             paintInner(pt, o.path, sh, s, geom, maskCache);
     }
     for (int i = glows.size() - 1; i >= 0; --i) {
         const Glow &g = glows.at(i);
-        if (g.enabled && g.inner)
+        if (g.enabled && g.inner && g.color.alpha() > 0)
             paintGlowInner(pt, o.path, g, s, geom, maskCache);
     }
     paintStrokes(pt, o.path, o.fillBox, kind, st, s);
@@ -1600,7 +1602,7 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
     const double s = scale > 0 ? scale : 1.0;
     // Whole-stack layer blur first (mirrors the vector leaf): the sharp
     // stack renders offscreen, blurs, mixes, composites.
-    if (layerBlur.enabled && layerBlur.radius > 0.01) {
+    if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
         const double rad = qMax(0.0, layerBlur.radius) * s;
         const double margin = qMin(256.0, rad * 2.0) + 1.0;
         const QSize tsz(qMax(1, qRound(box.width() + margin * 2.0)), qMax(1, qRound(box.height() + margin * 2.0)));
@@ -1634,7 +1636,7 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
     // topmost (closest to the glyphs), like vectors.
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Shadow &sh = shadows.at(i);
-        if (!sh.enabled || sh.inner)
+        if (!sh.enabled || sh.inner || sh.color.alpha() <= 0)
             continue;
         double m = 0.0;
         QImage halo = textHalo(cover, tkey, sh.spread, sh.blur, s, maskCache, &m);
@@ -1643,7 +1645,7 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
     }
     for (int i = glows.size() - 1; i >= 0; --i) {
         const Glow &g = glows.at(i);
-        if (!g.enabled || g.inner)
+        if (!g.enabled || g.inner || g.color.alpha() <= 0)
             continue;
         double m = 0.0;
         QImage halo = textHalo(cover, tkey, g.spread, g.blur, s, maskCache, &m);
@@ -1670,7 +1672,7 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
     // erase registers exactly, like the vector band.
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Shadow &sh = shadows.at(i);
-        if (!sh.enabled || !sh.inner)
+        if (!sh.enabled || !sh.inner || sh.color.alpha() <= 0)
             continue;
         double m = 0.0;
         QImage cutter = textCutter(base, tkey, sh.spread, sh.blur, sh.x, sh.y, s, maskCache, &m);
@@ -1684,7 +1686,7 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
     }
     for (int i = glows.size() - 1; i >= 0; --i) {
         const Glow &g = glows.at(i);
-        if (!g.enabled || !g.inner)
+        if (!g.enabled || !g.inner || g.color.alpha() <= 0)
             continue;
         double m = 0.0;
         QImage cutter = textCutter(base, tkey, g.spread, g.blur, 0.0, 0.0, s, maskCache, &m);

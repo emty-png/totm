@@ -138,8 +138,8 @@ Item {
     // CPU paint path for effects the stock items cannot express
     // (ShapePath has fillGradient only, Rectangle borders stay solid
     // and dashless, MultiEffect has no spread). Vectors stack shadows
-    // and glows here; text and images stack glows in their native
-    // branches (shadows stay vector-only, like export).
+    // and glows here; text stacks both in its native EffectItem branch
+    // and images stack both in their native branch below.
     readonly property bool isVectorPaint: shape.shapeType === "rectangle" || shape.shapeType === "ellipse" || shape.shapeType === "triangle" || shape.shapeType === "star" || shape.shapeType === "pen"
     readonly property var enabledFills: (shape.fills || []).filter(f => f && f.enabled !== false)
     readonly property var enabledStrokes: (shape.strokes || []).filter(s => s && s.enabled !== false && Number(s.width) > 0)
@@ -168,6 +168,8 @@ Item {
     readonly property var enabledGlows: (shape.glows || []).filter(g => g && g.enabled !== false)
     readonly property var outerGlows: shape.enabledGlows.filter(g => g.inner !== true)
     readonly property var innerGlows: shape.enabledGlows.filter(g => g.inner === true)
+    readonly property var outerShadows: shape.enabledShadows.filter(s => s.inner !== true)
+    readonly property var innerShadows: shape.enabledShadows.filter(s => s.inner === true)
     readonly property bool hasGlow: shape.enabledGlows.length > 0
     readonly property bool hasGrain: shape.grain !== null && shape.grain !== undefined && shape.grain.enabled === true && Number((shape.grain ?? {}).amount || 0) > 0
     // Dashed strokes route through the CPU painter too: stock borders
@@ -195,6 +197,10 @@ Item {
     // calls); plain text stays on the fast GPU glyphs. Grain rides its
     // own overlay either way; background blur stays off for text.
     readonly property bool useTextEffectPaint: shape.shapeType === "text" && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 1 || shape.hasStrokeOpacity || shape.hasShadow || shape.hasGlow || shape.hasLayerBlur)
+    // Effected images paint through the shared CPU painter (same code
+    // export calls, so inner bands match). Plain images stay on the
+    // fast GPU branch; grain-only stays on the overlay.
+    readonly property bool useImageEffectPaint: shape.shapeType === "image" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasStrokeDash)
 
     x: shape.sx
     y: shape.sy
@@ -525,7 +531,7 @@ Item {
         id: imageRoot
 
         anchors.fill: parent
-        visible: shape.shapeType === "image" && !shape.paintHidden
+        visible: shape.shapeType === "image" && !shape.paintHidden && !shape.useImageEffectPaint
         opacity: shape.shapeOpacity
         transform: Scale {
             xScale: shape.flipH ? -1 : 1
@@ -546,6 +552,34 @@ Item {
             kind: "image"
             iconColor: AppTheme.muted
             visible: shape.shapeType === "image" && imageObj.status !== Image.Ready
+        }
+
+        // Outer shadows: grown silhouettes in shadow colors, blurred
+        // behind the pixels and offset (spread grows the rect like the
+        // stroker dilate). Bottom-first so index 0 paints topmost.
+        // Paint under outer glows (Figma order).
+        Repeater {
+            model: shape.shapeType === "image" ? shape.outerShadows.slice().reverse() : []
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: -Number((modelData ?? {}).spread || 0)
+                radius: Math.max(0, shape.radius) + Number((modelData ?? {}).spread || 0)
+                color: String((modelData ?? {}).color ?? "#80000000")
+                transform: Translate {
+                    x: Number((modelData ?? {}).x || 0)
+                    y: Number((modelData ?? {}).y || 0)
+                }
+                layer.enabled: true
+                layer.smooth: true
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: 64
+                    // Same content-space rule as the backdrop rig above:
+                    // no zoom factor (ancestor scale already applies it).
+                    blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) / 64))
+                }
+            }
         }
 
         // Outer glows: grown silhouettes in glow colors, blurred behind
@@ -632,6 +666,60 @@ Item {
             layer.smooth: true
         }
 
+        // Inner shadows: shadow washes over the pixels, each cut by its
+        // own blurred offset inset silhouette (inverted mask) into an
+        // edge band. Paint below inner glows (Figma order).
+        Repeater {
+            model: shape.shapeType === "image" ? shape.innerShadows.slice().reverse() : []
+
+            Item {
+                anchors.fill: parent
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Math.max(0, shape.radius)
+                    color: String((modelData ?? {}).color ?? "#80000000")
+                    layer.enabled: true
+                    layer.smooth: true
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: erodeShadow
+                        maskInverted: true
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 1.0
+                    }
+                }
+
+                Item {
+                    id: erodeShadow
+
+                    anchors.fill: parent
+                    visible: false
+                    layer.enabled: true
+                    layer.smooth: true
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: Number((modelData ?? {}).spread || 0)
+                        radius: Math.max(0, Math.max(0, shape.radius) - Number((modelData ?? {}).spread || 0))
+                        color: "white"
+                        transform: Translate {
+                            x: Number((modelData ?? {}).x || 0)
+                            y: Number((modelData ?? {}).y || 0)
+                        }
+                        layer.enabled: true
+                        layer.smooth: true
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blurMax: 64
+                            // Content-space radius, no zoom factor (see above).
+                            blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) / 64))
+                        }
+                    }
+                }
+            }
+        }
+
         // Inner glows: glow washes over the pixels, each cut by its own
         // blurred inset silhouette (inverted mask) into an edge band.
         Repeater {
@@ -708,12 +796,51 @@ Item {
         }
     }
 
+    // Effected images via the shared CPU painter (same code export
+    // calls, so inner bands match). Pads like EffectItem; flip mirrors
+    // about the shape center; background blur stays on the backdrop rig.
+    ImageEffectItem {
+        id: imageEffectPaint
+
+        x: -imageEffectPaint.pad
+        y: -imageEffectPaint.pad
+        width: shape.sw + imageEffectPaint.pad * 2
+        height: shape.sh + imageEffectPaint.pad * 2
+        visible: shape.useImageEffectPaint && !shape.paintHidden
+        opacity: shape.shapeOpacity
+        boxW: shape.sw
+        boxH: shape.sh
+        radius: shape.radius
+        imageSource: shape.imageSource
+        shadows: shape.shadows ?? []
+        glows: shape.glows ?? []
+        layerBlur: shape.layerBlur ?? ({
+                "enabled": false,
+                "radius": 0,
+                "opacity": 1
+            })
+        grain: shape.grain ?? ({
+                "enabled": false,
+                "amount": 0.5,
+                "size": 2
+            })
+        strokes: shape.strokes ?? []
+        uid: shape.uid
+        frameNo: shape.grainFrame
+        transform: Scale {
+            xScale: shape.flipH ? -1 : 1
+            yScale: shape.flipV ? -1 : 1
+            origin.x: imageEffectPaint.pad + shape.sw / 2
+            origin.y: imageEffectPaint.pad + shape.sh / 2
+        }
+    }
+
     // Animated film grain over vectors and images (text confines to its
     // glyphs just below). Seed reseeds every transport frame; amount
     // scales dot alpha like the exporter.
     GrainOverlay {
         anchors.fill: parent
-        visible: shape.hasGrain && shape.shapeType !== "text" && !shape.paintHidden
+        visible: shape.hasGrain && shape.shapeType !== "text" && !shape.paintHidden && !shape.useImageEffectPaint
         opacity: shape.shapeOpacity
         uid: shape.uid
         frameNo: shape.grainFrame

@@ -34,6 +34,8 @@ qt_add_qml_module(totm
         backend/effects/EffectPainter.cpp
         backend/effects/EffectItem.h
         backend/effects/EffectItem.cpp
+        backend/effects/ImageEffectItem.h
+        backend/effects/ImageEffectItem.cpp
         backend/effects/MaskLeafItem.h
         backend/effects/MaskLeafItem.cpp
         backend/library/LibraryStore.h

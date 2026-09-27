@@ -30,6 +30,7 @@ ColumnLayout {
         maximum: fields.sizeMaximum
         value: fields.radiusValue
         mixed: fields.radiusMixed
+        commitOnRelease: true
         onCommitted: v => fields.radiusCommitted(v)
         onScrubStarted: fields.scrubStarted()
         onScrubFinished: fields.scrubFinished()
@@ -42,6 +43,7 @@ ColumnLayout {
         maximum: 100
         value: Math.round(fields.opacityValue * 100)
         mixed: fields.opacityMixed
+        commitOnRelease: true
         onCommitted: v => fields.opacityCommitted(v / 100)
         onScrubStarted: fields.scrubStarted()
         onScrubFinished: fields.scrubFinished()

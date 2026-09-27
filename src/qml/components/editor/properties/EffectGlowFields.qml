@@ -64,6 +64,7 @@ ColumnLayout {
             maximum: 100
             value: fields.colorAlpha
             mixed: fields.colorMixed
+            commitOnRelease: true
             onCommitted: v => fields.alphaCommitted(v)
             onScrubStarted: fields.scrubStarted()
             onScrubFinished: fields.scrubFinished()
@@ -84,6 +85,7 @@ ColumnLayout {
             maximum: 100
             value: fields.blurValue
             mixed: fields.blurMixed
+            commitOnRelease: true
             onCommitted: v => fields.blurCommitted(v)
             onScrubStarted: fields.scrubStarted()
             onScrubFinished: fields.scrubFinished()
@@ -99,6 +101,7 @@ ColumnLayout {
             maximum: 50
             value: fields.spreadValue
             mixed: fields.spreadMixed
+            commitOnRelease: true
             onCommitted: v => fields.spreadCommitted(v)
             onScrubStarted: fields.scrubStarted()
             onScrubFinished: fields.scrubFinished()

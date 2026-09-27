@@ -157,6 +157,7 @@ ColumnLayout {
             maximum: 100
             value: card.section ? card.section.alphaOf(card.current.value.color) : 100
             mixed: card.current.mixedColor
+            commitOnRelease: true
             onCommitted: v => {
                 if (card.section)
                     card.section.patchEntryAt("shadows", card.entryIndex, "color", card.section.withAlpha(card.section.hexOf(card.current.value.color), v));
@@ -186,6 +187,7 @@ ColumnLayout {
             maximum: 500
             value: card.current.value.x
             mixed: card.current.mixedX
+            commitOnRelease: true
             onCommitted: v => {
                 if (card.section)
                     card.section.patchEntryAt("shadows", card.entryIndex, "x", v);
@@ -210,6 +212,7 @@ ColumnLayout {
             maximum: 500
             value: card.current.value.y
             mixed: card.current.mixedY
+            commitOnRelease: true
             onCommitted: v => {
                 if (card.section)
                     card.section.patchEntryAt("shadows", card.entryIndex, "y", v);
@@ -239,6 +242,7 @@ ColumnLayout {
             maximum: 100
             value: card.current.value.blur
             mixed: card.current.mixedBlur
+            commitOnRelease: true
             onCommitted: v => {
                 if (card.section)
                     card.section.patchEntryAt("shadows", card.entryIndex, "blur", v);
@@ -263,6 +267,7 @@ ColumnLayout {
             maximum: 50
             value: card.current.value.spread
             mixed: card.current.mixedSpread
+            commitOnRelease: true
             onCommitted: v => {
                 if (card.section)
                     card.section.patchEntryAt("shadows", card.entryIndex, "spread", v);

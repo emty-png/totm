@@ -59,6 +59,26 @@ Item {
 
     property bool altHeld: false
 
+    // True when any leaf has background blur enabled: gates the
+    // backdrop duplicate so non-frosted scenes skip the 2x CPU tax.
+    readonly property bool hasFrosted: {
+        var d = canvas.doc;
+        if (!d)
+            return false;
+        d.rev;
+        d.structRev;
+        var leaves = d.leafList || [];
+        for (var i = 0; i < leaves.length; i++) {
+            var n = leaves[i];
+            if (!n)
+                continue;
+            var bb = n.backgroundBlur;
+            if (bb && bb.enabled === true && Number(bb.radius) > 0)
+                return true;
+        }
+        return false;
+    }
+
     SnapEngine {
         id: snapEngine
     }
@@ -154,6 +174,7 @@ Item {
         editingUid: -1
         hideBlurShapes: true
         enabled: false
+        visible: canvas.hasFrosted
     }
 
     ShapeLayer {

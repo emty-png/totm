@@ -449,8 +449,6 @@ QByteArray loadImageBytes(const QString &name) {
 // stdDeviation = radius/2, and grain is feTurbulence noise instead of
 // the hashed dots. Background blur has no standalone-SVG equivalent
 // (there is no backdrop to sample), so it is skipped, never failed.
-// PNG parity: image leaves ignore shadows (the raster image painter
-// takes glows/blurs only).
 struct FilterChain {
     QStringList prims;
     int seq = 0;
@@ -505,7 +503,9 @@ QString outerHalo(FilterChain &f, double dx, double dy, double blur, double spre
 
 // One inner shadow/glow band: the inverted shape alpha blurs, tints
 // and clips back to the silhouette (the standard inset recipe).
-// Spread erodes the inverted copy so the band thickens inward.
+// Spread dilates the inverted copy (the dual of eroding the shape, so
+// the band thickens inward like the raster painter); eroding here
+// would push the edge outward and thin the band with spread.
 QString innerBand(FilterChain &f, double dx, double dy, double blur, double spread, const QColor &c) {
     const QString inv = f.take("v");
     f.prims.append(QStringLiteral("<feComponentTransfer in=\"SourceAlpha\" result=\"%1\"><feFuncA type=\"table\" "
@@ -514,7 +514,7 @@ QString innerBand(FilterChain &f, double dx, double dy, double blur, double spre
     QString cur = inv;
     if (spread > 0.01) {
         const QString e = f.take("e");
-        f.prims.append(QStringLiteral("<feMorphology in=\"%1\" operator=\"erode\" radius=\"%2\" result=\"%3\"/>")
+        f.prims.append(QStringLiteral("<feMorphology in=\"%1\" operator=\"dilate\" radius=\"%2\" result=\"%3\"/>")
                 .arg(cur)
                 .arg(fmtNum(spread))
                 .arg(e));
@@ -557,10 +557,8 @@ QString mergeNodes(const QStringList &inputs, const QString &result) {
 // renderable). Mirrors buildLeafFilter's effect set so the viewBox and
 // the region can never disagree.
 double filterPadFor(const QVariantMap &m, const QString &shapeType, double sw) {
-    const bool isImage = shapeType == QLatin1String("image");
-    QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
-    if (isImage)
-        shadows.clear();
+    Q_UNUSED(shapeType);
+    const QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
     const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
     const Effects::Blur layerBlur = Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap());
     const Effects::Grain grain = Effects::Grain::fromMap(m.value(QStringLiteral("grain")).toMap());
@@ -580,10 +578,7 @@ double filterPadFor(const QVariantMap &m, const QString &shapeType, double sw) {
 // confined, SourceAlpha already straddles the stroke).
 QString buildLeafFilter(const QVariantMap &m, const QString &shapeType, double sw, double w, double h, int uid,
     const QString &id, QStringList &defs) {
-    const bool isImage = shapeType == QLatin1String("image");
-    QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
-    if (isImage)
-        shadows.clear();
+    const QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
     const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
     const Effects::Blur layerBlur = Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap());
     const Effects::Grain grain = Effects::Grain::fromMap(m.value(QStringLiteral("grain")).toMap());
