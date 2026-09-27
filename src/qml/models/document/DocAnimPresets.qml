@@ -653,17 +653,20 @@ QtObject {
             if (v.color !== undefined)
                 put("color", normalizeHexA(v.color, presetId === "customShadow" ? "#80000000" : "#cc00ffff"));
             if (presetId === "customShadow") {
-                put("x", _keyNum(v.x, 0, -500, 500));
-                put("y", _keyNum(v.y, 0, -500, 500));
+                put("x", _keyNum(v.x, 0, -2000, 2000));
+                put("y", _keyNum(v.y, 0, -2000, 2000));
             }
-            put("blur", v.blur !== undefined ? clampNum(v.blur, 0, 0, 100) : undefined);
-            put("spread", v.spread !== undefined ? clampNum(v.spread, 0, 0, 50) : undefined);
+            put("blur", v.blur !== undefined ? clampNum(v.blur, 0, 0, 500) : undefined);
+            put("spread", v.spread !== undefined ? clampNum(v.spread, 0, 0, 500) : undefined);
             if (v.inner !== undefined) {
                 o.inner = v.inner === true;
                 n++;
             }
         } else if (presetId === "customLayerBlur" || presetId === "customBackgroundBlur") {
-            put("radius", v.radius !== undefined ? clampNum(v.radius, 0, 0, 100) : undefined);
+            // Background blur renders through the GPU rig (64px ceiling),
+            // like the panel field; layer blur rides the CPU painter.
+            var maxR = presetId === "customBackgroundBlur" ? 64 : 500;
+            put("radius", v.radius !== undefined ? clampNum(v.radius, 0, 0, maxR) : undefined);
             put("opacity", v.opacity !== undefined ? normalizeOpacity(v.opacity, 1) : undefined);
         } else if (presetId === "customGrain") {
             put("amount", v.amount !== undefined ? clampNum(v.amount, 0, 0, 1) : undefined);

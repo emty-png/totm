@@ -3,6 +3,16 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [Unreleased]
+
+### Added
+
+* Raised effect limits — shadow/glow blur and spread scale 0–500px, offsets ±2000px and layer blur 0–500px in the design panel and animation clip editors (was 100/50/500/100); the CPU blur, pads and export regions follow, so preview matches video and SVG at the new extremes. Background blur stays at 64px (the GPU rig ceiling) so preview and export keep agreeing.
+* Snapshot home thumbnails — design and template cards render one tile-scale PNG per content change through the shared `FramePaint` painter instead of live scene items, so heavy effect stacks no longer re-rasterize at full resolution on every library refresh; stale files sweep on re-render and design delete.
+* Low-spec mode — a Settings → General → Performance switch for weak hardware: static preview grain, 30fps playback ticks (wall-clock based, so speed is unchanged) and the single-threaded scene-graph loop on restart. Off by default.
+* Image effects through the shared CPU painter — effected images preview through the same `FramePaint` code as export, so inner shadow/glow bands match the render instead of the old thresholded GPU approximation; inside image strokes inset correctly in export too.
+* Faster blur, grain and export caches — the box blur runs ~2.2x faster at identical pixels (row-sequential passes, exact fixed-point reciprocal), grain tiles ~4x (one hash per cell), and export shares blurred rasters thread-locally across leaves and frames with layer-blur sharp-stack memoization.
+
 ## [0.3.2] - 2026-09-26
 
 ### Added
