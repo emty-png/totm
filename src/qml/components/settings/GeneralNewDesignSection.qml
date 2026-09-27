@@ -113,12 +113,22 @@ Rectangle {
             spacing: 8
 
             Rectangle {
+                id: bgSwatch
+
                 Layout.preferredWidth: 28
                 Layout.preferredHeight: 28
                 radius: AppTheme.radiusSmall
                 border.width: 1
                 border.color: AppTheme.fieldBorder
                 color: SettingsStore.defaultSceneColor
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mouse => bgPicker.openFor(SettingsStore.defaultSceneColor, bgSwatch, mouse.x, mouse.y)
+                }
             }
 
             HexField {
@@ -144,5 +154,12 @@ Rectangle {
             value: SettingsStore.defaultDuration
             onCommitted: v => SettingsStore.defaultDuration = v
         }
+    }
+
+    ColorPickerPopup {
+        id: bgPicker
+
+        allowGradient: false
+        onCommitted: c => SettingsStore.defaultSceneColor = String(c)
     }
 }
