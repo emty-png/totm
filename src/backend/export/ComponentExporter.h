@@ -9,7 +9,7 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
-// ComponentExporter: Figma-style per-component still export.
+// ComponentExporter: Per-component still export.
 //
 // Ownership: PNG rendering goes through FramePaint (the same raster
 // the canvas preview and video export share), SVG through SvgPaint

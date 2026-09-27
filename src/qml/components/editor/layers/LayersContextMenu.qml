@@ -9,7 +9,7 @@ import Totm
 // Delete. Rows hide when their action can't apply (instead of
 // showing disabled), so the popup stays compact; its height derives
 // from the visible row count. Custom popups in the shapes-dropdown
-// style so the theme carries over; text rows like Figma (no icons).
+// style so the theme carries over; plain text rows (no icons).
 // Actions run straight against the document.
 Item {
     id: menu

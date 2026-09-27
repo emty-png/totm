@@ -212,6 +212,82 @@ ColumnLayout {
         }
     }
 
+    RowLayout {
+        visible: section.preset === "customResize"
+        Layout.fillWidth: true
+        spacing: 8
+
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Sync corners")
+            font.pixelSize: 12
+            color: AppTheme.foreground
+        }
+
+        Rectangle {
+            Layout.preferredWidth: 38
+            Layout.preferredHeight: 22
+            radius: AppTheme.radiusLarge
+            color: section.opts.syncCorner === true ? AppTheme.foreground : AppTheme.surface
+            border.width: 1
+            border.color: section.opts.syncCorner === true ? AppTheme.foreground : AppTheme.fieldBorder
+
+            Rectangle {
+                x: section.opts.syncCorner === true ? parent.width - width - 3 : 3
+                y: 3
+                width: 16
+                height: 16
+                radius: AppTheme.radiusMedium
+                color: section.opts.syncCorner === true ? AppTheme.background : AppTheme.muted
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: section.setOption("syncCorner", !(section.opts.syncCorner === true))
+            }
+        }
+    }
+
+    RowLayout {
+        visible: section.preset === "customResize"
+        Layout.fillWidth: true
+        spacing: 8
+
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Sync strokes")
+            font.pixelSize: 12
+            color: AppTheme.foreground
+        }
+
+        Rectangle {
+            Layout.preferredWidth: 38
+            Layout.preferredHeight: 22
+            radius: AppTheme.radiusLarge
+            color: section.opts.syncStroke === true ? AppTheme.foreground : AppTheme.surface
+            border.width: 1
+            border.color: section.opts.syncStroke === true ? AppTheme.foreground : AppTheme.fieldBorder
+
+            Rectangle {
+                x: section.opts.syncStroke === true ? parent.width - width - 3 : 3
+                y: 3
+                width: 16
+                height: 16
+                radius: AppTheme.radiusMedium
+                color: section.opts.syncStroke === true ? AppTheme.background : AppTheme.muted
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: section.setOption("syncStroke", !(section.opts.syncStroke === true))
+            }
+        }
+    }
+
     Text {
         visible: section.preset === "customCorner" || section.preset === "customStroke"
         text: qsTr("From")

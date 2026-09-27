@@ -3,7 +3,7 @@ import QtQuick.Shapes
 import Totm
 
 // Live pen preview: committed parts dimmed, active part bright, rubber
-// solid to a snapped ghost dot like Figma, anchors as squares (smooth
+// solid to a snapped ghost dot like the canvas, anchors as squares (smooth
 // as circles) with handle arms. Content-space container so paths land
 // 1:1; dot sizes divide by zoom to stay constant on screen like
 // SelectionHandles.
@@ -63,7 +63,7 @@ Item {
             }
         }
 
-        // Rubber: snapped next-segment preview, solid like Figma so the
+        // Rubber: snapped next-segment preview, solid like the canvas so the
         // in-progress path reads as one line; the ghost dot marks what
         // the next click places. Over the first anchor it draws the
         // closing segment instead (see tool.closePreview).

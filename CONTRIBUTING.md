@@ -13,10 +13,10 @@ Apache-2.0 (see [`LICENSE`](LICENSE)).
 
 Cross-platform motion-graphics editor: vector shapes (rectangle, ellipse,
 triangle, star, pen paths, text, images) with gradients / shadows / glows
-/ blur / grain, layers + groups + drill-in, smart snapping, Figma-style
+/ blur / grain, layers + groups + drill-in, smart snapping,
 design panel, presets + custom from-to animation + motion paths + easing
 graphs + timeline with audio lanes, SD/HD/4K MP4/WebM/GIF export through
-system `ffmpeg`, home library (workspaces, starring, templates, live previews,
+system `ffmpeg`, home library (workspaces, starring, templates, snapshot previews,
 `.totm` share bundles), QML-only plugin system, editable shortcuts,
 dark/light theme with appearance settings, and an in-app file picker.
 

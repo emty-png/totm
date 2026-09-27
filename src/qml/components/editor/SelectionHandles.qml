@@ -2,7 +2,7 @@ import QtQuick
 import Totm
 
 // Resize handles for the selection bounding box (corners + side
-// midpoints, Figma style). Screen-space overlay: fills the canvas
+// midpoints, canvas style). Screen-space overlay: fills the canvas
 // viewport and draws everything in whole screen pixels, so the frame
 // and handles stay razor sharp and glide smoothly at any zoom or pan.
 // (Positioning through the scaled content transform would leave them

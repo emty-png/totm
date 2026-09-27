@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Totm
 
-// Stacked fills per shape (Figma-style, index 0 paints topmost).
+// Stacked fills per shape (index 0 paints topmost).
 // Each entry carries its own color/gradient, opacity %, eye toggle
 // and order; strokes paint above all fills. Per-index values collect
 // across the selection with mixed flags (see EffectShadowCard);
@@ -249,7 +249,7 @@ PanelSection {
     }
 
     // Advanced per-entry settings live in a popup behind the row's
-    // ... button (Figma-style): order and delete. It opens below the
+    // ... button: order and delete. It opens below the
     // button when it fits, above otherwise, like the color picker.
     // The popup follows the entry across reorders and closes on delete.
     function openFillMenuAt(at, anchor, ax, ay) {

@@ -3,7 +3,7 @@ import QtQuick.Shapes
 import Totm
 
 // Live motion-path preview: active path bright, rubber solid to a snapped
-// ghost dot like Figma, anchors as squares (smooth as circles). A
+// ghost dot like the canvas, anchors as squares (smooth as circles). A
 // selected Path clip's trajectory also draws (dimmed, line only) so the
 // motion reads without entering draw mode.
 // Content-space container so paths land 1:1; dot sizes divide by zoom.

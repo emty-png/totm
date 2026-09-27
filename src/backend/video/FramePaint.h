@@ -33,7 +33,7 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
 // Only alpha carries meaning (DestinationIn); color stays white.
 QImage maskSilhouette(const QVariantMap &mask, double ox, double oy, double scale, const QSize &size);
 
-// Group-aware leaf pass with Figma/Jitter-style masks. Skips isMask
+// Group-aware leaf pass with layer masks. Skips isMask
 // leaves, clips masked leaves by their mask silhouette(s) at the same
 // frame time. scene is the full hierarchy (for mask lookup), work is
 // the sampled top-first leaf list. Paints bottom-first like callers did.

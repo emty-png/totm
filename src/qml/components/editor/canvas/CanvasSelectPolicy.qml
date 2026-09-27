@@ -62,7 +62,7 @@ QtObject {
             canvas.doc.drillInto(target);
         else {
             // Double-clicking a leaf inside a group drills into its direct
-            // parent group (Figma feel).
+            // parent group (canvas feel).
             var hit = canvas.doc._find(uid);
             if (hit) {
                 for (var i = hit.ancestors.length - 1; i >= 0; i--) {
@@ -83,7 +83,7 @@ QtObject {
         // adjusted delta. Guides show while dragging; the pixel settle
         // still runs on release. Alt suspends the magnet for free moves.
         //
-        // Figma-style escape: snapping reads the raw unsnapped travel
+        // Canvas-style escape: snapping reads the raw unsnapped travel
         // (press-time box plus accumulated deltas), never the live box.
         // Snapping the live box re-pulls every 1px step back to the
         // target, which wedges the shape until a single event jumps the

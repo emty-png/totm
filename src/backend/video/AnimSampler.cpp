@@ -399,7 +399,7 @@ double lerpOpacityOpt(const QVariantMap &o, double e, bool *present = nullptr) {
     return qBound(0.0, num(o, "fromOpacity", 1.0) + (num(o, "toOpacity", 1.0) - num(o, "fromOpacity", 1.0)) * e, 1.0);
 }
 
-// Nearest mask below branchIndex in a top-first sibling list (Figma
+// Nearest mask below branchIndex in a top-first sibling list (layer-mask
 // segmentation: each mask clips siblings directly above it, up to the
 // next mask). Groups never count as masks. Mirrors DocTree.maskBelowIn.
 QVariantMap maskBelowIn(const QVariantList &list, int branchIndex) {
@@ -786,6 +786,39 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         out[QStringLiteral("y")] = lcy - nh / 2.0;
         out[QStringLiteral("w")] = nw;
         out[QStringLiteral("h")] = nh;
+        // Synced corners/strokes scale with the box (mirrors the QML
+        // sampler): k averages the axis ratios against the reference
+        // size, so non-uniform resizes stay predictable.
+        if (o.value(QStringLiteral("syncCorner"), false).toBool()
+            || o.value(QStringLiteral("syncStroke"), false).toBool()) {
+            const double rsFw = qMax(1.0, hasRsKeys ? num(base, "w", 1.0) : num(o, "fromW", 1.0));
+            const double rsFh = qMax(1.0, hasRsKeys ? num(base, "h", 1.0) : num(o, "fromH", 1.0));
+            const double rsK = (nw / rsFw + nh / rsFh) / 2.0;
+            if (o.value(QStringLiteral("syncCorner"), false).toBool()) {
+                if (base.value(QStringLiteral("independentCorners")).toBool()) {
+                    const QVariantList rsBaseCr = base.value(QStringLiteral("cornerRadii")).toList();
+                    QVariantList rsCr;
+                    for (int rci = 0; rci < 4; ++rci) {
+                        const double cv = rci < rsBaseCr.size() ? rsBaseCr.at(rci).toDouble() : 0.0;
+                        rsCr.append(qMax(0.0, cv * rsK));
+                    }
+                    out[QStringLiteral("cornerRadii")] = rsCr;
+                } else {
+                    out[QStringLiteral("radius")] = qMax(0.0, num(base, "radius") * rsK);
+                }
+            }
+            if (o.value(QStringLiteral("syncStroke"), false).toBool()) {
+                const QVariantList rsSrc = base.value(QStringLiteral("strokes")).toList();
+                QVariantList rsSt;
+                for (const QVariant &sv : rsSrc) {
+                    QVariantMap entry = sv.toMap();
+                    entry[QStringLiteral("width")]
+                        = qMax(0.0, entry.value(QStringLiteral("width"), 0.0).toDouble() * rsK);
+                    rsSt.append(entry);
+                }
+                out[QStringLiteral("strokes")] = rsSt;
+            }
+        }
     } else if (preset == QLatin1String("customCorner")) {
         QVariantMap cornKv;
         if (genericKeysAt(o, p, cornKv) && cornKv.contains(QStringLiteral("v")))
@@ -1273,6 +1306,8 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
         b[QStringLiteral("grain")] = m.value(QStringLiteral("grain")).toMap();
         b[QStringLiteral("visible")] = m.value(QStringLiteral("visible"), true).toBool();
         b[QStringLiteral("radius")] = num(m, "radius");
+        b[QStringLiteral("independentCorners")] = m.value(QStringLiteral("independentCorners")).toBool();
+        b[QStringLiteral("cornerRadii")] = m.value(QStringLiteral("cornerRadii")).toList();
         base[uid] = b;
     }
     return base;
@@ -1599,8 +1634,8 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         for (const QString &k : {QStringLiteral("rotation"), QStringLiteral("opacity"),
                  QStringLiteral("layerBlur"), QStringLiteral("backgroundBlur"),
                  QStringLiteral("grain"), QStringLiteral("visible"), QStringLiteral("radius"),
-                 QStringLiteral("fills"), QStringLiteral("strokes"), QStringLiteral("flipH"), QStringLiteral("flipV"),
-                 QStringLiteral("textContent")}) {
+                 QStringLiteral("cornerRadii"), QStringLiteral("fills"), QStringLiteral("strokes"),
+                 QStringLiteral("flipH"), QStringLiteral("flipV"), QStringLiteral("textContent")}) {
             if (ov.contains(k))
                 m[k] = ov.value(k);
         }

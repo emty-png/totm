@@ -362,7 +362,7 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
         clip.addRoundedRect(QRectF(x, y, w, h), r, r);
     else
         clip.addRect(QRectF(x, y, w, h));
-    // Outer shadows under everything (Figma order), bottom-first so
+    // Outer shadows under everything (stack order), bottom-first so
     // index 0 paints topmost.
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Effects::Shadow &sh = shadows.at(i);
@@ -411,7 +411,7 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
     pt.setClipPath(clip, Qt::IntersectClip);
     pt.drawImage(QRectF(x, y, w, h), img);
     pt.restore();
-    // Inner shadows over the pixels, then inner glows (Figma order),
+    // Inner shadows over the pixels, then inner glows (stack order),
     // index 0 topmost inside each group.
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Effects::Shadow &sh = shadows.at(i);

@@ -820,7 +820,7 @@ void paintGlowInner(QPainter *pt, const QPainterPath &path, const Glow &glow, do
 
 // Vector outline in device coords plus the fill box the brushes span.
 // Shared by the shadow/blur and glow leaves so geometry never drifts.
-// Figma semantics: fills always span the full box; strokes straddle
+// Paint semantics: fills always span the full box; strokes straddle
 // the edge and clip per entry (center/inside/outside), so unlike the
 // old Rectangle-parity inset there is no stroke-driven shrink here.
 struct Outline {
@@ -908,7 +908,7 @@ void paintFills(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, c
     }
 }
 
-// One stroke with Figma position: center straddles, inside/outside
+// Stroke position extents: center straddles, inside/outside
 // draw double-width clipped to the respective side (open line-art
 // pens fall back to center: an open path has no interior).
 void paintOneStroke(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
@@ -1005,7 +1005,7 @@ double glowsPad(const QList<Glow> &glows)
 }
 
 // Max outward stroke extent: inside needs no room, center half the
-// width, outside the full width (Figma semantics via 2x clipped
+// width, outside the full width (via 2x clipped
 // strokes, see paintStrokes).
 double strokesPad(const QList<StrokeEntry> &strokes)
 {
@@ -1229,7 +1229,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
 namespace {
 
 // Shared tail: outer shadow under the shape, then stacked fills,
-// then the inner shadow above the fills (Figma order), then stacked
+// then the inner shadow above the fills (stack order), then stacked
 // strokes on top.
 void paintPathShadow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,
     const Style &st, const Shadow &sh, double s)
@@ -1301,7 +1301,7 @@ void paintInner(QPainter *pt, const QPainterPath &path, const Shadow &sh, double
 }
 
 // Shared tail for glow leaves: centered halo (outer under the shape,
-// inner above the fills like Figma), then stacked strokes on top.
+// inner above the fills like the stack), then stacked strokes on top.
 // Spread dilates the silhouette before blur; with zero blur and
 // spread the halo hugs the edge exactly.
 void paintPathGlow(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const QString &kind,

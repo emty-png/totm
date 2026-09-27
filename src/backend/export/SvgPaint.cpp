@@ -617,7 +617,7 @@ QString buildLeafFilter(const QVariantMap &m, const QString &shapeType, double s
             cur = mg;
         }
     }
-    // Halos land under the base in Figma order: shadows below glows,
+    // Halos land under the base in stack order: shadows below glows,
     // last entry bottommost inside each group.
     if (!outerSh.isEmpty() || !outerGl.isEmpty()) {
         const QString mg = f.take("m");

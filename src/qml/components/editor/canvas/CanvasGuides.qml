@@ -1,7 +1,7 @@
 import QtQuick
 import Totm
 
-// Canvas guides (Figma-style, minus the ruler chrome). Guides are the
+// Canvas guides (minus the ruler chrome). Guides are the
 // persistent, snappable lines; the canvas edges are their handle:
 // hovering the top/left 12px shows a split cursor, dragging out pulls
 // a guide onto the canvas, dragging a guide moves it, releasing home

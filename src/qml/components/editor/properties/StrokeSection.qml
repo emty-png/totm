@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Totm
 
-// Stacked strokes per shape (Figma-style, index 0 paints topmost,
+// Stacked strokes per shape (index 0 paints topmost,
 // above all fills). Each entry carries its own color/gradient,
 // width, center/inside/outside position, opacity %, dash pair, eye
 // toggle and order. Per-index values collect across the selection
@@ -106,7 +106,7 @@ PanelSection {
     }
 
     // Advanced per-entry settings live in a popup behind the row's
-    // ... button (Figma-style): color hex, type, angle, width,
+    // ... button: color hex, type, angle, width,
     // position, dash style, order, delete. It opens below the button
     // when it fits, above otherwise, like the color picker. The popup
     // follows the entry across reorders and closes on delete.

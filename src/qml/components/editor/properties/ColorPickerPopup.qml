@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Totm
 
-// Figma-style color picker: SV square + hue bar + hex row with live
+// Built-in color picker: SV square + hue bar + hex row with live
 // preview. Swatch-click opens via openFor(color, anchor, x, y); the hex
 // field stays for typing. Drags stream committed() live between
 // scrubStarted and scrubFinished so the caller coalesces one undo entry
@@ -21,7 +21,7 @@ Popup {
     property real sat: 1
     property real val: 1
     property bool scrubbing: false
-    // Gradient mode for fill/stroke gradients (Figma-style Solid |
+    // Gradient mode for fill/stroke gradients (Solid |
     // Gradient tabs on top). Callers that support it pass allowGradient
     // and open via openForGradient; the working copy lives here so tab
     // switches never lose the draft.

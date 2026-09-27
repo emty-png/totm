@@ -29,7 +29,7 @@ Item {
     property real sw: 10
     property real sh: 10
     property real shapeRotation: 0
-    // Stacked paints (Figma-style, index 0 paints topmost). Each fill:
+    // Stacked paints (index 0 paints topmost). Each fill:
     // {enabled, color, type, gradient, opacity}; each stroke: {enabled,
     // color, type, gradient, width, dash, position, opacity}. Bound
     // from model roles by the repeater (see ShapeLayer).
@@ -557,7 +557,7 @@ Item {
         // Outer shadows: grown silhouettes in shadow colors, blurred
         // behind the pixels and offset (spread grows the rect like the
         // stroker dilate). Bottom-first so index 0 paints topmost.
-        // Paint under outer glows (Figma order).
+        // Paint under outer glows (stack order).
         Repeater {
             model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.outerShadows.slice().reverse() : []
 
@@ -668,7 +668,7 @@ Item {
 
         // Inner shadows: shadow washes over the pixels, each cut by its
         // own blurred offset inset silhouette (inverted mask) into an
-        // edge band. Paint below inner glows (Figma order).
+        // edge band. Paint below inner glows (stack order).
         Repeater {
             model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.innerShadows.slice().reverse() : []
 
@@ -858,7 +858,7 @@ Item {
         }
     }
 
-    // Selection outline: constant screen size at any zoom (Figma bbox).
+    // Selection outline: constant screen size at any zoom (selection bbox).
     Rectangle {
         visible: shape.selected
         x: -3 / shape.zoom

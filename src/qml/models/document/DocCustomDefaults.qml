@@ -191,7 +191,9 @@ QtObject {
             fromW: fw,
             fromH: fh,
             toW: Math.min(4000, Math.round(fw * 1.5)),
-            toH: Math.min(4000, Math.round(fh * 1.5))
+            toH: Math.min(4000, Math.round(fh * 1.5)),
+            syncCorner: false,
+            syncStroke: false
         };
     }
 

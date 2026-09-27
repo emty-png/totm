@@ -93,7 +93,7 @@ PanelSection {
     }
 
     // Typing a size into an auto-growing text pins it to a fixed box
-    // first (Figma): the typed value then means something. Joins the
+    // first: the typed value then means something. Joins the
     // running commit, never its own entry.
     function pinTextBox() {
         if (section.snapshot.allOfType("text"))

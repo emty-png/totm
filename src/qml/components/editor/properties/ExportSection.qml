@@ -4,7 +4,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Totm
 
-// Figma-style component export: one row per setting (PNG at 1x/2x/3x,
+// Component export: one row per setting (PNG at 1x/2x/3x,
 // or resolution-independent SVG) plus an Export button rendering
 // every selected top. PNG renders through the shared CPU painter; SVG
 // writes vector-native documents through SvgPaint (same scene

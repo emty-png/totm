@@ -26,9 +26,9 @@ QtObject {
         return false;
     }
 
-    // Mask use (Figma/Jitter-style). Requires 2+ unlocked selected
+    // Mask use (layer masks). Requires 2+ unlocked selected
     // tops; the bottommost (last in top-first order) becomes the mask.
-    // Different parents auto-group first, mirroring Jitter Cmd+Ctrl+M.
+    // Different parents auto-group first.
     function canUseAsMask() {
         var tops = doc.selectedTops();
         var n = 0;

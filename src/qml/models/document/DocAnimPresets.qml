@@ -100,7 +100,7 @@ QtObject {
     }
 
     // Custom from-to clips reuse the preset pipeline; later clips win
-    // per property, matching Figma Smart Animate merge behavior.
+    // per property, matching smart-animate merge behavior.
     function isCustom(presetId) {
         return String(presetId).slice(0, 6) === "custom";
     }
@@ -254,7 +254,9 @@ QtObject {
             fromW: 100,
             fromH: 100,
             toW: 200,
-            toH: 200
+            toH: 200,
+            syncCorner: false,
+            syncStroke: false
         },
         "customCorner": {
             from: 0,
@@ -781,7 +783,9 @@ QtObject {
             fromW: clampNum(r.fromW !== undefined ? r.fromW : 100, 100, 1, 4000),
             fromH: clampNum(r.fromH !== undefined ? r.fromH : 100, 100, 1, 4000),
             toW: clampNum(r.toW !== undefined ? r.toW : 200, 200, 1, 4000),
-            toH: clampNum(r.toH !== undefined ? r.toH : 200, 200, 1, 4000)
+            toH: clampNum(r.toH !== undefined ? r.toH : 200, 200, 1, 4000),
+            syncCorner: r.syncCorner === true,
+            syncStroke: r.syncStroke === true
         };
         return _withKeys("customResize", o, r);
     }

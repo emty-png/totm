@@ -22,7 +22,7 @@
 // Rectangle borders stay solid, MultiEffect has no spread).
 namespace Effects {
 
-// Fill/stroke paint: stacked entries (Figma-style, index 0 topmost).
+// Fill/stroke paint: stacked entries (index 0 topmost).
 // Each fill is solid or 2-stop linear with its own opacity (final
 // alpha = color alpha * opacity); each stroke adds width, dash pair,
 // position (center/inside/outside) and opacity. penFill toggles the
@@ -88,7 +88,7 @@ void applyDashToPen(QPen &pen, const QVector<qreal> &dash);
 
 // Single outer shadow. Color alpha carries opacity; spread dilates the
 // silhouette before blur. inner paints the same shadow inside the shape
-// (Figma order: above fill, below stroke). Plain data so clips stay
+// (above fill, below stroke). Plain data so clips stay
 // backend-readable. Shadows stack: lists paint index 0 topmost.
 struct Shadow {
     bool enabled = false;

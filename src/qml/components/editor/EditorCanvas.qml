@@ -257,7 +257,7 @@ Item {
         }
     }
 
-    // Figma-style pen input: click adds corners, drag draws symmetric
+    // Pen input: click adds corners, drag draws symmetric
     // curves, first-point click closes. Double-click/Enter parts,
     // Esc finishes the node. Placed before the pan catcher so Space
     // still pans above the pen.

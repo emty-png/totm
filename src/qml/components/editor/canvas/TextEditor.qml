@@ -1,7 +1,7 @@
 import QtQuick
 import Totm
 
-// Inline text editing (Figma): double-click or fresh creation opens
+// Inline text editing: double-click or fresh creation opens
 // a TextInput over the shape. Keystrokes stream into one undo
 // transaction; Enter or focus loss commits, Esc restores + cancels.
 // Owns the editing session (uid/start/doc) so tab switches end the

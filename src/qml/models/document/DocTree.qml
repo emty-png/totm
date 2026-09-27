@@ -126,7 +126,7 @@ QtObject {
         return false;
     }
 
-    // Mask helpers (Figma-style segmentation). Children are top-first:
+    // Mask helpers (layer-mask segmentation). Children are top-first:
     // index 0 paints highest. Each mask clips the siblings directly
     // above it, up to the next mask (or the top): stacked masks split
     // the group into bands instead of one mask winning everything.

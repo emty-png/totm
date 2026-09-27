@@ -692,6 +692,37 @@ QtObject {
             out.y = lcy - nh / 2;
             out.w = nw;
             out.h = nh;
+            // Synced corners/strokes scale with the box: k averages the
+            // axis ratios against the reference size (keys: authored
+            // base, from/to: fromW/H), so non-uniform resizes stay
+            // predictable. Opt-in; clips without the flags behave
+            // exactly as before.
+            if (o.syncCorner === true || o.syncStroke === true) {
+                var rsFw = Math.max(1, rsKv2 ? (Number(base.w) || 1) : (Number(o.fromW) || 1));
+                var rsFh = Math.max(1, rsKv2 ? (Number(base.h) || 1) : (Number(o.fromH) || 1));
+                var rsK = (nw / rsFw + nh / rsFh) / 2;
+                if (o.syncCorner === true) {
+                    if (base.independentCorners === true) {
+                        var rsBaseCr = base.cornerRadii || [];
+                        var rsCr = [];
+                        for (var rci = 0; rci < 4; rci++)
+                            rsCr.push(Math.max(0, (Number(rsBaseCr[rci]) || 0) * rsK));
+                        out.cornerRadii = rsCr;
+                    } else {
+                        out.radius = Math.max(0, (Number(base.radius) || 0) * rsK);
+                    }
+                }
+                if (o.syncStroke === true) {
+                    var rsSrc = base.strokes || [];
+                    var rsSt = [];
+                    for (var rsi = 0; rsi < rsSrc.length; rsi++) {
+                        var rsEntry = Object.assign({}, rsSrc[rsi]);
+                        rsEntry.width = Math.max(0, (Number(rsEntry.width) || 0) * rsK);
+                        rsSt.push(rsEntry);
+                    }
+                    out.strokes = rsSt;
+                }
+            }
         } else if (preset === "customCorner") {
             var cornKeys = genericKeysAt(o, p);
             if (cornKeys) {
@@ -1532,6 +1563,15 @@ QtObject {
                 n.radius = rv;
                 if (n.independentCorners)
                     n.cornerRadii = [rv, rv, rv, rv];
+            }
+            // Resize corner sync writes per-corner values (independent
+            // leaves keep their shape instead of collapsing uniform).
+            if (ov.cornerRadii !== undefined) {
+                var crIn = ov.cornerRadii || [];
+                var crOut = [];
+                for (var cri = 0; cri < 4; cri++)
+                    crOut.push(Math.max(0, Number(crIn[cri]) || 0));
+                n.cornerRadii = crOut;
             }
         }
     }

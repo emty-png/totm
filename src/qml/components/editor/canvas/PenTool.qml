@@ -34,7 +34,7 @@ QtObject {
     property real snCY: 0
 
     readonly property bool hasWork: tool.session.length > 0 || tool.active.length > 0
-    // Figma-style rubber visible once a first anchor exists, hidden
+    // Rubber-band preview visible once a first anchor exists, hidden
     // while dragging handles and over the close target.
     readonly property bool previewActive: tool.active.length > 0 && tool.hasCursor && !tool.dragging && !tool.hoverClose
     // Closing preview: hovering the first anchor shows last-to-first so

@@ -20,7 +20,7 @@ QtObject {
     property real w: 10
     property real h: 10
     property real rotation: 0
-    // Stacked paints (Figma-style, index 0 paints topmost):
+    // Stacked paints (index 0 paints topmost):
     // fills: [{enabled, color, type ("solid"|"linear"), gradient {angle,
     //   stops:[{color,pos}x2]}, opacity 0..1}]. Final fill alpha =
     //   color alpha * opacity * leaf opacity. Empty = no fill.
@@ -99,7 +99,7 @@ QtObject {
     // shapeType === "image"). Empty means missing; canvas shows a
     // placeholder and export paints a neutral box.
     property string imageSource: ""
-    // Mask role (Figma/Jitter-style): when true on a shape inside a
+    // Mask role (layer masks): when true on a shape inside a
     // group, it clips siblings above it in the same group and never
     // paints itself. maskFeather softens the edge (content px),
     // maskInverted flips the alpha, maskMode reserves luminance.
