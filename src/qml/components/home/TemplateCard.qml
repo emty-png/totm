@@ -65,9 +65,7 @@ Item {
                         anchors.fill: parent
                         fillMode: Image.PreserveAspectFit
                         asynchronous: true
-                        source: card.hasPreview ? ComponentExporter.thumbnailFile(
-                                                      card.scene, "tpl_" + card.templateId, card.templateId, 400,
-                                                      true) : ""
+                        source: card.hasPreview ? ComponentExporter.thumbnailFile(card.scene, "tpl_" + card.templateId, card.templateId, 400, true) : ""
                     }
                 }
 
