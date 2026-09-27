@@ -250,7 +250,7 @@ ColumnLayout {
             var fi = Number(opts.fillIndex) || 0;
             var fe = section.stackEntry(leaf.fills, fi);
             return {
-                color: String(fe.color ?? leaf.fill ?? "#000000"),
+                color: String(fe.color ?? "#000000"),
                 opacity: Math.min(1, Math.max(0, Number(fe.opacity ?? 1)))
             };
         }
@@ -282,7 +282,7 @@ ColumnLayout {
             var sci = Number(opts.strokeIndex) || 0;
             var sce = section.stackEntry(leaf.strokes, sci);
             return {
-                color: String(sce.color ?? leaf.stroke ?? "#000000"),
+                color: String(sce.color ?? "#000000"),
                 opacity: Math.min(1, Math.max(0, Number(sce.opacity ?? 1)))
             };
         }

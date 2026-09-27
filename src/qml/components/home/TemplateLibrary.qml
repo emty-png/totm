@@ -49,8 +49,20 @@ QtObject {
         if (!n)
             return null;
         n.name = name;
-        for (var key in props)
-            n[key] = props[key];
+        for (var key in props) {
+            if (key === "fill") {
+                var arr = doc.factory._copyFills(n.fills, n);
+                if (arr.length === 0)
+                    arr = [doc.factory.defaultFill()];
+                arr[0].color = String(props[key]);
+                arr[0].enabled = true;
+                arr[0].type = "solid";
+                n.fills = arr;
+                continue;
+            }
+            if (key in n)
+                n[key] = props[key];
+        }
         return n;
     }
 

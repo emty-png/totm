@@ -47,7 +47,19 @@ Item {
         focus: visible
         selectByMouse: true
         clip: true
-        color: editor.node ? editor.node.fill : AppTheme.foreground
+        color: {
+            var n = editor.node;
+            if (n && n.fills && n.fills.length > 0) {
+                for (var i = 0; i < n.fills.length; i++) {
+                    var f = n.fills[i];
+                    if (f && f.enabled !== false && f.color !== undefined)
+                        return String(f.color);
+                }
+                if (n.fills[0] && n.fills[0].color !== undefined)
+                    return String(n.fills[0].color);
+            }
+            return AppTheme.foreground;
+        }
         selectionColor: AppTheme.selection
         font.family: editor.node ? editor.node.fontFamily : "Inter"
         font.pixelSize: Math.max(1, (editor.node ? editor.node.fontSize : 16) * textEditor.canvas.zoom)

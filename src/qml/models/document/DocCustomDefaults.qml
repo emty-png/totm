@@ -83,7 +83,7 @@ QtObject {
         var entry = defaults.stackEntry(leaf, "fills", ei);
         var fop = defaults._opacity(entry.opacity);
         return {
-            from: String(entry.color ?? leaf.fill ?? "#000000"),
+            from: String(entry.color ?? "#000000"),
             to: "#ff0000",
             fromOpacity: defaults._round2(fop),
             toOpacity: defaults._round2(fop),
@@ -93,7 +93,7 @@ QtObject {
 
     function _seedGradient(leaf, ei) {
         var entry = defaults.stackEntry(leaf, "fills", ei);
-        var stops = defaults._stopsOf(entry, entry.color ?? leaf.fill ?? "#000000");
+        var stops = defaults._stopsOf(entry, entry.color ?? "#000000");
         var fop = defaults._opacity(entry.opacity);
         return {
             fromC1: stops.c1,
@@ -207,7 +207,7 @@ QtObject {
 
     function _seedStroke(leaf, ei) {
         var entry = defaults.stackEntry(leaf, "strokes", ei);
-        var sw = Math.max(0, Number(entry.width ?? leaf.strokeWidth) || 0);
+        var sw = Math.max(0, Number(entry.width) || 0);
         var sop = defaults._opacity(entry.opacity);
         var dash = defaults._dashOf(entry);
         var spos = defaults._positionOf(entry);
@@ -230,7 +230,7 @@ QtObject {
         var entry = defaults.stackEntry(leaf, "strokes", ei);
         var sop = defaults._opacity(entry.opacity);
         return {
-            from: String(entry.color ?? leaf.stroke ?? "#000000"),
+            from: String(entry.color ?? "#000000"),
             to: "#ff0000",
             fromOpacity: defaults._round2(sop),
             toOpacity: defaults._round2(sop),
