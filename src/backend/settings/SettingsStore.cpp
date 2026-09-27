@@ -1,5 +1,6 @@
 #include "SettingsStore.h"
 
+#include <algorithm>
 #include <QColor>
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -726,6 +727,21 @@ QString SettingsStore::fontsDir() const {
 
 QStringList SettingsStore::importedFontFamilies() const {
     return QFontDatabase::families();
+}
+
+QList<int> SettingsStore::fontWeights(const QString &family) const {
+    QList<int> out;
+    if (family.isEmpty())
+        return out;
+    const QStringList styleList = QFontDatabase::styles(family);
+    for (const QString &style : styleList) {
+        const int w = QFontDatabase::weight(family, style);
+        const int clamped = qBound(1, w, 1000);
+        if (!out.contains(clamped))
+            out.append(clamped);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 void SettingsStore::loadImportedFonts() {

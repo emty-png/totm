@@ -200,6 +200,42 @@ ColumnLayout {
         onScrubFinished: section.endScrub()
     }
 
+    Text {
+        visible: section.preset === "customFontWeight"
+        text: qsTr("From")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: section.preset === "customFontWeight"
+        Layout.fillWidth: true
+        minimum: 1
+        maximum: 1000
+        value: Number(section.opts.from) || 0
+        onCommitted: v => section.setOption("from", Math.min(1000, Math.max(1, Math.round(v))))
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
+
+    Text {
+        visible: section.preset === "customFontWeight"
+        text: qsTr("To")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: section.preset === "customFontWeight"
+        Layout.fillWidth: true
+        minimum: 1
+        maximum: 1000
+        value: Number(section.opts.to) || 0
+        onCommitted: v => section.setOption("to", Math.min(1000, Math.max(1, Math.round(v))))
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
+
     function setOption(role, value) {
         if (!section.doc)
             return;

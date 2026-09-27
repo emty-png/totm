@@ -195,6 +195,11 @@ public:
     int cursorSize() const;
     void setCursorSize(int pixels);
     Q_INVOKABLE QStringList importedFontFamilies() const;
+    // Available font weights for a canvas text family (Qt 1..1000 scale,
+    // sorted, deduplicated). Enumerates QFontDatabase styles since Qt
+    // only reports one weight per style. Empty when the family is
+    // unknown; callers then keep the exact value and let Qt approximate.
+    Q_INVOKABLE QList<int> fontWeights(const QString &family) const;
     Q_INVOKABLE QString importFont(const QUrl &fileUrl);
     Q_INVOKABLE void removeImportedFont(const QString &fileName);
     Q_INVOKABLE void selectImportedFont(const QString &fileName);

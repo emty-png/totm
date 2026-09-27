@@ -121,6 +121,7 @@ QtObject {
                 rotation: n.rotation,
                 opacity: n.opacity,
                 fontSize: n.fontSize,
+                fontWeight: n.fontWeight,
                 shapeType: n.shapeType,
                 textContent: n.textContent,
                 fills: doc.factory._copyFills(n.fills, n),
@@ -215,6 +216,8 @@ QtObject {
                 n.strokeJoin = b.strokeJoin ?? "round";
             if (b.fontSize !== undefined && n.shapeType === "text")
                 n.fontSize = b.fontSize;
+            if (b.fontWeight !== undefined && n.shapeType === "text")
+                n.fontWeight = b.fontWeight;
             if (b.textContent !== undefined && n.shapeType === "text")
                 n.textContent = b.textContent;
             if (b.pathData !== undefined && n.shapeType === "pen")

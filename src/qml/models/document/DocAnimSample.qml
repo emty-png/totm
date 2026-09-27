@@ -887,6 +887,13 @@ QtObject {
                 out.fontSize = fsV !== undefined ? Math.max(1, Number(fsV) || 1) : Number(base.fontSize);
             } else
                 out.fontSize = Math.max(1, lerp(Number(o.from) || 0, Number(o.to) || 0, e));
+        } else if (preset === "customFontWeight") {
+            var fwKeys = genericKeysAt(o, p);
+            if (fwKeys) {
+                var fwV = (fwKeys.value || {}).v;
+                out.fontWeight = fwV !== undefined ? Math.min(1000, Math.max(1, Math.round(Number(fwV) || 400))) : Math.min(1000, Math.max(1, Math.round(Number(base.fontWeight) || 400)));
+            } else
+                out.fontWeight = Math.min(1000, Math.max(1, Math.round(lerp(Number(o.from) || 0, Number(o.to) || 0, e))));
         } else if (preset === "customFlip") {
             // Stepped mirror flip about the base state (bools can't
             // ease): first half reads base, second half reads toggled.
@@ -1355,6 +1362,8 @@ QtObject {
                 n.opacity = ov.opacity;
             if (ov.fontSize !== undefined && n.shapeType === "text")
                 n.fontSize = ov.fontSize;
+            if (ov.fontWeight !== undefined && n.shapeType === "text")
+                n.fontWeight = Math.min(1000, Math.max(1, Math.round(Number(ov.fontWeight) || 400)));
             if (ov.textContent !== undefined && n.shapeType === "text")
                 n.textContent = ov.textContent;
             // Style/effect animation targets the top stack entry (index

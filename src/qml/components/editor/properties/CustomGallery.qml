@@ -282,6 +282,11 @@ ScrollView {
                         id: "customFontSize",
                         name: qsTr("Font size"),
                         icon: "text"
+                    },
+                    {
+                        id: "customFontWeight",
+                        name: qsTr("Font weight"),
+                        icon: "text"
                     }
                 ]
             },

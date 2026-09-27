@@ -32,7 +32,8 @@ QtObject {
             "customStroke": defaults._seedStroke,
             "customStrokeColor": defaults._seedStrokeColor,
             "customStrokeGradient": defaults._seedStrokeGradient,
-            "customFontSize": defaults._seedFontSize
+            "customFontSize": defaults._seedFontSize,
+            "customFontWeight": defaults._seedFontWeight
         };
         return table[presetId];
     }
@@ -271,6 +272,14 @@ QtObject {
         return {
             from: fs,
             to: Math.min(500, fs * 2)
+        };
+    }
+
+    function _seedFontWeight(leaf, ei) {
+        var fw = Math.min(1000, Math.max(1, Math.round(Number(leaf.fontWeight) || 400)));
+        return {
+            from: fw,
+            to: fw >= 700 ? 400 : 700
         };
     }
 

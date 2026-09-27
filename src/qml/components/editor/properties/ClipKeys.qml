@@ -105,6 +105,8 @@ ColumnLayout {
             return qsTr("%1px").arg(section.round2(v.v));
         if (preset === "customFontSize")
             return qsTr("%1px").arg(section.round2(v.v));
+        if (preset === "customFontWeight")
+            return qsTr("w%1").arg(Math.min(1000, Math.max(1, Math.round(Number(v.v) || 400))));
         if (preset === "customColor" || preset === "customStrokeColor")
             return String(v.color || qsTr("key"));
         if (preset === "customGradient" || preset === "customStrokeGradient")
@@ -244,6 +246,11 @@ ColumnLayout {
         if (preset === "customFontSize") {
             return {
                 v: Math.min(500, Math.max(1, Math.round(Number(leaf.fontSize) || 16)))
+            };
+        }
+        if (preset === "customFontWeight") {
+            return {
+                v: Math.min(1000, Math.max(1, Math.round(Number(leaf.fontWeight) || 400)))
             };
         }
         if (preset === "customColor") {

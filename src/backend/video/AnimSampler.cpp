@@ -1030,6 +1030,12 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             out[QStringLiteral("fontSize")] = qMax(1.0, fsKv.value(QStringLiteral("v")).toDouble());
         else
             out[QStringLiteral("fontSize")] = qMax(1.0, num(o, "from") + (num(o, "to") - num(o, "from")) * e);
+    } else if (preset == QLatin1String("customFontWeight")) {
+        QVariantMap fwKv;
+        if (genericKeysAt(o, p, fwKv) && fwKv.contains(QStringLiteral("v")))
+            out[QStringLiteral("fontWeight")] = qBound(1, qRound(fwKv.value(QStringLiteral("v")).toDouble()), 1000);
+        else
+            out[QStringLiteral("fontWeight")] = qBound(1, qRound(num(o, "from") + (num(o, "to") - num(o, "from")) * e), 1000);
     } else if (preset == QLatin1String("customFlip")) {
         // Stepped mirror flip about the base state (mirrors DocAnimSample).
         if (str(o, "axis", QStringLiteral("h")) == QLatin1String("v"))
@@ -1287,6 +1293,7 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
         b[QStringLiteral("rotation")] = num(m, "rotation");
         b[QStringLiteral("opacity")] = num(m, "opacity", 1.0);
         b[QStringLiteral("fontSize")] = num(m, "fontSize", 16.0);
+        b[QStringLiteral("fontWeight")] = qBound(1, m.value(QStringLiteral("fontWeight"), 400).toInt(), 1000);
         b[QStringLiteral("textContent")] = str(m, "textContent");
         b[QStringLiteral("shapeType")] = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
         b[QStringLiteral("fills")] = m.value(QStringLiteral("fills")).toList();
@@ -1839,6 +1846,8 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         }
         if (ov.contains(QStringLiteral("fontSize")) && shapeType == QLatin1String("text"))
             m[QStringLiteral("fontSize")] = ov.value(QStringLiteral("fontSize"));
+        if (ov.contains(QStringLiteral("fontWeight")) && shapeType == QLatin1String("text"))
+            m[QStringLiteral("fontWeight")] = qBound(1, ov.value(QStringLiteral("fontWeight")).toInt(), 1000);
         if (ov.contains(QStringLiteral("maskFeather")))
             m[QStringLiteral("maskFeather")] = qMax(0.0, ov.value(QStringLiteral("maskFeather")).toDouble());
         if (ov.contains(QStringLiteral("maskInverted")))

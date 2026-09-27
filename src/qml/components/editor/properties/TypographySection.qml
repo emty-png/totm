@@ -66,6 +66,30 @@ PanelSection {
         }
     ]
 
+    // Weight presets plus a dynamic entry for values outside them, so
+    // the dropdown names the live weight instead of falling back to
+    // the first preset (PanelDropdown shows options[0] on no match).
+    readonly property var weightOptions: {
+        var cur = section.snapshot.commonOf("fontWeight");
+        var base = section.weights.slice();
+        if (!cur.mixed) {
+            var id = String(Math.min(1000, Math.max(1, Math.round(Number(cur.value) || 400))));
+            var known = false;
+            for (var i = 0; i < base.length; i++) {
+                if (String(base[i].id) === id) {
+                    known = true;
+                    break;
+                }
+            }
+            if (!known)
+                base.push({
+                    id: id,
+                    name: qsTr("Custom %1").arg(id)
+                });
+        }
+        return base;
+    }
+
     title: qsTr("Typography")
     visible: section.snapshot.sel.length > 0 && section.snapshot.allOfType("text")
     enabled: !section.snapshot.allLocked
@@ -113,9 +137,12 @@ PanelSection {
             spacing: 8
 
             PanelDropdown {
-                options: section.weights
-                currentId: String(section.snapshot.commonOf("fontWeight").value)
-                onPicked: id => section.commit("fontWeight", parseInt(id, 10))
+                options: section.weightOptions
+                currentId: {
+                    var c = section.snapshot.commonOf("fontWeight");
+                    return c.mixed ? "" : String(Math.min(1000, Math.max(1, Math.round(Number(c.value) || 400))));
+                }
+                onPicked: id => section.commitWeight(parseInt(id, 10))
             }
 
             NumberField {
@@ -129,6 +156,27 @@ PanelSection {
                 onScrubStarted: section.snapshot.beginScrub()
                 onScrubFinished: section.snapshot.endScrub()
             }
+        }
+    }
+
+    ColumnLayout {
+        spacing: 4
+
+        Text {
+            text: qsTr("Custom weight")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        NumberField {
+            Layout.fillWidth: true
+            minimum: 1
+            maximum: 1000
+            value: section.snapshot.commonOf("fontWeight").value
+            mixed: section.snapshot.commonOf("fontWeight").mixed
+            onCommitted: v => section.commitWeight(v)
+            onScrubStarted: section.snapshot.beginScrub()
+            onScrubFinished: section.snapshot.endScrub()
         }
     }
 
@@ -260,6 +308,46 @@ PanelSection {
         section.snapshot.beginScrub();
         section.snapshot.setAll(role, value);
         section.snapshot.endScrub();
+    }
+
+    // Custom weight commit: clamp to the Qt 1..1000 scale, then snap to
+    // the closest weight the current family actually ships (enumerated
+    // from QFontDatabase styles). Mixed families and unknown families
+    // keep the exact value and let Qt approximate the glyphs.
+    function nearestWeight(v) {
+        var want = Math.min(1000, Math.max(1, Math.round(Number(v) || 400)));
+        var fam = section.snapshot.commonOf("fontFamily");
+        if (fam.mixed)
+            return want;
+        var list = [];
+        try {
+            list = SettingsStore.fontWeights(String(fam.value || "")) || [];
+        } catch (e) {
+            list = [];
+        }
+        var avail = [];
+        if (list && typeof list.length === "number") {
+            for (var i = 0; i < list.length; i++) {
+                var w = Math.round(Number(list[i]));
+                if (!isNaN(w))
+                    avail.push(Math.min(1000, Math.max(1, w)));
+            }
+        }
+        if (avail.length === 0)
+            return want;
+        var best = avail[0], bd = Math.abs(avail[0] - want);
+        for (var j = 1; j < avail.length; j++) {
+            var d = Math.abs(avail[j] - want);
+            if (d < bd) {
+                bd = d;
+                best = avail[j];
+            }
+        }
+        return best;
+    }
+
+    function commitWeight(v) {
+        section.commit("fontWeight", section.nearestWeight(v));
     }
 
     function isAutoHeight() {

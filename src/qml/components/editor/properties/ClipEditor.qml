@@ -167,7 +167,7 @@ ScrollView {
         PanelSection {
             width: parent.width
             title: editor.presetTitle()
-            visible: !!editor.clipData && (editor.clipData.preset === "customScale" || editor.clipData.preset === "customRotate" || editor.clipData.preset === "customMove" || editor.clipData.preset === "customFontSize")
+            visible: !!editor.clipData && (editor.clipData.preset === "customScale" || editor.clipData.preset === "customRotate" || editor.clipData.preset === "customMove" || editor.clipData.preset === "customFontSize" || editor.clipData.preset === "customFontWeight")
 
             ClipCustomTransformOptions {
                 Layout.fillWidth: true

@@ -175,7 +175,7 @@ QString maskTextEl(const QVariantMap &m, double x, double y, double w, double h)
     if (content.isEmpty())
         return {};
     const QString family = str(m, "fontFamily", QStringLiteral("Inter"));
-    const int weight = qBound(100, m.value(QStringLiteral("fontWeight"), 400).toInt(), 900);
+    const int weight = qBound(1, m.value(QStringLiteral("fontWeight"), 400).toInt(), 1000);
     const double size = qMax(1.0, num(m, "fontSize", 16.0));
     const QString halign = str(m, "hAlign", QStringLiteral("left"));
     double tx = x;
@@ -844,7 +844,7 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
             const QString content = str(m, "textContent");
             const QRectF box(x, y, w, h);
             const QString family = str(m, "fontFamily", QStringLiteral("Inter"));
-            const int weight = qBound(100, m.value(QStringLiteral("fontWeight"), 400).toInt(), 900);
+            const int weight = qBound(1, m.value(QStringLiteral("fontWeight"), 400).toInt(), 1000);
             const double size = qMax(1.0, num(m, "fontSize", 16.0));
             const double spacing = num(m, "letterSpacing");
             const double leading = qMax(0.5, num(m, "lineHeight", 1.2));

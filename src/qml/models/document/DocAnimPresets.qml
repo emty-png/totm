@@ -79,7 +79,7 @@ QtObject {
     }
 
     function presetIds() {
-        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "maskWipe", "maskIris", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customStrokeGradient", "customFontSize", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "maskWipe", "maskIris", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customStrokeGradient", "customFontSize", "customFontWeight", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
     }
 
     // Stepped presets render as one diamond at t0 with a locked 0.1s
@@ -130,6 +130,7 @@ QtObject {
             "customStrokeColor": qsTr("Stroke color"),
             "customStrokeGradient": qsTr("Stroke gradient"),
             "customFontSize": qsTr("Font size"),
+            "customFontWeight": qsTr("Font weight"),
             "customFlip": qsTr("Flip"),
             "customShadow": qsTr("Shadow"),
             "customLayerBlur": qsTr("Layer Blur"),
@@ -305,6 +306,10 @@ QtObject {
             from: 16,
             to: 32
         },
+        "customFontWeight": {
+            from: 400,
+            to: 700
+        },
         "customFlip": {
             axis: "h"
         },
@@ -475,6 +480,7 @@ QtObject {
             "customStrokeColor": presets._normalizeCustomStrokeColor,
             "customStrokeGradient": presets._normalizeCustomStrokeGradient,
             "customFontSize": presets._normalizeCustomFontSize,
+            "customFontWeight": presets._normalizeCustomFontWeight,
             "customFlip": presets._normalizeCustomFlip,
             "customShadow": presets._normalizeCustomShadow,
             "customLayerBlur": presets._normalizeCustomLayerBlur,
@@ -624,8 +630,12 @@ QtObject {
         } else if (presetId === "customResize") {
             put("w", v.w !== undefined ? clampNum(v.w, 10, 1, 4000) : undefined);
             put("h", v.h !== undefined ? clampNum(v.h, 10, 1, 4000) : undefined);
-        } else if (presetId === "customCorner" || presetId === "customFontSize") {
-            put("v", v.v !== undefined ? clampNum(v.v, 0, presetId === "customFontSize" ? 1 : 0, presetId === "customFontSize" ? 500 : 500) : undefined);
+        } else if (presetId === "customCorner") {
+            put("v", v.v !== undefined ? clampNum(v.v, 0, 0, 500) : undefined);
+        } else if (presetId === "customFontSize") {
+            put("v", v.v !== undefined ? clampNum(v.v, 0, 1, 500) : undefined);
+        } else if (presetId === "customFontWeight") {
+            put("v", v.v !== undefined ? clampNum(Math.round(v.v), 0, 1, 1000) : undefined);
         } else if (presetId === "customColor" || presetId === "customStrokeColor") {
             if (v.color !== undefined)
                 put("color", normalizeHex(v.color, "#000000"));
@@ -872,6 +882,14 @@ QtObject {
             to: clampNum(r.to !== undefined ? r.to : 32, 32, 1, 500)
         };
         return _withKeys("customFontSize", o, r);
+    }
+
+    function _normalizeCustomFontWeight(r) {
+        var o = {
+            from: clampNum(Math.round(r.from !== undefined ? r.from : 400), 400, 1, 1000),
+            to: clampNum(Math.round(r.to !== undefined ? r.to : 700), 700, 1, 1000)
+        };
+        return _withKeys("customFontWeight", o, r);
     }
 
     function _normalizeCustomFlip(r) {

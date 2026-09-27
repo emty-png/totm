@@ -231,7 +231,7 @@ TextOpts TextOpts::fromMap(const QVariantMap &m)
     TextOpts t;
     t.content = m.value(QStringLiteral("content")).toString();
     t.family = m.value(QStringLiteral("family"), QStringLiteral("Inter")).toString();
-    t.weight = qBound(100, m.value(QStringLiteral("weight"), 400).toInt(), 900);
+    t.weight = qBound(1, m.value(QStringLiteral("weight"), 400).toInt(), 1000);
     t.size = qMax(1.0, m.value(QStringLiteral("size"), 16.0).toDouble());
     t.spacingPct = m.value(QStringLiteral("spacing"), 0.0).toDouble();
     t.halign = m.value(QStringLiteral("halign"), QStringLiteral("left")).toString();
