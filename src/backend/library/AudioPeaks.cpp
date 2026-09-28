@@ -165,7 +165,7 @@ bool AudioPeaks::decodeDense(const QString &path, qint64 fileSize, Dense &out) c
         {QStringLiteral("-v"), QStringLiteral("error"), QStringLiteral("-i"), path, QStringLiteral("-ac"),
             QStringLiteral("1"), QStringLiteral("-ar"), QString::number(kRate),
             // Decode at most 30min: lanes only show composition windows
-            // (<= 60s) and an unbounded pipe would stall/OOM the UI
+            // (<= 30min) and an unbounded pipe would stall/OOM the UI
             // thread on hour-long files. Clips past the cap stay flat.
             QStringLiteral("-t"), QStringLiteral("1800"), QStringLiteral("-f"), QStringLiteral("f32le"),
             QStringLiteral("-")});

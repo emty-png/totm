@@ -155,7 +155,7 @@ QtObject {
             return false;
         var old = anim.clips[at];
         var nt0 = Math.max(0, Number(t0));
-        var nd = Math.min(60, Math.max(0.1, Number(duration)));
+        var nd = Math.min(1800, Math.max(0.1, Number(duration)));
         nd = Math.min(nd, Math.max(0.1, anim.duration - nt0));
         if (isNaN(nt0) || isNaN(nd) || (nt0 === old.t0 && nd === old.duration))
             return false;
@@ -182,7 +182,7 @@ QtObject {
         if (at < 0)
             return false;
         var nt0 = Math.min(anim.duration, Math.max(0, Number(t0)));
-        var nd = Math.min(60, Math.max(0.1, Number(duration)));
+        var nd = Math.min(1800, Math.max(0.1, Number(duration)));
         nd = Math.min(nd, Math.max(0.1, anim.duration - nt0));
         if (isNaN(nt0) || isNaN(nd))
             return false;
@@ -446,7 +446,7 @@ QtObject {
     }
 
     function setDuration(v) {
-        var nd = Math.min(60, Math.max(0.5, Number(v)));
+        var nd = Math.min(1800, Math.max(0.5, Number(v)));
         if (isNaN(nd) || nd === anim.duration)
             return false;
         doc.history.checkpoint();
@@ -620,7 +620,7 @@ QtObject {
         var s = d || {};
         transportState.reset();
         anim.selectedClipIds = [];
-        var dur = s.duration > 0 ? Math.min(60, s.duration) : 4.0;
+        var dur = s.duration > 0 ? Math.min(1800, s.duration) : 4.0;
         anim.duration = dur;
         // Silent migration: clips staged under older rules pull inside.
         anim.clips = anim.fitClipsTo(dur, s.clips || []);

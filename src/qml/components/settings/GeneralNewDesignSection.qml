@@ -150,7 +150,7 @@ Rectangle {
             suffix: qsTr("s")
             scrubStep: 0.1
             minimum: 0.5
-            maximum: 60
+            maximum: 1800
             value: SettingsStore.defaultDuration
             onCommitted: v => SettingsStore.defaultDuration = v
         }

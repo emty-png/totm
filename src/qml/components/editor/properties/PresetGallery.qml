@@ -560,7 +560,7 @@ ScrollView {
             if (apply && Number(apply.cps) > 0)
                 cps = Math.min(120, Math.max(1, Number(apply.cps)));
             var len = gallery.selectionTextLen();
-            dur = len > 0 ? Math.min(60, Math.max(0.5, len / cps)) : 0.8;
+            dur = len > 0 ? Math.min(1800, Math.max(0.5, len / cps)) : 0.8;
         }
         var easing = typeof easingId === "string" && easingId !== "" ? {
             id: easingId

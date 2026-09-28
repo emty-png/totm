@@ -244,7 +244,7 @@ protected:
         const double sceneH = qMax(1.0, m_scene.value(QStringLiteral("sceneHeight"), 1080).toDouble());
         const QColor sceneColor(str(m_scene, "sceneColor", QStringLiteral("#ffffff")));
         const QVariantMap anim = m_scene.value(QStringLiteral("anim")).toMap();
-        const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 60.0);
+        const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 1800.0);
         const int total = qMax(1, qRound(duration * m_fps));
 
         // Ancestor visibility + masks resolve inside
@@ -411,6 +411,33 @@ protected:
             }
             if (!ok)
                 break;
+            // Throttle the producer to encoder speed. QProcess.write()
+            // only moves bytes into a RAM buffer, so without this a fast
+            // painter outruns a slow encoder (4K software x264) and the
+            // queue grows a full frame per iteration until OOM (~33MB per
+            // 4K frame: ~9GB queued by frame ~280). Capping the queue at
+            // ~2 frames bounds memory to ~100MB at 4K while keeping
+            // pipeline overlap. Bounded 500ms polls keep Cancel
+            // responsive, same pattern as the pipe waits above.
+            if (proc.bytesToWrite() > frameBytes * 2) {
+                qint64 waitedThrottleMs = 0;
+                while (proc.bytesToWrite() > frameBytes * 2) {
+                    if (m_cancelled.loadRelaxed()) {
+                        cancelAndOut();
+                        return;
+                    }
+                    if (!proc.waitForBytesWritten(500)) {
+                        waitedThrottleMs += 500;
+                        if (waitedThrottleMs > 60000) {
+                            failMsg = tr("Timed out writing to ffmpeg.");
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+                if (!ok)
+                    break;
+            }
             if (!emittedOnce || emitT.elapsed() >= 100 || frame + 1 == total) {
                 emittedOnce = true;
                 emitT.restart();
@@ -541,7 +568,7 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
     int vp9Cpu = 2, vp9Crf = 31;
     resolveWebmEffort(performance, vp9Cpu, vp9Crf);
     const QVariantMap anim = scene.value(QStringLiteral("anim")).toMap();
-    const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 60.0);
+    const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 1800.0);
     const int total = qMax(1, qRound(duration * fps));
 
     if (ffmpegPath().isEmpty()) {

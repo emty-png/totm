@@ -222,7 +222,7 @@ public:
     Q_INVOKABLE int applyThemeMaps(const QVariantMap &light, const QVariantMap &dark);
 
     // General defaults (persisted under QSettings group "general/").
-    // Scene sizes clamp to 16..7680px, duration to 0.5..60s; unknown
+    // Scene sizes clamp to 16..7680px, duration to 0.5..1800s (30min); unknown
     // quality/performance/format fall back to "hd"/"normal"/"mp4", fps to
     // 30; invalid colors are ignored. Setters are Q_INVOKABLE so QML can
     // call them directly as well as assign the properties.

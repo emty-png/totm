@@ -39,7 +39,7 @@ ColumnLayout {
         suffix: qsTr("s")
         scrubStep: 0.1
         minimum: 0.1
-        maximum: 60
+        maximum: 1800
         value: section.clip ? section.clip.duration : 0.8
         onCommitted: v => section.retime(v)
         onScrubStarted: section.beginScrub()

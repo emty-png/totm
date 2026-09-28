@@ -49,7 +49,7 @@ Item {
             suffix: "s"
             scrubStep: 0.1
             minimum: 0.5
-            maximum: 60
+            maximum: 1800
             value: transport.doc ? transport.doc.anim.duration : 4.0
             onCommitted: v => {
                 if (transport.doc)

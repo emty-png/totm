@@ -504,7 +504,7 @@ Item {
         if (lane.dragMode === "stretch") {
             var end = Math.min(comp, lane.snapTime(lane.snapT0 + lane.snapDur + (lx - lane.pressLx) / lane.pxPerSec));
             lane.dragT0 = lane.snapT0;
-            lane.dragDur = Math.min(60, Math.max(0.1, end - lane.snapT0));
+            lane.dragDur = Math.min(1800, Math.max(0.1, end - lane.snapT0));
             lane.doc.nudgeClip(lane.dragClipId, lane.dragT0, lane.dragDur);
         } else if (lane.jointIds.length > 1) {
             // Joint move: the dragged clip snaps, everyone rides the

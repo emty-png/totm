@@ -65,7 +65,7 @@ constexpr char kGenLowSpecKey[] = "general/lowSpec";
 constexpr int kSceneMin = 16;
 constexpr int kSceneMax = 7680;
 constexpr double kDurationMin = 0.5;
-constexpr double kDurationMax = 60.0;
+constexpr double kDurationMax = 1800.0;
 
 constexpr int kRadiusMin = 0;
 constexpr int kRadiusMax = 28;

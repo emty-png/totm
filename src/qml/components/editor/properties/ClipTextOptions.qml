@@ -143,7 +143,7 @@ ColumnLayout {
         var len = section.textLen();
         if (len <= 0)
             return;
-        var dur = Math.min(60, Math.max(0.5, len / Math.max(1, v)));
+        var dur = Math.min(1800, Math.max(0.5, len / Math.max(1, v)));
         section.doc.retimeClip(section.clipId, section.clip.t0, dur);
     }
 

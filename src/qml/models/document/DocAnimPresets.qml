@@ -1077,8 +1077,8 @@ QtObject {
         var ct0 = Math.max(0, Number(t0) || 0);
         // Clips never stage past the composition end; stepped clips lock
         // to the 0.1s floor so the switch reads as one keyframe at t0.
-        var comp = presets.doc && presets.doc.anim ? presets.doc.anim.duration : 60;
-        var cd = Math.min(60, Math.max(0.1, Number(duration) || 0.8));
+        var comp = presets.doc && presets.doc.anim ? presets.doc.anim.duration : 1800;
+        var cd = Math.min(1800, Math.max(0.1, Number(duration) || 0.8));
         cd = Math.min(cd, Math.max(0.1, comp - ct0));
         if (isStepped(presetId))
             cd = 0.1;

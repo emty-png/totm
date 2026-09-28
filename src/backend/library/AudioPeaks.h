@@ -18,8 +18,8 @@
 // are uuid-named and content-immutable, so a size match validates;
 // mismatches re-decode. .totm bundles never pack sidecars (derivable,
 // recomputed lazily) and the orphan sweep owns their lifecycle.
-// Threading: main thread only; a worst-case decode (60s file) reads
-// under 2MB and memoizes, so lane paints stay cheap.
+// Threading: main thread only; a worst-case decode (30min file) reads
+// ~58MB and memoizes, so lane paints stay cheap.
 class AudioPeaks {
 public:
     // Magnitudes 0..1 over [offsetSec, offsetSec + windowSec] of the
