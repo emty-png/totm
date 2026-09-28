@@ -366,7 +366,11 @@ protected:
                 cancelAndOut();
                 return;
             }
-            const double t = qMin(duration, double(frame) / m_fps);
+            // Sample at frame midpoints over (0, duration]: frame 0 reads
+            // what used to be frame 1, so the static base instant at t=0
+            // never lands in the file (thumbnailers grab the first frame).
+            // Frame count and duration are unchanged; the tail clamps.
+            const double t = qMin(duration, (double(frame) + 1.5) / m_fps);
 
             // Sampled from AnimSampler; see its header for the QML parity contract.
             const QList<QVariantMap> work = sampleFrame(m_scene, t);

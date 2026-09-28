@@ -776,7 +776,9 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             out[QStringLiteral("fillEntry") + QString::number(fIdx)] = fe;
         }
     } else if (preset == QLatin1String("customHide")) {
-        out[QStringLiteral("visible")] = e < 0.5 ? o.value(QStringLiteral("fromVisible"), true).toBool()
+        // Instant cut on entry (see the QML sampler): only the exact
+        // start reads from, matching the lane's single diamond at t0.
+        out[QStringLiteral("visible")] = p <= 0 ? o.value(QStringLiteral("fromVisible"), true).toBool()
                                                  : o.value(QStringLiteral("toVisible"), false).toBool();
     } else if (preset == QLatin1String("customResize")) {
         QVariantMap rsKv;
@@ -1044,12 +1046,13 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         else
             out[QStringLiteral("fontWeight")] = qBound(1, qRound(num(o, "from") + (num(o, "to") - num(o, "from")) * e), 1000);
     } else if (preset == QLatin1String("customFlip")) {
-        // Stepped mirror flip about the base state (mirrors DocAnimSample).
+        // Instant flip on entry (see the QML sampler): only the exact
+        // start reads base, matching the lane's single diamond at t0.
         if (str(o, "axis", QStringLiteral("h")) == QLatin1String("v"))
-            out[QStringLiteral("flipV")] = e < 0.5 ? base.value(QStringLiteral("flipV")).toBool()
+            out[QStringLiteral("flipV")] = p <= 0 ? base.value(QStringLiteral("flipV")).toBool()
                                                    : !base.value(QStringLiteral("flipV")).toBool();
         else
-            out[QStringLiteral("flipH")] = e < 0.5 ? base.value(QStringLiteral("flipH")).toBool()
+            out[QStringLiteral("flipH")] = p <= 0 ? base.value(QStringLiteral("flipH")).toBool()
                                                    : !base.value(QStringLiteral("flipH")).toBool();
     } else if (preset == QLatin1String("customGradient")) {
         // Fill gradient from-to: stop colors lerp in sRGB, angle lerps
@@ -1119,7 +1122,8 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         if (!c.isEmpty()) {
             QVariantMap sh;
             sh[QStringLiteral("enabled")] = true;
-            // Stepped like customHide (mirrors DocAnimSample).
+            // Boolean midpoint step (mirrors DocAnimSample): unlike the
+            // instant presets, inner rides the morph and flips halfway.
             if (hasShKeys && shKv.contains(QStringLiteral("inner")))
                 sh[QStringLiteral("inner")] = shKv.value(QStringLiteral("inner")).toBool();
             else
@@ -1186,7 +1190,8 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         if (!c.isEmpty()) {
             QVariantMap g;
             g[QStringLiteral("enabled")] = true;
-            // Stepped like customHide (mirrors DocAnimSample).
+            // Boolean midpoint step (mirrors DocAnimSample): unlike the
+            // instant presets, inner rides the morph and flips halfway.
             if (hasGlKeys && glKv.contains(QStringLiteral("inner")))
                 g[QStringLiteral("inner")] = glKv.value(QStringLiteral("inner")).toBool();
             else

@@ -684,9 +684,11 @@ QtObject {
                 out["fillEntry" + fIdx] = fe;
             }
         } else if (preset === "customHide") {
-            // Stepped visibility (bools can't ease): first half reads
-            // from, second half reads to.
-            out.visible = e < 0.5 ? o.fromVisible !== false : o.toVisible === true;
+            // Instant visibility cut on entry (bools can't ease): only
+            // the exact start instant reads from, everything after reads
+            // to — matching the single diamond the lane draws at t0.
+            // Flips on the raw clock like appear.
+            out.visible = p <= 0 ? o.fromVisible !== false : o.toVisible === true;
         } else if (preset === "customResize") {
             // Absolute box centered on the leaf's own center (shape-only
             // semantics; groups equalize per leaf but keep centers).
@@ -904,12 +906,13 @@ QtObject {
             } else
                 out.fontWeight = Math.min(1000, Math.max(1, Math.round(lerp(Number(o.from) || 0, Number(o.to) || 0, e))));
         } else if (preset === "customFlip") {
-            // Stepped mirror flip about the base state (bools can't
-            // ease): first half reads base, second half reads toggled.
+            // Instant mirror flip on entry (bools can't ease): only the
+            // exact start reads base, everything after reads toggled —
+            // matching the single diamond the lane draws at t0.
             if ((o.axis || "h") === "v")
-                out.flipV = e < 0.5 ? base.flipV === true : base.flipV !== true;
+                out.flipV = p <= 0 ? base.flipV === true : base.flipV !== true;
             else
-                out.flipH = e < 0.5 ? base.flipH === true : base.flipH !== true;
+                out.flipH = p <= 0 ? base.flipH === true : base.flipH !== true;
         } else if (preset === "customGradient") {
             // Fill gradient from-to: stop colors ease in sRGB, angle
             // linearly. Ports to AnimSampler; also flips fillType so a
@@ -961,8 +964,8 @@ QtObject {
             if (sc) {
                 var shEntry = {
                     enabled: true,
-                    // Stepped like customHide (bools can't ease): first
-                    // half reads from, second half reads to.
+                    // Boolean midpoint step (bools can't ease): unlike the
+                    // instant presets, inner rides the morph and flips halfway.
                     inner: shKv && shKv.inner !== undefined ? shKv.inner === true : (e < 0.5 ? o.fromInner === true : o.toInner === true),
                     color: sc,
                     x: shKv && shKv.x !== undefined ? (Number(shKv.x) || 0) : lerp(Number(o.fromX) || 0, Number(o.toX) || 0, e),
@@ -1010,8 +1013,8 @@ QtObject {
             if (gc) {
                 var glEntry = {
                     enabled: true,
-                    // Stepped like customHide (bools can't ease): first
-                    // half reads from, second half reads to.
+                    // Boolean midpoint step (bools can't ease): unlike the
+                    // instant presets, inner rides the morph and flips halfway.
                     inner: glKv && glKv.inner !== undefined ? glKv.inner === true : (e < 0.5 ? o.fromInner === true : o.toInner === true),
                     color: gc,
                     blur: glKv && glKv.blur !== undefined ? Math.max(0, Number(glKv.blur) || 0) : Math.max(0, lerp(Number(o.fromBlur) || 0, Number(o.toBlur) || 0, e)),
