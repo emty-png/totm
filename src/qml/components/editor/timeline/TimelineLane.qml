@@ -1,20 +1,11 @@
 import QtQuick
 import Totm
 
-// One timeline lane: span bars per clip plus draggable diamond keyframes
-// at each clip end. Start diamonds and bars move the whole clip, end
-// diamonds stretch its duration (6px snap to playhead, zero and sibling
-// ends); clicks still select, Delete still removes. Stored animation
-// keys show as small ticks on their bar: click selects and seeks,
-// drag retimes between neighbors. Stepped clips
-// (hide/show, appear, flip) are instants: one diamond at t0, no bar,
-// nothing to stretch. Empty lane space falls through to the view marquee
-// below for multi-select. Drag state lives here while delegates stay
-// model-bound: the doc clips update silently in place (no rebuild, live
-// canvas preview) and release touches once for a single undo entry.
-// Plain props with defaults (never required): Repeater delegates
-// evaluate required bindings before the model context attaches, which
-// breaks modelData reads.
+// Lane of clip bars, end diamonds (start moves, end stretches) and
+// key ticks. Drags mutate the model silently in place and touch once
+// on release for a single undo entry; stepped presets draw one diamond
+// at t0. Props stay non-required: Repeater delegates evaluate required
+// bindings before the model context attaches.
 Item {
     id: lane
 
@@ -25,30 +16,21 @@ Item {
     property real originX: 0
     property var selectedIds: []
 
-    // Plain (never required): this lane is a Repeater delegate, and
-    // required bindings evaluate before the model context attaches,
-    // which breaks the modelData reads below. All drag paths null-guard.
     property var doc: null
 
     property var diamondPolicy: null
-    // Joint-move state, owned by the view and shared across lanes
-    // (selections span rows): press-time t0/dur per selected id, the
-    // live delta in seconds, and whether a joint drag is showing.
+    // Joint-drag state shared with the view (selections span lanes).
     property var jointPolicy: null
     property var jointOrig: ({})
     property real jointDx: 0
     property bool jointActive: false
 
-    // Active drag: press-time snapshot plus applied times. Visuals follow
-    // these (not the model, which carries no mid-drag notifications).
     property bool dragging: false
     property int dragClipId: -1
     property string dragMode: "move"
     property real dragT0: 0
     property real dragDur: 0
     property real pressLx: 0
-    // Key-drag state (dragMode "key"): press-time clip-local t plus
-    // the live absolute time the tick follows.
     property int dragKeyIndex: -1
     property real snapKeyT: 0
     property real snapKeyAbs: 0
@@ -56,8 +38,7 @@ Item {
 
     implicitHeight: 30
 
-    // Bottom hairline pairing with the gutter label's own line so the
-    // row reads across the divider.
+    // Bottom hairline pairing with the gutter's own line.
     Rectangle {
         anchors {
             left: parent.left
@@ -72,8 +53,6 @@ Item {
         return lane.selectedIds.indexOf(id) >= 0;
     }
 
-    // Stepped clips (hide/show, appear, flip) are instants, not spans:
-    // one diamond at t0, no bar, no stretch handle.
     function isStepped(preset) {
         if (!lane.doc)
             return false;
@@ -84,9 +63,8 @@ Item {
         return lane.originX + t * lane.pxPerSec;
     }
 
-    // Span bar per clip, full end-to-end under the diamonds so each
-    // clip reads as one connected unit. Dragging the bar moves the clip.
-    // (Empty lane space falls through to the view marquee below.)
+    // Span bars (bar drag moves the clip); empty space falls through
+    // to the view marquee below.
     Repeater {
         model: lane.clips
 
@@ -97,8 +75,7 @@ Item {
             width: Math.max(14, lane.barW(modelData))
             height: 10
             radius: 5
-            // Selected clips wash red (calm in both themes) instead of a
-            // solid bar; resting clips stay in theme neutrals.
+            // Selected wash (calm red in both themes), neutrals at rest.
             color: lane.isSelected(modelData.id) ? AppTheme.snapGuide : AppTheme.hover
             opacity: lane.isSelected(modelData.id) ? 0.3 : 1
             border.width: 1
@@ -162,8 +139,7 @@ Item {
             rotation: 45
             radius: 2.5
             scale: lane.isSelected(modelData.clipId) ? 1.18 : 1
-            // Diamonds stay white in every theme (theme-proof ends);
-            // selected ones go red with a white rim to match the wash.
+            // White in every theme; selected go red with a white rim.
             color: lane.isSelected(modelData.clipId) ? AppTheme.snapGuide : "#ffffff"
             border.width: 1.25
             border.color: lane.isSelected(modelData.clipId) ? "#ffffff" : AppTheme.fieldBorder
@@ -200,9 +176,7 @@ Item {
         }
     }
 
-    // Keyframe ticks, one small diamond per stored key at its
-    // absolute time. Click selects the clip and seeks; drag retimes
-    // the key between its neighbors (single undo entry, snapped).
+    // Stored-key ticks: click seeks, drag retimes between neighbors.
     Repeater {
         model: lane.keyTicks()
 
@@ -233,9 +207,8 @@ Item {
         }
     }
 
-    // Bar geometry, following the drag while one is active on its clip.
-    // Joint clips ride the shared delta off their press-time snapshot
-    // (the model mutates silently, so only these scalars stay stable).
+    // Geometry follows the active drag; the model mutates silently,
+    // so visuals read these scalars, never the model mid-drag.
     function barX(snap) {
         if (lane.dragging && snap.id === lane.dragClipId)
             return lane.laneX(lane.dragT0);
@@ -259,9 +232,8 @@ Item {
         return lane.laneX(end.x);
     }
 
-    // Both ends of every clip as {clipId, x seconds, end}. Stepped
-    // clips expose only their start: one keyframe, nothing to stretch.
-
+    // Both clip ends as {clipId, x seconds, end}; stepped clips
+    // expose start only.
     function keyEnds() {
         var out = [];
         var list = lane.clips || [];
@@ -291,9 +263,6 @@ Item {
         return null;
     }
 
-    // Stored keys as {clipId, keyIndex, x seconds}. Stepped clips
-    // carry no keys; single stored keys show too (they mark time
-    // even before driving interpolation).
     function keyTicks() {
         var out = [];
         var list = lane.clips || [];
@@ -314,8 +283,6 @@ Item {
         return out;
     }
 
-    // Tick geometry, following clip drags (move/stretch/joint) plus
-    // the active key drag's own live time.
     function tickX(tick) {
         if (lane.dragging && tick.clipId === lane.dragClipId) {
             if (lane.dragMode === "key" && tick.keyIndex === lane.dragKeyIndex)
@@ -405,9 +372,8 @@ Item {
         lane.doc.seekPlayhead(c.t0 + Number(c.options.keys[keyIndex].t) * c.duration);
     }
 
-    // Snap to zero, the playhead and every other clip end in the
-    // document within 6px (lanes hold one clip each now, so siblings
-    // live across rows).
+    // Snap within 6px to zero, playhead and other ends (siblings live
+    // across rows: lanes hold one clip each now).
     function snapTime(t) {
         var threshold = 6 / lane.pxPerSec;
         var best = t, bestDist = threshold;
@@ -442,17 +408,15 @@ Item {
         if (!c || !lane.doc)
             return;
         // Passive: selecting must not disturb playback; the first real
-        // move below settles explicitly before mutating.
+        // move settles explicitly before mutating.
         lane.doc.beginPassiveTransaction();
         lane.dragClipId = clipId;
         lane.dragMode = mode;
         lane.storeOrig(c);
         lane.pressLx = lx;
         lane.dragging = false;
-        // Joint-move press snapshot: every selected clip anywhere in the
-        // document rides the same delta when this drag moves. Published
-        // to the view (shared across lanes); visuals stay still until
-        // the first move flips jointActive on.
+        // Joint snapshot: every selected clip rides the same delta.
+        // Published to the view; visuals stay still until the first move.
         var orig = {};
         var ids = [];
         if (mode === "move" && lane.doc.anim.isClipSelected(clipId)) {
@@ -474,14 +438,10 @@ Item {
             lane.jointPolicy("begin", orig);
     }
 
-    // Ids riding the active joint drag (press-time snapshot above).
     property var jointIds: []
-    // Local press-time snapshot (bindings to the view copy exist for
-    // the other lanes' visuals; the drag itself reads this).
     property var jointSnap: ({})
 
-    // Press-time snapshot kept as plain props (the model object mutates
-    // silently underneath, so only scalars are stable).
+    // Press-time snapshot as scalars (the model mutates silently).
     property real snapT0: 0
     property real snapDur: 0
 
@@ -507,10 +467,8 @@ Item {
             lane.dragDur = Math.min(1800, Math.max(0.1, end - lane.snapT0));
             lane.doc.nudgeClip(lane.dragClipId, lane.dragT0, lane.dragDur);
         } else if (lane.jointIds.length > 1) {
-            // Joint move: the dragged clip snaps, everyone rides the
-            // same delta, clamped so the whole formation stays inside
-            // the composition. Silent nudges + one touch on release =
-            // a single undo entry for the formation.
+            // Joint move: dragged clip snaps, everyone rides the delta,
+            // clamped inside the composition; one undo entry on release.
             var want = lane.snapTime(lane.snapT0 + (lx - lane.pressLx) / lane.pxPerSec);
             var dx = lane.clampJointDx(lane.jointIds, want - lane.snapT0, comp);
             for (var i = 0; i < lane.jointIds.length; i++) {
@@ -522,8 +480,6 @@ Item {
             if (lane.jointPolicy)
                 lane.jointPolicy("move", dx);
         } else {
-            // Both ends stay inside the composition: move keeps the whole
-            // clip in range, stretch pins its end to the duration.
             var cap = Math.max(0, comp - lane.snapDur);
             lane.dragT0 = Math.min(cap, Math.max(0, lane.snapTime(lane.snapT0 + (lx - lane.pressLx) / lane.pxPerSec)));
             lane.dragDur = lane.snapDur;
@@ -533,7 +489,7 @@ Item {
             lane.doc.seekPlayhead(lane.doc.anim.currentTime);
     }
 
-    // Widest delta keeping every joint clip inside [0, comp].
+    // Widest delta keeping every joint clip in [0, comp].
     function clampJointDx(ids, dx, comp) {
         var lo = -Infinity, hi = Infinity;
         for (var i = 0; i < ids.length; i++) {
@@ -559,8 +515,7 @@ Item {
         if (!d)
             return;
         if (moved) {
-            // Values already sit final via nudges: one touch stages the
-            // single undo entry that end() commits (formation included).
+            // Nudges already sit final: one touch stages the undo entry.
             if (joint.length > 1) {
                 for (var i = 0; i < joint.length; i++) {
                     var o = d.anim.clipById(joint[i]);

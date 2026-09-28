@@ -5,40 +5,30 @@ import QtQuick.Layouts
 import QtMultimedia
 import Totm
 
-// Timeline: left sidebar (transport plus one label per animated top)
-// beside a horizontally flickable tracks area (ruler, lanes, red
-// playhead overlay). Hairlines divide the header and every lane on both
-// sides so rows read across the divider. Delegates stay pure modelData
-// with policies wired in onItemAdded, like LayersView.
-// Tracks input lives on a sibling overlay below the content row (never
-// inside the Flickable): same geometry as the viewport, zero collision
-// with lanes, ruler or playhead, deterministic coordinates.
+// Timeline: gutter (transport + labels) beside flickable tracks (ruler,
+// lanes, playhead). Delegates stay modelData-pure with policies wired in
+// onItemAdded; tracks input lives on a sibling overlay below at viewport
+// geometry, so nothing collides with lanes, ruler or playhead.
 Item {
     id: timeline
 
     required property var doc
 
-    // Zoomable pixels-per-second (ctrl+wheel around the cursor).
     property real pxPerSec: 120
     readonly property real minZoom: 30
     readonly property real maxZoom: 600
-    // Joint clip-drag state, shared across lanes (selections span
-    // rows): press-time t0/dur per riding id, the live delta, and
-    // whether the formation is showing. Lanes publish through
-    // setJoint and read back through bound delegate props.
+    // Joint-drag state shared across lanes (selections span rows).
     property var jointOrig: ({})
     property real jointDx: 0
     property bool clipDragging: false
     property bool marqueeDragged: false
     readonly property real originX: 8
     readonly property real gutterWidth: 200
-    // Transparent headroom for the panel's resize strip. Interactive
-    // content starts below it; the divider and playhead bleed through
-    // to the top edge.
+    // Headroom for the panel resize strip; divider and playhead bleed
+    // through to the top edge.
     readonly property real topPad: 6
     readonly property real headerHeight: 44
-    // Tracks start below the header hairline so lane rows sit exactly
-    // beside their gutter labels.
+    // Tracks start below the header hairline so rows sit beside labels.
     readonly property real tracksTop: timeline.topPad + timeline.headerHeight + 1
     readonly property real rulerHeight: 28
     readonly property real laneHeight: 30
@@ -47,14 +37,13 @@ Item {
     readonly property var lanes: timeline.computeLanes()
     readonly property var audioRows: timeline.computeAudioRows()
     readonly property real audioHeadHeight: 28
-    // Audio section chrome (header rows here and on the tracks side)
-    // only exists once a clip does; the import button floats over the
-    // ruler band so adding the first clip is always at hand.
+    // Audio chrome exists only once a clip does; the import button
+    // floats over the ruler so adding the first clip is always at hand.
     readonly property bool hasAudio: timeline.audioRows.length > 0
     readonly property real audioTop: timeline.hasAudio ? timeline.audioHeadHeight : 0
 
-    // Tracks input overlay, below the content row: lane, diamond and
-    // ruler presses land above; empty tracks and wheel fall through here.
+    // Tracks input overlay below the content row: lane/diamond/ruler
+    // presses land above; empty tracks and wheel fall through here.
     MouseArea {
         id: tracksMouse
 
@@ -65,7 +54,7 @@ Item {
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
         onPressed: mouse => {
-            // Grabbing empty tracks finishes any open field editor.
+            // Grabbing tracks closes open field editors.
             timeline.forceActiveFocus();
             timeline.marqueeDragged = false;
             marquee.pressAt(mouse.x + tracks.contentX, mouse.y + tracks.contentY);
@@ -78,8 +67,7 @@ Item {
         onClicked: {
             if (timeline.marqueeDragged || !timeline.doc)
                 return;
-            // Clicking empty tracks stops playback like the ruler and
-            // clears the clip selection. Diamond clicks keep playing.
+            // Empty-tracks click stops playback and clears selection.
             if (timeline.doc.anim.playing)
                 timeline.doc.anim.pause();
             timeline.doc.clearClipSelection();
@@ -101,7 +89,6 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // Sidebar: transport block plus lane labels, hairlined per row.
         Column {
             Layout.preferredWidth: timeline.gutterWidth
             Layout.fillHeight: true
@@ -119,15 +106,11 @@ Item {
             }
 
             // Lane labels ride with the tracks (transport stays put).
-            // Non-interactive like tracks: it never claims presses,
-            // contentY just follows the tracks side.
             Flickable {
                 id: gutterScroll
 
-                // Plain Column ignores Layout.* props (only layouts honor
-                // them), so size explicitly: full sidebar width with the
-                // transport block's height removed. Without this the
-                // viewport is 0x0 and every lane label stays invisible.
+                // Plain Column ignores Layout props, so size explicitly
+                // (else the viewport is 0x0 and labels stay invisible).
                 width: parent.width
                 height: parent.height - timeline.topPad - timeline.headerHeight
                 interactive: false
@@ -187,9 +170,7 @@ Item {
                         }
                     }
 
-                    // Audio section header: label only now; the import button
-                    // floats top-right over the ruler band (the transport row is
-                    // full, and this keeps it at hand with zero clips too).
+                    // Audio header; import floats top-right over the ruler.
                     Item {
                         width: parent.width
                         height: timeline.audioHeadHeight
@@ -277,12 +258,8 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            // Never interactive: an interactive Flickable claims every
-            // press-drag for panning (and every wheel for flicking)
-            // before the marquee overlay below sees them, which kills
-            // drag-select, click-clear and ctrl+wheel zoom. Navigation
-            // stays programmatic (overlay wheel handler, scrollbars,
-            // zoomTo) while lanes and ruler keep their own MouseAreas.
+            // Never interactive: it would claim press-drags and wheels
+            // before the overlay sees them. Scrolling stays programmatic.
             interactive: false
             flickableDirection: Flickable.HorizontalAndVerticalFlick
             contentWidth: Math.max(tracks.width, timeline.tracksWidth())
@@ -312,12 +289,8 @@ Item {
                 }
             }
 
-            // Ruler block: ruler bottom-aligned with the sidebar transport,
-            // sharing its hairline. Pinned to the viewport so vertical
-            // scrolling moves lanes under a steady ruler. Opaque and
-            // above the lanes so bars/diamonds slide underneath like
-            // gutter labels slide under the transport. Covers the top
-            // pad too, or lane tips peek through the strip above.
+            // Ruler pinned to the viewport (lanes scroll under it), opaque
+            // and above the lanes, covering the top pad.
             Item {
                 z: 2
                 y: tracks.contentY
@@ -352,9 +325,8 @@ Item {
                 }
             }
 
-            // Lanes. Explicit content geometry (never anchored to the
-            // Flickable): anchors pin to the viewport, so lanes would sit
-            // still while the ruler scrolls away on horizontal pans.
+            // Lanes use explicit content geometry (anchors would pin them
+            // to the viewport while the ruler scrolls away).
             Column {
                 id: laneColumn
 
@@ -368,9 +340,7 @@ Item {
 
                     model: timeline.lanes
                     onItemAdded: (index, item) => {
-                        // Click-select policy for lane delegates
-                        // (delegate-safe: assigned here where outer scope
-                        // is visible, like LayersView).
+                        // Policies assigned where outer scope is visible.
                         item.diamondPolicy = (id, additive) => timeline.onDiamond(id, additive);
                         item.jointPolicy = (op, payload) => timeline.setJoint(op, payload);
                     }
@@ -392,9 +362,8 @@ Item {
                 }
             }
 
-            // Audio header spacer: pairs with the gutter header so rows
-            // stay aligned across the divider. Content geometry like the
-            // lanes so horizontal pans move the hairline with the ruler.
+            // Audio header spacer pairing with the gutter header (content
+            // geometry, so pans move the hairline with the ruler).
             Item {
                 x: 0
                 width: tracks.contentWidth
@@ -413,9 +382,7 @@ Item {
                 }
             }
 
-            // Audio lanes, one row per clip. Content geometry like the
-            // lanes so clips pan with the ruler instead of sticking to
-            // the viewport.
+            // Audio lanes pan with the ruler (never viewport-pinned).
             Column {
                 id: audioColumn
 
@@ -444,10 +411,8 @@ Item {
                 }
             }
 
-            // Playhead overlay: pill readout on the ruler plus a line down
-            // through every lane. Pinned to the viewport (not the content)
-            // so the line always reaches the panel bottom while scrolling.
-            // Above the ruler so the pill/line stay visible over ticks.
+            // Playhead pinned to the viewport above the ruler: pill plus a
+            // line through every lane.
             Item {
                 z: 3
                 x: timeline.originX + timeline.playheadX
@@ -481,8 +446,7 @@ Item {
                 }
             }
 
-            // Empty state: no clips yet. Anchored to the viewport below the
-            // ruler, not the content, so it stays put while scrolled.
+            // Empty state, viewport-anchored below the ruler.
             Text {
                 x: tracks.contentX + (tracks.width - width) / 2
                 y: tracks.contentY + timeline.tracksTop + (tracks.height - timeline.tracksTop - height) / 2
@@ -492,7 +456,7 @@ Item {
                 color: AppTheme.muted
             }
 
-            // Marquee rect, canvas selection language.
+            // Marquee rect in canvas selection language.
             Rectangle {
                 visible: marquee.selecting
                 x: marquee.selection.x
@@ -506,10 +470,8 @@ Item {
         }
     } // contentRow
 
-    // Add-sound button floating top-right over the ruler band, mirroring
-    // the canvas export pill: always at hand, never disturbing layout.
-    // ToolbarButton sizes itself for layouts only, so the floating use
-    // pins its own box.
+    // Add-sound button floating over the ruler (layout-independent box:
+    // ToolbarButton only sizes itself for layouts).
     ToolbarButton {
         anchors {
             top: parent.top
@@ -523,11 +485,8 @@ Item {
         onClicked: audioPicker.open()
     }
 
-    // One row per animated target (not per clip): stacked animations
-    // on one target share a lane, grouped by target in first-appearance
-    // order, earliest first. Reads rev, clips and clip selection so
-    // renames, edits and selection all refresh the rows; delegates bind
-    // modelData only.
+    // One lane per animated target in first-appearance order; reads rev
+    // so renames, edits and selection refresh the rows.
     function computeLanes() {
         var d = timeline.doc;
         if (!d)
@@ -579,9 +538,7 @@ Item {
             d.selectClip(id, additive);
     }
 
-    // Joint-drag publisher for the lanes: begin stores the press-time
-    // snapshot, move streams the live delta (flipping visuals on),
-    // end clears. One transaction still covers the formation.
+    // Joint-drag publisher for the lanes (one transaction per formation).
     function setJoint(op, payload) {
         if (op === "begin") {
             timeline.jointOrig = payload || {};
@@ -602,8 +559,7 @@ Item {
         d.selectAudioClip(id, additive);
     }
 
-    // One row per audio clip, earliest first. Reads rev so adds,
-    // deletes and undos rebuild the rows; delegates bind modelData only.
+    // Audio rows earliest-first; reads rev so edits rebuild.
     function computeAudioRows() {
         var d = timeline.doc;
         if (!d)
@@ -621,9 +577,8 @@ Item {
         return out;
     }
 
-    // Marquee select: any animation diamond inside the rect joins, as
-    // does any audio bar it overlaps. Click (no drag) is handled by the
-    // overlay; this only multi-picks.
+    // Marquee multi-pick: diamonds inside join, as does overlapped audio.
+    // (Plain clicks are handled by the overlay.)
     function applyMarquee(area, additive) {
         var d = timeline.doc;
         if (!d)
@@ -663,15 +618,15 @@ Item {
     }
 
     function handleWheel(event) {
-        // Overlay coordinates already are viewport coordinates.
+        // Overlay coords already are viewport coords.
         if (event.modifiers & Qt.ControlModifier) {
             timeline.zoomAt(event.x, event.angleDelta.y);
             event.accepted = true;
             return;
         }
-        // Shift+wheel scrolls vertically; unshifted wheels pan the tracks
-        // horizontally (Flickables stay non-interactive, so all scrolling
-        // is programmatic and never steals lane presses).
+        // Shift scrolls vertically, plain wheels pan horizontally
+        // (Flickables stay non-interactive, so scrolling never steals
+        // lane presses).
         if (event.modifiers & Qt.ShiftModifier) {
             var vy = event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.y;
             if (vy !== 0)
@@ -694,8 +649,7 @@ Item {
         timeline.zoomSet(next, viewX);
     }
 
-    // Zoom keeping the time under viewX stable (defaults to the
-    // viewport center, e.g. for the slider and keyboard steps).
+    // Zoom keeping the time under viewX stable (viewport center default).
     function zoomSet(next, viewX) {
         var old = timeline.pxPerSec;
         next = Math.min(timeline.maxZoom, Math.max(timeline.minZoom, next));
@@ -711,7 +665,6 @@ Item {
         timeline.zoomAt(tracks.width / 2, dy);
     }
 
-    // Fit the whole composition in the viewport width.
     function zoomToFit() {
         var d = timeline.doc;
         var dur = d ? Math.max(0.5, d.anim.duration) : 4.0;
@@ -727,10 +680,8 @@ Item {
         return Math.min(Math.max(0, tracks.contentHeight - tracks.height), Math.max(0, y));
     }
 
-    // Audio import: picker hands the user file to the probe, which reads
-    // the duration before anything is copied. Only probed files get
-    // imported and placed at the playhead; failures abort with nothing
-    // stored (stray blobs, if any, sweep next boot).
+    // Audio import: the probe reads duration first; only probed files
+    // are copied in at the playhead (failures store nothing).
     FilePicker {
         id: audioPicker
 
@@ -739,11 +690,9 @@ Item {
         onAccepted: timeline.probeAudio(selectedFile)
     }
 
-    // Duration probe: no audio output, so demuxing reports the length
-    // with no audible side effects and no device needed. The probe keeps
-    // its last file loaded: clearing the source mid-demux tears down
-    // the backend pipeline under in-flight events (segfault), so each
-    // import simply overwrites it and failures just disarm.
+    // Duration probe with no audio output. It keeps its file loaded:
+    // clearing mid-demux tears down the pipeline under in-flight events,
+    // so imports overwrite and failures just disarm.
     MediaPlayer {
         id: audioProbe
 

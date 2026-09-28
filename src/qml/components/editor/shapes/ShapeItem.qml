@@ -3,25 +3,18 @@ import QtQuick.Effects
 import QtQuick.Shapes
 import Totm
 
-// One shape on the canvas. Root geometry IS the shape geometry
-// (x/y/width/height/rotation bound from model roles by the repeater).
-// Reports press/move/release; the canvas owns selection policy.
-// Hidden shapes vanish entirely (no input); locked shapes render but
-// swallow canvas presses without acting, so the marquee below never
-// starts and selection policy stays untouched.
-// Drag deltas are measured in window-stable global coords and forwarded
-// in whole screen pixels (via zoom), so motion stays 1:1 smooth at any
-// zoom - measuring in local coords would feed back as the item moves
-// under the cursor and judder. Whole-pixel model snapping happens on
-// release (see Document.snapSelection), never mid-gesture.
+// One canvas shape; root geometry IS the shape geometry. Reports
+// press/move/release; the canvas owns selection policy. Hidden shapes
+// vanish (no input); locked ones swallow presses so the marquee below
+// never starts. Drag deltas run in window-stable global coords at whole
+// screen pixels (local coords would judder as the item moves under the
+// cursor); the document snaps to whole pixels on release.
 Item {
     id: shape
 
-    // Model-bound props (set explicitly from roles, avoiding Item clashes).
-    // Injected names stay undeclared: `required` breaks sibling
-    // initializer bindings at runtime.
-    // Paint follows the sidebar order via depth (renumbered by the
-    // document after every reorder); uid order must never drive paint.
+    // Model-bound props set from roles (undeclared injected names:
+    // `required` breaks sibling initializer bindings). Paint follows
+    // sidebar order via depth, never uid order.
     property int uid: -1
     property string shapeType: "rectangle"
     property real sx: 0
@@ -29,15 +22,10 @@ Item {
     property real sw: 10
     property real sh: 10
     property real shapeRotation: 0
-    // Stacked paints (index 0 paints topmost). Each fill:
-    // {enabled, color, type, gradient, opacity}; each stroke: {enabled,
-    // color, type, gradient, width, dash, position, opacity}. Bound
-    // from model roles by the repeater (see ShapeLayer).
+    // Stacked paints, index 0 topmost (see ShapeLayer for role binding).
     property var fills: []
     property var strokes: []
-    // Pen-only paint switches (meaningful for pen): fill on/off plus
-    // line cap/join. Defaults match the old hardcoded paint (filled,
-    // round caps/joins), so every other shape renders identically.
+    // Pen-only switches; defaults match the old hardcoded round paint.
     property bool penFill: true
     property string strokeCap: "round"
     property string strokeJoin: "round"
@@ -47,11 +35,10 @@ Item {
     property var glows: []
     property var grain: null
     property var backdropItem: null
-    // Frame number for animated grain (floor(seconds * 60), shared with
-    // the exporter so the shimmer matches; static while paused).
+    // Animated-grain frame (floor(seconds * 60), shared with export).
     property int grainFrame: 0
-    // True inside the hidden backdrop duplicate: blurred shapes hide
-    // so frosted panels sample only content behind them.
+    // True in the hidden backdrop duplicate (blurred shapes hide so
+    // frosted panels sample only content behind them).
     property bool isBackdropCapture: false
     property real shapeOpacity: 1
     property real radius: 0
@@ -59,13 +46,11 @@ Item {
     property var cornerRadii: []
     property bool flipH: false
     property bool flipV: false
-    // Star tips; clamped 3..12 by the document on edit.
+    // Star tips (document clamps 3..12 on edit).
     property int points: 5
-    // Pen subpaths in absolute content coords (meaningful for pen).
-    // [{closed, pts: [{x, y, smooth, inX, inY, outX, outY}]}]
+    // Pen subpaths in absolute content coords.
     property var pathData: []
-    // Text content/style (meaningful when shapeType === "text").
-    // letterSpacing stores percent of font size; rendering converts.
+    // Text style (letterSpacing is percent of font size).
     property string textContent: ""
     property string fontFamily: "Inter"
     property int fontWeight: 400
@@ -76,31 +61,26 @@ Item {
     property string hAlign: "left"
     property string vAlign: "top"
     property bool autoSize: true
-    // Stored blob name under LibraryStore images/ (meaningful when
-    // shapeType === "image"). Stretch fills the box per tool choice.
+    // Stored blob name under LibraryStore images/.
     property string imageSource: ""
-    // True while the canvas inline editor owns this text: the static
-    // glyphs hide so they never double-draw under the editor.
+    // True while the inline editor owns this text (glyphs hide to avoid
+    // double-draw).
     property bool editing: false
     property bool selected: false
     property bool shapeVisible: true
     property bool shapeLocked: false
     property int paintDepth: 0
     property real zoom: 1
-    // Mask role: never paints (export skips isMask leaves too), but
-    // stays hit-testable so the shape remains selectable/editable.
-    // Masked content hides its GPU paint the same way and lands on
-    // the CPU MaskLeafItem instead, so preview matches export.
+    // Masks never paint but stay hit-testable; masked content lands on
+    // the CPU MaskLeafItem so preview matches export.
     property bool isMaskShape: false
     property bool isMaskedContent: false
     readonly property bool paintHidden: shape.isMaskShape === true || shape.isMaskedContent === true
-    // False for non-interactive paint reuse (drag-preview ghost): the
-    // MouseArea below goes blind so canvas gestures pass through.
+    // False for non-interactive reuse (drag ghost): gestures pass through.
     property bool interactive: true
 
-    // Selection policy callbacks, assigned by the canvas in onItemAdded
-    // (calling item.customSignal() there would fail lint: onItemAdded's
-    // item is statically QQuickItem, while plain assignments stay dynamic).
+    // Selection policy callbacks from the canvas (plain assignments stay
+    // dynamic where item.customSignal() would fail lint).
     property var activatePolicy: null
     property var pressPolicy: null
     property var movePolicy: null
@@ -109,12 +89,10 @@ Item {
     // Auto-size writeback for text: the canvas clamps and commits.
     property var measurePolicy: null
 
-    // Vector path builders (pure geometry, mirrored by the C++ video
-    // renderer).
+    // Vector path builders (pure geometry, mirrored by export).
     readonly property var geometry: ShapeGeometry {}
 
-    // Pen line ends/bends. Other shapes keep the historic round paint;
-    // unknown values fall back to round on both renderers.
+    // Pen caps/joins; other shapes keep round, unknown falls back to round.
     function capFor() {
         if (shape.shapeType !== "pen")
             return ShapePath.RoundCap;
@@ -135,11 +113,8 @@ Item {
         return ShapePath.RoundJoin;
     }
 
-    // CPU paint path for effects the stock items cannot express
-    // (ShapePath has fillGradient only, Rectangle borders stay solid
-    // and dashless, MultiEffect has no spread). Vectors stack shadows
-    // and glows here; text stacks both in its native EffectItem branch
-    // and images stack both in their native branch below.
+    // CPU path for what stock items can't express (gradients, dashes,
+    // spread, multi-entry stacks).
     readonly property bool isVectorPaint: shape.shapeType === "rectangle" || shape.shapeType === "ellipse" || shape.shapeType === "triangle" || shape.shapeType === "star" || shape.shapeType === "pen"
     readonly property var enabledFills: (shape.fills || []).filter(f => f && f.enabled !== false)
     readonly property var enabledStrokes: (shape.strokes || []).filter(s => s && s.enabled !== false && Number(s.width) > 0)
@@ -156,9 +131,7 @@ Item {
     }
     readonly property bool hasLinearFill: shape.enabledFills.some(f => (f.type || "solid") === "linear")
     readonly property bool hasLinearStroke: shape.enabledStrokes.some(s => (s.type || "solid") === "linear")
-    // Per-entry opacity below 1 routes through the CPU painter (which
-    // folds color alpha * entry opacity exactly); fast branches keep
-    // the historic raw-color paint.
+    // Sub-1 entry opacity folds through the CPU painter exactly.
     readonly property bool hasFillOpacity: shape.enabledFills.some(f => Number(f.opacity ?? 1) < 0.999)
     readonly property bool hasStrokeOpacity: shape.enabledStrokes.some(s => Number(s.opacity ?? 1) < 0.999)
     readonly property var enabledShadows: (shape.shadows || []).filter(s => s && s.enabled !== false)
@@ -172,9 +145,8 @@ Item {
     readonly property var innerShadows: shape.enabledShadows.filter(s => s.inner === true)
     readonly property bool hasGlow: shape.enabledGlows.length > 0
     readonly property bool hasGrain: shape.grain !== null && shape.grain !== undefined && shape.grain.enabled === true && Number((shape.grain ?? {}).amount || 0) > 0
-    // Dashed strokes route through the CPU painter too: stock borders
-    // and ShapePaths cannot dash. Both entries must be positive,
-    // mirroring the backend rule, so half-cleared pairs stay solid.
+    // Dashes need the CPU painter (stock borders can't); both entries
+    // must be positive, mirroring the backend rule.
     readonly property bool hasStrokeDash: {
         for (var i = 0; i < shape.enabledStrokes.length; i++) {
             var d = shape.enabledStrokes[i].dash;
@@ -185,21 +157,15 @@ Item {
         }
         return false;
     }
-    // Non-center strokes need the CPU clipper (inside/outside); the
-    // native border straddles (Shape) or sits inside (Rectangle).
+    // Non-center strokes need the CPU clipper (native borders straddle/sit inside).
     readonly property bool hasNonCenterStroke: shape.enabledStrokes.some(s => (s.position || "center") !== "center")
-    // Native Rectangle borders paint inside, so the fast branch only
-    // holds for solid inside strokes (or no stroke); everything else
-    // rides the shared CPU painter like export.
+    // Native Rectangle borders paint inside: fast branch holds for solid
+    // inside strokes (or none), everything else rides the CPU painter.
     readonly property bool rectFastStroke: shape.enabledStrokes.length === 0 || (shape.enabledStrokes.length === 1 && (shape.firstStroke.type || "solid") !== "linear" && (shape.firstStroke.position || "center") === "inside" && !shape.hasStrokeDash)
     readonly property bool useEffectPaint: shape.isVectorPaint && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 1 || shape.hasLinearStroke || shape.hasStrokeOpacity || shape.hasStrokeDash || shape.hasNonCenterStroke || (shape.shapeType === "rectangle" && !shape.independentCorners && !shape.rectFastStroke && shape.enabledStrokes.length > 0) || shape.hasShadow || shape.hasLayerBlur || shape.hasGlow)
-    // Effected text paints the glyph stack on the CPU (same code export
-    // calls); plain text stays on the fast GPU glyphs. Grain rides its
-    // own overlay either way; background blur stays off for text.
+    // Effected text/images ride the shared CPU painter (matches export);
+    // plain variants stay on the fast GPU branches.
     readonly property bool useTextEffectPaint: shape.shapeType === "text" && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 1 || shape.hasStrokeOpacity || shape.hasShadow || shape.hasGlow || shape.hasLayerBlur)
-    // Effected images paint through the shared CPU painter (same code
-    // export calls, so inner bands match). Plain images stay on the
-    // fast GPU branch; grain-only stays on the overlay.
     readonly property bool useImageEffectPaint: shape.shapeType === "image" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasStrokeDash)
 
     x: shape.sx
@@ -211,11 +177,8 @@ Item {
     transformOrigin: Item.Center
     visible: shape.shapeVisible && !(shape.isBackdropCapture && shape.hasBackgroundBlur)
 
-    // Rectangle: native item (radius + stroke border built in).
-    // Flip mirrors paint about the center in local space, under the
-    // root rotation; geometry, outline and hit area keep the bbox.
-    // Fast only for solid inside strokes (native borders paint
-    // inside); center/outside/gradient/dashed stacks ride EffectItem.
+    // Rectangle: native item. Flip mirrors about the center; fast only
+    // for solid inside strokes (native borders paint inside).
     Rectangle {
         anchors.fill: parent
         visible: shape.shapeType === "rectangle" && !shape.independentCorners && !shape.useEffectPaint && !shape.paintHidden
@@ -232,10 +195,8 @@ Item {
         }
     }
 
-    // Effected vectors via the shared CPU painter (same code export
-    // will call, so preview matches video). The item pads itself by
-    // shadow spread/blur/offset so nothing clips; the shape paints at
-    // (pad,pad). Flip mirrors about the shape center like above.
+    // Effected vectors via the shared CPU painter. Padded for spread/
+    // blur/offset; the shape paints at (pad,pad).
     EffectItem {
         id: effectPaint
 
@@ -253,9 +214,8 @@ Item {
         cornerRadii: shape.cornerRadii
         points: shape.points
         pathData: shape.pathData
-        // Node origin feeds pen paths only (absolute coords resolve
-        // against it); other kinds ignore it in paint, so moves skip
-        // the CPU repaint entirely and ride the parent transform.
+        // Pen paths resolve against the node origin; other kinds ignore
+        // it, so their moves skip the CPU repaint.
         nodeX: shape.shapeType === "pen" ? shape.sx : 0
         nodeY: shape.shapeType === "pen" ? shape.sy : 0
         fills: shape.fills ?? []
@@ -283,13 +243,9 @@ Item {
         }
     }
 
-    // Background blur (frosted glass): a scene-sized rig samples the
-    // backdrop sibling layer directly and blurs it, clipped to this
-    // shape's bbox; a silhouette mask applies only where corners or
-    // curves actually cut (plain sharp rects need none). The live scene
-    // underneath supplies the sharp half of the opacity mix, so one
-    // tile suffices. Export repeats the same values on the CPU. Only
-    // visible with a translucent fill over content behind the shape.
+    // Frosted glass: scene-sized rig blurs the siblings behind, clipped
+    // to the bbox (silhouette mask only where corners/curves cut). Needs
+    // translucent fill over content; export repeats it on the CPU.
     Item {
         id: backdropRoot
 
@@ -297,16 +253,13 @@ Item {
         z: -1
         visible: shape.hasBackgroundBlur && shape.backdropItem !== null && !shape.isBackdropCapture && !shape.paintHidden
         clip: true
-        // Leaf opacity applies to the fill above, never the backdrop
-        // (matches the exporter, which resets opacity for the tile).
-        opacity: 1
+        opacity: 1 // fill above carries opacity, never the backdrop
 
         readonly property real sceneW: shape.backdropItem && shape.backdropItem.doc ? Number(shape.backdropItem.doc.sceneWidth) || 1920 : 1920
         readonly property real sceneH: shape.backdropItem && shape.backdropItem.doc ? Number(shape.backdropItem.doc.sceneHeight) || 1080 : 1080
         readonly property bool plainRect: shape.shapeType === "rectangle" && !shape.independentCorners
         readonly property bool needsMask: !((backdropRoot.plainRect || shape.shapeType === "image") && !(Number(shape.radius) > 0))
 
-        // Scene-sized rig, offset so scene coords register under the shape.
         Item {
             id: blurRig
 
@@ -322,9 +275,8 @@ Item {
                 blurEnabled: true
                 blurMax: 64
                 // Content-space radius: the scaled ancestor already maps
-                // local px to screen px, so no zoom factor here (it would
-                // grow screen blur as zoom-squared and pin blur at 1.0
-                // deep in, stalling weak GPUs on scene-sized tiles).
+                // local to screen px (no zoom factor: it would square with
+                // zoom and stall weak GPUs on scene-sized tiles).
                 blur: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).radius || 0) / 64))
                 opacity: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).opacity ?? 0.7)))
                 maskEnabled: backdropRoot.needsMask
@@ -333,8 +285,7 @@ Item {
                 maskSpreadAtMin: 1.0
             }
 
-            // White silhouette at the shape position (mask space is the
-            // rig). Mirrors the fill flip so asymmetric paths register.
+            // White silhouette as the mask (mirrors fill flip).
             Item {
                 id: rigMask
 
@@ -380,9 +331,7 @@ Item {
         }
     }
 
-    // Other types: stroked/filled vector path with round joins.
-    // Independent rectangles join them so every corner keeps its own cut.
-    // Images paint separately below, so they never reach the vector path.
+    // Stroked/filled vector path (images paint below, never here).
     Shape {
         anchors.fill: parent
         visible: (((shape.shapeType !== "rectangle" && shape.shapeType !== "text" && shape.shapeType !== "image") || (shape.shapeType === "rectangle" && shape.independentCorners)) && !shape.useEffectPaint) && !shape.paintHidden
@@ -406,10 +355,7 @@ Item {
         }
     }
 
-    // Text: plain glyphs paint on the GPU (fill plus a native 1px
-    // outline toggle); effected glyphs paint the full CPU stack
-    // (outer/inner shadows and glows, gradient fill, outline ring,
-    // whole-stack layer blur) through the shared painter export calls.
+    // Text: fast GPU glyphs, or the full CPU stack when effected.
     Item {
         id: textRoot
 
@@ -489,8 +435,7 @@ Item {
         }
     }
 
-    // Film grain confined to the glyphs: a white ghost copy masks the
-    // tile (no outline, like the export ghost). Hidden while editing.
+    // Text grain masked to the glyphs (hidden while editing).
     GrainOverlay {
         anchors.fill: parent
         visible: shape.hasGrain && shape.shapeType === "text" && !shape.editing && !shape.paintHidden
@@ -523,10 +468,8 @@ Item {
         }
     }
 
-    // Image: stretched blob with uniform radius mask plus an optional
-    // stroke border. Rectangle clip stays rectangular, so rounding goes
-    // through a MultiEffect mask (smooth edges via threshold/spread).
-    // Missing blobs show a neutral tile so broken imports never vanish.
+    // Image: stretched blob, rounding via MultiEffect mask (Rectangle
+    // clip can't round); missing blobs show a neutral tile.
     Item {
         id: imageRoot
 
@@ -554,10 +497,8 @@ Item {
             visible: shape.shapeType === "image" && imageObj.status !== Image.Ready
         }
 
-        // Outer shadows: grown silhouettes in shadow colors, blurred
-        // behind the pixels and offset (spread grows the rect like the
-        // stroker dilate). Bottom-first so index 0 paints topmost.
-        // Paint under outer glows (stack order).
+        // Outer shadows/glows: grown, blurred silhouettes behind the
+        // pixels, bottom-first (index 0 topmost). Shadows paint first.
         Repeater {
             model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.outerShadows.slice().reverse() : []
 
@@ -575,16 +516,12 @@ Item {
                 layer.effect: MultiEffect {
                     blurEnabled: true
                     blurMax: 64
-                    // Same content-space rule as the backdrop rig above:
-                    // no zoom factor (ancestor scale already applies it).
+                    // Content-space radius (no zoom factor, as above).
                     blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) / 64))
                 }
             }
         }
 
-        // Outer glows: grown silhouettes in glow colors, blurred behind
-        // the pixels (spread grows the rect like the stroker dilate).
-        // Bottom-first so index 0 paints topmost.
         Repeater {
             model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.outerGlows.slice().reverse() : []
 
@@ -598,8 +535,7 @@ Item {
                 layer.effect: MultiEffect {
                     blurEnabled: true
                     blurMax: 64
-                    // Same content-space rule as the backdrop rig above:
-                    // no zoom factor (ancestor scale already applies it).
+                    // Content-space radius (no zoom factor, as above).
                     blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) / 64))
                 }
             }
@@ -627,8 +563,7 @@ Item {
                 blurMax: 64
                 blur: shape.hasLayerBlur ? Math.min(1, Math.max(0, Number((shape.layerBlur ?? {}).radius || 0) / 64)) : 0
             }
-            // Opacity mix for layer blur: sharp base stays, blurred copy
-            // fades over it (export mixes the same values on the CPU).
+            // Layer blur mixes sharp base with the blurred copy above.
             opacity: shape.hasLayerBlur ? 1 - Number((shape.layerBlur ?? {}).opacity ?? 1) : 1
         }
 
@@ -666,9 +601,8 @@ Item {
             layer.smooth: true
         }
 
-        // Inner shadows: shadow washes over the pixels, each cut by its
-        // own blurred offset inset silhouette (inverted mask) into an
-        // edge band. Paint below inner glows (stack order).
+        // Inner shadows/glows: washes cut by blurred inset silhouettes
+        // into edge bands, below outer paint (stack order).
         Repeater {
             model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.innerShadows.slice().reverse() : []
 
@@ -712,7 +646,7 @@ Item {
                         layer.effect: MultiEffect {
                             blurEnabled: true
                             blurMax: 64
-                            // Content-space radius, no zoom factor (see above).
+                            // Content-space radius (no zoom factor, as above).
                             blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) / 64))
                         }
                     }
@@ -720,8 +654,6 @@ Item {
             }
         }
 
-        // Inner glows: glow washes over the pixels, each cut by its own
-        // blurred inset silhouette (inverted mask) into an edge band.
         Repeater {
             model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.innerGlows.slice().reverse() : []
 
@@ -761,7 +693,7 @@ Item {
                         layer.effect: MultiEffect {
                             blurEnabled: true
                             blurMax: 64
-                            // Content-space radius, no zoom factor (see above).
+                            // Content-space radius (no zoom factor, as above).
                             blur: Math.min(1, Math.max(0, Number((modelData ?? {}).blur || 0) / 64))
                         }
                     }
@@ -769,10 +701,8 @@ Item {
             }
         }
 
-        // Stacked strokes as borders, bottom-first so index 0 paints
-        // topmost. Inside rides the clip edge (native border), center
-        // straddles it, outside grows past it. Gradient strokes fall
-        // back to their first stop in v1; entry opacity rides the item.
+        // Stacked strokes, bottom-first; inside rides the edge, center
+        // straddles, outside grows past. Gradients fall back to first stop.
         Repeater {
             model: shape.shapeType === "image" && !shape.useImageEffectPaint ? shape.enabledStrokes.slice().reverse() : []
 
@@ -796,9 +726,7 @@ Item {
         }
     }
 
-    // Effected images via the shared CPU painter (same code export
-    // calls, so inner bands match). Pads like EffectItem; flip mirrors
-    // about the shape center; background blur stays on the backdrop rig.
+    // Effected images via the shared CPU painter (pads like EffectItem).
     ImageEffectItem {
         id: imageEffectPaint
 
@@ -835,9 +763,7 @@ Item {
         }
     }
 
-    // Animated film grain over vectors and images (text confines to its
-    // glyphs just below). Seed reseeds every transport frame; amount
-    // scales dot alpha like the exporter.
+    // Film grain over vectors/images (text has its own glyph-masked copy).
     GrainOverlay {
         anchors.fill: parent
         visible: shape.hasGrain && shape.shapeType !== "text" && !shape.paintHidden && !shape.useImageEffectPaint
@@ -887,14 +813,9 @@ Item {
         }
     }
 
-    // Move state lives here so press/move/release stay consistent.
-    // lastGX/lastGY anchor the drag in global coords (stable while the
-    // item moves); remCX/remCY bank sub-screen-pixel motion in content
-    // units so not a pixel of travel is ever lost and only whole screen
-    // pixels move shapes (smooth at any zoom; the document snaps the
-    // resting values to whole pixels on release).
-    // `refused` marks a press on a locked shape: claimed (so the marquee
-    // below never starts) but never touching selection policy.
+    // Move state: global-anchored drag with sub-pixel banking (no travel
+    // lost; only whole screen pixels move shapes). `refused` claims
+    // locked-shape presses so the marquee never starts.
     property bool moving: false
     property bool dragged: false
     property bool refused: false
@@ -905,9 +826,8 @@ Item {
     property real remCX: 0
     property real remCY: 0
 
-    // Auto-size writeback: reports the content text size so the canvas
-    // can grow click-created boxes with content. Fixed boxes and the
-    // inline-editing item stay quiet (the editor measures instead).
+    // Auto-size writeback for click-created text boxes (fixed boxes and
+    // the inline editor stay quiet).
     function reportMeasure() {
         if (shape.shapeType !== "text" || !shape.autoSize || shape.editing)
             return;
@@ -916,7 +836,6 @@ Item {
         shape.measurePolicy(shape.uid, glyphs.contentWidth, glyphs.contentHeight);
     }
 
-    // Press/move/release entry points for the MouseArea above.
     function pressAt(x, y, modifiers) {
         var g = mouse.mapToGlobal(x, y);
         shape.moving = true;
@@ -951,7 +870,7 @@ Item {
         shape.lastGY = g.y;
         if (Math.hypot(g.x - shape.startGX, g.y - shape.startGY) >= 4)
             shape.dragged = true;
-        // Bank the fractional travel, forward only whole screen pixels.
+        // Bank fractional travel, forward whole screen pixels only.
         shape.remCX += rawX;
         shape.remCY += rawY;
         var scrX = shape.remCX * z, scrY = shape.remCY * z;
