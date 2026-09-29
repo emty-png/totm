@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Generic keyframe rows for keyframeable clips (custom from-to clips
-// plus mask reveals). Keys hold canonical per-preset values at
+// Generic keyframe rows for keyframeable clips (basic fade/slide/
+// scale/spin/type, custom from-to clips plus mask reveals). Keys hold canonical per-preset values at
 // clip-local t, so moving the target later leaves existing keys where
 // they were. One key stores but only 2+ drive interpolation; shorter
 // lists read as plain from-to, so old clips never change behavior.
@@ -14,9 +14,12 @@ ColumnLayout {
     required property var doc
     required property int clipId
 
+    // Key-graph opener (provided by the clip editor): opens the shared
+    // Animation-type popup scoped to one stored key.
+    property var graphKeyPolicy: null
+
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property string preset: section.clip ? String(section.clip.preset || "") : ""
-    readonly property var entryDefaults: DocCustomDefaults {}
     readonly property var keyList: section.copyKeys(section.clip ? section.clip.options || {} : {})
 
     spacing: 8
@@ -52,7 +55,18 @@ ColumnLayout {
                 Layout.fillWidth: true
                 options: section.easingOptions()
                 currentId: String((modelData.easing || {}).id || "easeOut")
-                onPicked: id => section.setKeyEasing(index, id)
+                onPicked: id => section.pickKeyEasing(index, id)
+            }
+
+            // Hold steps instead of easing and labels itself; the first
+            // key opens no span, so only later Hold keys label.
+            Text {
+                Layout.fillWidth: true
+                visible: index > 0 && String((modelData.easing || {}).id || "easeOut") === "hold"
+                text: qsTr("Hold — keeps the previous value, steps at the next key")
+                font.pixelSize: 11
+                elide: Text.ElideRight
+                color: AppTheme.muted
             }
         }
     }
@@ -77,6 +91,8 @@ ColumnLayout {
         return Math.round(Number(v) * 100) / 100;
     }
 
+    // Lightweight per-key value preview so keys stay distinguishable.
+    // Reads canonical fields only; unknown shapes fall back to "key".
     function keySummary(preset, v) {
         if (preset === "maskWipe" || preset === "maskIris") {
             var parts = [];
@@ -92,12 +108,32 @@ ColumnLayout {
                 parts.push(qsTr("inv"));
             return parts.length > 0 ? parts.join(" ") : qsTr("key");
         }
+        if (preset === "fade")
+            return qsTr("op %1").arg(section.round2(v.v));
+        if (preset === "slide") {
+            var s = qsTr("dx %1 dy %2").arg(section.round2(v.dx)).arg(section.round2(v.dy));
+            if (v.v !== undefined)
+                s += qsTr(" op %1").arg(section.round2(v.v));
+            return s;
+        }
+        if (preset === "grow" || preset === "shrink" || preset === "customScale")
+            return qsTr("× %1").arg(section.round2(v.s));
+        if (preset === "spin" || preset === "customRotate")
+            return qsTr("%1°").arg(section.round2(v.r));
+        if (preset === "movescale") {
+            var m = qsTr("dx %1 dy %2 × %3").arg(section.round2(v.dx)).arg(section.round2(v.dy)).arg(section.round2(v.s));
+            if (v.v !== undefined)
+                m += qsTr(" op %1").arg(section.round2(v.v));
+            return m;
+        }
+        if (preset === "type")
+            return qsTr("%1%").arg(Math.round(Number(v.frac || 0) * 100));
+        if (preset === "customHide")
+            return v.v === true ? qsTr("visible") : qsTr("hidden");
+        if (preset === "customFlip")
+            return (v.v === true ? qsTr("flipped") : qsTr("normal")) + (v.axis ? " " + String(v.axis) : "");
         if (preset === "customMove")
             return qsTr("dx %1 dy %2").arg(section.round2(v.dx !== undefined ? v.dx : v.x)).arg(section.round2(v.dy !== undefined ? v.dy : v.y));
-        if (preset === "customScale")
-            return qsTr("× %1").arg(section.round2(v.s));
-        if (preset === "customRotate")
-            return qsTr("%1°").arg(section.round2(v.r));
         if (preset === "customOpacity")
             return qsTr("op %1").arg(section.round2(v.v));
         if (preset === "customResize")
@@ -125,232 +161,13 @@ ColumnLayout {
         return qsTr("key");
     }
 
-    // First shape leaf under the clip target (groups animate per leaf;
-    // keys capture the first leaf so group clips still record), except
-    // group style clips, which capture the group's own stacks.
-    function targetLeaf() {
-        if (!section.doc || !section.clip)
-            return null;
-        var n = section.doc.findNode(section.clip.targetUid);
-        if (!n)
-            return null;
-        if (n.kind === "shape")
-            return n;
-        if (section.entryDefaults.isGroupStylePreset(section.preset))
-            return n;
-        var leaves = section.doc._leavesUnder(n);
-        return leaves.length > 0 ? leaves[0] : null;
-    }
-
-    function baseFor(leaf) {
-        if (!leaf)
-            return null;
-        var pb = section.doc && section.doc.anim ? section.doc.anim.playBase : null;
-        if (pb && pb[leaf.uid])
-            return pb[leaf.uid];
-        return leaf;
-    }
-
-    function stackEntry(list, idx) {
-        var arr = list || [];
-        var i = Math.min(32, Math.max(0, Math.round(Number(idx) || 0)));
-        return i < arr.length ? (arr[i] ?? {}) : {};
-    }
-
-    // Captures the live look at the playhead (sampled frame while
-    // previewing, base otherwise) as a canonical key value. Replaces
-    // any key within 1% of the same t.
+    // Captures the live look at the playhead on this clip (shared
+    // DocAnim path, undoable). Replaces any key within 1% of the
+    // same t.
     function addKey() {
-        var c = section.clip;
-        if (!c || !section.doc)
+        if (!section.doc)
             return;
-        if (!section.doc.anim.presets.isKeyframeable(section.preset))
-            return;
-        var leaf = section.targetLeaf();
-        if (!leaf)
-            return;
-        var t = (section.doc.anim.currentTime - c.t0) / Math.max(0.001, c.duration);
-        t = Math.round(Math.min(1, Math.max(0, t)) * 1000) / 1000;
-        var v = section.captureValue(section.preset, leaf, c.options || {});
-        if (!v)
-            return;
-        var kept = [];
-        var cur = section.keyList;
-        for (var i = 0; i < cur.length; i++) {
-            if (Math.abs(Number(cur[i].t) - t) > 0.01)
-                kept.push({
-                    t: cur[i].t,
-                    value: JSON.parse(JSON.stringify(cur[i].value || {})),
-                    easing: {
-                        id: (cur[i].easing || {}).id || "easeOut"
-                    }
-                });
-        }
-        kept.push({
-            t: t,
-            value: v,
-            easing: {
-                id: "easeOut"
-            }
-        });
-        section.setKeys(kept);
-    }
-
-    function captureValue(preset, leaf, opts) {
-        var base = section.baseFor(leaf);
-        if (!base)
-            return null;
-        if (preset === "maskWipe" || preset === "maskIris") {
-            return {
-                x: section.round2(leaf.x),
-                y: section.round2(leaf.y),
-                w: Math.max(0.01, section.round2(leaf.w)),
-                h: Math.max(0.01, section.round2(leaf.h)),
-                rotation: section.round2(leaf.rotation),
-                opacity: Math.min(1, Math.max(0, Number(leaf.opacity))),
-                feather: Math.max(0, Number(leaf.maskFeather) || 0),
-                invert: leaf.maskInverted === true
-            };
-        }
-        if (preset === "customMove") {
-            return {
-                dx: section.round2((Number(leaf.x) || 0) - (Number(base.x) || 0)),
-                dy: section.round2((Number(leaf.y) || 0) - (Number(base.y) || 0))
-            };
-        }
-        if (preset === "customScale") {
-            var bw = Number(base.w) || 0, lw = Number(leaf.w) || 0;
-            var bh = Number(base.h) || 0, lh = Number(leaf.h) || 0;
-            var s = bw > 0.001 ? lw / bw : (bh > 0.001 ? lh / bh : 1);
-            return {
-                s: Math.min(100, Math.max(0.001, section.round2(s)))
-            };
-        }
-        if (preset === "customRotate") {
-            return {
-                r: section.round2((Number(leaf.rotation) || 0) - (Number(base.rotation) || 0))
-            };
-        }
-        if (preset === "customOpacity") {
-            return {
-                v: Math.min(1, Math.max(0, Number(leaf.opacity)))
-            };
-        }
-        if (preset === "customResize") {
-            return {
-                w: Math.max(1, Math.round(Number(leaf.w) || 1)),
-                h: Math.max(1, Math.round(Number(leaf.h) || 1))
-            };
-        }
-        if (preset === "customCorner") {
-            return {
-                v: Math.max(0, section.round2(leaf.radius))
-            };
-        }
-        if (preset === "customFontSize") {
-            return {
-                v: Math.min(500, Math.max(1, Math.round(Number(leaf.fontSize) || 16)))
-            };
-        }
-        if (preset === "customFontWeight") {
-            return {
-                v: Math.min(1000, Math.max(1, Math.round(Number(leaf.fontWeight) || 400)))
-            };
-        }
-        if (preset === "customColor") {
-            var fi = Number(opts.fillIndex) || 0;
-            var fe = section.stackEntry(leaf.fills, fi);
-            return {
-                color: String(fe.color ?? "#000000"),
-                opacity: Math.min(1, Math.max(0, Number(fe.opacity ?? 1)))
-            };
-        }
-        if (preset === "customGradient") {
-            var gi = Number(opts.fillIndex) || 0;
-            var ge = section.stackEntry(leaf.fills, gi);
-            var gg = ge.gradient ?? {};
-            var stops = gg.stops ?? [];
-            return {
-                c1: String((stops[0] ?? {}).color ?? "#000000"),
-                c2: String((stops[1] ?? {}).color ?? "#ffffff"),
-                angle: section.round2(gg.angle ?? 90),
-                opacity: Math.min(1, Math.max(0, Number(ge.opacity ?? 1)))
-            };
-        }
-        if (preset === "customStroke") {
-            var si = Number(opts.strokeIndex) || 0;
-            var se = section.stackEntry(leaf.strokes, si);
-            var dash = (se.dash && typeof se.dash.length === "number") ? se.dash : [];
-            return {
-                width: Math.max(0, section.round2(se.width ?? 0)),
-                opacity: Math.min(1, Math.max(0, Number(se.opacity ?? 1))),
-                dash: Math.max(0, section.round2(dash.length > 0 ? dash[0] : 0)),
-                gap: Math.max(0, section.round2(dash.length > 1 ? dash[1] : 0)),
-                position: (se.position === "inside" || se.position === "outside") ? se.position : "center"
-            };
-        }
-        if (preset === "customStrokeColor") {
-            var sci = Number(opts.strokeIndex) || 0;
-            var sce = section.stackEntry(leaf.strokes, sci);
-            return {
-                color: String(sce.color ?? "#000000"),
-                opacity: Math.min(1, Math.max(0, Number(sce.opacity ?? 1)))
-            };
-        }
-        if (preset === "customStrokeGradient") {
-            var sgi = Number(opts.strokeIndex) || 0;
-            var sge = section.stackEntry(leaf.strokes, sgi);
-            var sgg = sge.gradient ?? {};
-            var sstops = sgg.stops ?? [];
-            var sdash = (sge.dash && typeof sge.dash.length === "number") ? sge.dash : [];
-            return {
-                c1: String((sstops[0] ?? {}).color ?? "#000000"),
-                c2: String((sstops[1] ?? {}).color ?? "#ffffff"),
-                angle: section.round2(sgg.angle ?? 90),
-                opacity: Math.min(1, Math.max(0, Number(sge.opacity ?? 1))),
-                width: Math.max(0, section.round2(sge.width ?? 0)),
-                dash: Math.max(0, section.round2(sdash.length > 0 ? sdash[0] : 0)),
-                gap: Math.max(0, section.round2(sdash.length > 1 ? sdash[1] : 0)),
-                position: (sge.position === "inside" || sge.position === "outside") ? sge.position : "center"
-            };
-        }
-        if (preset === "customShadow") {
-            var shi = Number(opts.shadowIndex) || 0;
-            var she = section.stackEntry(leaf.shadows, shi);
-            return {
-                color: String(she.color ?? "#80000000"),
-                x: section.round2(she.x ?? 0),
-                y: section.round2(she.y ?? 4),
-                blur: Math.max(0, section.round2(she.blur ?? 8)),
-                spread: Math.max(0, section.round2(she.spread ?? 0)),
-                inner: she.inner === true
-            };
-        }
-        if (preset === "customGlow") {
-            var gli = Number(opts.glowIndex) || 0;
-            var gle = section.stackEntry(leaf.glows, gli);
-            return {
-                color: String(gle.color ?? "#cc00ffff"),
-                blur: Math.max(0, section.round2(gle.blur ?? 16)),
-                spread: Math.max(0, section.round2(gle.spread ?? 4)),
-                inner: gle.inner === true
-            };
-        }
-        if (preset === "customLayerBlur" || preset === "customBackgroundBlur") {
-            var b = preset === "customLayerBlur" ? (leaf.layerBlur ?? {}) : (leaf.backgroundBlur ?? {});
-            return {
-                radius: Math.max(0, section.round2(b.radius ?? 0)),
-                opacity: Math.min(1, Math.max(0, Number(b.opacity ?? (preset === "customLayerBlur" ? 1 : 0.7))))
-            };
-        }
-        if (preset === "customGrain") {
-            var gn = leaf.grain ?? {};
-            return {
-                amount: Math.min(1, Math.max(0, Number(gn.amount ?? 0))),
-                size: Math.min(10, Math.max(1, section.round2(gn.size ?? 2)))
-            };
-        }
-        return null;
+        section.doc.anim.addKeyAtPlayhead(section.clipId);
     }
 
     function deleteKey(index) {
@@ -362,20 +179,55 @@ ColumnLayout {
             kept.push({
                 t: cur[i].t,
                 value: JSON.parse(JSON.stringify(cur[i].value || {})),
-                easing: {
-                    id: (cur[i].easing || {}).id || "easeOut"
-                }
+                easing: section.copyEasing(cur[i].easing)
             });
         }
         section.setKeys(kept);
     }
 
+    // Easing deep-copy for key rebuilds: custom handles survive deletes
+    // and dropdown edits instead of resetting to the named default.
+    function copyEasing(ez) {
+        var e = ez || {};
+        return {
+            id: e.id || "easeOut",
+            bezier: e.bezier ? e.bezier.slice() : e.bezier
+        };
+    }
+
     // Named easing presets for the per-key dropdowns (bezier rides
-    // along untouched; the samplers use exact curves for named ids).
+    // along untouched; the samplers use exact curves for named ids):
+    // Hold freezes the segment, Custom opens the graph popup so the
+    // user draws the curve there instead of an inline strip.
     function easingOptions() {
         if (!section.doc)
             return [];
-        return section.doc.anim.presets.easingPresets();
+        var opts = section.doc.anim.presets.easingPresets().slice();
+        opts.push({
+            id: "hold",
+            name: qsTr("Hold")
+        });
+        opts.push({
+            id: "custom",
+            name: qsTr("Custom")
+        });
+        return opts;
+    }
+
+    // Shared Animation-type popup scoped to one stored key
+    // (dropdown picks and handle drags land on the key's easing).
+    function openKeyGraph(index) {
+        if (section.graphKeyPolicy)
+            section.graphKeyPolicy(index);
+    }
+
+    // Dropdown pick: Custom stores the custom id and opens the shared
+    // Animation-type popup scoped to the key; every other pick commits
+    // in place like before.
+    function pickKeyEasing(index, id) {
+        section.setKeyEasing(index, id);
+        if (String(id || "") === "custom")
+            section.openKeyGraph(index);
     }
 
     function setKeyEasing(index, id) {
@@ -384,12 +236,13 @@ ColumnLayout {
             return;
         var kept = [];
         for (var i = 0; i < cur.length; i++) {
+            var keptEasing = section.copyEasing(cur[i].easing);
+            if (i === index)
+                keptEasing.id = String(id || "easeOut");
             kept.push({
                 t: cur[i].t,
                 value: JSON.parse(JSON.stringify(cur[i].value || {})),
-                easing: {
-                    id: i === index ? String(id || "easeOut") : ((cur[i].easing || {}).id || "easeOut")
-                }
+                easing: keptEasing
             });
         }
         section.setKeys(kept);

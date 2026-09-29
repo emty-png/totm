@@ -1,98 +1,18 @@
 import QtQuick
+import Totm
 
 // Easing table for animation sampling: named easings plus custom
-// cubic-bezier. Cubics match CSS ease-in/out/in-out; slowDown is
-// bezier(0.22, 1, 0.36, 1). The solver is Newton plus a bisection
-// fallback. Progress is 0-1, matching the C++ video renderer
-// (AnimSampler), which ports this file.
+// cubic-bezier. Delegates to AnimBridge (the Anims:: core shared with
+// video export), so preview and export ease identically by
+// construction instead of a ported twin.
 QtObject {
     id: easing
 
     // Easing ids: linear | easeIn | easeOut | easeInOut | slowDown |
     // backOut | backInOut | bounceOut | elasticOut | custom
-    // (cubic-bezier [x1, y1, x2, y2]).
+    // (cubic-bezier [x1, y1, x2, y2]). Segment id "hold" never reaches
+    // here: keyed interpolation intercepts it first (constant).
     function easeValue(id, bezier, t) {
-        var x = Math.min(1, Math.max(0, t));
-        if (id === "linear")
-            return x;
-        if (id === "easeIn")
-            return x * x * x;
-        if (id === "easeOut") {
-            var u = 1 - x;
-            return 1 - u * u * u;
-        }
-        if (id === "easeInOut")
-            return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
-        if (id === "backOut") {
-            var c1 = 1.70158;
-            var c3 = c1 + 1;
-            return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
-        }
-        if (id === "backInOut") {
-            var c2 = 1.70158 * 1.525;
-            return x < 0.5 ? (Math.pow(2 * x, 2) * ((c2 + 1) * 2 * x - c2)) / 2 : (Math.pow(2 * x - 2, 2) * ((c2 + 1) * (x * 2 - 2) + c2) + 2) / 2;
-        }
-        if (id === "bounceOut") {
-            var n1 = 7.5625;
-            var d1 = 2.75;
-            if (x < 1 / d1)
-                return n1 * x * x;
-            if (x < 2 / d1)
-                return n1 * (x -= 1.5 / d1) * x + 0.75;
-            if (x < 2.5 / d1)
-                return n1 * (x -= 2.25 / d1) * x + 0.9375;
-            return n1 * (x -= 2.625 / d1) * x + 0.984375;
-        }
-        if (id === "elasticOut") {
-            if (x <= 0)
-                return 0;
-            if (x >= 1)
-                return 1;
-            var c4 = (2 * Math.PI) / 3;
-            return Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
-        }
-        if (id === "custom") {
-            var b = bezier || [0.25, 0.1, 0.25, 1];
-            return easing.cubicBezier(b[0], b[1], b[2], b[3], x);
-        }
-        if (id === "slowDown")
-            return easing.cubicBezier(0.22, 1, 0.36, 1, x);
-        return x;
-    }
-
-    function cubicBezier(x1, y1, x2, y2, x) {
-        if (x <= 0)
-            return 0;
-        if (x >= 1)
-            return 1;
-        var s = x, converged = false;
-        for (var i = 0; i < 8; i++) {
-            var u = 1 - s;
-            var xs = 3 * u * u * s * x1 + 3 * u * s * s * x2 + s * s * s;
-            var dx = 3 * u * u * x1 + 6 * u * s * (x2 - x1) + 3 * s * s * (1 - x2);
-            if (Math.abs(xs - x) < 1e-6) {
-                converged = true;
-                break;
-            }
-            if (Math.abs(dx) < 1e-6 || (s = s - (xs - x) / dx) < 0 || s > 1)
-                break;
-        }
-        if (!converged) {
-            var lo = 0, hi = 1;
-            s = Math.min(1, Math.max(0, s));
-            for (var j = 0; j < 24; j++) {
-                var v = 1 - s;
-                var xsv = 3 * v * v * s * x1 + 3 * v * s * s * x2 + s * s * s;
-                if (Math.abs(xsv - x) < 1e-6)
-                    break;
-                if (xsv < x)
-                    lo = s;
-                else
-                    hi = s;
-                s = (lo + hi) / 2;
-            }
-        }
-        var w = 1 - s;
-        return 3 * w * w * s * y1 + 3 * w * s * s * y2 + s * s * s;
+        return AnimBridge.easeValue(id, bezier || [], t);
     }
 }

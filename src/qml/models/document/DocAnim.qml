@@ -20,6 +20,16 @@ QtObject {
     // live; lane delegates never bind it, so no model rebuilds mid-drag.
     property int clipRev: 0
 
+    // Auto-key arm: while true, selection edits (canvas moves/scales,
+    // panel commits, rotate) capture keys at the playhead on
+    // keyframeable clips covering the selection. Toggled from the
+    // timeline transport; session-only like selection.
+    property bool recordArmed: false
+
+    function toggleRecord() {
+        anim.recordArmed = !anim.recordArmed;
+    }
+
     // Playback transport owns play state, playhead and pre-play values.
     // Aliases keep every reader (timeline, galleries, canvas, history)
     // working unchanged, including direct writes.
@@ -64,7 +74,7 @@ QtObject {
     // duration unless given. Stagger offsets each next target by that
     // many seconds (cascades), clamped inside the composition.
     // Returns applied clip ids.
-    function applyPreset(presetId, targetUids, t0, duration, mode, options, easing, loop, stagger) {
+    function applyPreset(presetId, targetUids, t0, duration, mode, options, easing, stagger) {
         if (anim.presets.presetIds().indexOf(presetId) < 0)
             return [];
         var valid = [];
@@ -82,7 +92,7 @@ QtObject {
         var list = anim.clips.slice();
         for (var j = 0; j < valid.length; j++) {
             var nt0 = Math.min(t0 + j * st, Math.max(0, comp - 0.1));
-            var clip = anim.presets.buildClip(presetId, anim.nextClipId++, valid[j], nt0, duration, mode, options, easing, loop);
+            var clip = anim.presets.buildClip(presetId, anim.nextClipId++, valid[j], nt0, duration, mode, options, easing);
             list.push(clip);
             made.push(clip.id);
         }
@@ -107,7 +117,7 @@ QtObject {
             merged[k] = old.options[k];
         for (var p in keys)
             merged[p] = keys[p];
-        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, merged, old.easing, old.loop);
+        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, merged, old.easing);
         doc.history.checkpoint();
         var list = anim.clips.slice();
         list[at] = fixed;
@@ -117,8 +127,8 @@ QtObject {
     }
 
     // Converts a clip to another preset, reseeding options from the live
-    // target so the new clip starts jump-free. Timing, mode, easing and
-    // loop carry over; one undo entry. Used by the style editor to
+    // target so the new clip starts jump-free. Timing, mode and easing
+    // carry over; one undo entry. Used by the style editor to
     // auto-swap solid color clips whose target top entry is linear.
     function convertClipPreset(id, newPreset) {
         var at = -1;
@@ -136,7 +146,7 @@ QtObject {
         var node = doc.findNode(old.targetUid);
         var tops = node ? [node] : [];
         var opts = anim.customDefaults.seededOptions(anim.presets, doc, tops, newPreset);
-        var fixed = anim.presets.buildClip(newPreset, old.id, old.targetUid, old.t0, old.duration, old.mode, opts, old.easing, old.loop);
+        var fixed = anim.presets.buildClip(newPreset, old.id, old.targetUid, old.t0, old.duration, old.mode, opts, old.easing);
         doc.history.checkpoint();
         var list = anim.clips.slice();
         list[at] = fixed;
@@ -159,7 +169,7 @@ QtObject {
         nd = Math.min(nd, Math.max(0.1, anim.duration - nt0));
         if (isNaN(nt0) || isNaN(nd) || (nt0 === old.t0 && nd === old.duration))
             return false;
-        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, nt0, nd, old.mode, old.options, old.easing, old.loop);
+        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, nt0, nd, old.mode, old.options, old.easing);
         doc.history.checkpoint();
         var list = anim.clips.slice();
         list[at] = fixed;
@@ -227,6 +237,31 @@ QtObject {
         return true;
     }
 
+    // Silent in-place key easing write for curve-strip drags: no
+    // checkpoint, no touch, mirroring nudgeKey. The press-time begin()
+    // holds the undo image; release touches once and ends for a single
+    // entry. Always stores id "custom" with the dragged handles.
+    function nudgeKeyBezier(id, keyIndex, bezier) {
+        var at = -1;
+        for (var i = 0; i < anim.clips.length; i++) {
+            if (anim.clips[i].id === id)
+                at = i;
+        }
+        if (at < 0)
+            return false;
+        var c = anim.clips[at];
+        var keys = c.options ? c.options.keys : null;
+        if (!keys || typeof keys.length !== "number" || keyIndex < 0 || keyIndex >= keys.length)
+            return false;
+        var b = bezier || [];
+        keys[keyIndex].easing = {
+            id: "custom",
+            bezier: [Number(b[0]) || 0, Number(b[1]) || 0, Number(b[2]) || 0, Number(b[3]) || 0]
+        };
+        anim.clipRev++;
+        return true;
+    }
+
     function setClipEasing(id, easing) {
         var at = -1;
         for (var i = 0; i < anim.clips.length; i++) {
@@ -236,7 +271,7 @@ QtObject {
         if (at < 0)
             return false;
         var old = anim.clips[at];
-        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, old.options, easing, old.loop);
+        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, old.options, easing);
         doc.history.checkpoint();
         var list = anim.clips.slice();
         list[at] = fixed;
@@ -257,30 +292,7 @@ QtObject {
         var nm = mode === "out" ? "out" : "in";
         if (nm === old.mode)
             return false;
-        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, nm, old.options, old.easing, old.loop);
-        doc.history.checkpoint();
-        var list = anim.clips.slice();
-        list[at] = fixed;
-        anim.clips = list;
-        doc.touch();
-        return true;
-    }
-
-    // Loop mode is clip-level like mode (not in options): rebuilds the
-    // clip so stored data stays normalized, one undo entry per change.
-    function setClipLoop(id, loop) {
-        var at = -1;
-        for (var i = 0; i < anim.clips.length; i++) {
-            if (anim.clips[i].id === id)
-                at = i;
-        }
-        if (at < 0)
-            return false;
-        var old = anim.clips[at];
-        var nl = anim.presets.normalizeLoop(loop);
-        if (nl === anim.presets.normalizeLoop(old.loop))
-            return false;
-        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, old.options, old.easing, nl);
+        var fixed = anim.presets.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, nm, old.options, old.easing);
         doc.history.checkpoint();
         var list = anim.clips.slice();
         list[at] = fixed;
@@ -343,7 +355,7 @@ QtObject {
         for (var m = 0; m < src.length; m++) {
             var s = src[m];
             var nt0 = Math.min(s.t0 - earliest + base, Math.max(0, comp - 0.1));
-            var copy = anim.presets.buildClip(s.preset, anim.nextClipId++, s.targetUid, nt0, s.duration, s.mode, copyMap(s.options), s.easing, s.loop);
+            var copy = anim.presets.buildClip(s.preset, anim.nextClipId++, s.targetUid, nt0, s.duration, s.mode, copyMap(s.options), s.easing);
             if (!doc.findNode(copy.targetUid))
                 continue;
             out.push(copy);
@@ -383,7 +395,6 @@ QtObject {
                 duration: s.duration,
                 dt: Math.max(0, s.t0 - earliest),
                 mode: s.mode,
-                loop: anim.presets.normalizeLoop(s.loop),
                 options: copyMap(s.options),
                 easing: {
                     id: ez.id,
@@ -432,7 +443,7 @@ QtObject {
                 var clip = anim.presets.buildClip(s.preset, anim.nextClipId++, valid[t], nt0, s.duration, s.mode, copyMap(s.options), {
                     id: ez.id,
                     bezier: ez.bezier ? ez.bezier.slice() : ez.bezier
-                }, s.loop);
+                });
                 if (!doc.findNode(clip.targetUid))
                     continue;
                 out.push(clip);
@@ -473,7 +484,7 @@ QtObject {
                 out.push(c);
                 continue;
             }
-            out.push(anim.presets.buildClip(c.preset, c.id, c.targetUid, nt0, nd, c.mode, c.options, c.easing, c.loop));
+            out.push(anim.presets.buildClip(c.preset, c.id, c.targetUid, nt0, nd, c.mode, c.options, c.easing));
         }
         return out;
     }
@@ -521,6 +532,416 @@ QtObject {
         anim.sampler.applySample(doc, map);
     }
 
+    function round2(v) {
+        return Math.round(Number(v) * 100) / 100;
+    }
+
+    function stackEntry(list, idx) {
+        var arr = list || [];
+        var i = Math.min(32, Math.max(0, Math.round(Number(idx) || 0)));
+        return i < arr.length ? (arr[i] ?? {}) : {};
+    }
+
+    function baseFor(leaf) {
+        if (!leaf)
+            return null;
+        var pb = anim.playBase;
+        if (pb && pb[leaf.uid])
+            return pb[leaf.uid];
+        return leaf;
+    }
+
+    // First shape leaf under the clip target (groups animate per leaf;
+    // keys capture the first leaf so group clips still record), except
+    // group style clips, which capture the group's own stacks.
+    function captureLeafFor(c) {
+        if (!c)
+            return null;
+        var n = anim.doc.findNode(c.targetUid);
+        if (!n)
+            return null;
+        if (n.kind === "shape")
+            return n;
+        if (anim.customDefaults.isGroupStylePreset(c.preset))
+            return n;
+        var leaves = anim.doc._leavesUnder(n);
+        return leaves.length > 0 ? leaves[0] : null;
+    }
+
+    // Captures the live look at the playhead (sampled frame while
+    // previewing, base otherwise) as a canonical key value for one
+    // keyframeable preset. Shared by manual + auto keying so both
+    // record identical values.
+    function captureKeyValue(preset, leaf, opts) {
+        var base = anim.baseFor(leaf);
+        if (!base)
+            return null;
+        if (preset === "maskWipe" || preset === "maskIris") {
+            return {
+                x: anim.round2(leaf.x),
+                y: anim.round2(leaf.y),
+                w: Math.max(0.01, anim.round2(leaf.w)),
+                h: Math.max(0.01, anim.round2(leaf.h)),
+                rotation: anim.round2(leaf.rotation),
+                opacity: Math.min(1, Math.max(0, Number(leaf.opacity))),
+                feather: Math.max(0, Number(leaf.maskFeather) || 0),
+                invert: leaf.maskInverted === true
+            };
+        }
+        if (preset === "fade") {
+            var bop = Number(base.opacity);
+            var lop = Number(leaf.opacity);
+            return {
+                v: Math.min(1, Math.max(0, anim.round2(bop > 0.001 ? lop / bop : lop)))
+            };
+        }
+        if (preset === "slide") {
+            var sv = {
+                dx: anim.round2((Number(leaf.x) || 0) - (Number(base.x) || 0)),
+                dy: anim.round2((Number(leaf.y) || 0) - (Number(base.y) || 0))
+            };
+            if (opts.fade !== false) {
+                var sbop = Number(base.opacity);
+                var slop = Number(leaf.opacity);
+                sv.v = Math.min(1, Math.max(0, anim.round2(sbop > 0.001 ? slop / sbop : slop)));
+            }
+            return sv;
+        }
+        if (preset === "grow" || preset === "shrink") {
+            var gbw = Number(base.w) || 0, glw = Number(leaf.w) || 0;
+            var gbh = Number(base.h) || 0, glh = Number(leaf.h) || 0;
+            var gs = gbw > 0.001 ? glw / gbw : (gbh > 0.001 ? glh / gbh : 1);
+            return {
+                s: Math.min(100, Math.max(0.001, anim.round2(gs)))
+            };
+        }
+        if (preset === "spin") {
+            return {
+                r: anim.round2((Number(leaf.rotation) || 0) - (Number(base.rotation) || 0))
+            };
+        }
+        if (preset === "movescale") {
+            var mbw = Number(base.w) || 0, mlw = Number(leaf.w) || 0;
+            var mbh = Number(base.h) || 0, mlh = Number(leaf.h) || 0;
+            var ms = mbw > 0.001 ? mlw / mbw : (mbh > 0.001 ? mlh / mbh : 1);
+            return {
+                dx: anim.round2((Number(leaf.x) || 0) - (Number(base.x) || 0)),
+                dy: anim.round2((Number(leaf.y) || 0) - (Number(base.y) || 0)),
+                s: Math.min(100, Math.max(0.001, anim.round2(ms)))
+            };
+        }
+        if (preset === "type") {
+            var full = String(base.textContent !== undefined ? base.textContent : "");
+            var norm = full.split("\r\n").join("\n").split("\r").join("\n");
+            var live = String(leaf.textContent !== undefined ? leaf.textContent : "");
+            if ((opts.cursor === true) && live.charAt(live.length - 1) === "|")
+                live = live.substring(0, live.length - 1);
+            var unit = opts.unit === "words" ? "words" : opts.unit === "lines" ? "lines" : "letters";
+            var sep = unit === "words" ? " " : "\n";
+            // Words split on U+0020 keeping empties (Qt KeepEmptyParts in
+            // C++), lines on LF, so preview and export reveal the same
+            // chunks even with double/multiple spaces.
+            var total = unit === "letters" ? norm.length : norm.split(sep).length;
+            if (total <= 0)
+                return {
+                    frac: 0
+                };
+            var shown = unit === "letters" ? live.split("\r\n").join("\n").split("\r").join("\n").length : (live === "" ? 0 : live.split(sep).length);
+            return {
+                frac: Math.min(1, Math.max(0, anim.round2(shown / total)))
+            };
+        }
+        if (preset === "customHide") {
+            return {
+                v: leaf.visible !== false
+            };
+        }
+        if (preset === "customFlip") {
+            var axis = (opts.axis || "h") === "v" ? "flipV" : "flipH";
+            return {
+                v: leaf[axis] === true,
+                axis: (opts.axis || "h") === "v" ? "v" : "h"
+            };
+        }
+        if (preset === "customMove") {
+            return {
+                dx: anim.round2((Number(leaf.x) || 0) - (Number(base.x) || 0)),
+                dy: anim.round2((Number(leaf.y) || 0) - (Number(base.y) || 0))
+            };
+        }
+        if (preset === "customScale") {
+            var bw = Number(base.w) || 0, lw = Number(leaf.w) || 0;
+            var bh = Number(base.h) || 0, lh = Number(leaf.h) || 0;
+            var s = bw > 0.001 ? lw / bw : (bh > 0.001 ? lh / bh : 1);
+            return {
+                s: Math.min(100, Math.max(0.001, anim.round2(s)))
+            };
+        }
+        if (preset === "customRotate") {
+            return {
+                r: anim.round2((Number(leaf.rotation) || 0) - (Number(base.rotation) || 0))
+            };
+        }
+        if (preset === "customOpacity") {
+            return {
+                v: Math.min(1, Math.max(0, Number(leaf.opacity)))
+            };
+        }
+        if (preset === "customResize") {
+            return {
+                w: Math.max(1, Math.round(Number(leaf.w) || 1)),
+                h: Math.max(1, Math.round(Number(leaf.h) || 1))
+            };
+        }
+        if (preset === "customCorner") {
+            return {
+                v: Math.max(0, anim.round2(leaf.radius))
+            };
+        }
+        if (preset === "customFontSize") {
+            return {
+                v: Math.min(500, Math.max(1, Math.round(Number(leaf.fontSize) || 16)))
+            };
+        }
+        if (preset === "customFontWeight") {
+            return {
+                v: Math.min(1000, Math.max(1, Math.round(Number(leaf.fontWeight) || 400)))
+            };
+        }
+        if (preset === "customColor") {
+            var fi = Number(opts.fillIndex) || 0;
+            var fe = anim.stackEntry(leaf.fills, fi);
+            return {
+                color: String(fe.color ?? "#000000"),
+                opacity: Math.min(1, Math.max(0, Number(fe.opacity ?? 1)))
+            };
+        }
+        if (preset === "customGradient") {
+            var gi = Number(opts.fillIndex) || 0;
+            var ge = anim.stackEntry(leaf.fills, gi);
+            var gg = ge.gradient ?? {};
+            var stops = gg.stops ?? [];
+            return {
+                c1: String((stops[0] ?? {}).color ?? "#000000"),
+                c2: String((stops[1] ?? {}).color ?? "#ffffff"),
+                angle: anim.round2(gg.angle ?? 90),
+                opacity: Math.min(1, Math.max(0, Number(ge.opacity ?? 1)))
+            };
+        }
+        if (preset === "customStroke") {
+            var si = Number(opts.strokeIndex) || 0;
+            var se = anim.stackEntry(leaf.strokes, si);
+            var dash = (se.dash && typeof se.dash.length === "number") ? se.dash : [];
+            return {
+                width: Math.max(0, anim.round2(se.width ?? 0)),
+                opacity: Math.min(1, Math.max(0, Number(se.opacity ?? 1))),
+                dash: Math.max(0, anim.round2(dash.length > 0 ? dash[0] : 0)),
+                gap: Math.max(0, anim.round2(dash.length > 1 ? dash[1] : 0)),
+                position: (se.position === "inside" || se.position === "outside") ? se.position : "center"
+            };
+        }
+        if (preset === "customStrokeColor") {
+            var sci = Number(opts.strokeIndex) || 0;
+            var sce = anim.stackEntry(leaf.strokes, sci);
+            return {
+                color: String(sce.color ?? "#000000"),
+                opacity: Math.min(1, Math.max(0, Number(sce.opacity ?? 1)))
+            };
+        }
+        if (preset === "customStrokeGradient") {
+            var sgi = Number(opts.strokeIndex) || 0;
+            var sge = anim.stackEntry(leaf.strokes, sgi);
+            var sgg = sge.gradient ?? {};
+            var sstops = sgg.stops ?? [];
+            var sdash = (sge.dash && typeof sge.dash.length === "number") ? sge.dash : [];
+            return {
+                c1: String((sstops[0] ?? {}).color ?? "#000000"),
+                c2: String((sstops[1] ?? {}).color ?? "#ffffff"),
+                angle: anim.round2(sgg.angle ?? 90),
+                opacity: Math.min(1, Math.max(0, Number(sge.opacity ?? 1))),
+                width: Math.max(0, anim.round2(sge.width ?? 0)),
+                dash: Math.max(0, anim.round2(sdash.length > 0 ? sdash[0] : 0)),
+                gap: Math.max(0, anim.round2(sdash.length > 1 ? sdash[1] : 0)),
+                position: (sge.position === "inside" || sge.position === "outside") ? sge.position : "center"
+            };
+        }
+        if (preset === "customShadow") {
+            var shi = Number(opts.shadowIndex) || 0;
+            var she = anim.stackEntry(leaf.shadows, shi);
+            return {
+                color: String(she.color ?? "#80000000"),
+                x: anim.round2(she.x ?? 0),
+                y: anim.round2(she.y ?? 4),
+                blur: Math.max(0, anim.round2(she.blur ?? 8)),
+                spread: Math.max(0, anim.round2(she.spread ?? 0)),
+                inner: she.inner === true
+            };
+        }
+        if (preset === "customGlow") {
+            var gli = Number(opts.glowIndex) || 0;
+            var gle = anim.stackEntry(leaf.glows, gli);
+            return {
+                color: String(gle.color ?? "#cc00ffff"),
+                blur: Math.max(0, anim.round2(gle.blur ?? 16)),
+                spread: Math.max(0, anim.round2(gle.spread ?? 4)),
+                inner: gle.inner === true
+            };
+        }
+        if (preset === "customLayerBlur" || preset === "customBackgroundBlur") {
+            var b = preset === "customLayerBlur" ? (leaf.layerBlur ?? {}) : (leaf.backgroundBlur ?? {});
+            return {
+                radius: Math.max(0, anim.round2(b.radius ?? 0)),
+                opacity: Math.min(1, Math.max(0, Number(b.opacity ?? (preset === "customLayerBlur" ? 1 : 0.7))))
+            };
+        }
+        if (preset === "customGrain") {
+            var gn = leaf.grain ?? {};
+            return {
+                amount: Math.min(1, Math.max(0, Number(gn.amount ?? 0))),
+                size: Math.min(10, Math.max(1, anim.round2(gn.size ?? 2)))
+            };
+        }
+        return null;
+    }
+
+    // Manual key at the playhead: captures the live look, replaces any
+    // key within 1% of the same t, commits once (undoable). Custom
+    // bezier rides along untouched.
+    function addKeyAtPlayhead(clipId) {
+        var c = anim.clipById(clipId);
+        if (!c || !anim.presets.isKeyframeable(c.preset))
+            return false;
+        var leaf = anim.captureLeafFor(c);
+        if (!leaf)
+            return false;
+        var t = (anim.currentTime - c.t0) / Math.max(0.001, c.duration);
+        t = Math.round(Math.min(1, Math.max(0, t)) * 1000) / 1000;
+        var v = anim.captureKeyValue(c.preset, leaf, c.options || {});
+        if (!v)
+            return false;
+        var kept = [];
+        var cur = (c.options && c.options.keys) || [];
+        var replacedEasing = null;
+        for (var i = 0; i < cur.length; i++) {
+            if (Math.abs(Number(cur[i].t) - t) > 0.01) {
+                var ke = (cur[i].easing || {});
+                kept.push({
+                    t: cur[i].t,
+                    value: JSON.parse(JSON.stringify(cur[i].value || {})),
+                    easing: {
+                        id: ke.id || "easeOut",
+                        bezier: ke.bezier ? ke.bezier.slice() : ke.bezier
+                    }
+                });
+            } else if (!replacedEasing) {
+                var re = (cur[i].easing || {});
+                replacedEasing = {
+                    id: re.id || "easeOut",
+                    bezier: re.bezier ? re.bezier.slice() : re.bezier
+                };
+            }
+        }
+        kept.push({
+            t: t,
+            value: v,
+            easing: replacedEasing || {
+                id: "easeOut"
+            }
+        });
+        return anim.setClipOptions(clipId, {
+            keys: kept
+        });
+    }
+
+    // Auto-key: captures the selection's live look at the playhead on
+    // every keyframeable clip covering it. Silent in-place upserts (no
+    // checkpoint, no touch): the outer gesture transaction — or the
+    // wrapper's pre-checkpoint for discrete commits — owns the single
+    // undo entry. Bumps clipRev so panels follow, touches for preview
+    // refresh. Times past a clip hold its end (local t clamps to 1);
+    // times before a clip stay silent. No-op unless record is armed.
+    function autocapture() {
+        if (!anim.recordArmed)
+            return false;
+        var t = anim.currentTime;
+        var sel = {};
+        var tops = anim.doc.selectedTops();
+        for (var s = 0; s < tops.length; s++) {
+            var top = tops[s];
+            if (top.kind === "shape") {
+                sel[top.uid] = true;
+            } else {
+                var under = anim.doc._leavesUnder(top);
+                for (var u = 0; u < under.length; u++)
+                    sel[under[u].uid] = true;
+            }
+        }
+        var done = false;
+        for (var i = 0; i < anim.clips.length; i++) {
+            var c = anim.clips[i];
+            if (!anim.presets.isKeyframeable(c.preset))
+                continue;
+            if (t < c.t0)
+                continue;
+            var target = anim.doc.findNode(c.targetUid);
+            if (!target)
+                continue;
+            var tleaves = target.kind === "group" ? anim.doc._leavesUnder(target) : [target];
+            var hit = false;
+            for (var j = 0; j < tleaves.length; j++) {
+                if (sel[tleaves[j].uid]) {
+                    hit = true;
+                    break;
+                }
+            }
+            if (!hit)
+                continue;
+            var dur = Math.max(0.001, c.duration);
+            var lt = Math.round(Math.min(1, Math.max(0, (t - c.t0) / dur)) * 1000) / 1000;
+            var leaf = anim.captureLeafFor(c);
+            if (!leaf)
+                continue;
+            var v = anim.captureKeyValue(c.preset, leaf, c.options || {});
+            if (!v)
+                continue;
+            if (!c.options)
+                c.options = {};
+            var next = [];
+            var raw = (c.options && c.options.keys) || [];
+            var carriedEasing = null;
+            for (var k = 0; k < raw.length; k++) {
+                if (Math.abs(Number(raw[k].t) - lt) > 0.01)
+                    next.push(raw[k]);
+                else if (!carriedEasing) {
+                    var ce = (raw[k].easing || {});
+                    carriedEasing = {
+                        id: ce.id || "easeOut",
+                        bezier: ce.bezier ? ce.bezier.slice() : ce.bezier
+                    };
+                }
+            }
+            next.push({
+                t: lt,
+                value: v,
+                easing: carriedEasing || {
+                    id: "easeOut"
+                }
+            });
+            var norm = anim.presets.normalizeKeysFor(c.preset, {
+                keys: next
+            });
+            if (norm !== undefined)
+                c.options.keys = norm;
+            else
+                c.options.keys = next;
+            anim.clipRev++;
+            done = true;
+        }
+        if (done)
+            anim.doc.touch();
+        return done;
+    }
+
     // Transport pass-throughs (state + clockwork live in DocTransport).
     function play() {
         transportState.play();
@@ -556,7 +977,6 @@ QtObject {
                 t0: c.t0,
                 duration: c.duration,
                 mode: c.mode,
-                loop: anim.presets.normalizeLoop(c.loop),
                 options: copyMap(c.options),
                 easing: {
                     id: ez.id,
@@ -623,7 +1043,14 @@ QtObject {
         var dur = s.duration > 0 ? Math.min(1800, s.duration) : 4.0;
         anim.duration = dur;
         // Silent migration: clips staged under older rules pull inside.
-        anim.clips = anim.fitClipsTo(dur, s.clips || []);
+        // Stale `loop` fields are dropped eagerly (sampler ignores them;
+        // snapshot would strip on next save anyway).
+        var fitted = anim.fitClipsTo(dur, s.clips || []);
+        for (var fi = 0; fi < fitted.length; fi++) {
+            if (fitted[fi] && fitted[fi].loop !== undefined)
+                delete fitted[fi].loop;
+        }
+        anim.clips = fitted;
         var top = 1;
         for (var i = 0; i < anim.clips.length; i++) {
             if (typeof anim.clips[i].id === "number" && anim.clips[i].id >= top)

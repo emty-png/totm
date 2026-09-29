@@ -83,20 +83,86 @@ QtObject {
     }
 
     // Stepped presets render as one diamond at t0 with a locked 0.1s
-    // duration (see buildClip), never a span bar.
+    // duration (see buildClip), never a span bar. Only appear now:
+    // hide/flip outgrew the lock once keys could spread across a span.
     function isStepped(presetId) {
-        return presetId === "appear" || presetId === "customHide" || presetId === "customFlip";
+        return presetId === "appear";
     }
 
-    // Keyframeable presets: custom from-to clips plus mask reveals.
-    // Stepped clips (appear/hide/flip), path clips (own pts geometry)
-    // and non-custom presets stay from-to only.
+    // Keyframeable presets: custom from-to clips, mask reveals and
+    // the basic transform/fade/type presets, plus hide/flip (booleans
+    // step within their segment like every other bool key). Stepped
+    // appear, procedural twist and path clips (own pts geometry) stay
+    // from-to only: twist amplitude is not observable in the live look
+    // so keys could never capture it.
     function isKeyframeable(presetId) {
         if (presetId === "maskWipe" || presetId === "maskIris")
             return true;
+        if (presetId === "fade" || presetId === "slide" || presetId === "grow" || presetId === "shrink" || presetId === "spin" || presetId === "movescale" || presetId === "type")
+            return true;
         if (!isCustom(presetId))
             return false;
-        return presetId !== "customHide" && presetId !== "customFlip" && presetId !== "customPath";
+        return presetId !== "customPath";
+    }
+
+    // Dopesheet channels per preset: property rows an expanded timeline
+    // lane shows. Only keyframeable presets contribute; a stored key
+    // reads as one diamond on every channel row of its clip (keys are
+    // per-clip value snapshots, so retiming touches the whole key).
+    function presetChannels(presetId) {
+        if (!isKeyframeable(presetId))
+            return [];
+        if (presetId === "fade" || presetId === "customOpacity")
+            return ["opacity"];
+        if (presetId === "slide")
+            return ["position", "opacity"];
+        if (presetId === "grow" || presetId === "shrink" || presetId === "customScale")
+            return ["scale"];
+        if (presetId === "spin" || presetId === "customRotate")
+            return ["rotation"];
+        if (presetId === "movescale")
+            return ["position", "scale", "opacity"];
+        if (presetId === "type")
+            return ["reveal"];
+        if (presetId === "maskWipe" || presetId === "maskIris")
+            return ["mask"];
+        if (presetId === "customHide")
+            return ["visibility"];
+        if (presetId === "customFlip")
+            return ["flip"];
+        if (presetId === "customMove")
+            return ["position"];
+        if (presetId === "customResize")
+            return ["size"];
+        if (presetId === "customCorner")
+            return ["radius"];
+        if (presetId === "customFontSize" || presetId === "customFontWeight")
+            return ["text"];
+        if (presetId === "customColor" || presetId === "customGradient")
+            return ["color"];
+        if (presetId === "customStroke" || presetId === "customStrokeColor" || presetId === "customStrokeGradient")
+            return ["stroke"];
+        return ["fx"];
+    }
+
+    function channelName(channelId) {
+        var names = {
+            "position": qsTr("Position"),
+            "visibility": qsTr("Visibility"),
+            "flip": qsTr("Flip"),
+            "opacity": qsTr("Opacity"),
+            "scale": qsTr("Scale"),
+            "rotation": qsTr("Rotation"),
+            "reveal": qsTr("Reveal"),
+            "mask": qsTr("Mask"),
+            "size": qsTr("Size"),
+            "radius": qsTr("Radius"),
+            "color": qsTr("Color"),
+            "stroke": qsTr("Stroke"),
+            "fx": qsTr("Effects"),
+            "text": qsTr("Text")
+        };
+        return names[channelId] !== undefined ? names[channelId] : qsTr("Keys");
     }
 
     // Custom from-to clips reuse the preset pipeline; later clips win
@@ -466,6 +532,7 @@ QtObject {
 
     function _normalizerFor(presetId) {
         var table = {
+            "fade": presets._normalizeFade,
             "grow": presets._normalizeGrow,
             "shrink": presets._normalizeShrink,
             "slide": presets._normalizeSlide,
@@ -500,31 +567,37 @@ QtObject {
         return table[presetId];
     }
 
+    // Fade carries no from-to fields; the normalizer exists so keyed
+    // fades survive rebuilds (no entry would reset options to {}).
+    function _normalizeFade(r) {
+        return _withKeys("fade", {}, r);
+    }
+
     function _normalizeGrow(r) {
-        return {
+        return _withKeys("grow", {
             amount: clampNum(r.amount !== undefined ? r.amount : 1, 1, 0, 100)
-        };
+        }, r);
     }
 
     function _normalizeShrink(r) {
-        return {
+        return _withKeys("shrink", {
             amount: clampNum(r.amount !== undefined ? r.amount : 1.5, 1.5, 0, 100)
-        };
+        }, r);
     }
 
     function _normalizeSlide(r) {
-        return {
+        return _withKeys("slide", {
             direction: slideDirection(r.direction !== undefined ? r.direction : "left"),
             distance: clampNum(r.distance !== undefined ? r.distance : 200, 200, 0, 2000),
             fade: r.fade !== false
-        };
+        }, r);
     }
 
     function _normalizeSpin(r) {
-        return {
+        return _withKeys("spin", {
             direction: spinDirection(r.direction !== undefined ? r.direction : "cw"),
             turns: clampNum(r.turns !== undefined ? r.turns : 1, 1, 0.25, 10)
-        };
+        }, r);
     }
 
     function _normalizeTwist(r) {
@@ -534,19 +607,19 @@ QtObject {
     }
 
     function _normalizeMovescale(r) {
-        return {
+        return _withKeys("movescale", {
             direction: slideDirection(r.direction !== undefined ? r.direction : "left"),
             distance: clampNum(r.distance !== undefined ? r.distance : 200, 200, 0, 2000),
             scale: clampNum(r.scale !== undefined ? r.scale : 0, 0, 0, 150)
-        };
+        }, r);
     }
 
     function _normalizeType(r) {
-        return {
+        return _withKeys("type", {
             unit: typeUnit(r.unit !== undefined ? r.unit : "letters"),
             cps: clampNum(r.cps !== undefined ? r.cps : 20, 20, 1, 120),
             cursor: r.cursor === true
-        };
+        }, r);
     }
 
     function maskWipeDirection(v) {
@@ -555,7 +628,9 @@ QtObject {
 
     // Keyframe lists for keyframeable clips: [{t, value:{...},
     // easing:{id,bezier}}]. t is clip-local 0..1, values are canonical
-    // per-preset fields (see _normalizeKeyValue). Sorted by t, capped
+    // per-preset fields (see _normalizeKeyValue). The target key's
+    // easing drives its segment; id "hold" is constant interpolation
+    // holding the previous key. Sorted by t, capped
     // at 32; entries missing t/value drop. One key stores (so the first
     // + press shows a row) but only 2+ drive interpolation; shorter
     // lists read as plain from-to, so old clips without keys never gain
@@ -626,6 +701,52 @@ QtObject {
             if (v.invert !== undefined) {
                 o.invert = v.invert === true;
                 n++;
+            }
+        } else if (presetId === "fade") {
+            // Opacity factor multiplied by the base opacity at sample time.
+            put("v", v.v !== undefined ? clampNum(v.v, 0, 0, 1) : undefined);
+        } else if (presetId === "slide") {
+            // Absolute offsets like customMove; v rides only when the clip
+            // fades (missing v keeps the base opacity). Partial keys stay
+            // partial (missing dx/dy fall back at sample time) so an
+            // opacity-only re-record never snaps position to base.
+            put("dx", _keyNum(v.dx !== undefined ? v.dx : v.x, 0, -2000, 2000));
+            put("dy", _keyNum(v.dy !== undefined ? v.dy : v.y, 0, -2000, 2000));
+            put("v", v.v !== undefined ? clampNum(v.v, 0, 0, 1) : undefined);
+            if (o.dx === undefined && o.dy === undefined && o.v === undefined)
+                return null;
+        } else if (presetId === "grow" || presetId === "shrink") {
+            // Absolute scale factor about the target center.
+            put("s", v.s !== undefined ? clampNum(v.s, 0.001, 0.001, 100) : undefined);
+        } else if (presetId === "spin") {
+            // Absolute rotation offset in degrees from the base rotation.
+            put("r", v.r !== undefined ? clampNum(v.r, 0, -1440, 1440) : undefined);
+        } else if (presetId === "movescale") {
+            // Absolute offsets plus an absolute scale factor. Partial keys
+            // stay partial like slide so opacity-only edits never snap.
+            put("dx", _keyNum(v.dx !== undefined ? v.dx : v.x, 0, -2000, 2000));
+            put("dy", _keyNum(v.dy !== undefined ? v.dy : v.y, 0, -2000, 2000));
+            put("s", v.s !== undefined ? clampNum(v.s, 0.001, 0.001, 100) : undefined);
+            put("v", v.v !== undefined ? clampNum(v.v, 0, 0, 1) : undefined);
+            if (o.dx === undefined && o.dy === undefined && o.s === undefined && o.v === undefined)
+                return null;
+        } else if (presetId === "type") {
+            // Reveal fraction 0..1; the sampler chunks it like eased progress.
+            put("frac", v.frac !== undefined ? clampNum(v.frac, 0, 0, 1) : undefined);
+        } else if (presetId === "customHide" || presetId === "customFlip") {
+            // Absolute booleans: visible for hide, flipped for flip. Step
+            // within their segment like every other bool key (the segment
+            // easing shifts the cut point). Accepts true/1/"true" so
+            // hand-edited scenes don't flip on numeric bools.
+            if (v.v !== undefined) {
+                o.v = v.v === true || v.v === 1 || String(v.v).toLowerCase() === "true";
+                n++;
+                if (presetId === "customFlip" && (v.axis === "v" || v.axis === "h")) {
+                    o.axis = v.axis;
+                    n++;
+                }
+            } else {
+                return null;
             }
         } else if (presetId === "customMove") {
             put("dx", _keyNum(v.dx !== undefined ? v.dx : v.x, 0, -2000, 2000));
@@ -802,10 +923,10 @@ QtObject {
     }
 
     function _normalizeCustomHide(r) {
-        return {
+        return _withKeys("customHide", {
             fromVisible: r.fromVisible === undefined ? true : !!r.fromVisible,
             toVisible: r.toVisible === undefined ? false : !!r.toVisible
-        };
+        }, r);
     }
 
     function _normalizeCustomResize(r) {
@@ -913,9 +1034,9 @@ QtObject {
     }
 
     function _normalizeCustomFlip(r) {
-        return {
+        return _withKeys("customFlip", {
             axis: r.axis === "v" ? "v" : "h"
-        };
+        }, r);
     }
 
     function _normalizeCustomShadow(r) {
@@ -996,12 +1117,6 @@ QtObject {
         return mode === "out" ? "out" : "in";
     }
 
-    // Clip loop lives top-level on the clip (not in options) so option
-    // rebuilds never drop it; old scenes miss it and read none.
-    function normalizeLoop(loop) {
-        return loop === "loop" || loop === "pingpong" ? loop : "none";
-    }
-
     // Bezier values are CSS-equivalent handles for display and dragging;
     // the sampler keeps exact cubics for the named ids, bezier for custom.
     function easingPresets() {
@@ -1055,6 +1170,10 @@ QtObject {
     }
 
     function easingName(id) {
+        if (id === "hold")
+            return qsTr("Hold");
+        if (id === "custom")
+            return qsTr("Custom");
         var all = easingPresets();
         for (var i = 0; i < all.length; i++) {
             if (all[i].id === id)
@@ -1072,7 +1191,7 @@ QtObject {
         return [0.25, 0.1, 0.25, 1];
     }
 
-    function buildClip(presetId, clipId, targetUid, t0, duration, mode, options, easing, loop) {
+    function buildClip(presetId, clipId, targetUid, t0, duration, mode, options, easing) {
         var ez = easing || {};
         var ct0 = Math.max(0, Number(t0) || 0);
         // Clips never stage past the composition end; stepped clips lock
@@ -1089,7 +1208,6 @@ QtObject {
             t0: ct0,
             duration: cd,
             mode: normalizeMode(mode),
-            loop: normalizeLoop(loop),
             options: normalizeOptions(presetId, options),
             easing: {
                 id: typeof ez.id === "string" && ez.id !== "" ? ez.id : defaultEasingFor(presetId),

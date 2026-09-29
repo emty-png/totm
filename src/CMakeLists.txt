@@ -54,6 +54,8 @@ qt_add_qml_module(totm
         backend/video/VideoExporter.cpp
         backend/video/AnimSampler.h
         backend/video/AnimSampler.cpp
+        backend/video/AnimBridge.h
+        backend/video/AnimBridge.cpp
         backend/video/FramePaint.h
         backend/video/FramePaint.cpp
         backend/export/ComponentExporter.h

@@ -8,7 +8,7 @@ import Totm
 // paint types, dash positions, inner flags, enabled toggles); both =
 // wholesale replace. Animation scope: same-preset clips across objects
 // (values = option values incl. keyframes, props = timing/easing/mode/
-// loop/entry shell, both = full replace); missing target clips are
+// entry shell, both = full replace); missing target clips are
 // created. Payloads ride TabState.propClipboard so copy works across
 // shapes and designs. Pastes checkpoint once for a single undo entry.
 QtObject {
@@ -507,7 +507,6 @@ QtObject {
             t0: c.t0,
             duration: c.duration,
             mode: c.mode,
-            loop: propCopy.doc.anim.presets.normalizeLoop(c.loop),
             options: propCopy.doc.anim.copyMap(c.options),
             easing: {
                 id: ez.id,
@@ -551,7 +550,7 @@ QtObject {
     }
 
     // Values overwrite option values (keys ride along); shell
-    // (t0/duration/mode/easing/loop/entry) stays target-owned.
+    // (t0/duration/mode/easing/entry) stays target-owned.
     // Missing same-preset clips are created at the playhead.
     // Returns applied clip count.
     function pasteAnim(mode, targetUids) {
@@ -595,12 +594,12 @@ QtObject {
                     if (m === "values") {
                         var opts = propCopy.doc.anim.copyMap(tmpl.options);
                         propCopy.carryEntry(old.preset, old.options, opts);
-                        fixed = P.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, opts, old.easing, old.loop);
+                        fixed = P.buildClip(old.preset, old.id, old.targetUid, old.t0, old.duration, old.mode, opts, old.easing);
                     } else if (m === "props") {
-                        fixed = P.buildClip(old.preset, old.id, old.targetUid, tmpl.t0, tmpl.duration, tmpl.mode, old.options, tmpl.easing, tmpl.loop);
+                        fixed = P.buildClip(old.preset, old.id, old.targetUid, tmpl.t0, tmpl.duration, tmpl.mode, old.options, tmpl.easing);
                         propCopy.carryEntry(tmpl.preset, tmpl.options, fixed.options);
                     } else {
-                        fixed = P.buildClip(tmpl.preset, old.id, old.targetUid, tmpl.t0, tmpl.duration, tmpl.mode, propCopy.doc.anim.copyMap(tmpl.options), tmpl.easing, tmpl.loop);
+                        fixed = P.buildClip(tmpl.preset, old.id, old.targetUid, tmpl.t0, tmpl.duration, tmpl.mode, propCopy.doc.anim.copyMap(tmpl.options), tmpl.easing);
                     }
                     list[at] = fixed;
                     made++;
@@ -612,11 +611,11 @@ QtObject {
                     if (m === "props") {
                         var ei = propCopy.entryOf(tmpl.preset, tmpl.options);
                         var seed = propCopy.doc.anim.customDefaults.seededOptions(P, propCopy.doc, tops, tmpl.preset, ei);
-                        fresh = P.buildClip(tmpl.preset, propCopy.doc.anim.nextClipId++, targets[t], nt0, tmpl.duration, tmpl.mode, seed, tmpl.easing, tmpl.loop);
+                        fresh = P.buildClip(tmpl.preset, propCopy.doc.anim.nextClipId++, targets[t], nt0, tmpl.duration, tmpl.mode, seed, tmpl.easing);
                         propCopy.carryEntry(tmpl.preset, tmpl.options, fresh.options);
-                        fresh = P.buildClip(tmpl.preset, fresh.id, targets[t], nt0, tmpl.duration, tmpl.mode, fresh.options, tmpl.easing, tmpl.loop);
+                        fresh = P.buildClip(tmpl.preset, fresh.id, targets[t], nt0, tmpl.duration, tmpl.mode, fresh.options, tmpl.easing);
                     } else {
-                        fresh = P.buildClip(tmpl.preset, propCopy.doc.anim.nextClipId++, targets[t], nt0, tmpl.duration, tmpl.mode, propCopy.doc.anim.copyMap(tmpl.options), tmpl.easing, tmpl.loop);
+                        fresh = P.buildClip(tmpl.preset, propCopy.doc.anim.nextClipId++, targets[t], nt0, tmpl.duration, tmpl.mode, propCopy.doc.anim.copyMap(tmpl.options), tmpl.easing);
                     }
                     list.push(fresh);
                     made++;

@@ -417,7 +417,7 @@ ScrollView {
             pid = "customStrokeGradient";
         var options = gallery.defaults.seededOptions(d.anim.presets, d, tops, pid);
         var t0 = d.anim.currentTime;
-        var made = d.applyPreset(pid, uids, t0, 0.8, "in", options, null, "none", gallery.stagger);
+        var made = d.applyPreset(pid, uids, t0, 0.8, "in", options, null, gallery.stagger);
         if (made.length > 0) {
             d.anim.currentTime = t0;
             d.anim.play();
@@ -441,10 +441,9 @@ ScrollView {
                 continue;
             if (!d.anim.presets.isCustom(clips[j].preset))
                 continue;
-            var loopSuffix = clips[j].loop === "loop" ? " · " + qsTr("Loop") : clips[j].loop === "pingpong" ? " · " + qsTr("Ping-pong") : "";
-            var detail = clips[j].t0.toFixed(1) + "s – " + (clips[j].t0 + clips[j].duration).toFixed(1) + "s · " + d.anim.presets.easingName(clips[j].easing.id) + loopSuffix;
+            var detail = clips[j].t0.toFixed(1) + "s – " + (clips[j].t0 + clips[j].duration).toFixed(1) + "s · " + d.anim.presets.easingName(clips[j].easing.id);
             if (d.anim.presets.isStepped(clips[j].preset))
-                detail = qsTr("at %1s · Instant").arg(clips[j].t0.toFixed(1)) + loopSuffix;
+                detail = qsTr("at %1s · Instant").arg(clips[j].t0.toFixed(1));
             out.push({
                 id: clips[j].id,
                 name: d.anim.presets.presetName(clips[j].preset) + d.anim.presets.entrySuffix(clips[j].preset, clips[j].options),

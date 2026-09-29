@@ -4,8 +4,10 @@ import Totm
 // One audio lane row: a tape-style span bar (not animation diamonds:
 // audio has no keyframes, both ends move the whole clip and it never
 // stretches) with slim end-cap grips marking the grabbable ends.
-// Selection stays the universal red wash + rim. Clicks select, Delete
-// removes. Empty lane space falls through to the view marquee below.
+// Selection is a red fill plus white rim (never a wash: the wash would
+// multiply into the waveform child and drown it). Clicks select,
+// Delete removes. Empty lane space falls through to the view marquee
+// below.
 // The bar carries a zoom-adaptive waveform (filled mini-bars over the
 // clip file window, silent when undecodable) so beats stay visible.
 // Drag state lives here while the bar stays model-bound: the doc clip
@@ -82,9 +84,12 @@ Item {
         height: 18
         radius: 4
         color: lane.selected ? AppTheme.snapGuide : AppTheme.hover
-        opacity: lane.selected ? 0.3 : 1
         border.width: 1
-        border.color: lane.selected ? AppTheme.snapGuide : AppTheme.fieldBorder
+        // White rim like selected diamonds (intentional contrast on
+        // snapGuide red in every theme, shared selection language);
+        // the waveform and grips flip light on red through their own
+        // selected states below.
+        border.color: lane.selected ? "#ffffff" : AppTheme.fieldBorder
 
         Behavior on color {
             ColorAnimation {
@@ -93,8 +98,8 @@ Item {
             }
         }
 
-        Behavior on opacity {
-            NumberAnimation {
+        Behavior on border.color {
+            ColorAnimation {
                 duration: 120
                 easing.type: Easing.OutCubic
             }
@@ -125,7 +130,7 @@ Item {
             height: parent.height - 8
             radius: 1.5
             visible: lane.barW() > 30
-            color: lane.selected ? AppTheme.background : AppTheme.muted
+            color: lane.selected ? "#ffffff" : AppTheme.muted
             opacity: lane.selected ? 0.9 : 0.6
         }
 
@@ -136,7 +141,7 @@ Item {
             height: parent.height - 8
             radius: 1.5
             visible: lane.barW() > 30
-            color: lane.selected ? AppTheme.background : AppTheme.muted
+            color: lane.selected ? "#ffffff" : AppTheme.muted
             opacity: lane.selected ? 0.9 : 0.6
         }
 
@@ -174,7 +179,9 @@ Item {
                 var n = p.length;
                 var bw = waves.width / n;
                 var muted = lane.clip && lane.clip.muted === true;
-                ctx.fillStyle = String(lane.selected ? AppTheme.background : AppTheme.foreground);
+                // White in every theme (like selected diamonds): the bar
+                // is snapGuide red when selected, hover gray otherwise.
+                ctx.fillStyle = String(lane.selected ? "#ffffff" : AppTheme.foreground);
                 ctx.globalAlpha = muted ? 0.3 : (lane.selected ? 0.95 : 0.85);
                 for (var i = 0; i < n; i++) {
                     var v = Math.min(1, Math.max(0, Number(p[i]) || 0));

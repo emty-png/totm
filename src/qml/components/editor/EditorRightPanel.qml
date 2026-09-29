@@ -2,7 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Editor right panel: mode switcher on top; design shows the
+// Editor right panel: mode switcher on top (hidden while a clip is
+// being edited, so the clip editor owns the column); design shows the
 // properties panel, animate shows the preset/custom switcher with
 // per-mode content below. 320px, background fill, 1px left border,
 // shared resize strip on the left edge.
@@ -37,6 +38,14 @@ Item {
     function clipSelected() {
         var d = TabState.documentFor(TabState.currentIndex);
         return !!d && d.anim.selectedClipIds.length > 0;
+    }
+
+    // True while the clip editor owns the column: a selected clip in
+    // animate mode. Both switchers hide then (the editor's back chevron
+    // is the way out); design mode keeps them so shortcuts that flip
+    // modes mid-selection never strand the panel.
+    function editingClip() {
+        return rightPanel.clipSelected() && modeSwitcher.mode === "animate";
     }
 
     function shapeSelected() {
@@ -160,13 +169,16 @@ Item {
         EditorModeSwitcher {
             id: modeSwitcher
             width: parent.width
-            height: 48
+            // A selected clip owns the column: both switchers hide and
+            // the clip editor (with its back chevron out) takes over.
+            height: rightPanel.editingClip() ? 0 : 48
+            visible: !rightPanel.editingClip()
         }
 
         // Design properties for the selection.
         DesignPanel {
             width: parent.width
-            height: parent.height - 48
+            height: parent.height - modeSwitcher.height
             visible: modeSwitcher.mode === "design"
             doc: TabState.documentFor(TabState.currentIndex)
         }
@@ -174,15 +186,15 @@ Item {
         // Animate mode: preset/custom toggle plus per-mode content.
         Column {
             width: parent.width
-            height: parent.height - 48
+            height: parent.height - modeSwitcher.height
             visible: modeSwitcher.mode === "animate"
             spacing: 0
 
             AnimateModeSwitcher {
                 id: animateSwitcher
                 width: parent.width
-                height: rightPanel.hasAnimContext() && !rightPanel.audioPanel() ? 48 : 0
-                visible: rightPanel.hasAnimContext() && !rightPanel.audioPanel()
+                height: rightPanel.hasAnimContext() && !rightPanel.audioPanel() && !rightPanel.editingClip() ? 48 : 0
+                visible: rightPanel.hasAnimContext() && !rightPanel.audioPanel() && !rightPanel.editingClip()
             }
 
             // Empty selection: same nothing-here as the design panel.
@@ -245,6 +257,15 @@ Item {
                 clipId: rightPanel.selectedClipId()
                 backPolicy: () => rightPanel.goShapePanel()
                 redrawPolicy: () => rightPanel.redrawPathClip()
+                onVisibleChanged: {
+                    // Switchers hide while editing (mid-focus strand risk):
+                    // drop picker state and settle focus on the panel so
+                    // hidden controls never keep it.
+                    if (visible) {
+                        rightPanel.pickingPreset = false;
+                        rightPanel.forceActiveFocus();
+                    }
+                }
             }
 
             // Audio properties: timing, volume/mute, fades and source

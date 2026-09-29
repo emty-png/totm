@@ -18,6 +18,15 @@ Item {
 
     property var doc: null
 
+    // Dopesheet expansion: per-property channel rows under the main
+    // bar row. channels lists channel ids (see presets.presetChannels);
+    // a stored key draws one diamond on every channel row of its clip.
+    // Drag/seek flow reuses the key handlers below, so sub-row diamonds
+    // retime through the same nudgeKey transaction.
+    property var channels: []
+    property bool expanded: false
+    property real dopeRowH: 20
+
     property var diamondPolicy: null
     // Joint-drag state shared with the view (selections span lanes).
     property var jointPolicy: null
@@ -38,7 +47,8 @@ Item {
 
     implicitHeight: 30
 
-    // Bottom hairline pairing with the gutter's own line.
+    // Bottom hairline pairing with the gutter's own line. Stays at the
+    // lane bottom so expanded channel rows sit inside the frame.
     Rectangle {
         anchors {
             left: parent.left
@@ -63,146 +73,208 @@ Item {
         return lane.originX + t * lane.pxPerSec;
     }
 
-    // Span bars (bar drag moves the clip); empty space falls through
-    // to the view marquee below.
-    Repeater {
-        model: lane.clips
+    // Main bar row: fixed 30px so end diamonds and ticks never shift
+    // when channel rows expand below.
+    Item {
+        id: mainRow
 
-        Rectangle {
-            visible: !lane.isStepped(modelData.preset)
-            x: lane.barX(modelData)
-            y: (parent.height - 10) / 2
-            width: Math.max(14, lane.barW(modelData))
-            height: 10
-            radius: 5
-            // Selected wash (calm red in both themes), neutrals at rest.
-            color: lane.isSelected(modelData.id) ? AppTheme.snapGuide : AppTheme.hover
-            opacity: lane.isSelected(modelData.id) ? 0.3 : 1
-            border.width: 1
-            border.color: lane.isSelected(modelData.id) ? AppTheme.snapGuide : AppTheme.fieldBorder
+        width: parent.width
+        height: 30
 
-            Behavior on color {
-                ColorAnimation {
-                    duration: 120
-                    easing.type: Easing.OutCubic
+        // Span bars (bar drag moves the clip); empty space falls through
+        // to the view marquee below.
+        Repeater {
+            model: lane.clips
+
+            Rectangle {
+                visible: !lane.isStepped(modelData.preset)
+                x: lane.barX(modelData)
+                y: (parent.height - 10) / 2
+                width: Math.max(14, lane.barW(modelData))
+                height: 10
+                radius: 5
+                // Selected wash (calm red in both themes), neutrals at rest.
+                color: lane.isSelected(modelData.id) ? AppTheme.snapGuide : AppTheme.hover
+                opacity: lane.isSelected(modelData.id) ? 0.3 : 1
+                border.width: 1
+                border.color: lane.isSelected(modelData.id) ? AppTheme.snapGuide : AppTheme.fieldBorder
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 120
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 120
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                MouseArea {
+                    id: barMouse
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    hoverEnabled: true
+                    cursorShape: lane.dragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+                    preventStealing: true
+                    onPressed: mouse => lane.dragPress(modelData.id, "move", lane.mapFromItem(barMouse, mouse.x, mouse.y).x)
+                    onPositionChanged: mouse => lane.dragMove(lane.mapFromItem(barMouse, mouse.x, mouse.y).x)
+                    onReleased: lane.dragRelease()
+                    onClicked: mouse => {
+                        if (lane.diamondPolicy)
+                            lane.diamondPolicy(modelData.id, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)));
+                    }
                 }
             }
+        }
 
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 120
-                    easing.type: Easing.OutCubic
+        // Diamond keyframes at both clip ends: start moves, end stretches.
+        Repeater {
+            model: lane.keyEnds()
+
+            Rectangle {
+                x: lane.endX(modelData) - width / 2
+                y: (parent.height - height) / 2
+                width: 12
+                height: 12
+                rotation: 45
+                radius: 2.5
+                scale: lane.isSelected(modelData.clipId) ? 1.18 : 1
+                // White in every theme; selected go red with a white rim.
+                // White is intentional contrast on snapGuide red (shared
+                // with audio lanes), not a theme token.
+                color: lane.isSelected(modelData.clipId) ? AppTheme.snapGuide : "#ffffff"
+                border.width: 1.25
+                border.color: lane.isSelected(modelData.clipId) ? "#ffffff" : AppTheme.fieldBorder
+
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 120
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 120
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                MouseArea {
+                    id: endMouse
+
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    hoverEnabled: true
+                    cursorShape: lane.dragging ? Qt.ClosedHandCursor : modelData.end === "end" ? Qt.SizeHorCursor : Qt.PointingHandCursor
+                    preventStealing: true
+                    onPressed: mouse => lane.dragPress(modelData.clipId, modelData.end === "end" ? "stretch" : "move", lane.mapFromItem(endMouse, mouse.x, mouse.y).x)
+                    onPositionChanged: mouse => lane.dragMove(lane.mapFromItem(endMouse, mouse.x, mouse.y).x)
+                    onReleased: lane.dragRelease()
+                    onClicked: mouse => {
+                        if (lane.diamondPolicy)
+                            lane.diamondPolicy(modelData.clipId, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)));
+                    }
                 }
             }
+        }
 
-            MouseArea {
-                id: barMouse
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                hoverEnabled: true
-                cursorShape: lane.dragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
-                preventStealing: true
-                onPressed: mouse => lane.dragPress(modelData.id, "move", lane.mapFromItem(barMouse, mouse.x, mouse.y).x)
-                onPositionChanged: mouse => lane.dragMove(lane.mapFromItem(barMouse, mouse.x, mouse.y).x)
-                onReleased: lane.dragRelease()
-                onClicked: mouse => {
-                    if (lane.diamondPolicy)
-                        lane.diamondPolicy(modelData.id, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)));
-                }
-            }
+        // Stored-key ticks: click seeks, drag retimes between neighbors.
+        Repeater {
+            model: lane.keyTicks()
 
-            // Loop badge: one glyph so short clips still read as looped.
-            Text {
-                anchors {
-                    right: parent.right
-                    verticalCenter: parent.verticalCenter
-                    rightMargin: 3
-                }
-                visible: modelData.loop === "loop" || modelData.loop === "pingpong"
-                text: modelData.loop === "pingpong" ? "⇄" : "⟳"
-                font.pixelSize: 9
+            Rectangle {
+                x: lane.tickX(modelData) - width / 2
+                y: (parent.height - height) / 2
+                width: 8
+                height: 8
+                rotation: 45
+                radius: 2
                 color: AppTheme.foreground
-                opacity: 0.9
-            }
-        }
-    }
+                border.width: 1
+                border.color: AppTheme.fieldBorder
 
-    // Diamond keyframes at both clip ends: start moves, end stretches.
-    Repeater {
-        model: lane.keyEnds()
+                MouseArea {
+                    id: keyMouse
 
-        Rectangle {
-            x: lane.endX(modelData) - width / 2
-            y: (parent.height - height) / 2
-            width: 12
-            height: 12
-            rotation: 45
-            radius: 2.5
-            scale: lane.isSelected(modelData.clipId) ? 1.18 : 1
-            // White in every theme; selected go red with a white rim.
-            color: lane.isSelected(modelData.clipId) ? AppTheme.snapGuide : "#ffffff"
-            border.width: 1.25
-            border.color: lane.isSelected(modelData.clipId) ? "#ffffff" : AppTheme.fieldBorder
-
-            Behavior on scale {
-                NumberAnimation {
-                    duration: 120
-                    easing.type: Easing.OutCubic
-                }
-            }
-            Behavior on color {
-                ColorAnimation {
-                    duration: 120
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            MouseArea {
-                id: endMouse
-
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                hoverEnabled: true
-                cursorShape: lane.dragging ? Qt.ClosedHandCursor : modelData.end === "end" ? Qt.SizeHorCursor : Qt.PointingHandCursor
-                preventStealing: true
-                onPressed: mouse => lane.dragPress(modelData.clipId, modelData.end === "end" ? "stretch" : "move", lane.mapFromItem(endMouse, mouse.x, mouse.y).x)
-                onPositionChanged: mouse => lane.dragMove(lane.mapFromItem(endMouse, mouse.x, mouse.y).x)
-                onReleased: lane.dragRelease()
-                onClicked: mouse => {
-                    if (lane.diamondPolicy)
-                        lane.diamondPolicy(modelData.clipId, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)));
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    preventStealing: true
+                    onPressed: mouse => lane.keyPress(modelData.clipId, modelData.keyIndex, lane.mapFromItem(keyMouse, mouse.x, mouse.y).x)
+                    onPositionChanged: mouse => lane.keyMove(lane.mapFromItem(keyMouse, mouse.x, mouse.y).x)
+                    onReleased: lane.keyRelease()
+                    onClicked: mouse => lane.keyClick(modelData.clipId, modelData.keyIndex, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)))
                 }
             }
         }
-    }
+    } // mainRow
 
-    // Stored-key ticks: click seeks, drag retimes between neighbors.
-    Repeater {
-        model: lane.keyTicks()
+    // Dopesheet channel rows: one diamond per stored key on every
+    // channel row of its clip. Drag/seek reuse the key handlers above
+    // (tickX/keyPress/keyMove/keyRelease/keyClick take the same entry
+    // shape), so sub-row diamonds retime through nudgeKey with the same
+    // snapping and single-undo transaction.
+    Column {
+        y: 30
+        width: parent.width
+        visible: lane.expanded && lane.channels.length > 0
 
-        Rectangle {
-            x: lane.tickX(modelData) - width / 2
-            y: (parent.height - height) / 2
-            width: 8
-            height: 8
-            rotation: 45
-            radius: 2
-            color: AppTheme.foreground
-            border.width: 1
-            border.color: AppTheme.fieldBorder
+        Repeater {
+            model: lane.channels
 
-            MouseArea {
-                id: keyMouse
+            Item {
+                // Outer scope leaks into delegates (see file header), so
+                // the channel id rides a delegate-local prop instead of
+                // closing over the loop var.
+                readonly property string channelId: String(modelData)
+                width: parent.width
+                height: lane.dopeRowH
 
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                preventStealing: true
-                onPressed: mouse => lane.keyPress(modelData.clipId, modelData.keyIndex, lane.mapFromItem(keyMouse, mouse.x, mouse.y).x)
-                onPositionChanged: mouse => lane.keyMove(lane.mapFromItem(keyMouse, mouse.x, mouse.y).x)
-                onReleased: lane.keyRelease()
-                onClicked: mouse => lane.keyClick(modelData.clipId, modelData.keyIndex, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)))
+                Rectangle {
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        top: parent.top
+                    }
+                    height: 1
+                    color: AppTheme.border
+                    opacity: 0.6
+                }
+
+                Repeater {
+                    model: lane.dopeTicksFor(channelId)
+
+                    Rectangle {
+                        x: lane.tickX(modelData) - width / 2
+                        y: (lane.dopeRowH - height) / 2
+                        width: 8
+                        height: 8
+                        rotation: 45
+                        radius: 2
+                        color: AppTheme.foreground
+                        border.width: 1
+                        border.color: AppTheme.fieldBorder
+
+                        MouseArea {
+                            id: dopeMouse
+
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            preventStealing: true
+                            onPressed: mouse => lane.keyPress(modelData.clipId, modelData.keyIndex, lane.mapFromItem(dopeMouse, mouse.x, mouse.y).x)
+                            onPositionChanged: mouse => lane.keyMove(lane.mapFromItem(dopeMouse, mouse.x, mouse.y).x)
+                            onReleased: lane.keyRelease()
+                            onClicked: mouse => lane.keyClick(modelData.clipId, modelData.keyIndex, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier)))
+                        }
+                    }
+                }
             }
         }
     }
@@ -283,6 +355,39 @@ Item {
         return out;
     }
 
+    // Dopesheet diamonds for one channel row: every stored key of every
+    // clip whose preset animates the channel, as {clipId, keyIndex, x}.
+    // Same entry shape as keyTicks, so tickX and the key handlers apply
+    // unchanged.
+    function dopeTicksFor(channel) {
+        var out = [];
+        var list = lane.clips || [];
+        for (var i = 0; i < list.length; i++) {
+            if (lane.isStepped(list[i].preset))
+                continue;
+            if (!lane.clipHasChannel(list[i], channel))
+                continue;
+            var keys = list[i].options ? list[i].options.keys : null;
+            if (!keys || typeof keys.length !== "number")
+                continue;
+            for (var k = 0; k < keys.length; k++) {
+                out.push({
+                    clipId: list[i].id,
+                    keyIndex: k,
+                    x: list[i].t0 + Number(keys[k].t) * list[i].duration
+                });
+            }
+        }
+        return out;
+    }
+
+    function clipHasChannel(clip, channel) {
+        if (!lane.doc || !clip)
+            return false;
+        var chs = lane.doc.anim.presets.presetChannels(clip.preset);
+        return chs.indexOf(String(channel)) >= 0;
+    }
+
     function tickX(tick) {
         if (lane.dragging && tick.clipId === lane.dragClipId) {
             if (lane.dragMode === "key" && tick.keyIndex === lane.dragKeyIndex)
@@ -359,6 +464,9 @@ Item {
             if (c)
                 d.nudgeKey(id, idx, (abs - c.t0) / Math.max(0.001, c.duration));
             d.touch();
+            // Notification-only refresh so key panels and dopesheet rows
+            // follow the silent retime without a second undo entry.
+            d.anim.clips = d.anim.clips.slice();
         }
         d.endTransaction();
     }

@@ -43,6 +43,18 @@ Item {
             }
         }
 
+        // Auto-key arm: selection edits capture keys at the playhead on
+        // keyframeable clips covering the selection. Session-only.
+        ToolbarButton {
+            Layout.alignment: Qt.AlignVCenter
+            iconKind: "circle"
+            active: !!transport.doc && transport.doc.anim.recordArmed
+            onClicked: {
+                if (transport.doc)
+                    transport.doc.anim.toggleRecord();
+            }
+        }
+
         NumberField {
             Layout.preferredWidth: 76
             Layout.alignment: Qt.AlignVCenter

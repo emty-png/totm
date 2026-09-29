@@ -1,4 +1,5 @@
 import QtQuick
+import Totm
 
 // Pure animation sampler: per-preset overlay math plus sampling and
 // writeback. sampleAnim() evaluates overlays against a STABLE base
@@ -6,10 +7,11 @@ import QtQuick
 // frame's output back as the next frame's input and collapse every
 // preset). applySample() writes overlays with no touch() so playback
 // never dirties the doc, never triggers autosave, never pollutes undo.
-// Easing curves live in DocEasing, motion-path measuring in
-// DocPathSample. Units match the C++ video renderer (AnimSampler), which
-// ports this file: times in seconds, angles in degrees, distances in
-// canvas px.
+// Easing, motion-path measuring and keyed interpolation run the shared
+// Anims:: core through AnimBridge (same code as video export), so only
+// the per-preset overlay branches below stay mirrored with
+// AnimSampler.cpp. Units: times in seconds, angles in degrees,
+// distances in canvas px.
 QtObject {
     id: sampler
 
@@ -62,160 +64,32 @@ QtObject {
     }
 
     // Keyed mask values at raw progress p over o.keys (clip-local
-    // 0..1, absolute geometry). The bracketing segment eases by the
-    // target key's easing; clip-level easing is bypassed when keys
-    // drive. Returns null when the clip carries no usable keys, so
-    // callers fall back to from-to. Mirrors AnimSampler (C++).
+    // 0..1, absolute geometry). Runs the shared Anims:: core through
+    // AnimBridge, so preview and export interpolate identically by
+    // construction. Returns null when the clip carries no usable keys,
+    // so callers fall back to from-to.
     function maskKeysAt(o, p) {
-        var keys = o ? o.keys : null;
-        if (!keys || typeof keys.length !== "number" || keys.length < 2)
+        var v = AnimBridge.maskKeysAt(o || {}, Number(p) || 0);
+        if (v === undefined || v === null)
             return null;
-        var p2 = Math.min(1, Math.max(0, Number(p) || 0));
-        var a = keys[0], b = keys[keys.length - 1];
-        if (p2 <= Number(a.t))
-            return {
-                value: a.value || {}
-            };
-        if (p2 >= Number(b.t))
-            return {
-                value: b.value || {}
-            };
-        for (var i = 0; i < keys.length - 1; i++) {
-            if (p2 >= Number(keys[i].t) && p2 <= Number(keys[i + 1].t)) {
-                a = keys[i];
-                b = keys[i + 1];
-                break;
-            }
-        }
-        var span = Math.max(1e-6, Number(b.t) - Number(a.t));
-        var raw = (p2 - Number(a.t)) / span;
-        var ez = b.easing || {};
-        var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, raw);
-        var av = a.value || {}, bv = b.value || {};
-        var out = {};
-        var fields = ["x", "y", "w", "h", "rotation", "opacity", "feather"];
-        for (var f = 0; f < fields.length; f++) {
-            var k = fields[f];
-            var hasA = av[k] !== undefined, hasB = bv[k] !== undefined;
-            if (!hasA && !hasB)
-                continue;
-            var an = hasA ? Number(av[k]) : Number(bv[k]);
-            var bn = hasB ? Number(bv[k]) : Number(av[k]);
-            if (isNaN(an) || isNaN(bn))
-                continue;
-            out[k] = an + (bn - an) * e;
-        }
-        if (av.invert !== undefined || bv.invert !== undefined) {
-            if (av.invert === undefined)
-                out.invert = bv.invert === true;
-            else if (bv.invert === undefined)
-                out.invert = av.invert === true;
-            else
-                out.invert = e < 0.5 ? av.invert === true : bv.invert === true;
-        }
         return {
-            value: out
+            value: v
         };
     }
 
     // Generic keyed values at raw progress p over o.keys (clip-local
-    // 0..1). Bracketing segment eases by the target key's easing; the
-    // clip-level easing is bypassed when keys drive. Numbers lerp,
-    // hex colors lerp in sRGB (alpha-aware when either side carries
-    // it), bools/strings step at the midpoint. Missing fields carry
-    // from the side that has them. Returns null when fewer than 2
-    // keys, so callers fall back to from-to. Mirrors AnimSampler (C++).
+    // 0..1). Runs the shared Anims:: core through AnimBridge: numbers
+    // lerp, hex colors lerp alpha-aware, bools/strings step at the
+    // midpoint, missing fields carry, and "hold" as a target key's
+    // easing id freezes the segment. Returns null when fewer than 2
+    // keys, so callers fall back to from-to.
     function genericKeysAt(o, p) {
-        var keys = o ? o.keys : null;
-        if (!keys || typeof keys.length !== "number" || keys.length < 2)
+        var v = AnimBridge.genericKeysAt(o || {}, Number(p) || 0);
+        if (v === undefined || v === null)
             return null;
-        var p2 = Math.min(1, Math.max(0, Number(p) || 0));
-        var a = keys[0], b = keys[keys.length - 1];
-        if (p2 <= Number(a.t))
-            return {
-                value: JSON.parse(JSON.stringify((a.value || {})))
-            };
-        if (p2 >= Number(b.t))
-            return {
-                value: JSON.parse(JSON.stringify((b.value || {})))
-            };
-        for (var i = 0; i < keys.length - 1; i++) {
-            if (p2 >= Number(keys[i].t) && p2 <= Number(keys[i + 1].t)) {
-                a = keys[i];
-                b = keys[i + 1];
-                break;
-            }
-        }
-        var span = Math.max(1e-6, Number(b.t) - Number(a.t));
-        var raw = (p2 - Number(a.t)) / span;
-        var ez = b.easing || {};
-        var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, raw);
-        var av = a.value || {}, bv = b.value || {};
-        var out = {};
-        var seen = {};
-        var k;
-        for (k in av)
-            seen[k] = true;
-        for (k in bv)
-            seen[k] = true;
-        for (k in seen) {
-            var hasA = av[k] !== undefined, hasB = bv[k] !== undefined;
-            if (!hasA) {
-                out[k] = bv[k];
-                continue;
-            }
-            if (!hasB) {
-                out[k] = av[k];
-                continue;
-            }
-            var va = av[k], vb = bv[k];
-            if (typeof va === "boolean" || typeof vb === "boolean") {
-                // Booleans step at the midpoint (invert/inner).
-                out[k] = e < 0.5 ? (av[k] === true) : (bv[k] === true);
-                continue;
-            }
-            if (typeof va === "string" && typeof vb === "string" && (isHexLike(va) || isHexLike(vb))) {
-                var cc = lerpColorMaybeAlpha(va, vb, e);
-                if (cc !== null) {
-                    out[k] = cc;
-                    continue;
-                }
-            }
-            if (typeof va === "string" || typeof vb === "string") {
-                // Positions (center/inside/outside) and other enums step.
-                out[k] = e < 0.5 ? va : vb;
-                continue;
-            }
-            var an = Number(va), bn = Number(vb);
-            if (isNaN(an) || isNaN(bn)) {
-                out[k] = e < 0.5 ? va : vb;
-                continue;
-            }
-            out[k] = an + (bn - an) * e;
-        }
         return {
-            value: out
+            value: v
         };
-    }
-
-    function isHexLike(s) {
-        var t = String(s || "").trim().toLowerCase();
-        if (t.charAt(0) === "#")
-            t = t.slice(1);
-        return /^[0-9a-f]{3}$/.test(t) || /^[0-9a-f]{6}$/.test(t) || /^[0-9a-f]{8}$/.test(t);
-    }
-
-    function hasAlphaHex(s) {
-        var t = String(s || "").trim().toLowerCase();
-        if (t.charAt(0) === "#")
-            t = t.slice(1);
-        return t.length === 8;
-    }
-
-    function lerpColorMaybeAlpha(fromHex, to, t) {
-        if (hasAlphaHex(fromHex) || hasAlphaHex(to))
-            return lerpColorA(fromHex, to, t);
-        return lerpColor(fromHex, to, t);
     }
 
     function parseHex(hex) {
@@ -412,9 +286,11 @@ QtObject {
     function isKeyframeablePreset(preset) {
         if (preset === "maskWipe" || preset === "maskIris")
             return true;
+        if (preset === "fade" || preset === "slide" || preset === "grow" || preset === "shrink" || preset === "spin" || preset === "movescale" || preset === "type")
+            return true;
         if (typeof preset !== "string" || preset.slice(0, 6) !== "custom")
             return false;
-        return preset !== "customHide" && preset !== "customFlip" && preset !== "customPath";
+        return preset !== "customPath";
     }
 
     // Keyed overlay builders: each takes the interpolated key value (kv)
@@ -468,35 +344,73 @@ QtObject {
             // out. Base opacity scales it like every other preset.
             out.opacity = base.opacity * (inward ? (p <= 0 ? 0 : 1) : (p >= 1 ? 0 : 1));
         } else if (preset === "fade") {
-            out.opacity = base.opacity * (inward ? e : 1 - e);
-        } else if (preset === "slide" || preset === "movescale") {
-            var d = slideVec(o.direction);
-            var dist = Math.max(0, o.distance || 0);
-            var k = inward ? 1 - e : e;
-            var sgn = inward ? -1 : 1;
-            var bx = base.x, by = base.y, bw = base.w, bh = base.h;
-            if (preset === "movescale") {
-                var s0 = Math.max(0, (o.scale === undefined ? 0 : o.scale) / 100);
-                var s = inward ? s0 + (1 - s0) * e : 1 + (s0 - 1) * e;
-                var g = scaleBox({
-                    x: base.x,
-                    y: base.y,
-                    w: base.w,
-                    h: base.h
-                }, cx, cy, Math.max(0.001, s));
-                bx = g.x;
-                by = g.y;
-                bw = g.w;
-                bh = g.h;
-            }
-            out.x = bx + sgn * d.x * dist * k;
-            out.y = by + sgn * d.y * dist * k;
-            if (preset === "movescale" || o.fade) {
+            // Keys hold {v}: an opacity factor on the base opacity.
+            // Mode is bypassed when keys drive, like custom clips.
+            var fadeKeys = genericKeysAt(o, p);
+            if (fadeKeys && (fadeKeys.value || {}).v !== undefined)
+                out.opacity = base.opacity * Math.min(1, Math.max(0, Number(fadeKeys.value.v)));
+            else
                 out.opacity = base.opacity * (inward ? e : 1 - e);
-            }
-            if (preset === "movescale") {
-                out.w = bw;
-                out.h = bh;
+        } else if (preset === "slide" || preset === "movescale") {
+            var slKeys = genericKeysAt(o, p);
+            if (slKeys) {
+                // Keyed slide/movescale: absolute offsets (and an absolute
+                // scale for movescale), mode bypassed. Missing v keeps the
+                // base opacity; otherwise the from-to fade still applies.
+                var skv = slKeys.value || {};
+                var skx = base.x, sky = base.y, skw = base.w, skh = base.h;
+                if (preset === "movescale") {
+                    var sks = Math.max(0.001, Number(skv.s !== undefined ? skv.s : 1) || 0.001);
+                    var skg = scaleBox({
+                        x: base.x,
+                        y: base.y,
+                        w: base.w,
+                        h: base.h
+                    }, cx, cy, sks);
+                    skx = skg.x;
+                    sky = skg.y;
+                    skw = skg.w;
+                    skh = skg.h;
+                    out.w = skw;
+                    out.h = skh;
+                    if (base.shapeType === "text" && base.fontSize > 0)
+                        out.fontSize = base.fontSize * sks;
+                }
+                out.x = skx + (Number(skv.dx !== undefined ? skv.dx : 0) || 0);
+                out.y = sky + (Number(skv.dy !== undefined ? skv.dy : 0) || 0);
+                if (skv.v !== undefined)
+                    out.opacity = base.opacity * Math.min(1, Math.max(0, Number(skv.v)));
+                else if (preset === "movescale" || o.fade)
+                    out.opacity = base.opacity * (inward ? e : 1 - e);
+            } else {
+                var d = slideVec(o.direction);
+                var dist = Math.max(0, o.distance || 0);
+                var k = inward ? 1 - e : e;
+                var sgn = inward ? -1 : 1;
+                var bx = base.x, by = base.y, bw = base.w, bh = base.h;
+                if (preset === "movescale") {
+                    var s0 = Math.max(0, (o.scale === undefined ? 0 : o.scale) / 100);
+                    var s = inward ? s0 + (1 - s0) * e : 1 + (s0 - 1) * e;
+                    var g = scaleBox({
+                        x: base.x,
+                        y: base.y,
+                        w: base.w,
+                        h: base.h
+                    }, cx, cy, Math.max(0.001, s));
+                    bx = g.x;
+                    by = g.y;
+                    bw = g.w;
+                    bh = g.h;
+                }
+                out.x = bx + sgn * d.x * dist * k;
+                out.y = by + sgn * d.y * dist * k;
+                if (preset === "movescale" || o.fade) {
+                    out.opacity = base.opacity * (inward ? e : 1 - e);
+                }
+                if (preset === "movescale") {
+                    out.w = bw;
+                    out.h = bh;
+                }
             }
         } else if (preset === "grow" || preset === "shrink") {
             // Sized ends: grow runs 0 <-> amount (default 1x, the old
@@ -509,7 +423,9 @@ QtObject {
             var gsBig = amt;
             var g0 = inward ? (isGrow ? gsSmall : gsBig) : (isGrow ? gsBig : gsSmall);
             var g1 = inward ? (isGrow ? gsBig : gsSmall) : (isGrow ? gsSmall : gsBig);
-            var sc = g0 + (g1 - g0) * e;
+            // Keys hold {s}: an absolute scale factor, mode bypassed.
+            var grKeys = genericKeysAt(o, p);
+            var sc = grKeys && (grKeys.value || {}).s !== undefined ? Math.max(0.001, Number(grKeys.value.s) || 0.001) : g0 + (g1 - g0) * e;
             var gs = scaleBox({
                 x: base.x,
                 y: base.y,
@@ -526,9 +442,15 @@ QtObject {
             if (base.shapeType === "text" && base.fontSize > 0)
                 out.fontSize = base.fontSize * sc;
         } else if (preset === "spin") {
-            var turns = Math.min(10, Math.max(0.25, o.turns || 1));
-            var dir = o.direction === "ccw" ? -1 : 1;
-            out.rotation = base.rotation + dir * 360 * turns * (inward ? 1 - e : e);
+            // Keys hold {r}: an absolute rotation offset from base.
+            var spinKeys = genericKeysAt(o, p);
+            if (spinKeys && (spinKeys.value || {}).r !== undefined)
+                out.rotation = base.rotation + (Number(spinKeys.value.r) || 0);
+            else {
+                var turns = Math.min(10, Math.max(0.25, o.turns || 1));
+                var dir = o.direction === "ccw" ? -1 : 1;
+                out.rotation = base.rotation + dir * 360 * turns * (inward ? 1 - e : e);
+            }
         } else if (preset === "twist") {
             var dir2 = o.direction === "ccw" ? -1 : 1;
             var env = inward ? 1 - p : p;
@@ -684,11 +606,14 @@ QtObject {
                 out["fillEntry" + fIdx] = fe;
             }
         } else if (preset === "customHide") {
-            // Instant visibility cut on entry (bools can't ease): only
-            // the exact start instant reads from, everything after reads
-            // to — matching the single diamond the lane draws at t0.
-            // Flips on the raw clock like appear.
-            out.visible = p <= 0 ? o.fromVisible !== false : o.toVisible === true;
+            // Keys hold {v}: absolute visibility, stepping within the
+            // segment like every other bool key. Without keys, the
+            // instant cut on entry reads from only at the exact start.
+            var hideKeys = genericKeysAt(o, p);
+            if (hideKeys && (hideKeys.value || {}).v !== undefined)
+                out.visible = hideKeys.value.v === true;
+            else
+                out.visible = p <= 0 ? o.fromVisible !== false : o.toVisible === true;
         } else if (preset === "customResize") {
             // Absolute box centered on the leaf's own center (shape-only
             // semantics; groups equalize per leaf but keep centers).
@@ -906,10 +831,18 @@ QtObject {
             } else
                 out.fontWeight = Math.min(1000, Math.max(1, Math.round(lerp(Number(o.from) || 0, Number(o.to) || 0, e))));
         } else if (preset === "customFlip") {
-            // Instant mirror flip on entry (bools can't ease): only the
-            // exact start reads base, everything after reads toggled —
-            // matching the single diamond the lane draws at t0.
-            if ((o.axis || "h") === "v")
+            // Keys hold {v, axis}: absolute flipped state. Per-key axis
+            // wins so changing the clip axis after keying never
+            // reinterprets old keys; without it the clip axis applies.
+            var flipKeys = genericKeysAt(o, p);
+            if (flipKeys && (flipKeys.value || {}).v !== undefined) {
+                var fkAxis = (flipKeys.value || {}).axis === "v" ? "v" : (flipKeys.value || {}).axis === "h" ? "h" : (o.axis || "h");
+                var fkV = flipKeys.value.v === true || flipKeys.value.v === 1 || String(flipKeys.value.v).toLowerCase() === "true";
+                if (fkAxis === "v")
+                    out.flipV = fkV;
+                else
+                    out.flipH = fkV;
+            } else if ((o.axis || "h") === "v")
                 out.flipV = p <= 0 ? base.flipV === true : base.flipV !== true;
             else
                 out.flipH = p <= 0 ? base.flipH === true : base.flipH !== true;
@@ -1061,8 +994,10 @@ QtObject {
             var sep = unit === "words" ? " " : "\n";
             var total = unit === "letters" ? norm.length : norm.split(sep).length;
             var shown = 0;
+            // Keys hold {frac}: an absolute reveal fraction, mode bypassed.
+            var typeKeys = genericKeysAt(o, p);
             if (total > 0) {
-                var frac = inward ? e : 1 - e;
+                var frac = typeKeys && (typeKeys.value || {}).frac !== undefined ? Math.min(1, Math.max(0, Number(typeKeys.value.frac))) : (inward ? e : 1 - e);
                 shown = Math.min(total, Math.max(0, Math.floor(frac * total + 1e-6)));
             }
             var txt = "";
@@ -1077,23 +1012,12 @@ QtObject {
         return out;
     }
 
-    // Loop-aware linear progress: none holds at the end (clamped),
-    // loop restarts each cycle, pingpong runs 0->1->0. Times before
-    // the clip start stay silent (callers skip t < t0 first).
-    function loopProgress(loop, t, t0, duration) {
+    // Clip-local linear progress, clamped: times past a clip hold its
+    // end state, times before the start stay silent (callers skip
+    // t < t0 first).
+    function clipProgress(t, t0, duration) {
         var dur = Math.max(0.001, Number(duration) || 0.8);
-        var raw = (t - t0) / dur;
-        if (loop === "loop") {
-            var p = raw % 1;
-            return p < 0 ? p + 1 : p;
-        }
-        if (loop === "pingpong") {
-            var cyc = raw % 2;
-            if (cyc < 0)
-                cyc += 2;
-            return cyc <= 1 ? cyc : 2 - cyc;
-        }
-        return Math.min(1, Math.max(0, raw));
+        return Math.min(1, Math.max(0, (t - t0) / dur));
     }
 
     // Position presets output x/y (move, slide, scale-anchored shifts,
@@ -1154,7 +1078,7 @@ QtObject {
             };
         var cur = list[li];
         var dur = Math.max(0.001, cur.c.duration);
-        var p = loopProgress(cur.c.loop, t, cur.c.t0, dur);
+        var p = clipProgress(t, cur.c.t0, dur);
         var ez = cur.c.easing || {};
         var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, p);
         var off = moveOffset(cur.c, base, cur.cx, cur.cy, e, p);
@@ -1173,8 +1097,7 @@ QtObject {
     // Full overlay map for time t: later clips win per property, so
     // stacked presets coexist (Slide owns x/y, Fade owns opacity) while
     // same-property overlaps resolve to the topmost clip. Times past a
-    // clip hold its end state, unless loop repeats (loop/pingpong);
-    // times before its start stay silent.
+    // clip hold its end state; times before its start stay silent.
     // Every frame derives from base (the playBase snapshot, or live
     // values only for nodes born mid-play): never from the live tree.
     // Movement x/y chains from the previous end (see above); w/h and all
@@ -1217,7 +1140,7 @@ QtObject {
             if (!info)
                 continue;
             var dur = Math.max(0.001, c.duration);
-            var p = loopProgress(c.loop, t, c.t0, dur);
+            var p = clipProgress(t, c.t0, dur);
             var ez = c.easing || {};
             var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, p);
             var skipXY = isPositionPreset(c.preset);

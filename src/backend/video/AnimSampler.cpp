@@ -416,11 +416,10 @@ QVariantMap maskBelowIn(const QVariantList &list, int branchIndex) {
     return {};
 }
 
-// Keyed mask values at raw progress p over o["keys"] (clip-local
-// 0..1, absolute geometry). Bracketing segment eases by the target
-// key's easing. True when usable; value holds interpolated fields.
-// Mirrors DocAnimSample.maskKeysAt. Kept for masks; customs use the
-// generic interpolator below.
+} // namespace
+
+// Shared keyed-interpolation core (see AnimSampler.h): QML preview
+// runs these through AnimBridge, export calls them directly.
 bool maskKeysAt(const QVariantMap &o, double p, QVariantMap &value) {
     QVariantList keys = o.value(QStringLiteral("keys")).toList();
     if (keys.size() < 2)
@@ -455,8 +454,11 @@ bool maskKeysAt(const QVariantMap &o, double p, QVariantMap &value) {
     const double span = qMax(1e-6, bt - at);
     const double raw = (p2 - at) / span;
     const QVariantMap ez = b.value(QStringLiteral("easing")).toMap();
-    const double ke = Anims::easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
-        ez.value(QStringLiteral("bezier")).toList(), raw);
+    // "hold" holds the previous key: constant interpolation.
+    const double ke = ez.value(QStringLiteral("id")).toString() == QLatin1String("hold")
+        ? 0.0
+        : Anims::easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
+            ez.value(QStringLiteral("bezier")).toList(), raw);
     const QVariantMap av = a.value(QStringLiteral("value")).toMap();
     const QVariantMap bv = b.value(QStringLiteral("value")).toMap();
     static const char *fields[] = {"x", "y", "w", "h", "rotation", "opacity", "feather"};
@@ -502,10 +504,7 @@ bool hasAlphaHexStr(const QString &s) {
     return t.size() == 8;
 }
 
-// Generic keyed values at raw progress p over o["keys"] (clip-local
-// 0..1). Numbers lerp, hex colors lerp (alpha-aware), bools/strings
-// step at the midpoint. Missing fields carry. True when 2+ keys.
-// Mirrors DocAnimSample.genericKeysAt.
+// Shared keyed-interpolation core (see AnimSampler.h).
 bool genericKeysAt(const QVariantMap &o, double p, QVariantMap &value) {
     QVariantList keys = o.value(QStringLiteral("keys")).toList();
     if (keys.size() < 2)
@@ -538,8 +537,12 @@ bool genericKeysAt(const QVariantMap &o, double p, QVariantMap &value) {
     const double span = qMax(1e-6, bt - at);
     const double raw = (p2 - at) / span;
     const QVariantMap ez = b.value(QStringLiteral("easing")).toMap();
-    const double ke = Anims::easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
-        ez.value(QStringLiteral("bezier")).toList(), raw);
+    // "hold" holds the previous key: constant interpolation (shared
+    // core: QML preview reaches this through AnimBridge).
+    const double ke = ez.value(QStringLiteral("id")).toString() == QLatin1String("hold")
+        ? 0.0
+        : Anims::easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
+            ez.value(QStringLiteral("bezier")).toList(), raw);
     const QVariantMap av = a.value(QStringLiteral("value")).toMap();
     const QVariantMap bv = b.value(QStringLiteral("value")).toMap();
     QSet<QString> seen;
@@ -590,7 +593,6 @@ bool genericKeysAt(const QVariantMap &o, double p, QVariantMap &value) {
     }
     return true;
 }
-} // namespace
 
 QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVariantMap &o,
     const QVariantMap &base, double cx, double cy, double e, double p) {
@@ -603,8 +605,38 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
     if (preset == QLatin1String("appear")) {
         out[QStringLiteral("opacity")] = baseOpacity * (inward ? (p <= 0 ? 0.0 : 1.0) : (p >= 1 ? 0.0 : 1.0));
     } else if (preset == QLatin1String("fade")) {
-        out[QStringLiteral("opacity")] = baseOpacity * (inward ? e : 1.0 - e);
+        // Keys hold {v}: an opacity factor on the base opacity. Mode is
+        // bypassed when keys drive, like custom clips. Mirrors DocAnimSample.
+        QVariantMap fadeKv;
+        if (genericKeysAt(o, p, fadeKv) && fadeKv.contains(QStringLiteral("v")))
+            out[QStringLiteral("opacity")] = baseOpacity * qBound(0.0, fadeKv.value(QStringLiteral("v")).toDouble(), 1.0);
+        else
+            out[QStringLiteral("opacity")] = baseOpacity * (inward ? e : 1.0 - e);
     } else if (preset == QLatin1String("slide") || preset == QLatin1String("movescale")) {
+        QVariantMap slKv;
+        if (genericKeysAt(o, p, slKv)) {
+            // Keyed slide/movescale: absolute offsets (and an absolute
+            // scale for movescale), mode bypassed. Missing v keeps the
+            // base opacity; otherwise the from-to fade still applies.
+            double skx = bx, sky = by;
+            if (preset == QLatin1String("movescale")) {
+                const double sks = qMax(0.001, slKv.contains(QStringLiteral("s")) ? slKv.value(QStringLiteral("s")).toDouble() : 1.0);
+                const double skw = qMax(0.01, bw * sks);
+                const double skh = qMax(0.01, bh * sks);
+                skx = cx + (bx - cx) * sks;
+                sky = cy + (by - cy) * sks;
+                out[QStringLiteral("w")] = skw;
+                out[QStringLiteral("h")] = skh;
+                if (shapeType == QLatin1String("text") && num(base, "fontSize") > 0)
+                    out[QStringLiteral("fontSize")] = num(base, "fontSize") * sks;
+            }
+            out[QStringLiteral("x")] = skx + slKv.value(QStringLiteral("dx"), 0.0).toDouble();
+            out[QStringLiteral("y")] = sky + slKv.value(QStringLiteral("dy"), 0.0).toDouble();
+            if (slKv.contains(QStringLiteral("v")))
+                out[QStringLiteral("opacity")] = baseOpacity * qBound(0.0, slKv.value(QStringLiteral("v")).toDouble(), 1.0);
+            else if (preset == QLatin1String("movescale") || o.value(QStringLiteral("fade")).toBool())
+                out[QStringLiteral("opacity")] = baseOpacity * (inward ? e : 1.0 - e);
+        } else {
         const QPointF d = slideVec(str(o, "direction", QStringLiteral("left")));
         const double dist = qMax(0.0, num(o, "distance"));
         const double k = inward ? 1.0 - e : e;
@@ -628,6 +660,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             out[QStringLiteral("w")] = nw;
             out[QStringLiteral("h")] = nh;
         }
+        }
     } else if (preset == QLatin1String("grow") || preset == QLatin1String("shrink")) {
         const bool isGrow = preset == QLatin1String("grow");
         // Sized ends mirroring DocAnimSample: grow runs 0 <-> amount
@@ -637,20 +670,32 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         const double gsBig = amt;
         const double g0 = inward ? (isGrow ? gsSmall : gsBig) : (isGrow ? gsBig : gsSmall);
         const double g1 = inward ? (isGrow ? gsBig : gsSmall) : (isGrow ? gsSmall : gsBig);
-        const double raw = g0 + (g1 - g0) * e;
-        // Parity: QML clamps only the box; glyphs use the raw factor, so
-        // both are preserved here.
+        // Keys hold {s}: an absolute scale factor, mode bypassed.
+        // Mirrors DocAnimSample.
+        QVariantMap grKv;
+        const double raw = (genericKeysAt(o, p, grKv) && grKv.contains(QStringLiteral("s")))
+            ? grKv.value(QStringLiteral("s")).toDouble()
+            : g0 + (g1 - g0) * e;
+        // Parity: QML clamps only the box; glyphs use the clamped factor too,
+        // so both are preserved here (was raw, diverged at exact 0).
         const double sc = qMax(0.001, raw);
         out[QStringLiteral("x")] = cx + (bx - cx) * sc;
         out[QStringLiteral("y")] = cy + (by - cy) * sc;
         out[QStringLiteral("w")] = qMax(0.01, bw * sc);
         out[QStringLiteral("h")] = qMax(0.01, bh * sc);
         if (shapeType == QLatin1String("text") && num(base, "fontSize") > 0)
-            out[QStringLiteral("fontSize")] = num(base, "fontSize") * raw;
+            out[QStringLiteral("fontSize")] = num(base, "fontSize") * sc;
     } else if (preset == QLatin1String("spin")) {
-        const double turns = qBound(0.25, num(o, "turns", 1.0), 10.0);
-        const double dir = str(o, "direction") == QLatin1String("ccw") ? -1.0 : 1.0;
-        out[QStringLiteral("rotation")] = num(base, "rotation") + dir * 360.0 * turns * (inward ? 1.0 - e : e);
+        // Keys hold {r}: an absolute rotation offset from base.
+        // Mirrors DocAnimSample.
+        QVariantMap spKv;
+        if (genericKeysAt(o, p, spKv) && spKv.contains(QStringLiteral("r")))
+            out[QStringLiteral("rotation")] = num(base, "rotation") + spKv.value(QStringLiteral("r")).toDouble();
+        else {
+            const double turns = qBound(0.25, num(o, "turns", 1.0), 10.0);
+            const double dir = str(o, "direction") == QLatin1String("ccw") ? -1.0 : 1.0;
+            out[QStringLiteral("rotation")] = num(base, "rotation") + dir * 360.0 * turns * (inward ? 1.0 - e : e);
+        }
     } else if (preset == QLatin1String("twist")) {
         const double dir = str(o, "direction") == QLatin1String("ccw") ? -1.0 : 1.0;
         const double env = inward ? 1.0 - p : p;
@@ -780,10 +825,15 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             out[QStringLiteral("fillEntry") + QString::number(fIdx)] = fe;
         }
     } else if (preset == QLatin1String("customHide")) {
-        // Instant cut on entry (see the QML sampler): only the exact
-        // start reads from, matching the lane's single diamond at t0.
-        out[QStringLiteral("visible")] = p <= 0 ? o.value(QStringLiteral("fromVisible"), true).toBool()
-                                                 : o.value(QStringLiteral("toVisible"), false).toBool();
+        // Keys hold {v}: absolute visibility, stepping within the
+        // segment like every other bool key. Without keys, the instant
+        // cut reads from only at the exact start. Mirrors DocAnimSample.
+        QVariantMap hideKv;
+        if (genericKeysAt(o, p, hideKv) && hideKv.contains(QStringLiteral("v")))
+            out[QStringLiteral("visible")] = hideKv.value(QStringLiteral("v")).toBool();
+        else
+            out[QStringLiteral("visible")] = p <= 0 ? o.value(QStringLiteral("fromVisible"), true).toBool()
+                                                     : o.value(QStringLiteral("toVisible"), false).toBool();
     } else if (preset == QLatin1String("customResize")) {
         QVariantMap rsKv;
         const bool hasRsKeys = genericKeysAt(o, p, rsKv);
@@ -1050,9 +1100,20 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         else
             out[QStringLiteral("fontWeight")] = qBound(1, qRound(num(o, "from") + (num(o, "to") - num(o, "from")) * e), 1000);
     } else if (preset == QLatin1String("customFlip")) {
-        // Instant flip on entry (see the QML sampler): only the exact
-        // start reads base, matching the lane's single diamond at t0.
-        if (str(o, "axis", QStringLiteral("h")) == QLatin1String("v"))
+        // Keys hold {v, axis}: absolute flipped state. Per-key axis wins
+        // so changing the clip axis after keying never reinterprets old
+        // keys (mirrors DocAnimSample).
+        QVariantMap flipKv;
+        if (genericKeysAt(o, p, flipKv) && flipKv.contains(QStringLiteral("v"))) {
+            QString fkAxis = str(o, "axis", QStringLiteral("h"));
+            const QString ka = flipKv.value(QStringLiteral("axis")).toString();
+            if (ka == QLatin1String("v") || ka == QLatin1String("h"))
+                fkAxis = ka;
+            if (fkAxis == QLatin1String("v"))
+                out[QStringLiteral("flipV")] = flipKv.value(QStringLiteral("v")).toBool();
+            else
+                out[QStringLiteral("flipH")] = flipKv.value(QStringLiteral("v")).toBool();
+        } else if (str(o, "axis", QStringLiteral("h")) == QLatin1String("v"))
             out[QStringLiteral("flipV")] = p <= 0 ? base.value(QStringLiteral("flipV")).toBool()
                                                    : !base.value(QStringLiteral("flipV")).toBool();
         else
@@ -1260,7 +1321,12 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         }
         int shown = 0;
         if (total > 0) {
-            const double frac = inward ? e : 1.0 - e;
+            // Keys hold {frac}: an absolute reveal fraction, mode
+            // bypassed. Mirrors DocAnimSample.
+            QVariantMap tyKv;
+            const double frac = (genericKeysAt(o, p, tyKv) && tyKv.contains(QStringLiteral("frac")))
+                ? qBound(0.0, tyKv.value(QStringLiteral("frac")).toDouble(), 1.0)
+                : (inward ? e : 1.0 - e);
             shown = qBound(0, int(frac * total + 1e-6), total);
         }
         QString txt;
@@ -1444,25 +1510,11 @@ bool isGroupStylePreset(const QString &preset) {
         || preset == QLatin1String("customGrain");
 }
 
-// Loop-aware linear progress: none holds at the end (clamped), loop
-// restarts each cycle, pingpong runs 0->1->0. Mirrors
-// DocAnimSample.loopProgress (old scenes miss the key and read none).
-double loopProgress(const QString &loop, double t, double t0, double dur) {
+// Clip-local linear progress, clamped: times past a clip hold its end
+// state. Mirrors DocAnimSample.clipProgress.
+double clipProgress(double t, double t0, double dur) {
     const double d = qMax(0.001, dur);
-    const double raw = (t - t0) / d;
-    if (loop == QLatin1String("loop")) {
-        double p = std::fmod(raw, 1.0);
-        if (p < 0.0)
-            p += 1.0;
-        return p;
-    }
-    if (loop == QLatin1String("pingpong")) {
-        double cyc = std::fmod(raw, 2.0);
-        if (cyc < 0.0)
-            cyc += 2.0;
-        return cyc <= 1.0 ? cyc : 2.0 - cyc;
-    }
-    return qBound(0.0, raw, 1.0);
+    return qBound(0.0, (t - t0) / d, 1.0);
 }
 
 struct PosClip {
@@ -1503,8 +1555,7 @@ QPointF chainedOffsetAt(const QList<PosClip> &list, const QVariantMap &base, dou
         return {0.0, 0.0};
     const PosClip &cur = list.at(li);
     const double dur = qMax(0.001, cur.c.value(QStringLiteral("duration"), 0.8).toDouble());
-    const double p = loopProgress(cur.c.value(QStringLiteral("loop"), QStringLiteral("none")).toString(), t,
-        cur.c.value(QStringLiteral("t0"), 0.0).toDouble(), dur);
+    const double p = clipProgress(t, cur.c.value(QStringLiteral("t0"), 0.0).toDouble(), dur);
     const QVariantMap ez = cur.c.value(QStringLiteral("easing")).toMap();
     const double e = Anims::easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
         ez.value(QStringLiteral("bezier")).toList(), p);
@@ -1602,8 +1653,7 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         if (!info.hasBox)
             continue;
         const double dur = qMax(0.001, c.value(QStringLiteral("duration"), 0.8).toDouble());
-        const double p = loopProgress(c.value(QStringLiteral("loop"), QStringLiteral("none")).toString(), t,
-            c.value(QStringLiteral("t0"), 0.0).toDouble(), dur);
+        const double p = clipProgress(t, c.value(QStringLiteral("t0"), 0.0).toDouble(), dur);
         const QVariantMap ez = c.value(QStringLiteral("easing")).toMap();
         const double e = easeValue(ez.value(QStringLiteral("id"), QStringLiteral("easeOut")).toString(),
             ez.value(QStringLiteral("bezier")).toList(), p);

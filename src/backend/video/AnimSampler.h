@@ -8,10 +8,12 @@
 
 // AnimSampler: QtCore-only animation sampling for export.
 //
-// Ownership: C++ port of DocEasing.qml, DocPathSample.qml and the sampling
-// half of DocAnimSample.qml (presetOverlay, per-clip evaluation,
-// writeback). VideoExporter renders from here so export matches the canvas
-// preview. When adding a preset, update both sides together.
+// Ownership: easing, motion-path measuring and keyed interpolation live
+// here once (easeValue/samplePath/maskKeysAt/genericKeysAt) and QML
+// preview delegates through AnimBridge, so preview and export match by
+// construction. Per-preset overlay math is still mirrored with
+// DocAnimSample.qml (presetOverlay): when adding a preset, update both
+// sides together.
 // Constraints: no QtGui/QtQuick dependency; operates on plain scene maps.
 // Units: positions/sizes in scene px, time in seconds, eased progress e
 // and linear progress p both in [0, 1].
@@ -47,6 +49,17 @@ bool parseHex(const QString &hex, int &r, int &g, int &b);
 QString lerpColor(const QString &from, const QString &to, double t);
 bool parseHexA(const QString &hex, int &a, int &r, int &g, int &b);
 QString lerpColorA(const QString &from, const QString &to, double t);
+
+// Keyed interpolation core shared with QML preview: AnimBridge
+// delegates to these, so there is one implementation instead of a
+// ported twin. maskKeysAt covers absolute-geometry mask fields;
+// genericKeysAt lerps numbers, lerps hex colors alpha-aware, steps
+// bools/strings at the midpoint and carries missing fields. True
+// when o["keys"] holds 2+ usable keys, with value holding the
+// interpolated fields ("hold" as a target key's easing id freezes
+// the segment at the previous key).
+bool maskKeysAt(const QVariantMap &o, double p, QVariantMap &value);
+bool genericKeysAt(const QVariantMap &o, double p, QVariantMap &value);
 
 // Single-clip overlay for one leaf (mirrors DocAnimSample.presetOverlay).
 // base: captureBase row for the leaf (or captureGroupBase row for a

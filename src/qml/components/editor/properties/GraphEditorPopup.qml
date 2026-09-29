@@ -13,6 +13,11 @@ Popup {
     required property var doc
     required property int clipId
 
+    // Key scope: -1 edits the clip easing (classic path); >= 0 edits
+    // that stored key's easing, so keyframe strips share this popup.
+    // Reset on close so clip timing always reopens unscoped.
+    property int keyIndex: -1
+
     property string curId: "easeOut"
     property real hx1: 0
     property real hy1: 0
@@ -29,6 +34,7 @@ Popup {
     y: 40
 
     onOpened: graph.reloadFromClip()
+    onClosed: graph.keyIndex = -1
     onWatchedClipChanged: {
         if (!graph.watchedClip && graph.opened)
             graph.close();
@@ -245,6 +251,15 @@ Popup {
             name: qsTr("Custom"),
             bezier: null
         });
+        // Key scope offers Hold like the row dropdowns (no curve to
+        // draw; the strip labels it).
+        if (graph.keyIndex >= 0) {
+            opts.push({
+                id: "hold",
+                name: qsTr("Hold"),
+                bezier: null
+            });
+        }
         return opts;
     }
 
@@ -258,6 +273,23 @@ Popup {
         var c = graph.doc ? graph.doc.animClip(graph.clipId) : null;
         if (!c)
             return;
+        if (graph.keyIndex >= 0) {
+            var ke = graph.keyEasingOf(c);
+            graph.curId = ke.id || "easeOut";
+            var kb = null;
+            if (graph.curId === "custom" && ke.bezier)
+                kb = ke.bezier;
+            else if (graph.curId === "hold")
+                kb = [0.25, 0.1, 0.25, 1];
+            else if (graph.doc)
+                kb = graph.doc.anim.presets.easingBezier(graph.curId);
+            kb = kb || [0.25, 0.1, 0.25, 1];
+            graph.hx1 = kb[0];
+            graph.hy1 = kb[1];
+            graph.hx2 = kb[2];
+            graph.hy2 = kb[3];
+            return;
+        }
         var ez = c.easing || {};
         graph.curId = typeof ez.id === "string" && ez.id !== "" ? ez.id : "easeOut";
         var b = null;
@@ -273,14 +305,85 @@ Popup {
     }
 
     // Dropdown pick: presets commit once, Custom keeps the handles as
-    // they stand (already custom means nothing to do).
+    // they stand (already custom means nothing to do). Key scope
+    // writes the stored key instead of the clip easing.
     function pickOption(id) {
         typeMenu.close();
+        if (graph.keyIndex >= 0) {
+            if (id === "custom")
+                graph.makeKeyCustom();
+            else
+                graph.writeKeyEasing(id);
+            return;
+        }
         if (id === "custom") {
             graph.makeCustom();
             return;
         }
         graph.pickEasing(id);
+    }
+
+    // Stored key's easing (id + handles), defaulting to easeOut when
+    // the key index is stale (deleted mid-edit).
+    function keyEasingOf(c) {
+        if (!c || !c.options || !c.options.keys)
+            return {};
+        var keys = c.options.keys;
+        if (graph.keyIndex < 0 || graph.keyIndex >= keys.length)
+            return {};
+        return (keys[graph.keyIndex] || {}).easing || {};
+    }
+
+    // Single-commit key easing write (dropdown picks): rebuilds the key
+    // list preserving values and sibling easings, bezier included.
+    function writeKeyEasing(id, bezier) {
+        var c = graph.doc ? graph.doc.animClip(graph.clipId) : null;
+        if (!c || !c.options || !c.options.keys)
+            return;
+        var keys = c.options.keys;
+        if (graph.keyIndex < 0 || graph.keyIndex >= keys.length)
+            return;
+        graph.curId = String(id || "easeOut");
+        if (graph.curId !== "custom" && graph.curId !== "hold" && graph.doc) {
+            var b = graph.doc.anim.presets.easingBezier(graph.curId);
+            graph.hx1 = b[0];
+            graph.hy1 = b[1];
+            graph.hx2 = b[2];
+            graph.hy2 = b[3];
+        }
+        var kept = [];
+        for (var i = 0; i < keys.length; i++) {
+            var ke = (keys[i].easing || {});
+            if (i === graph.keyIndex) {
+                var isCustomPick = graph.curId === "custom";
+                kept.push({
+                    t: keys[i].t,
+                    value: JSON.parse(JSON.stringify(keys[i].value || {})),
+                    easing: {
+                        id: graph.curId,
+                        bezier: bezier !== undefined ? bezier : (isCustomPick ? (ke.bezier ? ke.bezier.slice() : ke.bezier) : undefined)
+                    }
+                });
+            } else {
+                kept.push({
+                    t: keys[i].t,
+                    value: JSON.parse(JSON.stringify(keys[i].value || {})),
+                    easing: {
+                        id: ke.id || "easeOut",
+                        bezier: ke.bezier ? ke.bezier.slice() : ke.bezier
+                    }
+                });
+            }
+        }
+        graph.doc.setClipOptions(graph.clipId, {
+            keys: kept
+        });
+    }
+
+    function makeKeyCustom() {
+        if (graph.curId === "custom" || !graph.doc)
+            return;
+        graph.writeKeyEasing("custom", [graph.hx1, graph.hy1, graph.hx2, graph.hy2]);
     }
 
     function makeCustom() {
@@ -318,7 +421,13 @@ Popup {
         graph.hx2 = b[2];
         graph.hy2 = b[3];
         graph.curId = "custom";
-        if (graph.doc)
+        if (!graph.doc)
+            return;
+        // Key scope streams silent nudges (single undo entry like the
+        // strips); clip scope commits per tick inside the transaction.
+        if (graph.keyIndex >= 0)
+            graph.doc.anim.nudgeKeyBezier(graph.clipId, graph.keyIndex, [graph.hx1, graph.hy1, graph.hx2, graph.hy2]);
+        else
             graph.doc.setClipEasing(graph.clipId, {
                 id: "custom",
                 bezier: [graph.hx1, graph.hy1, graph.hx2, graph.hy2]
@@ -326,7 +435,16 @@ Popup {
     }
 
     function endHandle() {
-        if (graph.doc)
+        if (!graph.doc)
+            return;
+        // Key scope refreshes rows without a second entry (see the
+        // strips); clip scope already rebuilt per tick.
+        if (graph.keyIndex >= 0) {
+            graph.doc.touch();
             graph.doc.endTransaction();
+            graph.doc.anim.clips = graph.doc.anim.clips.slice();
+            return;
+        }
+        graph.doc.endTransaction();
     }
 }

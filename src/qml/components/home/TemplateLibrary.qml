@@ -78,8 +78,9 @@ QtObject {
 
     // Light vertical 9:16 offer in five beats: eyebrow fades, the
     // headline slides up, a rule draws itself, the card rises with a
-    // checklist cascade, the CTA pops and breathes, then everything
-    // fades for the loop point. Pricing-scene restraint, portrait.
+    // checklist cascade, the CTA pops and breathes (two one-shot fades),
+    // then everything fades for the outro. Pricing-scene restraint,
+    // portrait.
     function buildStoryPromo(doc) {
         doc.beginTransaction();
         doc.sceneWidth = 1080;
@@ -126,14 +127,14 @@ QtObject {
         if (sl)
             sl.vAlign = "middle";
         library.styleText(doc, foot, "Footnote", "Ends Sunday", 28, 400, "#888888", "center");
-        doc.applyPreset("fade", [brow], 0.1, 0.4, "in", {}, null, "none", 0);
+        doc.applyPreset("fade", [brow], 0.1, 0.4, "in", {}, null, 0);
         doc.applyPreset("slide", [head], 0.3, 0.6, "in", {
             direction: "up",
             distance: 110,
             fade: true
         }, {
             id: "easeOut"
-        }, "none", 0);
+        }, 0);
         doc.applyPreset("customResize", [rule], 0.8, 0.5, "in", {
             fromW: 8,
             fromH: 4,
@@ -141,36 +142,42 @@ QtObject {
             toH: 4
         }, {
             id: "easeOut"
-        }, "none", 0);
-        doc.applyPreset("fade", [sub], 1.0, 0.4, "in", {}, null, "none", 0);
+        }, 0);
+        doc.applyPreset("fade", [sub], 1.0, 0.4, "in", {}, null, 0);
         doc.applyPreset("slide", [card], 1.2, 0.55, "in", {
             direction: "up",
             distance: 90,
             fade: true
         }, {
             id: "easeOut"
-        }, "none", 0);
+        }, 0);
         doc.applyPreset("slide", dots.concat(rows), 1.4, 0.45, "in", {
             direction: "left",
             distance: 80,
             fade: true
         }, {
             id: "easeOut"
-        }, "none", 0.09);
+        }, 0.09);
         doc.applyPreset("customScale", [cta, ctaLabel], 1.9, 0.5, "in", {
             from: 0,
             to: 1
         }, {
             id: "backOut"
-        }, "none", 0);
-        doc.applyPreset("customOpacity", [cta], 2.5, 2.7, "in", {
+        }, 0);
+        doc.applyPreset("customOpacity", [cta], 2.5, 1.2, "in", {
             from: 1,
             to: 0.75
         }, {
             id: "easeInOut"
-        }, "pingpong", 0);
-        doc.applyPreset("fade", [foot], 2.2, 0.4, "in", {}, null, "none", 0);
-        doc.applyPreset("fade", [brow, head, rule, sub, card, cta, ctaLabel, foot].concat(dots, rows), 5.2, 0.6, "out", {}, null, "none", 0);
+        }, 0);
+        doc.applyPreset("customOpacity", [cta], 3.7, 1.5, "in", {
+            from: 0.75,
+            to: 1
+        }, {
+            id: "easeInOut"
+        }, 0);
+        doc.applyPreset("fade", [foot], 2.2, 0.4, "in", {}, null, 0);
+        doc.applyPreset("fade", [brow, head, rule, sub, card, cta, ctaLabel, foot].concat(dots, rows), 5.2, 0.6, "out", {}, null, 0);
         doc.endTransaction();
         return true;
     }
@@ -230,23 +237,23 @@ QtObject {
         if (hl)
             hl.glows = [glow];
         var board = [title, sub].concat(cards, names, prices, pers, feats, ctas, ctaLabels);
-        doc.applyPreset("fade", [title], 0.1, 0.5, "in", {}, null, "none", 0);
-        doc.applyPreset("fade", [sub], 0.25, 0.5, "in", {}, null, "none", 0);
+        doc.applyPreset("fade", [title], 0.1, 0.5, "in", {}, null, 0);
+        doc.applyPreset("fade", [sub], 0.25, 0.5, "in", {}, null, 0);
         doc.applyPreset("slide", cards.concat(names, prices, pers, feats, ctas, ctaLabels), 0.4, 0.7, "in", {
             direction: "up",
             distance: 90,
             fade: true
         }, {
             id: "easeOut"
-        }, "none", 0.06);
+        }, 0.06);
         doc.applyPreset("customScale", prices, 1.6, 0.5, "in", {
             from: 0.5,
             to: 1
         }, {
             id: "backOut"
-        }, "none", 0.15);
-        doc.applyPreset("fade", [foot], 2.4, 0.5, "in", {}, null, "none", 0);
-        doc.applyPreset("fade", board.concat([foot]), 6.0, 0.8, "out", {}, null, "none", 0);
+        }, 0.15);
+        doc.applyPreset("fade", [foot], 2.4, 0.5, "in", {}, null, 0);
+        doc.applyPreset("fade", board.concat([foot]), 6.0, 0.8, "out", {}, null, 0);
         doc.endTransaction();
         return true;
     }

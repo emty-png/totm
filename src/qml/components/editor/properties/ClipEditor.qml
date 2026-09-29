@@ -5,7 +5,8 @@ import Totm
 
 // Clip options editor shell: header (back plus preset name), Mode
 // section (presets only; customs carry explicit from-to), per-preset
-// and per-custom option sections plus the timing section. Back routes
+// and per-custom option sections, timing, keyframes, then the clip
+// clipboard. Back routes
 // through backPolicy (shape panel) with a clear-selection fallback.
 // Path redraw routes through redrawPolicy (canvas draw mode).
 ScrollView {
@@ -17,7 +18,12 @@ ScrollView {
     property var backPolicy: null
     property var redrawPolicy: null
 
-    readonly property var clipData: editor.doc ? editor.doc.animClip(editor.clipId) : null
+    readonly property var clipData: {
+        if (!editor.doc)
+            return null;
+        editor.doc.anim.clipRev;
+        return editor.doc.animClip(editor.clipId);
+    }
     readonly property bool isCustom: !!editor.clipData && !!editor.doc && editor.doc.anim.presets.isCustom(editor.clipData.preset)
 
     contentWidth: availableWidth
@@ -310,10 +316,22 @@ ScrollView {
             }
         }
 
+        // Timing and easing.
+        PanelSection {
+            width: parent.width
+            title: qsTr("Animation")
+
+            ClipTimingOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+                graphPolicy: () => graphPopup.open()
+            }
+        }
+
         // Keyframes (header add button captures the live look at the
-        // playhead). Available on mask reveals and custom from-to clips;
-        // one key stores, two or more drive multi-stop motion with
-        // per-key easing. From-to stays as the fallback.
+        // playhead). One key stores, two or more drive multi-stop
+        // motion with per-key easing. From-to stays as the fallback.
         PanelSection {
             width: parent.width
             title: qsTr("Keyframes")
@@ -327,19 +345,107 @@ ScrollView {
                 Layout.fillWidth: true
                 doc: editor.doc
                 clipId: editor.clipId
+                graphKeyPolicy: keyIndex => editor.openKeyGraph(keyIndex)
             }
         }
 
-        // Timing and easing.
+        // Clip clipboard: duplicate plus app-wide copy/paste. Lives
+        // below Keyframes so capture controls sit closest to the keys.
         PanelSection {
             width: parent.width
-            title: qsTr("Animation")
+            title: qsTr("Clip")
 
-            ClipTimingOptions {
-                Layout.fillWidth: true
-                doc: editor.doc
-                clipId: editor.clipId
-                graphPolicy: () => graphPopup.open()
+            ColumnLayout {
+                spacing: 8
+
+                // Copies this clip to the playhead (one undo entry, copy selected).
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 32
+                    radius: AppTheme.radiusSmall
+                    color: dupMouse.containsMouse || dupMouse.pressed ? AppTheme.hover : AppTheme.surface
+                    border.width: 1
+                    border.color: AppTheme.fieldBorder
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("Duplicate clip")
+                        font.pixelSize: 12
+                        color: AppTheme.foreground
+                    }
+
+                    MouseArea {
+                        id: dupMouse
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: editor.duplicateClip()
+                    }
+                }
+
+                // Cross-shape/design copy: templates live app-wide in
+                // TabState.animClipboard (same store the shortcuts use),
+                // paste re-anchors earliest at the playhead onto the
+                // selected tops.
+                RowLayout {
+                    spacing: 8
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 32
+                        radius: AppTheme.radiusSmall
+                        border.width: 1
+                        border.color: AppTheme.fieldBorder
+                        color: copyMouse.containsMouse || copyMouse.pressed ? AppTheme.hover : AppTheme.surface
+                        opacity: editor.clipData !== null ? 1 : 0.4
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: qsTr("Copy clip")
+                            font.pixelSize: 12
+                            color: AppTheme.foreground
+                        }
+
+                        MouseArea {
+                            id: copyMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton
+                            cursorShape: editor.clipData !== null ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: editor.copyClip()
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 32
+                        radius: AppTheme.radiusSmall
+                        border.width: 1
+                        border.color: AppTheme.fieldBorder
+                        color: pasteMouse.containsMouse || pasteMouse.pressed ? AppTheme.hover : AppTheme.surface
+                        opacity: editor.canPasteClips() ? 1 : 0.4
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: qsTr("Paste clips")
+                            font.pixelSize: 12
+                            color: AppTheme.foreground
+                        }
+
+                        MouseArea {
+                            id: pasteMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton
+                            cursorShape: editor.canPasteClips() ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: editor.pasteClips()
+                        }
+                    }
+                }
             }
         }
 
@@ -363,6 +469,33 @@ ScrollView {
 
         doc: editor.doc
         clipId: editor.clipId
+    }
+
+    function duplicateClip() {
+        if (editor.doc)
+            editor.doc.duplicateClips([editor.clipId]);
+    }
+
+    function canPasteClips() {
+        if (!editor.doc)
+            return false;
+        editor.doc.rev;
+        return TabState.animClipboard.length > 0 && editor.doc.selectedTops().length > 0;
+    }
+
+    function copyClip() {
+        if (editor.doc && editor.clipData)
+            TabState.animClipboard = editor.doc.copyClips([editor.clipId]);
+    }
+
+    function pasteClips() {
+        if (!editor.doc || !editor.canPasteClips())
+            return;
+        var tops = editor.doc.selectedTops();
+        var uids = [];
+        for (var i = 0; i < tops.length; i++)
+            uids.push(tops[i].uid);
+        editor.doc.pasteClips(TabState.animClipboard, uids);
     }
 
     function presetTitle() {
@@ -398,6 +531,13 @@ ScrollView {
             editor.doc.deleteSelectedClips();
         else
             editor.doc.deleteClips([editor.clipId]);
+    }
+
+    // Segment popup: the shared Animation-type editor scoped to one
+    // stored key (dropdown picks and handle drags land on its easing).
+    function openKeyGraph(keyIndex) {
+        graphPopup.keyIndex = keyIndex;
+        graphPopup.open();
     }
 
     function redrawPath() {

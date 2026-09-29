@@ -207,8 +207,8 @@ QtObject {
 
     // Animation. DocAnim checkpoints internally after validating, so
     // these stay thin pass-throughs (never double-checkpoint here).
-    function applyPreset(presetId, targetUids, t0, duration, mode, options, easing, loop, stagger) {
-        return anim.applyPreset(presetId, targetUids, t0, duration, mode, options, easing, loop, stagger);
+    function applyPreset(presetId, targetUids, t0, duration, mode, options, easing, stagger) {
+        return anim.applyPreset(presetId, targetUids, t0, duration, mode, options, easing, stagger);
     }
     function setClipOptions(id, patch) {
         return anim.setClipOptions(id, patch);
@@ -230,9 +230,6 @@ QtObject {
     }
     function setClipMode(id, mode) {
         return anim.setClipMode(id, mode);
-    }
-    function setClipLoop(id, loop) {
-        return anim.setClipLoop(id, loop);
     }
     function deleteClips(ids) {
         return anim.deleteClips(ids);
@@ -649,10 +646,13 @@ QtObject {
         reorderer.moveWithinParent(parentUid, from, to);
     }
 
-    // Geometry and bounds.
+    // Geometry and bounds. Selection edits auto-capture keys at the
+    // playhead while record is armed (one undo entry: the pre-checkpoint
+    // or the outer gesture owns it, autocapture stays silent).
     function moveSelected(dx, dy) {
         history.checkpoint();
         edits.moveSelected(dx, dy);
+        anim.autocapture();
     }
     function snapSelection() {
         edits.snapSelection();
@@ -660,18 +660,22 @@ QtObject {
     function scaleSelection(orig, box0, newBox) {
         history.checkpoint();
         edits.scaleSelection(orig, box0, newBox);
+        anim.autocapture();
     }
     function rotateSelected90() {
         history.checkpoint();
         edits.rotateSelected90();
+        anim.autocapture();
     }
     function flipSelectedH() {
         history.checkpoint();
         edits.flipSelectedH();
+        anim.autocapture();
     }
     function flipSelectedV() {
         history.checkpoint();
         edits.flipSelectedV();
+        anim.autocapture();
     }
     function alignSelected(mode) {
         // Pre-check before checkpoint so single selections never stage
@@ -681,7 +685,9 @@ QtObject {
         if (["hLeft", "hCenter", "hRight", "vTop", "vMiddle", "vBottom"].indexOf(mode) < 0)
             return false;
         history.checkpoint();
-        return edits.alignSelection(mode);
+        var aligned = edits.alignSelection(mode);
+        anim.autocapture();
+        return aligned;
     }
     function distributeSelected(axis) {
         if (selectedTops().length < 3)
@@ -689,7 +695,9 @@ QtObject {
         if (axis !== "h" && axis !== "v")
             return false;
         history.checkpoint();
-        return edits.distributeSelected(axis);
+        var spread = edits.distributeSelected(axis);
+        anim.autocapture();
+        return spread;
     }
     function selectedLeafSnapshot() {
         return edits.selectedLeafSnapshot();
@@ -701,6 +709,7 @@ QtObject {
     function setPropSelected(role, value) {
         history.checkpoint();
         edits.setPropSelected(role, value);
+        anim.autocapture();
     }
     // Style targets for panel effect edits: selected leaves, or the
     // single selected group itself (see DocEdits.styleTargets).

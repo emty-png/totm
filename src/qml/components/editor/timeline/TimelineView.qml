@@ -23,7 +23,11 @@ Item {
     property bool clipDragging: false
     property bool marqueeDragged: false
     readonly property real originX: 8
-    readonly property real gutterWidth: 200
+    // Wide enough for the transport row (play/stop/record plus the
+    // duration field) so nothing pushes into the tracks divider.
+    // 12+12 margins + 3×ToolbarButton + 76px duration field + 3×8px
+    // spacing ≈ 220px + slack for record toggle.
+    readonly property real gutterWidth: 236
     // Headroom for the panel resize strip; divider and playhead bleed
     // through to the top edge.
     readonly property real topPad: 6
@@ -32,6 +36,11 @@ Item {
     readonly property real tracksTop: timeline.topPad + timeline.headerHeight + 1
     readonly property real rulerHeight: 28
     readonly property real laneHeight: 30
+    // Dopesheet: per-property channel rows under an expanded lane.
+    // expanded maps target uid -> true (session-only, reassigned wholesale
+    // so lanes recompute like selection does).
+    property var expanded: ({})
+    readonly property real dopeRowH: 20
 
     readonly property real playheadX: timeline.doc ? timeline.doc.anim.currentTime * timeline.pxPerSec : 0
     readonly property var lanes: timeline.computeLanes()
@@ -116,7 +125,7 @@ Item {
                 interactive: false
                 clip: true
                 contentWidth: timeline.gutterWidth
-                contentHeight: timeline.lanes.length * timeline.laneHeight + timeline.audioTop + timeline.audioRows.length * timeline.laneHeight
+                contentHeight: timeline.lanesHeight() + timeline.audioTop + timeline.audioRows.length * timeline.laneHeight
                 contentY: tracks.contentY
 
                 Column {
@@ -127,21 +136,47 @@ Item {
 
                         Item {
                             width: timeline.gutterWidth
-                            height: timeline.laneHeight
+                            height: modelData.h
 
                             RowLayout {
                                 anchors {
                                     left: parent.left
                                     right: parent.right
-                                    verticalCenter: parent.verticalCenter
-                                    leftMargin: 12
+                                    top: parent.top
+                                    leftMargin: 4
                                     rightMargin: 8
                                 }
-                                spacing: 4
+                                height: timeline.laneHeight
+                                spacing: 2
+
+                                // Dopesheet chevron: expands per-property
+                                // channel rows beside the lane's key ticks.
+                                Item {
+                                    Layout.preferredWidth: 20
+                                    Layout.preferredHeight: 20
+                                    visible: modelData.channels.length > 0
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: timeline.expanded[modelData.uid] ? "▾" : "▸"
+                                        font.pixelSize: 11
+                                        color: AppTheme.muted
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        acceptedButtons: Qt.LeftButton
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: timeline.toggleExpand(modelData.uid)
+                                    }
+                                }
 
                                 Text {
                                     Layout.maximumWidth: parent.width
                                     Layout.preferredWidth: Math.min(implicitWidth, parent.width)
+                                    // Chevron-less lanes keep the legacy 12px text inset.
+                                    Layout.leftMargin: modelData.channels.length > 0 ? 0 : 8
                                     text: modelData.objectName
                                     font.pixelSize: 12
                                     font.weight: Font.DemiBold
@@ -155,6 +190,34 @@ Item {
                                     font.pixelSize: 12
                                     elide: Text.ElideRight
                                     color: AppTheme.muted
+                                }
+                            }
+
+                            // Channel labels pairing with the lane's key rows.
+                            Column {
+                                y: timeline.laneHeight
+                                width: parent.width
+                                visible: !!timeline.expanded[modelData.uid] && modelData.channels.length > 0
+
+                                Repeater {
+                                    model: modelData.channels
+
+                                    Item {
+                                        width: parent.width
+                                        height: timeline.dopeRowH
+
+                                        Text {
+                                            anchors {
+                                                left: parent.left
+                                                verticalCenter: parent.verticalCenter
+                                                leftMargin: 28
+                                            }
+                                            text: timeline.doc ? timeline.doc.anim.presets.channelName(String(modelData)) : ""
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                            color: AppTheme.muted
+                                        }
+                                    }
                                 }
                             }
 
@@ -263,7 +326,7 @@ Item {
             interactive: false
             flickableDirection: Flickable.HorizontalAndVerticalFlick
             contentWidth: Math.max(tracks.width, timeline.tracksWidth())
-            contentHeight: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight + timeline.audioTop + timeline.audioRows.length * timeline.laneHeight
+            contentHeight: timeline.tracksTop + timeline.lanesHeight() + timeline.audioTop + timeline.audioRows.length * timeline.laneHeight
 
             ScrollBar.horizontal: ScrollBar {
                 policy: ScrollBar.AsNeeded
@@ -333,7 +396,7 @@ Item {
                 x: 0
                 y: timeline.tracksTop
                 width: tracks.contentWidth
-                height: timeline.lanes.length * timeline.laneHeight
+                height: timeline.lanesHeight()
 
                 Repeater {
                     id: laneRows
@@ -347,10 +410,13 @@ Item {
 
                     TimelineLane {
                         width: tracks.contentWidth
-                        height: timeline.laneHeight
+                        height: modelData.h
                         laneUid: modelData.uid
                         laneName: modelData.name
                         clips: modelData.clips
+                        channels: modelData.channels
+                        expanded: !!timeline.expanded[modelData.uid] && modelData.channels.length > 0
+                        dopeRowH: timeline.dopeRowH
                         pxPerSec: timeline.pxPerSec
                         originX: timeline.originX
                         selectedIds: modelData.selected
@@ -367,7 +433,7 @@ Item {
             Item {
                 x: 0
                 width: tracks.contentWidth
-                y: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight
+                y: timeline.tracksTop + timeline.lanesHeight()
                 height: timeline.audioHeadHeight
                 visible: timeline.hasAudio
 
@@ -388,7 +454,7 @@ Item {
 
                 x: 0
                 width: tracks.contentWidth
-                y: timeline.tracksTop + timeline.lanes.length * timeline.laneHeight + timeline.audioTop
+                y: timeline.tracksTop + timeline.lanesHeight() + timeline.audioTop
                 height: timeline.audioRows.length * timeline.laneHeight
 
                 Repeater {
@@ -486,12 +552,15 @@ Item {
     }
 
     // One lane per animated target in first-appearance order; reads rev
-    // so renames, edits and selection refresh the rows.
+    // so renames, edits and selection refresh the rows. channels unions
+    // the presets' dopesheet channels; h grows by one dope row per
+    // channel while expanded.
     function computeLanes() {
         var d = timeline.doc;
         if (!d)
             return [];
         d.rev;
+        var exp = timeline.expanded;
         var clips = d.anim.clips;
         var sel = d.anim.selectedClipIds;
         var byTarget = {};
@@ -510,16 +579,54 @@ Item {
             var n = d.findNode(Number(order[t]));
             var base = n && n.name ? n.name : qsTr("Clip");
             var sub = mine.length > 1 ? "· " + qsTr("%1 clips").arg(mine.length) : "· " + d.anim.presets.presetName(mine[0].preset);
+            var chs = [];
+            for (var c = 0; c < mine.length; c++) {
+                var pc = d.anim.presets.presetChannels(mine[c].preset);
+                for (var h = 0; h < pc.length; h++) {
+                    if (chs.indexOf(pc[h]) < 0)
+                        chs.push(pc[h]);
+                }
+            }
+            var open = !!exp[order[t]] && chs.length > 0;
             out.push({
                 uid: order[t],
                 name: base + " " + sub,
                 objectName: base,
                 presetName: sub,
                 clips: mine,
-                selected: sel
+                selected: sel,
+                channels: chs,
+                h: timeline.laneHeight + (open ? chs.length * timeline.dopeRowH : 0)
             });
         }
         return out;
+    }
+
+    // Total lane stack height (lanes expand independently).
+    function lanesHeight() {
+        var total = 0;
+        var ls = timeline.lanes;
+        for (var i = 0; i < ls.length; i++)
+            total += ls[i].h;
+        return total;
+    }
+
+    // Tracks-space y of lane i (heights above it accumulate).
+    function laneY(i) {
+        var y = timeline.tracksTop;
+        var ls = timeline.lanes;
+        for (var k = 0; k < i && k < ls.length; k++)
+            y += ls[k].h;
+        return y;
+    }
+
+    function toggleExpand(uid) {
+        var next = Object.assign({}, timeline.expanded);
+        if (next[uid])
+            delete next[uid];
+        else
+            next[uid] = true;
+        timeline.expanded = next;
     }
 
     function tracksWidth() {
@@ -589,8 +696,9 @@ Item {
         }
         var lanes = timeline.lanes;
         for (var i = 0; i < lanes.length; i++) {
-            var cy = timeline.tracksTop + i * timeline.laneHeight + timeline.laneHeight / 2;
-            if (cy + 6 < area.y || cy - 6 > area.y + area.height)
+            var top = timeline.laneY(i);
+            var h = lanes[i].h;
+            if (top > area.y + area.height || top + h < area.y)
                 continue;
             var clips = lanes[i].clips;
             for (var j = 0; j < clips.length; j++) {
@@ -606,7 +714,7 @@ Item {
         }
         var rows = timeline.audioRows;
         for (var m = 0; m < rows.length; m++) {
-            var ay = timeline.tracksTop + lanes.length * timeline.laneHeight + timeline.audioTop + m * timeline.laneHeight + timeline.laneHeight / 2;
+            var ay = timeline.tracksTop + timeline.lanesHeight() + timeline.audioTop + m * timeline.laneHeight + timeline.laneHeight / 2;
             if (ay < area.y || ay > area.y + area.height)
                 continue;
             var clip = rows[m].clip;

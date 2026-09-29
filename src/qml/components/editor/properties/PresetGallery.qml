@@ -172,9 +172,8 @@ ScrollView {
                             applyOptions: modelData.apply
                             textMode: gallery.textMode
                             easingId: modelData.easing
-                            loop: modelData.loop || "none"
                             driver: gallery
-                            clickPolicy: (presetId, apply, easingId, loop) => gallery.applyPreset(presetId, apply, easingId, loop)
+                            clickPolicy: (presetId, apply, easingId) => gallery.applyPreset(presetId, apply, easingId)
                         }
                     }
                 }
@@ -362,7 +361,7 @@ ScrollView {
 
     // Logo/UI pack, all reusing the preset pipeline (no new sampler
     // math): overshoot scales for pops, an unfaded slide for wipes, a
-    // relaxing blur and a ping-pong opacity pulse for loops.
+    // relaxing blur and an opacity pulse.
     function wipeCard() {
         return {
             id: "slide",
@@ -447,8 +446,7 @@ ScrollView {
             name: qsTr("Pulse"),
             options: o,
             apply: o,
-            easing: "easeInOut",
-            loop: "pingpong"
+            easing: "easeInOut"
         };
     }
 
@@ -533,7 +531,7 @@ ScrollView {
         return best;
     }
 
-    function applyPreset(presetId, apply, easingId, loop) {
+    function applyPreset(presetId, apply, easingId) {
         var d = gallery.doc;
         if (!d)
             return;
@@ -565,7 +563,7 @@ ScrollView {
         var easing = typeof easingId === "string" && easingId !== "" ? {
             id: easingId
         } : null;
-        var made = d.applyPreset(presetId, uids, t0, dur, "in", apply || {}, easing, loop || "none", gallery.stagger);
+        var made = d.applyPreset(presetId, uids, t0, dur, "in", apply || {}, easing, gallery.stagger);
         if (made.length > 0) {
             d.anim.currentTime = t0;
             d.anim.play();
