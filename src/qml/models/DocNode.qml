@@ -117,6 +117,12 @@ QtObject {
     property bool renaming: false
     // Groups only: layers collapse (no canvas effect).
     property bool expanded: true
+    // Live boolean op for groups ("none" = plain group). When set to
+    // union|subtract|intersect|exclude the group paints one combined
+    // silhouette (see ShapePath) with the group's own fills/strokes/
+    // effects, while children stay editable via drill-in. Plain groups
+    // keep empty stacks and never paint.
+    property string boolOp: "none"
 
     // Group children (array of DocNode, top-first). Empty for shapes.
     property var children: []

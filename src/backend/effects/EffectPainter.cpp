@@ -1468,6 +1468,59 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
     paintStrokes(pt, o.path, o.fillBox, kind, st, s);
 }
 
+void paintCombinedPath(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const Style &st,
+    const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur, double scale,
+    QCache<QByteArray, QImage> *maskCache)
+{
+    if (!pt || path.isEmpty())
+        return;
+    static const QString boolKind = QStringLiteral("boolean");
+    if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
+        const double s = scale > 0 ? scale : 1.0;
+        const double rad = qMax(0.0, layerBlur.radius) * s;
+        const double margin = qMin(1024.0, rad * 2.0) + 1.0;
+        const QRectF box = path.boundingRect();
+        const QSize tsz(qMax(1, qRound(box.width() + margin * 2.0)), qMax(1, qRound(box.height() + margin * 2.0)));
+        QImage sharp(tsz, QImage::Format_ARGB32_Premultiplied);
+        sharp.fill(0);
+        {
+            QPainter tp(&sharp);
+            tp.setRenderHint(QPainter::Antialiasing, true);
+            tp.translate(-box.topLeft() + QPointF(margin, margin));
+            Blur off;
+            // Combined paths skip the raster cache (few instances,
+            // always recompute like the single-effect tails).
+            paintCombinedPath(&tp, path, fillBox, st, shadows, glows, off, scale, nullptr);
+        }
+        QImage blurred = sharp.copy();
+        blurImageImpl(blurred, rad);
+        mixBlurred(sharp, blurred, layerBlur.opacity);
+        pt->drawImage(path.boundingRect().topLeft() - QPointF(margin, margin), sharp);
+        Q_UNUSED(maskCache);
+        return;
+    }
+    const double s = scale > 0 ? scale : 1.0;
+    // No geometry fingerprint: boolean silhouettes recompute their blur
+    // rasters per paint (same pixels as export, which passes null).
+    const QByteArray geom;
+    for (int i = shadows.size() - 1; i >= 0; --i)
+        paintOuterShadow(pt, path, shadows.at(i), s, geom, nullptr);
+    for (int i = glows.size() - 1; i >= 0; --i)
+        paintOuterGlow(pt, path, glows.at(i), s, geom, nullptr);
+    paintFills(pt, path, fillBox, boolKind, st);
+    for (int i = shadows.size() - 1; i >= 0; --i) {
+        const Shadow &sh = shadows.at(i);
+        if (sh.enabled && sh.inner && sh.color.alpha() > 0)
+            paintInner(pt, path, sh, s, geom, nullptr);
+    }
+    for (int i = glows.size() - 1; i >= 0; --i) {
+        const Glow &g = glows.at(i);
+        if (g.enabled && g.inner && g.color.alpha() > 0)
+            paintGlowInner(pt, path, g, s, geom, nullptr);
+    }
+    paintStrokes(pt, path, fillBox, boolKind, st, s);
+}
+
 namespace {
 
 // Shared QTextDocument builder: mirrors the canvas TextGlyphs settings

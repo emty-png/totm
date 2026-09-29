@@ -150,6 +150,30 @@ QtObject {
                 entry.cornerRadii = (n.cornerRadii || []).slice();
             out[n.uid] = entry;
         }
+        // Group style bases for group-targeted style clips: stacks plus
+        // opacity/visibility only (geometry and text stay leaf-owned).
+        var groups = doc.tree._allNodes();
+        for (var gi = 0; gi < groups.length; gi++) {
+            var g = groups[gi];
+            if (!g || g.kind !== "group")
+                continue;
+            out[g.uid] = {
+                kind: "group",
+                boolOp: g.boolOp ?? "none",
+                opacity: g.opacity ?? 1,
+                fills: doc.factory._copyFills(g.fills, g),
+                strokes: doc.factory._copyStrokes(g.strokes, g),
+                penFill: g.penFill !== false,
+                strokeCap: g.strokeCap ?? "round",
+                strokeJoin: g.strokeJoin ?? "round",
+                shadows: doc.factory._copyShadows(g.shadows),
+                glows: doc.factory._copyGlows(g.glows),
+                layerBlur: doc.factory._copyBlur(g.layerBlur, 8, 1),
+                backgroundBlur: doc.factory._copyBlur(g.backgroundBlur, 16, 0.7),
+                grain: doc.factory._copyGrain(g.grain),
+                visible: g.visible
+            };
+        }
         return out;
     }
 
@@ -169,9 +193,33 @@ QtObject {
             return;
         for (var uid in base) {
             var n = doc.findNode(Number(uid));
-            if (!n || n.kind !== "shape")
+            if (!n)
                 continue;
             var b = base[uid];
+            if (n.kind === "group") {
+                // Group style restore only (geometry/text stay leaf-owned).
+                if (b.opacity !== undefined)
+                    n.opacity = b.opacity;
+                if (b.fills !== undefined)
+                    n.fills = doc.factory._copyFills(b.fills, b);
+                if (b.strokes !== undefined)
+                    n.strokes = doc.factory._copyStrokes(b.strokes, b);
+                if (b.shadows !== undefined)
+                    n.shadows = doc.factory._copyShadows(b.shadows);
+                if (b.glows !== undefined)
+                    n.glows = doc.factory._copyGlows(b.glows);
+                if (b.layerBlur !== undefined)
+                    n.layerBlur = doc.factory._copyBlur(b.layerBlur, 8, 1);
+                if (b.backgroundBlur !== undefined)
+                    n.backgroundBlur = doc.factory._copyBlur(b.backgroundBlur, 16, 0.7);
+                if (b.grain !== undefined)
+                    n.grain = doc.factory._copyGrain(b.grain);
+                if (b.visible !== undefined)
+                    n.visible = b.visible;
+                continue;
+            }
+            if (n.kind !== "shape")
+                continue;
             n.x = b.x;
             n.y = b.y;
             n.w = b.w;

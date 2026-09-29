@@ -16,6 +16,7 @@ ColumnLayout {
 
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property string preset: section.clip ? String(section.clip.preset || "") : ""
+    readonly property var entryDefaults: DocCustomDefaults {}
     readonly property var keyList: section.copyKeys(section.clip ? section.clip.options || {} : {})
 
     spacing: 8
@@ -125,7 +126,8 @@ ColumnLayout {
     }
 
     // First shape leaf under the clip target (groups animate per leaf;
-    // keys capture the first leaf so group clips still record).
+    // keys capture the first leaf so group clips still record), except
+    // group style clips, which capture the group's own stacks.
     function targetLeaf() {
         if (!section.doc || !section.clip)
             return null;
@@ -133,6 +135,8 @@ ColumnLayout {
         if (!n)
             return null;
         if (n.kind === "shape")
+            return n;
+        if (section.entryDefaults.isGroupStylePreset(section.preset))
             return n;
         var leaves = section.doc._leavesUnder(n);
         return leaves.length > 0 ? leaves[0] : null;

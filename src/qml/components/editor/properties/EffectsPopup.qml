@@ -22,6 +22,8 @@ Popup {
     // True while the selection holds text: background blur samples no
     // backdrop for glyphs, so its row goes inert instead of no-op.
     property bool textSelected: false
+    property bool groupSelected: false
+    property bool frameSelected: false
 
     width: 220
     padding: 6
@@ -94,7 +96,7 @@ Popup {
         EffectRow {
             label: qsTr("Background Blur")
             iconKind: "backdrop"
-            rowEnabled: !popup.textSelected
+            rowEnabled: !popup.textSelected && !popup.groupSelected
             onChosen: {
                 popup.close();
                 popup.backgroundBlurClicked();
@@ -122,6 +124,7 @@ Popup {
         EffectRow {
             label: qsTr("Grain")
             iconKind: "grain"
+            rowEnabled: !popup.frameSelected
             onChosen: {
                 popup.close();
                 popup.grainClicked();

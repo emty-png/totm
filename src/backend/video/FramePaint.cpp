@@ -2,6 +2,7 @@
 
 #include "AnimSampler.h"
 #include "EffectPainter.h"
+#include "ShapePath.h"
 
 #include <QCache>
 #include <QCoreApplication>
@@ -14,6 +15,7 @@
 #include <QPainterPathStroker>
 #include <QStandardPaths>
 #include <QSvgRenderer>
+#include <QTransform>
 #include <QtMath>
 
 namespace FramePaint {
@@ -547,6 +549,69 @@ QRectF rotatedBox(const QVariantMap &m) {
 
 } // namespace
 
+// Live boolean group: combine sampled children (content coords), scale
+// to device, and paint through the shared combined stack so export
+// matches canvas preview. v1 paints direct: no mask participation and
+// no background blur (rare combos, documented).
+void paintBooleanGroup(QPainter &pt, const QVariantMap &m, double ox, double oy, double scale, int frameNo) {
+    const QVariantList kids = m.value(QStringLiteral("children")).toList();
+    if (kids.isEmpty())
+        return;
+    const QString op = ShapePath::normOp(m.value(QStringLiteral("boolOp"), QStringLiteral("union")).toString());
+    QList<QPainterPath> paths;
+    paths.reserve(kids.size());
+    for (const QVariant &v : kids)
+        paths << ShapePath::nodeToWorldPath(v.toMap());
+    QPainterPath combined = ShapePath::combinePaths(op, paths);
+    if (combined.isEmpty())
+        return;
+    const double s = scale > 0 ? scale : 1.0;
+    if (!qFuzzyCompare(s, 1.0))
+        combined = QTransform::fromScale(s, s).map(combined);
+    const QRectF fillBox = combined.boundingRect();
+    const Effects::Style st = Effects::Style::fromMap(m);
+    const QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
+    const Effects::Blur layerBlur = Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap());
+    const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
+    const Effects::Grain grain = Effects::Grain::fromMap(m.value(QStringLiteral("grain")).toMap());
+    const double opacity = qBound(0.0, Anims::num(m, "opacity", 1.0), 1.0);
+    const int uid = m.value(QStringLiteral("uid"), -1).toInt();
+    pt.save();
+    pt.setOpacity(opacity);
+    pt.translate(ox, oy);
+    Effects::paintCombinedPath(&pt, combined, fillBox, st, shadows, glows, layerBlur, s, &sharedBlurCache());
+    if (grain.enabled && grain.amount > 0.001) {
+        Effects::paintGrainPath(&pt, combined, st.maxStrokeWidth() * s, fillBox, grain, uid, frameNo, s);
+    }
+    pt.restore();
+}
+
+// Plain-group frame background: rounded rect at the derived box
+// through the shared leaf stack (radius/corners ride Style/PathOpts).
+// Grain and background blur skip (no canvas path either); masks skip.
+void paintFrameGroup(QPainter &pt, const QVariantMap &m, double ox, double oy, double scale)
+{
+    const double w = qMax(0.01, Anims::num(m, "w"));
+    const double h = qMax(0.01, Anims::num(m, "h"));
+    if (w <= 0 || h <= 0)
+        return;
+    const double s = scale > 0 ? scale : 1.0;
+    const double x = ox + Anims::num(m, "x") * s;
+    const double y = oy + Anims::num(m, "y") * s;
+    const QRectF box(x, y, qMax(0.01, w * s), qMax(0.01, h * s));
+    const Effects::Style st = Effects::Style::fromMap(m);
+    const QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
+    const Effects::Blur layerBlur = Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap());
+    const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
+    const double opacity = qBound(0.0, Anims::num(m, "opacity", 1.0), 1.0);
+    pt.save();
+    pt.setOpacity(opacity);
+    Effects::PathOpts opts = Effects::PathOpts::fromMap(m);
+    Effects::paintLeaf(&pt, QStringLiteral("rectangle"), box, opts, st, shadows, glows, layerBlur, s,
+        &sharedBlurCache());
+    pt.restore();
+}
+
 void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, double oy, double scale, int frameNo) {
     const QString shapeType = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
     const double x = ox + num(m, "x") * scale;
@@ -725,6 +790,22 @@ void paintLeaves(QPainter &pt, QImage &frame, const QList<QVariantMap> &work, co
         const int uid = m.value(QStringLiteral("uid"), -1).toInt();
         if (m.value(QStringLiteral("isMask"), false).toBool())
             continue;
+        if (str(m, "type", str(m, "shapeType", QStringLiteral("rectangle"))) == QLatin1String("boolean")) {
+            if (!m.value(QStringLiteral("visible"), true).toBool())
+                continue;
+            if (qBound(0.0, Anims::num(m, "opacity", 1.0), 1.0) <= 0.001)
+                continue;
+            paintBooleanGroup(pt, m, ox, oy, scale, frameNo);
+            continue;
+        }
+        if (str(m, "type", str(m, "shapeType", QStringLiteral("rectangle"))) == QLatin1String("frame")) {
+            if (!m.value(QStringLiteral("visible"), true).toBool())
+                continue;
+            if (qBound(0.0, Anims::num(m, "opacity", 1.0), 1.0) <= 0.001)
+                continue;
+            paintFrameGroup(pt, m, ox, oy, scale);
+            continue;
+        }
         const int srcIdx = leafIndex.value(uid, -1);
         const bool ancVis = srcIdx >= 0 ? leaves.at(srcIdx).ancestorsVisible : true;
         if (!ancVis || !m.value(QStringLiteral("visible"), true).toBool())

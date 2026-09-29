@@ -102,6 +102,12 @@ ScrollView {
             doc: panel.doc
         }
 
+        BooleanSection {
+            Layout.fillWidth: true
+            snapshot: panel.snapshot
+            doc: panel.doc
+        }
+
         LayoutSection {
             Layout.fillWidth: true
             snapshot: panel.snapshot

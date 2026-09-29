@@ -9,12 +9,25 @@ QtObject {
 
     function seededOptions(presets, d, tops, presetId, entryIndex) {
         var first = tops.length > 0 ? tops[0] : null;
-        var leaf = first ? defaults.firstLeaf(d, first) : null;
+        var leaf = first ? defaults.seedTarget(d, first, presetId) : null;
         var ei = Math.min(32, Math.max(0, Math.round(Number(entryIndex) || 0)));
         var seed = defaults._seedFor(presetId);
         if (seed && leaf)
             return seed(leaf, ei);
         return presets.defaultsFor(presetId);
+    }
+
+    // Style clips on groups seed from the group's own stacks (mirrors
+    // DocAnimSample.isGroupStylePreset: same preset set); everything
+    // else seeds from the first leaf as before.
+    function isGroupStylePreset(presetId) {
+        return presetId === "customOpacity" || presetId === "customColor" || presetId === "customGradient" || presetId === "customStroke" || presetId === "customStrokeColor" || presetId === "customStrokeGradient" || presetId === "customShadow" || presetId === "customGlow" || presetId === "customLayerBlur" || presetId === "customBackgroundBlur" || presetId === "customGrain";
+    }
+
+    function seedTarget(d, top, presetId) {
+        if (top && top.kind === "group" && defaults.isGroupStylePreset(presetId))
+            return top;
+        return defaults.firstLeaf(d, top);
     }
 
     function _seedFor(presetId) {
@@ -331,13 +344,15 @@ QtObject {
     // entry is linear, so a gradient stroke never lands in a solid
     // hex editor. Missing entries read as solid.
     function topFillType(d, tops) {
-        var leaf = tops.length > 0 ? firstLeaf(d, tops[0]) : null;
+        var first = tops.length > 0 ? tops[0] : null;
+        var leaf = first && first.kind === "group" ? first : (first ? firstLeaf(d, first) : null);
         var f0 = (leaf && leaf.fills && leaf.fills.length > 0 ? leaf.fills[0] : {}) ?? {};
         return f0.type === "linear" ? "linear" : "solid";
     }
 
     function topStrokeType(d, tops) {
-        var leaf = tops.length > 0 ? firstLeaf(d, tops[0]) : null;
+        var first = tops.length > 0 ? tops[0] : null;
+        var leaf = first && first.kind === "group" ? first : (first ? firstLeaf(d, first) : null);
         var s0 = (leaf && leaf.strokes && leaf.strokes.length > 0 ? leaf.strokes[0] : {}) ?? {};
         return s0.type === "linear" ? "linear" : "solid";
     }

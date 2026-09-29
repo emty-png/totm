@@ -1,6 +1,10 @@
 #include "AnimSampler.h"
 
+#include "ShapePath.h"
+
+#include <QPainterPath>
 #include <QPointF>
+#include <QRectF>
 #include <QSet>
 #include <QtMath>
 
@@ -1332,6 +1336,42 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
     return base;
 }
 
+// Group style bases for group-targeted style clips: stacks plus
+// opacity/visibility (geometry and text stay leaf-owned). Mirrors
+// DocTransport.captureBase.
+QMap<int, QVariantMap> captureGroupBase(const QVariantList &nodes) {
+    QMap<int, QVariantMap> base;
+    std::function<void(const QVariantList &)> walk = [&](const QVariantList &list) {
+        for (const QVariant &v : list) {
+            const QVariantMap n = v.toMap();
+            if (n.value(QStringLiteral("kind")).toString() != QLatin1String("group"))
+                continue;
+            const int uid = n.value(QStringLiteral("uid"), -1).toInt();
+            if (uid < 0)
+                continue;
+            QVariantMap b;
+            b[QStringLiteral("kind")] = QStringLiteral("group");
+            b[QStringLiteral("boolOp")] = n.value(QStringLiteral("boolOp"), QStringLiteral("none")).toString();
+            b[QStringLiteral("opacity")] = num(n, "opacity", 1.0);
+            b[QStringLiteral("fills")] = n.value(QStringLiteral("fills")).toList();
+            b[QStringLiteral("strokes")] = n.value(QStringLiteral("strokes")).toList();
+            b[QStringLiteral("penFill")] = n.value(QStringLiteral("penFill"), true).toBool();
+            b[QStringLiteral("strokeCap")] = str(n, "strokeCap", QStringLiteral("round"));
+            b[QStringLiteral("strokeJoin")] = str(n, "strokeJoin", QStringLiteral("round"));
+            b[QStringLiteral("shadows")] = n.value(QStringLiteral("shadows")).toList();
+            b[QStringLiteral("glows")] = n.value(QStringLiteral("glows")).toList();
+            b[QStringLiteral("layerBlur")] = n.value(QStringLiteral("layerBlur")).toMap();
+            b[QStringLiteral("backgroundBlur")] = n.value(QStringLiteral("backgroundBlur")).toMap();
+            b[QStringLiteral("grain")] = n.value(QStringLiteral("grain")).toMap();
+            b[QStringLiteral("visible")] = n.value(QStringLiteral("visible"), true).toBool();
+            base[uid] = b;
+            walk(n.value(QStringLiteral("children")).toList());
+        }
+    };
+    walk(nodes);
+    return base;
+}
+
 namespace {
 // uid -> node index for clip target resolution (groups included).
 void indexNodes(const QVariantList &nodes, QMap<int, QVariantMap> &out) {
@@ -1390,6 +1430,18 @@ bool isPositionPreset(const QString &preset) {
         || preset == QLatin1String("grow") || preset == QLatin1String("shrink")
         || preset == QLatin1String("customScale") || preset == QLatin1String("customMove")
         || preset == QLatin1String("customResize") || preset == QLatin1String("customPath");
+}
+
+// Style presets output stack/opacity keys only: on a group target they
+// animate the group's own stacks (Mirrors DocAnimSample.isGroupStylePreset,
+// same preset set). All other group clips keep fanning out to leaves.
+bool isGroupStylePreset(const QString &preset) {
+    return preset == QLatin1String("customOpacity") || preset == QLatin1String("customColor")
+        || preset == QLatin1String("customGradient") || preset == QLatin1String("customStroke")
+        || preset == QLatin1String("customStrokeColor") || preset == QLatin1String("customStrokeGradient")
+        || preset == QLatin1String("customShadow") || preset == QLatin1String("customGlow")
+        || preset == QLatin1String("customLayerBlur") || preset == QLatin1String("customBackgroundBlur")
+        || preset == QLatin1String("customGrain");
 }
 
 // Loop-aware linear progress: none holds at the end (clamped), loop
@@ -1466,7 +1518,7 @@ QPointF chainedOffsetAt(const QList<PosClip> &list, const QVariantMap &base, dou
 
 QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
     const QList<Leaf> leaves = collectLeaves(scene);
-    const QMap<int, QVariantMap> base = captureBase(leaves);
+    QMap<int, QVariantMap> base = captureBase(leaves);
     QMap<int, int> leafIndex;
     for (int i = 0; i < leaves.size(); ++i) {
         const int uid = leaves.at(i).map.value(QStringLiteral("uid"), -1).toInt();
@@ -1484,6 +1536,13 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
     const QVariantMap anim = scene.value(QStringLiteral("anim")).toMap();
     const QVariantList clips = anim.value(QStringLiteral("clips")).toList();
     const QVariantList roots = scene.value(QStringLiteral("nodes")).toList();
+    // Group style bases ride along so group-targeted style clips sample
+    // the group's own stacks (Mirrors DocTransport.captureBase).
+    const QMap<int, QVariantMap> groupBase = captureGroupBase(roots);
+    for (auto it = groupBase.constBegin(); it != groupBase.constEnd(); ++it) {
+        if (!base.contains(it.key()))
+            base[it.key()] = it.value();
+    }
 
     QMap<int, QVariantMap> acc;
     struct ClipInfo {
@@ -1493,6 +1552,9 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         double cx = 0.0;
         double cy = 0.0;
         bool hasBox = false;
+        // Group-targeted style clips sample the group's own stacks.
+        bool groupStyle = false;
+        int groupUid = -1;
     };
     QList<ClipInfo> infos;
     infos.reserve(clips.size());
@@ -1505,6 +1567,11 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         if (!nodeByUid.contains(targetUid)) {
             infos.append(info);
             continue;
+        }
+        if (nodeByUid.value(targetUid).value(QStringLiteral("kind")).toString() == QLatin1String("group")
+            && isGroupStylePreset(c.value(QStringLiteral("preset")).toString())) {
+            info.groupStyle = true;
+            info.groupUid = targetUid;
         }
         info.targetLeaves = leavesUnder(nodeByUid.value(targetUid));
         double x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18;
@@ -1542,6 +1609,19 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
             ez.value(QStringLiteral("bezier")).toList(), p);
         const QString preset = c.value(QStringLiteral("preset")).toString();
         const bool skipXY = isPositionPreset(preset);
+        if (info.groupStyle) {
+            if (preset != QLatin1String("customHide") && !chainVisible(roots, info.groupUid))
+                continue;
+            if (!base.contains(info.groupUid))
+                continue;
+            const QVariantMap ov = presetOverlay(preset, c.value(QStringLiteral("mode"), QStringLiteral("in")).toString(),
+                c.value(QStringLiteral("options")).toMap(), base[info.groupUid], info.cx, info.cy, e, p);
+            QVariantMap entry = acc.value(info.groupUid);
+            for (auto it = ov.constBegin(); it != ov.constEnd(); ++it)
+                entry[it.key()] = it.value();
+            acc[info.groupUid] = entry;
+            continue;
+        }
         for (int uid : info.targetLeaves) {
             if (preset != QLatin1String("customHide") && !chainVisible(roots, uid))
                 continue;
@@ -1601,11 +1681,23 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         acc[uid] = entry;
     }
 
+    // Group style overlays ride work entries so the shared writeback
+    // folds them; painters skip kind-group entries (no geometry).
+    for (auto git = acc.constBegin(); git != acc.constEnd(); ++git) {
+        const int guid = git.key();
+        if (leafIndex.contains(guid) || !nodeByUid.contains(guid))
+            continue;
+        if (nodeByUid.value(guid).value(QStringLiteral("kind")).toString() != QLatin1String("group"))
+            continue;
+        work.append(nodeByUid.value(guid));
+    }
+
     for (int i = 0; i < work.size(); ++i) {
         QVariantMap m = work[i];
         const int uid = m.value(QStringLiteral("uid"), -1).toInt();
         const int src = leafIndex.value(uid, -1);
-        if (src >= 0 && leaves.at(src).locked)
+        const bool locked = src >= 0 ? leaves.at(src).locked : m.value(QStringLiteral("locked"), false).toBool();
+        if (locked)
             continue;
         if (!acc.contains(uid))
             continue;
@@ -1869,6 +1961,195 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
             m[QStringLiteral("cornerRadii")] = QVariantList{rv, rv, rv, rv};
         }
         work[i] = m;
+    }
+    // Live boolean groups: fold sampled children into one combined entry
+    // at the topmost child position. Children animate first (above), the
+    // combine follows, mirroring canvas preview (BooleanGroupItem over
+    // live previewMaps). Group style stays static (v1); masks on boolean
+    // content are out of scope and paint direct. Nested booleans are out
+    // of scope: an outer group whose leaves already folded keeps its
+    // remaining direct children only when 2+ survive.
+    {
+        QMap<int, int> workPos;
+        for (int i = 0; i < work.size(); ++i) {
+            const int uid = work.at(i).value(QStringLiteral("uid"), -1).toInt();
+            if (uid >= 0 && !workPos.contains(uid))
+                workPos[uid] = i;
+        }
+        const QList<QVariantMap> groups = ShapePath::booleanGroupsIn(roots);
+        // Innermost first so nested booleans fold bottom-up. A raw
+        // group style entry in work does not count as folded (only
+        // boolean/frame entries do); the fold reads its style below.
+        auto alreadyFolded = [&](int guid) {
+            if (!workPos.contains(guid))
+                return false;
+            const QString k = work.at(workPos.value(guid)).value(QStringLiteral("kind")).toString();
+            return k == QLatin1String("boolean") || k == QLatin1String("frame");
+        };
+        for (int gi = groups.size() - 1; gi >= 0; --gi) {
+            const QVariantMap g = groups.at(gi);
+            const int guid = g.value(QStringLiteral("uid"), -1).toInt();
+            if (guid < 0 || alreadyFolded(guid))
+                continue;
+            const QList<int> kids = ShapePath::descendantLeafUids(g);
+            QVariantList sampled;
+            int at = work.size();
+            for (int uid : kids) {
+                if (!workPos.contains(uid))
+                    continue;
+                at = qMin(at, workPos.value(uid));
+                sampled.append(work.at(workPos.value(uid)));
+            }
+            if (sampled.size() < 2)
+                continue;
+            const QString op = ShapePath::normOp(g.value(QStringLiteral("boolOp"), QStringLiteral("union")).toString());
+            if (!ShapePath::isOp(op))
+                continue;
+            const QPainterPath combined = ShapePath::combineNodes(op, sampled);
+            if (combined.isEmpty())
+                continue;
+            const QRectF bb = combined.boundingRect();
+            // Style rides the writeback-resolved work entry when the
+            // group itself is animated, else the static scene map.
+            QVariantMap entry = (workPos.contains(guid) && work.at(workPos.value(guid)).value(QStringLiteral("kind")).toString() == QLatin1String("group")) ? work.at(workPos.value(guid)) : g;
+            entry[QStringLiteral("kind")] = QStringLiteral("boolean");
+            entry[QStringLiteral("type")] = QStringLiteral("boolean");
+            entry[QStringLiteral("shapeType")] = QStringLiteral("boolean");
+            entry[QStringLiteral("boolOp")] = op;
+            entry[QStringLiteral("children")] = sampled;
+            entry[QStringLiteral("x")] = bb.x();
+            entry[QStringLiteral("y")] = bb.y();
+            entry[QStringLiteral("w")] = qMax(0.01, bb.width());
+            entry[QStringLiteral("h")] = qMax(0.01, bb.height());
+            entry[QStringLiteral("rotation")] = 0.0;
+            entry[QStringLiteral("flipH")] = false;
+            entry[QStringLiteral("flipV")] = false;
+            entry[QStringLiteral("visible")]
+                = g.value(QStringLiteral("visible"), true).toBool() && chainVisible(roots, guid);
+            QList<int> drop;
+            for (int uid : kids) {
+                if (workPos.contains(uid))
+                    drop.append(workPos.value(uid));
+            }
+            std::sort(drop.begin(), drop.end(), std::greater<int>());
+            for (int di : drop)
+                work.removeAt(di);
+            work.insert(qBound(0, at, work.size()), entry);
+            workPos.clear();
+            for (int i = 0; i < work.size(); ++i) {
+                const int uid = work.at(i).value(QStringLiteral("uid"), -1).toInt();
+                if (uid >= 0 && !workPos.contains(uid))
+                    workPos[uid] = i;
+            }
+        }
+    }
+    // Paintable plain groups: emit one frame-background entry after the
+    // last sampled child (paints under children, over lower siblings).
+    // Children stay in work and paint normally; the entry carries the
+    // group style plus sampled children for box derivation. Innermost
+    // first so nested frames layer correctly. Masks and grain skip on
+    // frames (no canvas path either); background blur skips too.
+    {
+        QMap<int, int> workPos;
+        for (int i = 0; i < work.size(); ++i) {
+            const int uid = work.at(i).value(QStringLiteral("uid"), -1).toInt();
+            if (uid >= 0 && !workPos.contains(uid))
+                workPos[uid] = i;
+        }
+        auto hasFramePaint = [](const QVariantMap &g) {
+            for (const QVariant &v : g.value(QStringLiteral("fills")).toList()) {
+                if (v.toMap().value(QStringLiteral("enabled"), true).toBool())
+                    return true;
+            }
+            for (const QVariant &v : g.value(QStringLiteral("strokes")).toList()) {
+                const QVariantMap e = v.toMap();
+                if (e.value(QStringLiteral("enabled"), true).toBool()
+                    && e.value(QStringLiteral("width"), 0.0).toDouble() > 0.01)
+                    return true;
+            }
+            for (const QVariant &v : g.value(QStringLiteral("shadows")).toList()) {
+                if (v.toMap().value(QStringLiteral("enabled"), true).toBool())
+                    return true;
+            }
+            for (const QVariant &v : g.value(QStringLiteral("glows")).toList()) {
+                if (v.toMap().value(QStringLiteral("enabled"), true).toBool())
+                    return true;
+            }
+            return false;
+        };
+        QList<QVariantMap> frames;
+        std::function<void(const QVariantList &)> walk = [&](const QVariantList &nodes) {
+            for (const QVariant &v : nodes) {
+                const QVariantMap n = v.toMap();
+                if (n.value(QStringLiteral("kind")).toString() != QLatin1String("group"))
+                    continue;
+                // Boolean groups fold above; plain groups frame here.
+                if (!ShapePath::isBooleanGroupMap(n) && hasFramePaint(n))
+                    frames.append(n);
+                walk(n.value(QStringLiteral("children")).toList());
+            }
+        };
+        walk(roots);
+        auto frameFolded = [&](int guid) {
+            if (!workPos.contains(guid))
+                return false;
+            const QString k = work.at(workPos.value(guid)).value(QStringLiteral("kind")).toString();
+            return k == QLatin1String("boolean") || k == QLatin1String("frame");
+        };
+        for (int gi = frames.size() - 1; gi >= 0; --gi) {
+            const QVariantMap g = frames.at(gi);
+            const int guid = g.value(QStringLiteral("uid"), -1).toInt();
+            if (guid < 0 || frameFolded(guid))
+                continue;
+            const QList<int> kids = ShapePath::descendantLeafUids(g);
+            QVariantList sampled;
+            int at = -1;
+            for (int uid : kids) {
+                if (!workPos.contains(uid))
+                    continue;
+                at = qMax(at, workPos.value(uid));
+                sampled.append(work.at(workPos.value(uid)));
+            }
+            if (sampled.isEmpty() || at < 0)
+                continue;
+            // Box derives from visible children only, mirroring
+            // DocBounds (hidden subtrees contribute nothing there).
+            double x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18;
+            bool anyVisible = false;
+            for (const QVariant &v : sampled) {
+                const QVariantMap m = v.toMap();
+                if (!m.value(QStringLiteral("visible"), true).toBool())
+                    continue;
+                anyVisible = true;
+                x0 = qMin(x0, num(m, "x"));
+                y0 = qMin(y0, num(m, "y"));
+                x1 = qMax(x1, num(m, "x") + qMax(0.01, num(m, "w")));
+                y1 = qMax(y1, num(m, "y") + qMax(0.01, num(m, "h")));
+            }
+            if (!anyVisible)
+                continue;
+            QVariantMap entry = (workPos.contains(guid) && work.at(workPos.value(guid)).value(QStringLiteral("kind")).toString() == QLatin1String("group")) ? work.at(workPos.value(guid)) : g;
+            entry[QStringLiteral("kind")] = QStringLiteral("frame");
+            entry[QStringLiteral("type")] = QStringLiteral("frame");
+            entry[QStringLiteral("shapeType")] = QStringLiteral("frame");
+            entry[QStringLiteral("children")] = sampled;
+            entry[QStringLiteral("x")] = x0;
+            entry[QStringLiteral("y")] = y0;
+            entry[QStringLiteral("w")] = qMax(1.0, x1 - x0);
+            entry[QStringLiteral("h")] = qMax(1.0, y1 - y0);
+            entry[QStringLiteral("rotation")] = 0.0;
+            entry[QStringLiteral("flipH")] = false;
+            entry[QStringLiteral("flipV")] = false;
+            entry[QStringLiteral("visible")]
+                = g.value(QStringLiteral("visible"), true).toBool() && chainVisible(roots, guid);
+            work.insert(qBound(0, at + 1, work.size()), entry);
+            workPos.clear();
+            for (int i = 0; i < work.size(); ++i) {
+                const int uid = work.at(i).value(QStringLiteral("uid"), -1).toInt();
+                if (uid >= 0 && !workPos.contains(uid))
+                    workPos[uid] = i;
+            }
+        }
     }
     return work;
 }

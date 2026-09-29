@@ -25,6 +25,8 @@ Item {
     readonly property bool canUngroup: !!menu.doc && menu.doc.canUngroup()
     readonly property bool canUseAsMask: !!menu.doc && menu.doc.canUseAsMask()
     readonly property bool canReleaseMask: !!menu.doc && menu.doc.canReleaseMask()
+    readonly property bool canCombine: !!menu.doc && menu.doc.canCombine()
+    readonly property bool canReleaseBoolean: !!menu.doc && menu.doc.canReleaseBoolean()
     readonly property bool canUndo: !!menu.doc && menu.doc.canUndo
     readonly property bool canRedo: !!menu.doc && menu.doc.canRedo
     readonly property bool canBringToFront: !!menu.doc && menu.doc.canBringToFront()
@@ -56,8 +58,8 @@ Item {
     // Visible row count for popup placement: one 32px row plus
     // 2px spacing each, matching MenuItem + the column below.
     // Order mirrors the rows: Undo, Redo, Copy, Duplicate, Paste,
-    // Group, Ungroup, Use as Mask, Release Mask, Arrange, Rename,
-    // Delete.
+    // Group, Ungroup, Use as Mask, Release Mask, Combine, Release
+    // Boolean, Arrange, Rename, Delete.
     function visibleRowCount() {
         var n = 0;
         if (menu.canUndo)
@@ -76,6 +78,10 @@ Item {
             n++;
         if (menu.canReleaseMask)
             n++;
+        if (menu.canCombine)
+            n++;
+        if (menu.canReleaseBoolean)
+            n++;
         if (menu.hasSelection)
             n++;
         if (menu.contextValid)
@@ -90,6 +96,7 @@ Item {
     function openFor(uid, px, py) {
         menu.contextUid = uid;
         sub.close();
+        combineSub.close();
         if (menu.visibleRowCount() === 0)
             return;
         var w = 170, h = menu.visibleRowCount() * 34 + 30;
@@ -100,6 +107,7 @@ Item {
 
     function closeAll() {
         sub.close();
+        combineSub.close();
         main.close();
     }
 
@@ -247,6 +255,102 @@ Item {
                 onClicked: {
                     menu.doc.releaseMask();
                     menu.closeAll();
+                }
+            }
+            MenuItem {
+                id: combineItem
+                label: qsTr("Combine")
+                hint: qsTr("›")
+                visible: menu.canCombine || menu.canReleaseBoolean
+                enabled: menu.canCombine || menu.canReleaseBoolean
+                onClicked: {
+                    if (combineSub.opened)
+                        combineSub.close();
+                    else
+                        combineSub.open();
+                }
+
+                Popup {
+                    id: combineSub
+                    x: combineItem.width - 6
+                    y: -6
+                    implicitWidth: 190
+                    padding: 16
+                    closePolicy: Popup.CloseOnEscape
+                    transformOrigin: Item.TopLeft
+
+                    enter: Transition {
+                        NumberAnimation {
+                            property: "opacity"
+                            from: 0
+                            to: 1
+                            duration: 120
+                            easing.type: Easing.OutCubic
+                        }
+                        NumberAnimation {
+                            property: "scale"
+                            from: 0.97
+                            to: 1
+                            duration: 120
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                    exit: Transition {
+                        NumberAnimation {
+                            property: "opacity"
+                            from: 1
+                            to: 0
+                            duration: 100
+                            easing.type: Easing.InCubic
+                        }
+                    }
+
+                    background: MenuBackground {}
+
+                    contentItem: ColumnLayout {
+                        spacing: 2
+
+                        MenuItem {
+                            label: qsTr("Union")
+                            visible: menu.canCombine
+                            onClicked: {
+                                menu.doc.combineSelected("union");
+                                menu.closeAll();
+                            }
+                        }
+                        MenuItem {
+                            label: qsTr("Subtract")
+                            visible: menu.canCombine
+                            onClicked: {
+                                menu.doc.combineSelected("subtract");
+                                menu.closeAll();
+                            }
+                        }
+                        MenuItem {
+                            label: qsTr("Intersect")
+                            visible: menu.canCombine
+                            onClicked: {
+                                menu.doc.combineSelected("intersect");
+                                menu.closeAll();
+                            }
+                        }
+                        MenuItem {
+                            label: qsTr("Exclude")
+                            visible: menu.canCombine
+                            onClicked: {
+                                menu.doc.combineSelected("exclude");
+                                menu.closeAll();
+                            }
+                        }
+                        MenuItem {
+                            label: qsTr("Release")
+                            visible: menu.canReleaseBoolean
+                            onClicked: {
+                                menu.doc.releaseBoolean();
+                                menu.closeAll();
+                            }
+                        }
+                    }
                 }
             }
             MenuItem {

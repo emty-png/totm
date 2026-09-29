@@ -14,7 +14,7 @@ PanelSection {
     required property var snapshot
 
     title: qsTr("Appearance")
-    visible: section.snapshot.sel.length > 0 && !section.snapshot.hasGroup
+    visible: section.snapshot.sel.length > 0 && (!section.snapshot.hasGroup || section.snapshot.singleGroupTop() !== null)
     enabled: !section.snapshot.allLocked
 
     property bool showAllCorners: false

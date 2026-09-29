@@ -18,6 +18,7 @@ ColumnLayout {
 
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property var opts: section.clip ? section.clip.options || {} : ({})
+    readonly property var entryDefaults: DocCustomDefaults {}
     readonly property string preset: section.clip ? section.clip.preset : ""
     // Top entry of the clip target (reactive to doc edits): a solid
     // color clip on a linear top entry animates an unused color field,
@@ -31,6 +32,9 @@ ColumnLayout {
         if (!n)
             return null;
         if (n.kind === "shape")
+            return n;
+        // Group style clips read the group's own stacks.
+        if (section.entryDefaults.isGroupStylePreset(section.preset))
             return n;
         var leaves = section.doc._leavesUnder(n);
         return leaves.length > 0 ? leaves[0] : null;

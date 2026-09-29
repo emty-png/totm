@@ -263,6 +263,66 @@ Item {
     }
 
     Shortcut {
+        sequences: ["Ctrl+Alt+U"]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            var d = shortcuts.doc();
+            if (d && d.canCombine())
+                d.combineSelected("union");
+        }
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+Alt+S"]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            var d = shortcuts.doc();
+            if (d && d.canCombine())
+                d.combineSelected("subtract");
+        }
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+Alt+I"]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            var d = shortcuts.doc();
+            if (d && d.canCombine())
+                d.combineSelected("intersect");
+        }
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+Alt+X"]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            var d = shortcuts.doc();
+            if (d && d.canCombine())
+                d.combineSelected("exclude");
+        }
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+Alt+B"]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            var d = shortcuts.doc();
+            if (d && d.canReleaseBoolean())
+                d.releaseBoolean();
+        }
+    }
+
+    Shortcut {
         sequences: [ShortcutState.arrangeFront]
         enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.hasShapes()
         onActivated: {

@@ -63,6 +63,9 @@ QtObject {
     property var grouper: DocGroup {
         doc: root
     }
+    property var booleaner: DocBoolean {
+        doc: root
+    }
     property var reorderer: DocReorder {
         doc: root
     }
@@ -426,8 +429,8 @@ QtObject {
     function _makeShapeNode(type, snap) {
         return factory._makeShapeNode(type, snap);
     }
-    function _makeGroupNode(name, children) {
-        return factory._makeGroupNode(name, children);
+    function _makeGroupNode(name, children, snap) {
+        return factory._makeGroupNode(name, children, snap);
     }
     function addShape(type, x, y, w, h) {
         history.checkpoint();
@@ -574,6 +577,41 @@ QtObject {
         anim.pruneTargets();
     }
 
+    // Live boolean groups.
+    function canCombine() {
+        return booleaner.canCombine();
+    }
+    function canReleaseBoolean() {
+        return booleaner.canReleaseBoolean();
+    }
+    function isBooleanGroup(node) {
+        return booleaner.isBooleanGroup(node);
+    }
+    function combineSelected(op) {
+        if (!booleaner.canCombine())
+            return -1;
+        history.checkpoint();
+        return booleaner.combineSelected(op);
+    }
+    function setBoolOp(uid, op) {
+        var n = findNode(uid);
+        if (!n || n.kind !== "group")
+            return false;
+        // No-op clicks (e.g. the active op) skip the checkpoint so no
+        // empty undo entry lands on the stack.
+        if (String(n.boolOp ?? "none").toLowerCase() === String(op ?? "").toLowerCase())
+            return true;
+        history.checkpoint();
+        return booleaner.setBoolOp(uid, op);
+    }
+    function releaseBoolean() {
+        if (!booleaner.canReleaseBoolean())
+            return;
+        history.checkpoint();
+        booleaner.releaseSelected();
+        anim.pruneTargets();
+    }
+
     // Reorder.
     function _reorderInParent(parentUid, order) {
         reorderer._reorderInParent(parentUid, order);
@@ -663,6 +701,11 @@ QtObject {
     function setPropSelected(role, value) {
         history.checkpoint();
         edits.setPropSelected(role, value);
+    }
+    // Style targets for panel effect edits: selected leaves, or the
+    // single selected group itself (see DocEdits.styleTargets).
+    function styleTargets() {
+        return edits.styleTargets();
     }
     function _selectionBBox() {
         return bounds._selectionBBox();

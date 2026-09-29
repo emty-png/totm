@@ -90,14 +90,41 @@ QtObject {
         doc.touch();
     }
 
+    // Magnitude fuse: no legitimate canvas geometry exceeds these
+    // bounds (scenes are ~1e3 px, offsets ~1e3). Anything beyond is a
+    // poisoned input (cleared field, drag-flip, stale snapshot); the
+    // caller declines or the child keeps its box instead of writing
+    // e±48 garbage.
+    function saneBox(b) {
+        if (!b || !isFinite(b.x + b.y + b.w + b.h))
+            return false;
+        if (!(b.w > 0) || !(b.h > 0))
+            return false;
+        return Math.abs(b.x) < 1e7 && Math.abs(b.y) < 1e7 && b.w < 1e7 && b.h < 1e7;
+    }
+
     function scaleSelection(orig, box0, newBox) {
-        if (!box0 || box0.w <= 0 || box0.h <= 0)
+        // Shared-box mapping: one poisoned box would collapse every
+        // child (all deltas derive from box0), so decline insane boxes
+        // outright and skip insane snapshots entry-wise (see saneBox).
+        // Touches only on real change so gesture transactions drop
+        // no-op ticks.
+        if (!box0 || !saneBox(box0))
+            return;
+        if (!newBox || !isFinite(newBox.x + newBox.y + newBox.w + newBox.h) || !(newBox.w > 0) || !(newBox.h > 0))
+            return;
+        // No-op ticks (press without move) touch nothing so gesture
+        // transactions commit no entry.
+        if (Math.abs(newBox.x - box0.x) < 0.001 && Math.abs(newBox.y - box0.y) < 0.001 && Math.abs(newBox.w - box0.w) < 0.001 && Math.abs(newBox.h - box0.h) < 0.001)
             return;
         var sx = newBox.w / box0.w, sy = newBox.h / box0.h;
         var mapX = v => newBox.x + (v - box0.x) * sx;
         var mapY = v => newBox.y + (v - box0.y) * sy;
+        var changed = false;
         for (var k = 0; k < orig.length; k++) {
             var o = orig[k];
+            if (!o || !saneBox(o))
+                continue;
             var n = doc.findNode(o.uid);
             if (!n || n.kind !== "shape" || doc.isEffectivelyLocked(n))
                 continue;
@@ -135,18 +162,24 @@ QtObject {
                 n.y = box.y;
                 n.w = box.w;
                 n.h = box.h;
+                changed = true;
                 continue;
             }
             var ncx = newBox.x + (o.x + o.w / 2 - box0.x) * sx;
             var ncy = newBox.y + (o.y + o.h / 2 - box0.y) * sy;
             var nw = Math.max(1, o.w * sx);
             var nh = Math.max(1, o.h * sy);
-            n.x = ncx - nw / 2;
-            n.y = ncy - nh / 2;
+            var nx = ncx - nw / 2, ny = ncy - nh / 2;
+            if (Math.abs(nx - n.x) < 0.001 && Math.abs(ny - n.y) < 0.001 && Math.abs(nw - n.w) < 0.001 && Math.abs(nh - n.h) < 0.001)
+                continue;
+            n.x = nx;
+            n.y = ny;
             n.w = nw;
             n.h = nh;
+            changed = true;
         }
-        doc.touch();
+        if (changed)
+            doc.touch();
     }
 
     function selectedLeafSnapshot() {
@@ -201,11 +234,11 @@ QtObject {
             _setBBoxProp(role, value);
             return;
         }
-        var leaves = doc._selectedLeaves();
+        var leaves = styleTargets();
         for (var j = 0; j < leaves.length; j++) {
             if (doc.isEffectivelyLocked(leaves[j]))
                 continue;
-            // Style roles apply per leaf; the `in` guard skips misses.
+            // Style roles apply per target; the `in` guard skips misses.
             if (role === "w" || role === "h")
                 value = Math.max(1, value);
             if (role === "points") {
@@ -225,7 +258,17 @@ QtObject {
     }
 
     function _setBBoxProp(role, value) {
+        // Cleared/typed garbage commits nothing (NaN would poison every
+        // solve below); panel scrubs own the transaction, so a bare
+        // return stages no undo entry.
+        if (!isFinite(Number(value)))
+            return;
         var box = doc._selectionBBox();
+        // A poisoned box (stale insane geometry) must not shift or
+        // scale the selection: deltas derived from it would detonate
+        // sane leaves. Delete + redraw poisoned shapes to recover.
+        if (!box || !saneBox(box))
+            return;
         if (!box)
             return;
         var leaves = doc._selectedLeaves();
@@ -233,15 +276,25 @@ QtObject {
             return;
         if (role === "x") {
             var dx = value - box.x;
+            if (Math.abs(dx) < 0.001)
+                return;
             for (var i = 0; i < leaves.length; i++) {
-                if (!doc.isEffectivelyLocked(leaves[i]))
-                    leaves[i].x += dx;
+                if (doc.isEffectivelyLocked(leaves[i]))
+                    continue;
+                leaves[i].x += dx;
+                if (leaves[i].shapeType === "pen")
+                    leaves[i].pathData = shiftPath(leaves[i], dx, 0);
             }
         } else if (role === "y") {
             var dy = value - box.y;
+            if (Math.abs(dy) < 0.001)
+                return;
             for (var j = 0; j < leaves.length; j++) {
-                if (!doc.isEffectivelyLocked(leaves[j]))
-                    leaves[j].y += dy;
+                if (doc.isEffectivelyLocked(leaves[j]))
+                    continue;
+                leaves[j].y += dy;
+                if (leaves[j].shapeType === "pen")
+                    leaves[j].pathData = shiftPath(leaves[j], 0, dy);
             }
         } else if (role === "w" || role === "h") {
             var nw = Math.max(1, value);
@@ -256,14 +309,20 @@ QtObject {
             else
                 newBox.h = nw;
             var orig = [];
-            for (var k = 0; k < leaves.length; k++)
-                orig.push({
+            for (var k = 0; k < leaves.length; k++) {
+                var entry = {
                     uid: leaves[k].uid,
                     x: leaves[k].x,
                     y: leaves[k].y,
                     w: leaves[k].w,
                     h: leaves[k].h
-                });
+                };
+                // Pens remap points (see scaleSelection); without the
+                // frozen paths the box would move while points stay.
+                if (leaves[k].shapeType === "pen")
+                    entry.pathData = doc.factory._copyPath(leaves[k].pathData);
+                orig.push(entry);
+            }
             scaleSelection(orig, box, newBox);
             return;
         }
@@ -274,7 +333,7 @@ QtObject {
     // stacked fills: every matching entry across the selection takes
     // the new color). Scoped like every other panel edit.
     function recolorSelected(oldFill, newFill) {
-        var leaves = doc._selectedLeaves();
+        var leaves = styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (doc.isEffectivelyLocked(leaves[i]))
                 continue;
@@ -295,6 +354,17 @@ QtObject {
     // Stacked paint edits. Arrays reassign wholesale so var bindings
     // fire; every entry round-trips through the factory copy so live
     // nodes never share objects with snapshots.
+    // Style targets: selected leaves normally, or the single selected
+    // group itself (boolean or plain frame) so panel fill/stroke/effect
+    // edits land on group-owned stacks. Groups carry the same stack
+    // shapes as leaves, so the _copy* round-trips below apply unchanged.
+    function styleTargets() {
+        var tops = doc.selectedTops();
+        if (tops.length === 1 && tops[0].kind === "group" && !doc.isEffectivelyLocked(tops[0]))
+            return [tops[0]];
+        return _unlockedLeaves();
+    }
+
     function _unlockedLeaves() {
         var out = [];
         var leaves = doc._selectedLeaves();
@@ -306,7 +376,7 @@ QtObject {
     }
 
     function addFillToSelected() {
-        var leaves = _unlockedLeaves();
+        var leaves = styleTargets();
         for (var i = 0; i < leaves.length; i++)
             leaves[i].fills = [doc.factory.defaultFill()].concat(doc.factory._copyFills(leaves[i].fills, leaves[i]));
         if (leaves.length > 0)
@@ -314,7 +384,7 @@ QtObject {
     }
 
     function addStrokeToSelected() {
-        var leaves = _unlockedLeaves();
+        var leaves = styleTargets();
         for (var i = 0; i < leaves.length; i++)
             leaves[i].strokes = [doc.factory.defaultStroke()].concat(doc.factory._copyStrokes(leaves[i].strokes, leaves[i]));
         if (leaves.length > 0)
@@ -429,7 +499,7 @@ QtObject {
     // the Document wrapper's single checkpoint). Leaves missing the
     // index are skipped; adds/removes apply to every unlocked leaf.
     function patchFillAtSelected(at, patch) {
-        var leaves = _unlockedLeaves();
+        var leaves = styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             var arr = doc.factory._copyFills(leaves[i].fills, leaves[i]);
             if (at < 0 || at >= arr.length)
@@ -454,7 +524,7 @@ QtObject {
     }
 
     function patchStrokeAtSelected(at, patch) {
-        var leaves = _unlockedLeaves();
+        var leaves = styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             var arr = doc.factory._copyStrokes(leaves[i].strokes, leaves[i]);
             if (at < 0 || at >= arr.length)
@@ -485,7 +555,7 @@ QtObject {
     }
 
     function toggleFillAtSelected(at) {
-        var leaves = _unlockedLeaves();
+        var leaves = styleTargets();
         var nextOn = true;
         var found = false;
         for (var i = 0; i < leaves.length; i++) {
@@ -511,7 +581,7 @@ QtObject {
     }
 
     function toggleStrokeAtSelected(at) {
-        var leaves = _unlockedLeaves();
+        var leaves = styleTargets();
         var nextOn = true;
         var found = false;
         for (var i = 0; i < leaves.length; i++) {
@@ -540,7 +610,7 @@ QtObject {
         var to = at + delta;
         if (to < 0)
             return;
-        var leaves = _unlockedLeaves();
+        var leaves = styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             var list = doc.factory._copyFills(leaves[i].fills, leaves[i]);
             if (at < 0 || at >= list.length || to < 0 || to >= list.length)
@@ -558,7 +628,7 @@ QtObject {
         var to = at + delta;
         if (to < 0)
             return;
-        var leaves = _unlockedLeaves();
+        var leaves = styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             var list = doc.factory._copyStrokes(leaves[i].strokes, leaves[i]);
             if (at < 0 || at >= list.length || to < 0 || to >= list.length)
@@ -573,7 +643,7 @@ QtObject {
     }
 
     function removeFillAtSelected(at) {
-        var leaves = _unlockedLeaves();
+        var leaves = styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             var list = doc.factory._copyFills(leaves[i].fills, leaves[i]);
             if (at < 0 || at >= list.length)
@@ -586,7 +656,7 @@ QtObject {
     }
 
     function removeStrokeAtSelected(at) {
-        var leaves = _unlockedLeaves();
+        var leaves = styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             var list = doc.factory._copyStrokes(leaves[i].strokes, leaves[i]);
             if (at < 0 || at >= list.length)

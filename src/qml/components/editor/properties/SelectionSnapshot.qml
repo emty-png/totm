@@ -32,6 +32,9 @@ QtObject {
         if (!snapshot.doc)
             return [];
         snapshot.doc.rev;
+        var single = snapshot.singleGroupTop();
+        if (single)
+            return [snapshot.groupProxyEntry(single)];
         var tops = snapshot.doc.selectedTops();
         var out = [];
         for (var i = 0; i < tops.length; i++) {
@@ -81,10 +84,68 @@ QtObject {
         return out;
     }
 
+    // The single selected group top, or null. Style sections edit this
+    // group's own stacks through it (see DocEdits.styleTargets).
+    function singleGroupTop() {
+        if (!snapshot.doc)
+            return null;
+        var tops = snapshot.tops;
+        if (tops.length !== 1 || tops[0].kind !== "group")
+            return null;
+        return tops[0];
+    }
+
+    // Plain-object style proxy for one group: same entry shape as leaf
+    // snapshots so fill/stroke/effect sections bind unchanged. Copies,
+    // never live refs. Type is "boolean" for live booleans, "frame"
+    // for plain groups.
+    function groupProxyEntry(g) {
+        var d = snapshot.doc;
+        var box = d._selectionBBox();
+        if (!box)
+            box = {
+                x: 0,
+                y: 0,
+                w: 1,
+                h: 1
+            };
+        return {
+            uid: g.uid,
+            type: (g.boolOp !== undefined && g.boolOp !== "none") ? "boolean" : "frame",
+            x: box.x,
+            y: box.y,
+            w: box.w,
+            h: box.h,
+            rotation: 0,
+            fills: d.factory._copyFills(g.fills, g),
+            strokes: d.factory._copyStrokes(g.strokes, g),
+            penFill: g.penFill !== false,
+            strokeCap: g.strokeCap ?? "round",
+            strokeJoin: g.strokeJoin ?? "round",
+            shadows: d.factory._copyShadows(g.shadows),
+            glows: d.factory._copyGlows(g.glows),
+            layerBlur: d.factory._copyBlur(g.layerBlur, 8, 1),
+            backgroundBlur: d.factory._copyBlur(g.backgroundBlur, 16, 0.7),
+            grain: d.factory._copyGrain(g.grain),
+            opacity: g.opacity ?? 1,
+            radius: g.radius ?? 0,
+            independentCorners: g.independentCorners === true,
+            cornerRadii: d.factory._copyRadii(g.cornerRadii),
+            points: 5,
+            flipH: false,
+            flipV: false,
+            textContent: "",
+            locked: d.isEffectivelyLocked(g)
+        };
+    }
+
     function collectSelected() {
         if (!snapshot.doc)
             return [];
         snapshot.doc.rev;
+        var single = snapshot.singleGroupTop();
+        if (single)
+            return [snapshot.groupProxyEntry(single)];
         if (snapshot.hasGroup) {
             var box = snapshot.doc._selectionBBox();
             if (!box)

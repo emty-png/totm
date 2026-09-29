@@ -35,7 +35,7 @@ PanelSection {
     }
 
     title: qsTr("Stroke")
-    visible: section.snapshot.sel.length > 0 && !section.snapshot.hasGroup && !section.snapshot.allOfType("image")
+    visible: section.snapshot.sel.length > 0 && (!section.snapshot.hasGroup || section.snapshot.singleGroupTop() !== null) && !section.snapshot.allOfType("image")
     enabled: !section.snapshot.allLocked
     compact: section.strokeCount === 0
     showAdd: true

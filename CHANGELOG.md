@@ -3,6 +3,14 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [Unreleased]
+
+### Added
+
+* Live boolean groups — combine vector shapes with Union / Subtract / Intersect / Exclude from the layers Combine submenu (`Ctrl+Alt+U/S/I/X`, `Ctrl+Alt+B` releases) or the design panel Boolean section; children stay editable via drill-in and style comes from the bottommost donor. Canvas preview and PNG/SVG/video export share one combiner, so they match. v1 limits: text/images/masks excluded from combines, no mask participation, nested booleans unsupported, group style static after combine (release + recombine to restyle).
+* Editable group style + frame backgrounds — Fill, Stroke, Appearance (opacity) and Effects sections now edit a single selected group's own stacks (live boolean or plain group) instead of hiding; plain groups with paint render a rounded-rect frame behind their children in canvas, PNG/SVG export, thumbnails and video. Grain and background blur stay hidden on groups (no frame path either side).
+* Animated group style — opacity, color, gradient, stroke, shadow, glow and blur clips targeting a group animate the group's own stacks in preview and export (seeding, keyframes and entry retargeting read group stacks); transform clips keep moving the whole group via its children.
+
 ## [0.4.0] - 2026-09-27
 
 ### Added

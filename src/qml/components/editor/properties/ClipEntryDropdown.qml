@@ -26,6 +26,9 @@ ColumnLayout {
             return null;
         if (n.kind === "shape")
             return n;
+        // Group style clips read the group's own stacks.
+        if (entry.entryDefaults.isGroupStylePreset(entry.clip.preset))
+            return n;
         var leaves = entry.doc._leavesUnder(n);
         return leaves.length > 0 ? leaves[0] : null;
     }

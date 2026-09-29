@@ -75,7 +75,11 @@ Item {
     // the CPU MaskLeafItem so preview matches export.
     property bool isMaskShape: false
     property bool isMaskedContent: false
-    readonly property bool paintHidden: shape.isMaskShape === true || shape.isMaskedContent === true
+    // Boolean children never paint individually (the combined delegate
+    // paints them) but stay hit-testable so press/drag/drill resolve
+    // to the boolean group like any other group.
+    property bool isBooleanChild: false
+    readonly property bool paintHidden: shape.isMaskShape === true || shape.isMaskedContent === true || shape.isBooleanChild === true
     // False for non-interactive reuse (drag ghost): gestures pass through.
     property bool interactive: true
 

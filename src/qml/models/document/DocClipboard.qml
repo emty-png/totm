@@ -16,6 +16,21 @@ QtObject {
                 kind: "group",
                 uid: node.uid,
                 name: node.name,
+                boolOp: node.boolOp ?? "none",
+                fills: doc.factory._copyGroupFills(node.fills),
+                strokes: doc.factory._copyGroupStrokes(node.strokes),
+                shadows: doc.factory._copyShadows(node.shadows),
+                glows: doc.factory._copyGlows(node.glows),
+                layerBlur: doc.factory._copyBlur(node.layerBlur, 8, 1),
+                backgroundBlur: doc.factory._copyBlur(node.backgroundBlur, 16, 0.7),
+                grain: doc.factory._copyGrain(node.grain),
+                opacity: node.opacity ?? 1,
+                radius: node.radius ?? 0,
+                independentCorners: node.independentCorners === true,
+                cornerRadii: doc.factory._copyRadii(node.cornerRadii),
+                penFill: node.penFill !== false,
+                strokeCap: node.strokeCap ?? "round",
+                strokeJoin: node.strokeJoin ?? "round",
                 visible: node.visible,
                 locked: node.locked,
                 expanded: node.expanded,
@@ -81,7 +96,7 @@ QtObject {
             var kids = [];
             for (var i = 0; i < (snap.children || []).length; i++)
                 kids.push(_instantiateSnapshot(snap.children[i], select, reuseUid));
-            var g = doc._makeGroupNode(snap.name, kids);
+            var g = doc._makeGroupNode(snap.name, kids, snap);
             if (reuseUid && typeof snap.uid === "number" && snap.uid >= 0) {
                 g.uid = snap.uid;
                 if (doc.nextNodeUid <= snap.uid)

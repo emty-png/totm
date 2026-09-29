@@ -224,6 +224,13 @@ QImage grainDots(const QSize &px, double cellD, uint32_t seed, double amount);
 // for non-plain shapes, like the paint leaves).
 QPainterPath outlinePath(const QString &kind, const QRectF &box, const PathOpts &opts, const Style &st,
     double scale);
+// Arbitrary combined path (boolean groups): same stacked order as
+// paintLeaf (outers -> fills -> inners -> strokes, then layer-blur),
+// with kind "boolean" so closed-path stroke positioning applies.
+// fillBox spans the brushes (usually path.boundingRect()).
+void paintCombinedPath(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const Style &st,
+    const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur, double scale,
+    QCache<QByteArray, QImage> *maskCache = nullptr);
 // Grain confined to clip (stroke unioned in when it sticks out),
 // composited over dotBox's top-left. No-op when disabled.
 void paintGrainPath(QPainter *pt, const QPainterPath &clip, double strokeWidth, const QRectF &dotBox,

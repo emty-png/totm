@@ -7,14 +7,16 @@ import Totm
 // (backdrop) -> outer shadows -> outer glows -> fill -> inner shadows
 // -> inner glows -> stroke -> layerBlur (whole stack) -> grain on top.
 // + opens the picker any time; each card edits live with scrub-
-// coalesced undo. Groups never see this section.
+// coalesced undo. A single selected group edits its own stacks;
+// background blur and (for plain frames) grain stay hidden there:
+// neither paints on frames in preview or export.
 PanelSection {
     id: section
 
     required property var snapshot
 
     title: qsTr("Effects")
-    visible: section.snapshot.sel.length > 0 && !section.snapshot.hasGroup && section.effectable()
+    visible: section.snapshot.sel.length > 0 && (!section.snapshot.hasGroup || section.snapshot.singleGroupTop() !== null) && section.effectable()
     enabled: !section.snapshot.allLocked
     compact: !section.hasAnyEffect()
     showAdd: true
@@ -96,7 +98,7 @@ PanelSection {
     }
 
     ColumnLayout {
-        visible: section.backgroundCommon.value.enabled === true
+        visible: section.backgroundCommon.value.enabled === true && section.groupTarget() === null
         Layout.fillWidth: true
         spacing: 8
 
@@ -139,7 +141,7 @@ PanelSection {
     }
 
     ColumnLayout {
-        visible: section.grainCommon.value.enabled === true
+        visible: section.grainCommon.value.enabled === true && !section.isFrameTarget()
         Layout.fillWidth: true
         spacing: 8
 
@@ -179,17 +181,33 @@ PanelSection {
         }
     }
 
-    // Every shape kind including text; groups excluded by visible.
+    // Every shape kind including text, plus group style targets
+    // ("boolean" live booleans, "frame" plain groups); groups excluded
+    // only via visible. Grain and background blur rows hide for frames
+    // (neither paints there); background blur also hides for booleans.
     function effectable() {
         var leaves = section.snapshot.selLeaves;
         if (leaves.length === 0)
             return false;
         for (var i = 0; i < leaves.length; i++) {
             var t = leaves[i].type;
-            if (t !== "rectangle" && t !== "ellipse" && t !== "triangle" && t !== "star" && t !== "pen" && t !== "image" && t !== "text")
+            if (t !== "rectangle" && t !== "ellipse" && t !== "triangle" && t !== "star" && t !== "pen" && t !== "image" && t !== "text" && t !== "boolean" && t !== "frame")
                 return false;
         }
         return true;
+    }
+
+    // Single selected group target (null for leaf selections).
+    function groupTarget() {
+        return section.snapshot.singleGroupTop();
+    }
+
+    // Plain-frame target: grain has no canvas overlay there.
+    function isFrameTarget() {
+        var g = section.groupTarget();
+        if (!g)
+            return false;
+        return section.snapshot.sel.length === 1 && section.snapshot.sel[0].type === "frame";
     }
 
     function hasText() {
@@ -409,6 +427,8 @@ PanelSection {
         id: picker
 
         textSelected: section.hasText()
+        groupSelected: section.groupTarget() !== null
+        frameSelected: section.isFrameTarget()
         onOuterShadowClicked: section.addEntry("shadows", false)
         onInnerShadowClicked: section.addEntry("shadows", true)
         onLayerBlurClicked: section.enableBlur("layerBlur")
@@ -445,7 +465,7 @@ PanelSection {
         if (!d)
             return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
@@ -461,8 +481,11 @@ PanelSection {
         var d = section.snapshot.doc;
         if (!d)
             return;
+        // Background blur has no frame/boolean preview or export path.
+        if (role === "backgroundBlur" && section.groupTarget() !== null)
+            return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
@@ -486,8 +509,11 @@ PanelSection {
         var d = section.snapshot.doc;
         if (!d)
             return;
+        // Grain has no canvas overlay on plain frames.
+        if (section.isFrameTarget())
+            return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
@@ -507,7 +533,7 @@ PanelSection {
         if (!d)
             return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
@@ -539,7 +565,7 @@ PanelSection {
         var common = section.collectEntryAt(kind, at);
         var nextOn = !(common.value.enabled !== false);
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
@@ -559,7 +585,7 @@ PanelSection {
         if (!d)
             return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
@@ -580,7 +606,7 @@ PanelSection {
         if (to < 0)
             return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
@@ -604,7 +630,7 @@ PanelSection {
         if (!d)
             return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
@@ -625,7 +651,7 @@ PanelSection {
         if (!d)
             return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var j = 0; j < leaves.length; j++) {
             if (d.isEffectivelyLocked(leaves[j]))
                 continue;
@@ -648,7 +674,7 @@ PanelSection {
         if (!d)
             return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;
@@ -665,7 +691,7 @@ PanelSection {
         if (!d)
             return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var j = 0; j < leaves.length; j++) {
             if (d.isEffectivelyLocked(leaves[j]))
                 continue;
@@ -686,7 +712,7 @@ PanelSection {
         if (!d)
             return;
         d.history.checkpoint();
-        var leaves = d._selectedLeaves();
+        var leaves = d.styleTargets();
         for (var i = 0; i < leaves.length; i++) {
             if (d.isEffectivelyLocked(leaves[i]))
                 continue;

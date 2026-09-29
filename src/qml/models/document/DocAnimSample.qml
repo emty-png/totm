@@ -1104,6 +1104,15 @@ QtObject {
         return preset === "slide" || preset === "movescale" || preset === "grow" || preset === "shrink" || preset === "customScale" || preset === "customMove" || preset === "customResize" || preset === "customPath";
     }
 
+    // Style presets output stack/opacity keys only (no geometry): on a
+    // group target they animate the group's own stacks instead of
+    // fanning out to children (see sampleAnim). Position-adjacent
+    // customs (hide/flip/corner/resize/scale/rotate/move/font/path)
+    // keep expanding so group transforms stay coherent.
+    function isGroupStylePreset(preset) {
+        return preset === "customOpacity" || preset === "customColor" || preset === "customGradient" || preset === "customStroke" || preset === "customStrokeColor" || preset === "customStrokeGradient" || preset === "customShadow" || preset === "customGlow" || preset === "customLayerBlur" || preset === "customBackgroundBlur" || preset === "customGrain";
+    }
+
     // Local x/y offset of one clip from its own base (overlay minus base).
     // Base-independent for moves/paths/slides (pure offsets); scale-driven
     // shifts depend only on sizes, so adding them onto a moved start keeps
@@ -1193,7 +1202,11 @@ QtObject {
                 box: abox,
                 cx: abox.x + abox.w / 2,
                 cy: abox.y + abox.h / 2,
-                leaves: aleaves
+                leaves: aleaves,
+                // Style presets on groups ride the group's own stacks
+                // (base entry keyed by group uid, see captureBase).
+                groupStyle: anode.kind === "group" && isGroupStylePreset(cc.preset),
+                anode: anode
             });
         }
         for (var i = 0; i < clips.length; i++) {
@@ -1208,6 +1221,18 @@ QtObject {
             var ez = c.easing || {};
             var e = samplerEasing.easeValue(ez.id || "easeOut", ez.bezier, p);
             var skipXY = isPositionPreset(c.preset);
+            if (info.groupStyle) {
+                var g = info.anode;
+                if (c.preset !== "customHide" && !doc.isEffectivelyVisible(g))
+                    continue;
+                var gbv = base && base[g.uid] ? base[g.uid] : g;
+                var gov = presetOverlay(c.preset, c.mode, c.options || {}, gbv, info.cx, info.cy, e, p);
+                var gentry = acc[g.uid] || {};
+                for (var gk in gov)
+                    gentry[gk] = gov[gk];
+                acc[g.uid] = gentry;
+                continue;
+            }
             for (var j = 0; j < info.leaves.length; j++) {
                 var lf = info.leaves[j];
                 if (c.preset !== "customHide" && !doc.isEffectivelyVisible(lf))

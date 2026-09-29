@@ -49,8 +49,9 @@ bool parseHexA(const QString &hex, int &a, int &r, int &g, int &b);
 QString lerpColorA(const QString &from, const QString &to, double t);
 
 // Single-clip overlay for one leaf (mirrors DocAnimSample.presetOverlay).
-// base: captureBase row for the leaf. cx/cy: target bounds center in scene
-// px (scale anchor). e: eased progress, p: linear progress.
+// base: captureBase row for the leaf (or captureGroupBase row for a
+// group style clip). cx/cy: target bounds center in scene px (scale
+// anchor). e: eased progress, p: linear progress.
 QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVariantMap &o,
     const QVariantMap &base, double cx, double cy, double e, double p);
 
@@ -65,10 +66,14 @@ struct Leaf {
 QList<Leaf> collectLeaves(const QVariantMap &scene);
 // Pre-play values keyed by uid (mirrors DocTransport.captureBase).
 QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves);
+// Group style bases keyed by group uid (stacks plus opacity/visibility;
+// geometry stays leaf-owned). Mirrors the group rows of captureBase.
+QMap<int, QVariantMap> captureGroupBase(const QVariantList &nodes);
 // Full frame at time t in seconds: leaves top-first with later clips
 // winning per property, except movement x/y which chains from the
 // previous end so sequential moves accumulate. Locked leaves are
-// returned unmodified.
+// returned unmodified. Group-targeted style clips resolve against
+// captureGroupBase rows and fold into boolean/frame entries.
 QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t);
 
 // Masks (layer masks, one active mask per group). Children are

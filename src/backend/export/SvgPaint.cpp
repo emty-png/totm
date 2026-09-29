@@ -3,6 +3,7 @@
 #include "AnimSampler.h"
 #include "EffectPainter.h"
 #include "EffectSpec.h"
+#include "ShapePath.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -793,7 +794,12 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
         const double rot = num(m, "rotation");
         const bool flipH = m.value(QStringLiteral("flipH")).toBool();
         const bool flipV = m.value(QStringLiteral("flipV")).toBool();
-        const QString xf = leafTransform(x, y, w, h, rot, flipH, flipV, ox, oy);
+        // Boolean silhouettes arrive in world coords (rotation baked),
+        // pre-shifted below: no leaf transform, just the export offset.
+        // Frames behave the same (derived box, rotation baked as 0).
+        const bool isBool = shapeType == QLatin1String("boolean");
+        const bool isFrame = shapeType == QLatin1String("frame");
+        const QString xf = (isBool || isFrame) ? QString() : leafTransform(x, y, w, h, rot, flipH, flipV, ox, oy);
 
         // Empty text paints nothing: skip before the filter so no
         // unused <filter> def leaks into the document.
@@ -981,8 +987,27 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
         // Position stays centered in standalone SVG (no backdrop to
         // clip against); per-entry opacity folds into the paint.
         const Effects::Style st = Effects::Style::fromMap(m);
-        const QPainterPath path = Effects::outlinePath(shapeType, QRectF(x, y, w, h),
-            Effects::PathOpts::fromMap(m), st, 1.0);
+        QRectF gradBox(x, y, w, h);
+        QPainterPath path;
+        if (isBool) {
+            path = ShapePath::combineNodes(
+                ShapePath::normOp(m.value(QStringLiteral("boolOp"), QStringLiteral("union")).toString()),
+                m.value(QStringLiteral("children")).toList());
+            if (path.isEmpty())
+                continue;
+            path.translate(ox, oy);
+            gradBox = path.boundingRect();
+        } else if (isFrame) {
+            path = Effects::outlinePath(QStringLiteral("rectangle"), QRectF(x, y, w, h),
+                Effects::PathOpts::fromMap(m), st, 1.0);
+            if (path.isEmpty())
+                continue;
+            path.translate(ox, oy);
+            gradBox = path.boundingRect();
+        } else {
+            path = Effects::outlinePath(
+                shapeType, QRectF(x, y, w, h), Effects::PathOpts::fromMap(m), st, 1.0);
+        }
         const QString d = pathToSvg(path);
         if (d.isEmpty())
             continue;
@@ -995,7 +1020,7 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                     continue;
                 QString fillAttr = QStringLiteral("fill=\"none\"");
                 if (f.type == QLatin1String("linear")) {
-                    GradientOut g = gradientFillOpacity(f.gradient, QRectF(x, y, w, h),
+                    GradientOut g = gradientFillOpacity(f.gradient, gradBox,
                         QStringLiteral("svgfg%1").arg(gradSeq++), true, f.opacity);
                     defs.append(g.def);
                     fillAttr = g.attr;
@@ -1017,7 +1042,7 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
             const double sw = se.width;
             QString strokeAttr = QStringLiteral("stroke=\"none\"");
             if (se.type == QLatin1String("linear")) {
-                GradientOut g = gradientFillOpacity(se.gradient, QRectF(x, y, w, h),
+                GradientOut g = gradientFillOpacity(se.gradient, gradBox,
                     QStringLiteral("svgsg%1").arg(gradSeq++), false, se.opacity);
                 defs.append(g.def);
                 strokeAttr = QStringLiteral("%1 stroke-width=\"%2\" stroke-linecap=\"%3\" stroke-linejoin=\"%4\"%5")

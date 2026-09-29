@@ -185,6 +185,26 @@ QtObject {
         return factory._copyFillEntry({});
     }
 
+    // Group/boolean stacks default empty (plain groups never paint);
+    // boolean groups copy a source leaf's stacks at creation instead.
+    function _copyGroupFills(src) {
+        if (!src || typeof src.length !== "number")
+            return [];
+        var out = [];
+        for (var i = 0; i < src.length; i++)
+            out.push(factory._copyFillEntry(src[i]));
+        return out;
+    }
+
+    function _copyGroupStrokes(src) {
+        if (!src || typeof src.length !== "number")
+            return [];
+        var out = [];
+        for (var i = 0; i < src.length; i++)
+            out.push(factory._copyStrokeEntry(src[i]));
+        return out;
+    }
+
     function defaultStroke() {
         return factory._copyStrokeEntry({
             color: "#000000",
@@ -387,12 +407,31 @@ QtObject {
         };
     }
 
-    function _makeGroupNode(name, children) {
+    function _makeGroupNode(name, children, snap) {
         var uid = doc.nextNodeUid++;
+        var s = snap ?? {};
+        var op = String(s.boolOp ?? "none").toLowerCase();
+        if (op !== "union" && op !== "subtract" && op !== "intersect" && op !== "exclude")
+            op = "none";
         var n = doc.nodeFactory.createObject(doc, {
             uid: uid,
             kind: "group",
             name: name || ("Group " + uid),
+            boolOp: op,
+            fills: factory._copyGroupFills(s.fills),
+            strokes: factory._copyGroupStrokes(s.strokes),
+            shadows: factory._copyShadows(s.shadows),
+            glows: factory._copyGlows(s.glows),
+            layerBlur: factory._copyBlur(s.layerBlur, 8, 1),
+            backgroundBlur: factory._copyBlur(s.backgroundBlur, 16, 0.7),
+            grain: factory._copyGrain(s.grain),
+            opacity: s.opacity ?? 1,
+            radius: s.radius ?? 0,
+            independentCorners: s.independentCorners === true,
+            cornerRadii: factory._copyRadii(s.cornerRadii),
+            penFill: s.penFill !== false,
+            strokeCap: s.strokeCap ?? "round",
+            strokeJoin: s.strokeJoin ?? "round",
             selected: true,
             visible: true,
             locked: false,

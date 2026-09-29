@@ -34,6 +34,10 @@ qt_add_qml_module(totm
         backend/effects/EffectPainter.cpp
         backend/effects/EffectItem.h
         backend/effects/EffectItem.cpp
+        backend/geometry/ShapePath.h
+        backend/geometry/ShapePath.cpp
+        backend/geometry/BooleanGroupItem.h
+        backend/geometry/BooleanGroupItem.cpp
         backend/effects/ImageEffectItem.h
         backend/effects/ImageEffectItem.cpp
         backend/effects/MaskLeafItem.h
@@ -88,6 +92,7 @@ qt_add_qml_module(totm
         qml/models/document/DocSelection.qml
         qml/models/document/DocRename.qml
         qml/models/document/DocGroup.qml
+        qml/models/document/DocBoolean.qml
         qml/models/document/DocReorder.qml
         qml/models/document/DocBounds.qml
         qml/models/document/DocEdits.qml
@@ -181,6 +186,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/PanelSection.qml
         qml/components/editor/properties/PanelIconButton.qml
         qml/components/editor/properties/PositionSection.qml
+        qml/components/editor/properties/BooleanSection.qml
         qml/components/editor/properties/LayoutSection.qml
         qml/components/editor/properties/AppearanceSection.qml
         qml/components/editor/properties/AudioSection.qml
@@ -309,6 +315,7 @@ target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia Qt6::Netw
 # qmltyperegistrations.cpp), so each backend dir must be on the include path.
 target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/effects
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/geometry
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/files
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/library
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/settings
