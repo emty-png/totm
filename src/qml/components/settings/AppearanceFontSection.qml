@@ -3,15 +3,17 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Font card: import .ttf/.otf files (copied to <AppData>/totm/fonts/
-// and registered via QFontDatabase), then pick from the list.
-// No typing: the user selects System default or an imported font.
-// A stored family that is gone next session falls back to the system
-// font and shows a "Font not found" error until re-picked or reset.
+// Font card: bundled Inter by default, the OS font on explicit choice,
+// or import .ttf/.otf files (copied to <AppData>/totm/fonts/ and
+// registered via QFontDatabase), then pick from the list.
+// No typing: the user selects one of the rows.
+// A stored family that is gone next session falls back to the Inter
+// default and shows a "Font not found" error until re-picked or reset.
 Rectangle {
     id: fontCard
 
-    readonly property bool hasCustom: SettingsStore.fontFamily !== ""
+    readonly property bool isSystem: SettingsStore.fontFamily.toLowerCase() === "system"
+    readonly property bool hasCustom: SettingsStore.fontFamily !== "" && !fontCard.isSystem
 
     Layout.fillWidth: true
     implicitHeight: fontBody.implicitHeight + 24
@@ -63,9 +65,18 @@ Rectangle {
             Layout.fillWidth: true
             visible: SettingsStore.fontMissing
             wrapMode: Text.WordWrap
-            text: qsTr("Font not found: %1. Using system default instead.").arg(SettingsStore.fontFamily)
+            text: qsTr("Font not found: %1. Using Inter instead.").arg(SettingsStore.fontFamily)
             font.pixelSize: 12
             color: AppTheme.snapGuide
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: SettingsStore.fontRestartNeeded
+            wrapMode: Text.WordWrap
+            text: qsTr("New font applies after a restart.")
+            font.pixelSize: 11
+            color: AppTheme.muted
         }
 
         Rectangle {
@@ -104,9 +115,17 @@ Rectangle {
         AppearanceFontRow {
             Layout.fillWidth: true
             fileName: ""
-            familyName: qsTr("System default")
-            selected: !fontCard.hasCustom && !SettingsStore.fontMissing
+            familyName: qsTr("Inter (default)")
+            selected: SettingsStore.fontFamily === "" && !SettingsStore.fontMissing
             selectPolicy: () => SettingsStore.fontFamily = ""
+        }
+
+        AppearanceFontRow {
+            Layout.fillWidth: true
+            fileName: ""
+            familyName: qsTr("System default")
+            selected: fontCard.isSystem && !SettingsStore.fontMissing
+            selectPolicy: () => SettingsStore.fontFamily = "system"
         }
 
         Repeater {

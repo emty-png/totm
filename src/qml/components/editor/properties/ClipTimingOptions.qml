@@ -26,15 +26,17 @@ ColumnLayout {
     spacing: 8
 
     // Stepped clips are instants with a locked duration: no Duration row.
+    // Instant hide/show (customHide with fade off) likewise needs
+    // neither duration nor easing; the fade owns them when toggled on.
     Text {
-        visible: !section.isStepped()
+        visible: !section.isStepped() && !section.isInstantHide()
         text: qsTr("Duration")
         font.pixelSize: 11
         color: AppTheme.muted
     }
 
     NumberField {
-        visible: !section.isStepped()
+        visible: !section.isStepped() && !section.isInstantHide()
         Layout.fillWidth: true
         suffix: qsTr("s")
         scrubStep: 0.1
@@ -47,12 +49,14 @@ ColumnLayout {
     }
 
     Text {
+        visible: !section.isInstantHide()
         text: qsTr("Easing")
         font.pixelSize: 11
         color: AppTheme.muted
     }
 
     Rectangle {
+        visible: !section.isInstantHide()
         Layout.fillWidth: true
         Layout.preferredHeight: 28
         radius: AppTheme.radiusSmall
@@ -98,6 +102,18 @@ ColumnLayout {
         if (!section.clip || !section.doc)
             return false;
         return section.doc.anim.presets.isStepped(section.clip.preset);
+    }
+
+    // Instant hide/show: customHide without the fade toggle. Duration
+    // and easing stay hidden; the fade owns them when toggled on.
+    // Missing fade reads as off so old clips stay instant.
+    function isInstantHide() {
+        if (!section.clip || !section.doc)
+            return false;
+        if (section.clip.preset !== "customHide")
+            return false;
+        var o = section.clip.options || {};
+        return o.fade !== true;
     }
 
     function retime(v) {

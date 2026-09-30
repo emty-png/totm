@@ -49,12 +49,18 @@ QtObject {
             fontFamily: s.fontFamily ?? "Inter",
             fontWeight: s.fontWeight ?? 400,
             fontSize: s.fontSize ?? 16,
+            fontItalic: s.fontItalic === true,
+            fontUnderline: s.fontUnderline === true,
+            fontStrike: s.fontStrike === true,
+            fontCaps: (s.fontCaps === "upper" || s.fontCaps === "lower") ? s.fontCaps : "none",
             lineHeightAuto: s.lineHeightAuto !== false,
             lineHeight: s.lineHeight ?? 1.2,
             letterSpacing: s.letterSpacing ?? 0,
             hAlign: s.hAlign ?? "left",
             vAlign: s.vAlign ?? "top",
             autoSize: s.autoSize ?? (type === "text"),
+            textRuns: factory._copyRuns(s.textRuns),
+            textFx: s.textFx ?? null,
             selected: true,
             visible: s.visible !== false,
             locked: false,
@@ -84,6 +90,28 @@ QtObject {
             return out;
         for (var i = 0; i < src.length && i < 2; i++)
             out.push(Math.max(0, Number(src[i]) || 0));
+        return out;
+    }
+
+    // Rich runs copy (same sequence caveat as radii): entries carry
+    // start/len plus style flags, clamped to sane ranges here (content
+    // length clamping happens at paint/commit, like corner radii).
+    function _copyRuns(src) {
+        var out = [];
+        if (!src || typeof src.length !== "number")
+            return out;
+        for (var i = 0; i < src.length; i++) {
+            var d = src[i] ?? {};
+            out.push({
+                start: Math.max(0, Math.round(Number(d.start) || 0)),
+                len: Math.max(0, Math.round(Number(d.len) || 0)),
+                bold: d.bold === true,
+                italic: d.italic === true,
+                underline: d.underline === true,
+                strike: d.strike === true,
+                color: String(d.color ?? "")
+            });
+        }
         return out;
     }
 
@@ -152,8 +180,8 @@ QtObject {
     }
 
     // Stacked strokes, index 0 topmost. Legacy single stroke keys
-    // fold into one entry; missing input defaults to no stroke
-    // (width 0) so creation snapshots stay stroke-free.
+    // fold into one entry; missing input defaults to no strokes so
+    // new shapes stay stroke-free until the user adds one.
     function _copyStrokes(src, legacy) {
         if (src && typeof src.length === "number") {
             var out = [];
@@ -175,10 +203,7 @@ QtObject {
                     position: "center",
                     opacity: 1
                 })];
-        return [factory._copyStrokeEntry({
-                color: "#000000",
-                width: 0
-            })];
+        return [];
     }
 
     function defaultFill() {
@@ -546,9 +571,9 @@ QtObject {
                     ] : undefined),
                 fill: e.fill ?? "#000000",
                 penFill: e.penFill !== false,
-                stroke: e.stroke ?? "#000000",
-                strokeType: "solid",
-                strokeWidth: swScaled,
+                stroke: e.stroke,
+                strokeType: (e.stroke !== undefined || e.strokeWidth !== undefined) ? "solid" : undefined,
+                strokeWidth: (e.stroke !== undefined || e.strokeWidth !== undefined) ? swScaled : undefined,
                 strokeCap: e.strokeCap ?? "round",
                 strokeJoin: e.strokeJoin ?? "round"
             });

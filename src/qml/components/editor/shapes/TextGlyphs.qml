@@ -1,13 +1,19 @@
 import QtQuick
+import Totm
 
-// One text run with document metrics. ShapeItem instantiates it once
-// for the fill plus N rotated copies for the stroke outline, so all
-// copies share metrics from a single definition. Sizing anchors are
-// left to the use site (fill for glyphs, explicit box for copies).
+// One text run with document metrics. Fast GPU fill for plain text;
+// stroked/effected text rides the CPU vector path (no fake outline).
+// The font value comes from TextRuns so variable families interpolate
+// the wght axis (plain weight bindings render their default instance
+// at every weight).
 Text {
     property string family: "Inter"
     property int weight: 400
     property real size: 16
+    property bool italic: false
+    property bool underline: false
+    property bool strike: false
+    property string caps: "none"
     property real spacingPct: 0
     property string halign: "left"
     property string valign: "top"
@@ -15,10 +21,7 @@ Text {
     property bool autoLeading: true
     property real leading: 1.2
 
-    font.family: family
-    font.pixelSize: Math.max(1, size)
-    font.weight: weight
-    font.letterSpacing: size * spacingPct / 100
+    font: TextRuns.textFont(family, weight, size, italic, underline, strike, caps, size * spacingPct / 100)
     horizontalAlignment: {
         switch (halign) {
         case "center":

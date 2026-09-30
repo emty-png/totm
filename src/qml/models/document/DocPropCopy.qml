@@ -17,6 +17,27 @@ QtObject {
 
     // ---- design: source snapshot ----
 
+    // Rich-run copy (array-like safe, like the radii copier in
+    // DocFactory: C++ round trips break Array.isArray).
+    function _copyRuns(src) {
+        var out = [];
+        if (!src || typeof src.length !== "number")
+            return out;
+        for (var i = 0; i < src.length; i++) {
+            var d = src[i] ?? {};
+            out.push({
+                start: Math.max(0, Math.round(Number(d.start) || 0)),
+                len: Math.max(0, Math.round(Number(d.len) || 0)),
+                bold: d.bold === true,
+                italic: d.italic === true,
+                underline: d.underline === true,
+                strike: d.strike === true,
+                color: String(d.color ?? "")
+            });
+        }
+        return out;
+    }
+
     function firstLeaf() {
         if (!propCopy.doc)
             return null;
@@ -139,6 +160,11 @@ QtObject {
                 fontFamily: String(n.fontFamily ?? ""),
                 fontWeight: n.fontWeight,
                 fontSize: n.fontSize,
+                fontItalic: n.fontItalic === true,
+                fontUnderline: n.fontUnderline === true,
+                fontStrike: n.fontStrike === true,
+                fontCaps: n.fontCaps ?? "none",
+                textRuns: propCopy._copyRuns(n.textRuns),
                 lineHeightAuto: n.lineHeightAuto !== false,
                 lineHeight: n.lineHeight,
                 letterSpacing: n.letterSpacing,
@@ -283,6 +309,11 @@ QtObject {
                 n.fontFamily = String(t.fontFamily);
             n.fontWeight = t.fontWeight;
             n.fontSize = Math.min(500, Math.max(1, Number(t.fontSize) || 16));
+            n.fontItalic = t.fontItalic === true;
+            n.fontUnderline = t.fontUnderline === true;
+            n.fontStrike = t.fontStrike === true;
+            n.fontCaps = (t.fontCaps === "upper" || t.fontCaps === "lower") ? t.fontCaps : "none";
+            n.textRuns = propCopy._copyRuns(t.textRuns);
             n.lineHeightAuto = t.lineHeightAuto !== false;
             n.lineHeight = t.lineHeight;
             n.letterSpacing = t.letterSpacing;

@@ -1,5 +1,7 @@
 #include <QDebug>
 #include <QFileInfo>
+#include <QFont>
+#include <QFontDatabase>
 #include <QFileOpenEvent>
 #include <QGuiApplication>
 #include <QHash>
@@ -181,6 +183,35 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     // Identity drives QSettings (org "tot", app "totm") and QStandardPaths.
     app.setApplicationName(QStringLiteral("totm"));
+    // Bundled UI typeface (Inter, OFL-1.1 — see src/fonts/inter/OFL.txt).
+    // Loaded before any QML so the family resolves app-wide from the
+    // first frame; failures only warn (Qt substitutes a system sans).
+    // SettingsStore::applyFontFamily picks Inter vs. the user override.
+    for (const QString &face : {QStringLiteral(":/fonts/inter/Inter-Regular.ttf"),
+                                QStringLiteral(":/fonts/inter/Inter-Medium.ttf"),
+                                QStringLiteral(":/fonts/inter/Inter-SemiBold.ttf"),
+                                QStringLiteral(":/fonts/inter/Inter-Bold.ttf")}) {
+        if (QFontDatabase::addApplicationFont(face) < 0)
+            qWarning() << "totm: bundled font failed to load:" << face;
+    }
+    // UI typeface applies at startup: QML text resolves its family at
+    // creation and ignores later setFont() calls, so the stored choice
+    // must land before the engine loads (explicit org/app match
+    // SettingsStore's identity, like the low-spec read above). Empty
+    // means bundled Inter; "system" keeps the OS font. Changes made in
+    // Appearance take effect on restart (noted on the font card).
+    {
+        const QSettings early(QStringLiteral("tot"), QStringLiteral("totm"));
+        const QString stored =
+            early.value(QStringLiteral("appearance/fontFamily"), QString()).toString().trimmed();
+        if (stored.compare(QStringLiteral("system"), Qt::CaseInsensitive) == 0) {
+            // OS default: leave the stock application font alone.
+        } else {
+            QFont appFont;
+            appFont.setFamily(stored.isEmpty() ? QStringLiteral("Inter") : stored);
+            QGuiApplication::setFont(appFont);
+        }
+    }
     app.setApplicationVersion(QStringLiteral("0.4.0"));
     app.setOrganizationName(QStringLiteral("tot"));
     // Window/taskbar icon (X11, Wayland, Windows).

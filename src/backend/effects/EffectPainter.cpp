@@ -1,20 +1,29 @@
 #include "EffectPainter.h"
 
 #include "EffectSpec.h"
+#include "VariableFonts.h"
 
 #include <QAbstractTextDocumentLayout>
 #include <QDataStream>
 #include <QFont>
+#include <QFontMetricsF>
+#include <QGlyphRun>
 #include <QImage>
 #include <QIODevice>
 #include <QLinearGradient>
 #include <QPainterPathStroker>
 #include <QPalette>
+#include <QRawFont>
+#include <QTextBlock>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextFormat>
+#include <QTextLayout>
+#include <QTextLine>
 #include <QTextOption>
 #include <QtMath>
+
+#include <algorithm>
 
 namespace Effects {
 
@@ -242,6 +251,22 @@ TextOpts TextOpts::fromMap(const QVariantMap &m)
     t.boxW = qMax(1.0, m.value(QStringLiteral("boxW"), 10.0).toDouble());
     t.boxH = qMax(1.0, m.value(QStringLiteral("boxH"), 10.0).toDouble());
     t.outlinePx = qMax(0.0, m.value(QStringLiteral("outlinePx"), 0.0).toDouble());
+    t.italic = m.value(QStringLiteral("italic"), false).toBool();
+    t.underline = m.value(QStringLiteral("underline"), false).toBool();
+    t.strike = m.value(QStringLiteral("strike"), false).toBool();
+    const QString j = m.value(QStringLiteral("join"), QStringLiteral("round")).toString();
+    t.join = (j == QLatin1String("bevel") || j == QLatin1String("miter")) ? j : QStringLiteral("round");
+    const QString c = m.value(QStringLiteral("caps"), QStringLiteral("none")).toString();
+    t.caps = (c == QLatin1String("upper") || c == QLatin1String("lower")) ? c : QStringLiteral("none");
+    t.fx = m.value(QStringLiteral("fx"), false).toBool();
+    t.fxReveal = qBound(0.0, m.value(QStringLiteral("fxReveal"), 1.0).toDouble(), 1.0);
+    t.fxStagger = qBound(0.0, m.value(QStringLiteral("fxStagger"), 0.0).toDouble(), 1.0);
+    t.fxRise = qMax(0.0, m.value(QStringLiteral("fxRise"), 0.0).toDouble());
+    t.fxHighlight = m.value(QStringLiteral("fxHighlight")).toString();
+    t.fxSweep = m.value(QStringLiteral("fxSweep"), false).toBool();
+    const QString u = m.value(QStringLiteral("fxUnit"), QStringLiteral("letters")).toString();
+    t.fxUnit = (u == QLatin1String("words") || u == QLatin1String("lines")) ? u : QStringLiteral("letters");
+    t.runs = m.value(QStringLiteral("runs")).toList();
     return t;
 }
 
@@ -1523,21 +1548,147 @@ void paintCombinedPath(QPainter *pt, const QPainterPath &path, const QRectF &fil
 
 namespace {
 
+// Normalized rich span (mirrors TextRuns.normalize: sorted, clamped,
+// later-wins overlaps, merged neighbors, blanks dropped).
+struct TextRun {
+    int start = 0;
+    int len = 0;
+    bool bold = false;
+    bool italic = false;
+    bool underline = false;
+    bool strike = false;
+    QString color;
+
+    bool styled() const { return bold || italic || underline || strike || !color.isEmpty(); }
+    bool sameStyle(const TextRun &o) const {
+        return bold == o.bold && italic == o.italic && underline == o.underline && strike == o.strike
+            && color.compare(o.color, Qt::CaseInsensitive) == 0;
+    }
+};
+
+QList<TextRun> normalizeTextRuns(int contentLen, const QVariantList &raw) {
+    QList<TextRun> in;
+    for (const QVariant &v : raw) {
+        const QVariantMap m = v.toMap();
+        TextRun r;
+        r.start = qBound(0, m.value(QStringLiteral("start"), 0).toInt(), contentLen);
+        r.len = qBound(0, m.value(QStringLiteral("len"), 0).toInt(), contentLen - r.start);
+        r.bold = m.value(QStringLiteral("bold"), false).toBool();
+        r.italic = m.value(QStringLiteral("italic"), false).toBool();
+        r.underline = m.value(QStringLiteral("underline"), false).toBool();
+        r.strike = m.value(QStringLiteral("strike"), false).toBool();
+        r.color = m.value(QStringLiteral("color")).toString();
+        if (r.len > 0 && r.styled())
+            in.append(r);
+    }
+    std::sort(in.begin(), in.end(), [](const TextRun &a, const TextRun &b) {
+        return a.start < b.start || (a.start == b.start && a.len < b.len);
+    });
+    QList<TextRun> out;
+    for (const TextRun &r : in) {
+        if (!out.isEmpty() && r.start < out.last().start + out.last().len) {
+            TextRun &prev = out.last();
+            const int prevEnd = prev.start + prev.len;
+            if (r.start + r.len <= prevEnd) {
+                if (prev.sameStyle(r))
+                    continue;
+                TextRun tail = prev;
+                tail.start = r.start + r.len;
+                tail.len = prevEnd - tail.start;
+                prev.len = r.start - prev.start;
+                if (prev.len <= 0) {
+                    prev = r;
+                } else {
+                    out.append(r);
+                }
+                if (tail.len > 0)
+                    out.append(tail);
+                continue;
+            }
+            prev.len = r.start - prev.start;
+            if (prev.len <= 0) {
+                out.removeLast();
+            } else if (prev.sameStyle(r)) {
+                prev.len = r.start + r.len - prev.start;
+                continue;
+            }
+        } else if (!out.isEmpty() && out.last().sameStyle(r)
+            && out.last().start + out.last().len == r.start) {
+            out.last().len += r.len;
+            continue;
+        }
+        out.append(r);
+    }
+    return out;
+}
+
+// Run index covering a content offset, or -1 (box style).
+int runIndexAt(const QList<TextRun> &runs, int offset) {
+    for (int i = 0; i < runs.size(); ++i) {
+        const TextRun &r = runs.at(i);
+        if (offset >= r.start && offset < r.start + r.len)
+            return i;
+    }
+    return -1;
+}
+
 // Shared QTextDocument builder: mirrors the canvas TextGlyphs settings
-// (family, pixel size, weight, absolute letter spacing, alignment,
-// wrap, fixed line height) so preview and export lay glyphs alike.
+// (family, pixel size, weight, italic, underline, strike, caps,
+// absolute letter spacing, alignment, wrap, fixed line height) so
+// preview and export lay glyphs alike. Rich spans ride as fragments
+// with per-run fonts (bold maps to 700); colors stay out (fills paint
+// separately), the outline pen applies to every fragment for the cover.
 void setupTextDoc(QTextDocument &doc, const TextOpts &t, double s, const QColor &fg, double outlinePx)
 {
-    doc.setPlainText(t.content);
+    QString content = t.content;
+    if (t.caps == QLatin1String("upper"))
+        content = content.toUpper();
+    else if (t.caps == QLatin1String("lower"))
+        content = content.toLower();
     const double px = qMax(1.0, t.size * s);
     QFont font(t.family);
     font.setPixelSize(qRound(px));
-    font.setWeight(QFont::Weight(qBound(100, t.weight, 900)));
+    VariableFonts::applyTextWeight(font, t.family, t.weight);
+    font.setItalic(t.italic);
+    font.setUnderline(t.underline);
+    font.setStrikeOut(t.strike);
+    if (t.caps == QLatin1String("upper"))
+        font.setCapitalization(QFont::AllUppercase);
+    else if (t.caps == QLatin1String("lower"))
+        font.setCapitalization(QFont::AllLowercase);
     if (!qFuzzyIsNull(t.spacingPct))
         font.setLetterSpacing(QFont::AbsoluteSpacing, t.size * s * t.spacingPct / 100.0);
     doc.setDefaultFont(font);
+    const QList<TextRun> runs = normalizeTextRuns(content.size(), t.runs);
     QTextCursor cur(&doc);
-    cur.select(QTextCursor::Document);
+    if (runs.isEmpty()) {
+        doc.setPlainText(content);
+        cur.select(QTextCursor::Document);
+    } else {
+        // Fragments in document order (gaps use the box font); every
+        // fragment carries the full font so shaping matches paint.
+        int pos = 0;
+        for (const TextRun &r : runs) {
+            if (r.start > pos)
+                cur.insertText(content.mid(pos, r.start - pos));
+            QTextCharFormat rf;
+            QFont rfont = font;
+            if (r.bold)
+                VariableFonts::applyTextWeight(rfont, t.family, 700);
+            if (r.italic)
+                rfont.setItalic(true);
+            if (r.underline)
+                rfont.setUnderline(true);
+            if (r.strike)
+                rfont.setStrikeOut(true);
+            rf.setFont(rfont);
+            cur.insertText(content.mid(r.start, r.len), rf);
+            pos = r.start + r.len;
+        }
+        if (pos < content.size())
+            cur.insertText(content.mid(pos));
+        cur.select(QTextCursor::Document);
+    }
     QTextCharFormat fmt;
     fmt.setForeground(fg);
     if (outlinePx > 0.01)
@@ -1569,7 +1720,9 @@ QByteArray textKey(const TextOpts &t, double s)
     QDataStream ds(&bytes, QIODevice::WriteOnly);
     ds.setVersion(QDataStream::Qt_6_0);
     ds << quint8('T') << t.content << t.family << t.weight << t.size << t.spacingPct << t.halign
-       << t.valign << t.autoSize << t.lineAuto << t.leading << t.boxW << t.boxH << t.outlinePx << s;
+       << t.valign << t.autoSize << t.lineAuto << t.leading << t.boxW << t.boxH << t.outlinePx << s
+       << t.italic << t.underline << t.strike << t.join << t.caps << t.fx << t.fxReveal << t.fxStagger
+       << t.fxRise << t.fxHighlight << t.fxSweep << t.fxUnit << t.runs;
     return bytes;
 }
 
@@ -1584,44 +1737,6 @@ double textDy(const TextOpts &t, double docH, double boxH)
     return 0.0;
 }
 
-// Alpha-complement (white with inverted alpha) for the erode-by-dual.
-QImage inverted(const QImage &src)
-{
-    QImage inv(src.size(), QImage::Format_ARGB32_Premultiplied);
-    inv.fill(Qt::white);
-    QPainter p(&inv);
-    p.setCompositionMode(QPainter::CompositionMode_DestinationOut);
-    p.drawImage(0, 0, src);
-    return inv;
-}
-
-// Nine-tap stamp dilate: halo starts outside the glyphs like the old
-// exporter stamp pass. Eight taps approximate a disc; the blur that
-// always follows rounds off the rest.
-QImage stamped(const QImage &src, double spread)
-{
-    if (spread <= 0.01 || src.isNull())
-        return src.copy();
-    QImage grown(src.size(), QImage::Format_ARGB32_Premultiplied);
-    grown.fill(0);
-    QPainter gp(&grown);
-    for (int oy = -1; oy <= 1; ++oy) {
-        for (int ox = -1; ox <= 1; ++ox)
-            gp.drawImage(QPointF(ox * spread, oy * spread), src);
-    }
-    gp.end();
-    return grown;
-}
-
-// Erode by duality (not dilate(not)): blurred-mask pipeline stays in
-// plain QPainter ops, no extra dependencies.
-QImage eroded(const QImage &src, double spread)
-{
-    if (spread <= 0.01 || src.isNull())
-        return src.copy();
-    return inverted(stamped(inverted(src), spread));
-}
-
 QByteArray textOuterKey(const QByteArray &tkey, bool outlined, double spread, double blur, double s)
 {
     QByteArray key;
@@ -1631,52 +1746,14 @@ QByteArray textOuterKey(const QByteArray &tkey, bool outlined, double spread, do
     return key;
 }
 
-QByteArray textInnerKey(const QByteArray &tkey, double spread, double blur, double ox, double oy, double s)
-{
-    QByteArray key;
-    QDataStream ds(&key, QIODevice::WriteOnly);
-    ds.setVersion(QDataStream::Qt_6_0);
-    ds << quint8('I') << tkey << spread << blur << ox << oy << s;
-    return key;
-}
-
-// Stroke ring: outlined coverage minus its erosion. A single render
-// feeds both sides, so antialiased edge ramps never punch holes in
-// the band (mixing hinted bare glyphs with unhinted outlined ones
-// does). Cached on layout plus outline width.
-QImage textRing(const QImage &outlined, const QByteArray &tkey, double outlineW, double s,
-    QCache<QByteArray, QImage> *cache)
-{
-    QByteArray key;
-    {
-        QDataStream ds(&key, QIODevice::WriteOnly);
-        ds.setVersion(QDataStream::Qt_6_0);
-        ds << quint8('R') << tkey << outlineW << s;
-    }
-    if (cache) {
-        if (QImage *hit = cache->object(key))
-            return *hit;
-    }
-    QImage ring(outlined.size(), QImage::Format_ARGB32_Premultiplied);
-    ring.fill(0);
-    {
-        QPainter p(&ring);
-        p.drawImage(0, 0, outlined);
-        p.setCompositionMode(QPainter::CompositionMode_DestinationOut);
-        p.drawImage(0, 0, eroded(outlined, outlineW * s));
-    }
-    if (cache && !ring.isNull())
-        cache->insert(key, new QImage(ring), qMax(1, int(ring.sizeInBytes())));
-    return ring;
-}
-
 // White glyph coverage, cached on the layout key. withOutline unions
 // the outline ring in (halo/fill silhouette); without it is the bare
 // glyphs (fill and inner-band silhouette).
+QByteArray textLayoutKey(const TextOpts &t, double s);
 QImage textCoverage(const TextOpts &t, double w, double h, double s, bool withOutline,
     QCache<QByteArray, QImage> *cache, QByteArray *keyOut)
 {
-    const QByteArray tkey = textKey(t, s);
+    const QByteArray tkey = textLayoutKey(t, s);
     const QByteArray key = textOuterKey(tkey, withOutline, -1.0, -1.0, s);
     if (keyOut)
         *keyOut = tkey;
@@ -1704,90 +1781,550 @@ QImage textCoverage(const TextOpts &t, double w, double h, double s, bool withOu
     return ghost;
 }
 
-// Blurred dilated halo canvas (pre-tint), grown by margin on every
-// side like the vector pad so nothing clips. Cached on layout plus
-// spread/blur; tint and offset apply per paint.
-QImage textHalo(const QImage &outlined, const QByteArray &tkey, double spread, double blur, double s,
+// Layout-only fingerprint (textKey minus the fx reveal fields): the glyph
+// coverage raster never depends on karaoke progress, so color/offset/fx
+// edits reuse it bit-for-bit instead of recomputing per frame.
+QByteArray textLayoutKey(const TextOpts &t, double s)
+{
+    QByteArray bytes;
+    QDataStream ds(&bytes, QIODevice::WriteOnly);
+    ds.setVersion(QDataStream::Qt_6_0);
+    ds << quint8('T') << t.content << t.family << t.weight << t.size << t.spacingPct << t.halign
+       << t.valign << t.autoSize << t.lineAuto << t.leading << t.boxW << t.boxH << t.outlinePx << s
+       << t.italic << t.underline << t.strike << t.join << t.caps << t.runs;
+    return bytes;
+}
+
+// Nine-tap stamp dilate for halo spread: eight taps approximate a disc,
+// the blur that always follows rounds off the rest. Pure raster ops, no
+// boolean path math (glyph paths carry hundreds of elements; united()
+// explodes superlinearly on them).
+QImage stamped(const QImage &src, double spread)
+{
+    if (spread <= 0.01 || src.isNull())
+        return src.copy();
+    QImage grown(src.size(), QImage::Format_ARGB32_Premultiplied);
+    grown.fill(0);
+    QPainter gp(&grown);
+    for (int oy = -1; oy <= 1; ++oy) {
+        for (int ox = -1; ox <= 1; ++ox)
+            gp.drawImage(QPointF(ox * spread, oy * spread), src);
+    }
+    gp.end();
+    return grown;
+}
+
+// Blurred dilated halo canvas (pre-tint) from a coverage image, grown by
+// margin on every side like the vector pad so nothing clips. Cached on
+// the caller-built key (layout + spread/blur + reveal quantum); tint and
+// offset apply per paint.
+QImage textHaloFrom(const QImage &cover, const QByteArray &key, double spread, double blur, double s,
     QCache<QByteArray, QImage> *cache, double *marginOut)
 {
     const double margin = qMin(1024.0, spread * s + blur * s * 2.0) + 1.0;
     if (marginOut)
         *marginOut = margin;
-    const QByteArray key = textOuterKey(tkey, true, spread, blur, s);
     if (cache) {
         if (QImage *hit = cache->object(key))
             return *hit;
     }
-    const QSize csz(qMax(1, outlined.width() + qRound(margin * 2.0)),
-        qMax(1, outlined.height() + qRound(margin * 2.0)));
+    const QSize csz(qMax(1, cover.width() + qRound(margin * 2.0)),
+        qMax(1, cover.height() + qRound(margin * 2.0)));
     QImage canvas(csz, QImage::Format_ARGB32_Premultiplied);
     canvas.fill(0);
     {
         QPainter p(&canvas);
-        p.drawImage(QPointF(margin, margin), outlined);
+        p.drawImage(QPointF(margin, margin), cover);
     }
     QImage grown = stamped(canvas, spread * s);
     blurImageImpl(grown, blur * s);
-    if (cache)
+    if (cache && !grown.isNull())
         cache->insert(key, new QImage(grown), qMax(1, int(grown.sizeInBytes())));
     return grown;
 }
 
-// Blurred eroded cutter canvas for inner bands, shift baked in like
-// the vector cutter. The margin covers spread (stamp reach) plus blur
-// plus offset so the stamp dilate never clips. Cached on layout plus
-// spread/blur/offset.
-QImage textCutter(const QImage &base, const QByteArray &tkey, double spread, double blur, double ox,
-    double oy, double s, QCache<QByteArray, QImage> *cache, double *marginOut)
+// Halo cache key: layout + coverage outline + spread/blur + reveal quantum.
+// The quantum is 0 off-fx (stable across paints) or the started-unit count
+// on-fx (the union silhouette only changes when a new unit starts, so one
+// blur per step instead of one per frame).
+QByteArray textHaloKey(const TextOpts &t, double s, double spread, double blur, int quantum)
 {
-    const double margin = qMin(1024.0, spread * s + blur * s * 2.0) + 1.0 + qHypot(ox * s, oy * s);
-    if (marginOut)
-        *marginOut = margin;
-    const QByteArray key = textInnerKey(tkey, spread, blur, ox, oy, s);
-    if (cache) {
-        if (QImage *hit = cache->object(key))
-            return *hit;
-    }
-    const QSize csz(qMax(1, base.width() + qRound(margin * 2.0)),
-        qMax(1, base.height() + qRound(margin * 2.0)));
-    QImage canvas(csz, QImage::Format_ARGB32_Premultiplied);
-    canvas.fill(0);
-    {
-        QPainter p(&canvas);
-        p.drawImage(QPointF(margin + ox * s, margin + oy * s), base);
-    }
-    QImage cut = eroded(canvas, spread * s);
-    blurImageImpl(cut, blur * s);
-    if (cache)
-        cache->insert(key, new QImage(cut), qMax(1, int(cut.sizeInBytes())));
-    return cut;
+    QByteArray key;
+    QDataStream ds(&key, QIODevice::WriteOnly);
+    ds.setVersion(QDataStream::Qt_6_0);
+    ds << quint8('H') << textLayoutKey(t, s) << spread << blur << s << quantum;
+    return key;
 }
 
-void tintImage(QImage &img, const QBrush &brush)
+// Tint a pre-blurred halo canvas in place (color through SourceIn).
+void tintHalo(QImage &img, const QColor &color)
 {
     QPainter p(&img);
     p.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    p.fillRect(img.rect(), brush);
+    p.fillRect(img.rect(), color);
 }
 
-// Tinted glyphs minus the blurred cutter: the edge band. Both canvases
-// share the (margin, margin) basis, so the erase registers exactly.
-void paintTextInner(QPainter *pt, const QPointF &at, const QImage &base, const QImage &cutter,
-    const QBrush &tint)
+// Vector glyph outline at box.topLeft (device coords): union of the
+// run/unit pieces, so rich spans shape with their own fonts exactly
+// like the painter fills them. Fixed boxes intersect with the box
+// (canvas clips them); auto-size boxes overflow like the canvas.
+QPainterPath glyphOutlineFor(const TextOpts &t, double s, const QRectF &box, const QTextDocument &doc,
+    double dy);
+
+// Text stroke join from the text style (round default, like vectors).
+Qt::PenJoinStyle textJoinFor(const TextOpts &t)
 {
-    QImage mask(base.size(), QImage::Format_ARGB32_Premultiplied);
-    mask.fill(0);
-    {
-        QPainter mp(&mask);
-        mp.drawImage(0, 0, base);
+    if (t.join == QLatin1String("bevel"))
+        return Qt::BevelJoin;
+    if (t.join == QLatin1String("miter"))
+        return Qt::MiterJoin;
+    return Qt::RoundJoin;
+}
+
+// One real text stroke, composed without boolean path ops. Center strokes
+// draw directly; inside/outside strokes paint a doubled pen into a tile
+// and keep (inside) or erase (outside) the glyph interior. Glyph paths
+// carry hundreds of elements, where subtracted()/united() explode
+// superlinearly (300ms+ on a 26-glyph headline), while tile composition
+// stays O(pixels). Dash patterns halve (pen is doubled, dash units are
+// pen widths); gradients span fillBox like vectors.
+void paintOneTextStroke(QPainter *pt, const QPainterPath &glyphs, const QRectF &fillBox,
+    const TextOpts &t, const StrokeEntry &se, double s)
+{
+    const double w = qMax(0.0, se.width) * s;
+    if (w <= 0.01 || glyphs.isEmpty())
+        return;
+    const QBrush sb = strokeBrushFor(fillBox, se);
+    const bool isInside = se.position == QLatin1String("inside");
+    const bool isOutside = se.position == QLatin1String("outside");
+    if (!isOutside) {
+        // Center straddles; inside draws double-width clipped to the
+        // glyphs. Painter clipping only: no boolean path ops (they
+        // explode on hundred-element glyph paths) and no In-modes
+        // (misbehave on uniform-opaque dests in some Qt builds).
+        QPen pen(sb, isInside ? w * 2.0 : w, Qt::SolidLine, Qt::RoundCap, textJoinFor(t));
+        applyDashToPen(pen, se.dash);
+        pt->save();
+        if (isInside)
+            pt->setClipPath(glyphs, Qt::IntersectClip);
+        pt->setPen(pen);
+        pt->setBrush(Qt::NoBrush);
+        pt->drawPath(glyphs);
+        pt->restore();
+        return;
     }
-    tintImage(mask, tint);
-    {
-        QPainter mp(&mask);
-        mp.setCompositionMode(QPainter::CompositionMode_DestinationOut);
-        mp.drawImage(0, 0, cutter);
+    const QRectF gb = glyphs.boundingRect();
+    const double pad = w * 2.0 + 2.0;
+    const QRect bounds(qFloor(gb.x() - pad), qFloor(gb.y() - pad),
+        qCeil(gb.width() + pad * 2.0), qCeil(gb.height() + pad * 2.0));
+    if (bounds.isEmpty())
+        return;
+    // Gradient brushes span fillBox in painter coords; the tile paints at
+    // a translated origin, so shift the box by the same offset to register.
+    QBrush tb = strokeBrushFor(fillBox.translated(-bounds.topLeft()), se);
+    QPen pen(tb, w * 2.0, Qt::SolidLine, Qt::RoundCap, textJoinFor(t));
+    if (!se.dash.isEmpty()) {
+        QVector<qreal> half;
+        half.reserve(se.dash.size());
+        for (qreal d : se.dash)
+            half << d * qreal(0.5);
+        pen.setStyle(Qt::CustomDashLine);
+        pen.setDashPattern(half);
+        pen.setDashOffset(0.0);
     }
-    pt->drawImage(at, mask);
+    QImage tile(bounds.size(), QImage::Format_ARGB32_Premultiplied);
+    tile.fill(0);
+    {
+        QPainter tp(&tile);
+        tp.setRenderHints(QPainter::Antialiasing, true);
+        tp.translate(-bounds.topLeft());
+        tp.setPen(pen);
+        tp.setBrush(Qt::NoBrush);
+        tp.drawPath(glyphs);
+        // Erase the glyph interior (DestinationOut is exact on all Qt
+        // builds; DestinationIn misbehaves on uniform-opaque dests).
+        tp.setPen(Qt::NoPen);
+        tp.setBrush(Qt::white);
+        tp.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+        tp.fillPath(glyphs, Qt::white);
+    }
+    pt->drawImage(bounds.topLeft(), tile);
+}
+
+// One karaoke unit: vector path plus its stagger window. Order matches
+// the samplers (document order; newline separators count as empty units
+// in letters mode so timing matches the substring reveal). Pieces keep
+// per-run colors for fills; strokes stay box-level over the union.
+struct TextFxUnit {
+    QPainterPath path;
+    QList<RunGlyphs> pieces;
+    double start = 0.0;
+    double dur = 1.0;
+};
+
+double fxLocalT(const TextFxUnit &u, double reveal)
+{
+    if (u.dur <= 0.0)
+        return reveal >= 1.0 ? 1.0 : 0.0;
+    return qBound(0.0, (reveal - u.start) / u.dur, 1.0);
+}
+
+// Per-unit glyph paths for karaoke/sweep (device coords at box.topLeft).
+// Units split EXACTLY like the samplers over folded content (CRLF/CR fold
+// to LF; letters count UTF-16 units; words split on U+0020 keeping
+// empties; lines on LF), with content offsets tracked so wrapped lines,
+// explicit newlines inside words and multi-space runs all agree on N.
+// Glyphs come from shaped glyph runs (kerning/ligatures intact) assigned
+// to spans by origin x; spans only place boundaries. Underline/strike
+// ride per span. Complex scripts should still prefer lines mode.
+QList<TextFxUnit> textFxUnitsFor(const TextOpts &t, double s, const QRectF &box, const QTextDocument &doc,
+    double dy)
+{
+    // Piece builder and unit grouper: runs unconditionally (static
+    // fills consume pieces grouped by run; karaoke groups by unit).
+    // Timing entries always cover every unit index so N matches the
+    // samplers even with no glyphs.
+    QList<TextFxUnit> units;
+    const QFont font = doc.defaultFont();
+    const QFontMetricsF fm(font);
+    const double underlineH = qMax(1.0, fm.lineWidth());
+    const double underlineY = fm.underlinePos();
+    const double strikeY = fm.strikeOutPos();
+    const bool wantLines = t.fxUnit == QLatin1String("lines");
+    const bool wantWords = !wantLines && t.fxUnit == QLatin1String("words");
+    // Global units over folded content, split EXACTLY like the samplers
+    // (letters: UTF-16 units; words: U+0020 keeping empties; lines: LF
+    // keeping empties), with content offsets. Caps transforms to match
+    // the laid-out document (length-changing locales excepted).
+    QString shaped = t.content;
+    shaped.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    shaped.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+    if (t.caps == QLatin1String("upper"))
+        shaped = shaped.toUpper();
+    else if (t.caps == QLatin1String("lower"))
+        shaped = shaped.toLower();
+    struct GUnit {
+        int start = 0;
+        int len = 0;
+    };
+    QList<GUnit> gunits;
+    if (wantLines) {
+        int off = 0;
+        const QStringList parts = shaped.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+        for (const QString &p : parts) {
+            gunits.append({off, int(p.size())});
+            off += int(p.size()) + 1;
+        }
+    } else if (wantWords) {
+        int off = 0;
+        const QStringList parts = shaped.split(QLatin1Char(' '), Qt::KeepEmptyParts);
+        for (const QString &p : parts) {
+            gunits.append({off, int(p.size())});
+            off += int(p.size()) + 1;
+        }
+    } else {
+        for (int i = 0; i < shaped.size(); ++i)
+            gunits.append({i, 1});
+    }
+    // Content offset -> unit index (units tile the content in order).
+    QVector<int> charUnit(shaped.size(), -1);
+    for (int ui = 0; ui < gunits.size(); ++ui) {
+        const GUnit &gu = gunits.at(ui);
+        for (int k = gu.start; k < gu.start + gu.len && k < charUnit.size(); ++k)
+            charUnit[k] = ui;
+    }
+    // Rich spans normalized against the shaped content (same rules as
+    // TextRuns::normalizeRuns); content offset -> run index.
+    const QList<TextRun> runs = normalizeTextRuns(shaped.size(), t.runs);
+    QVector<int> charRun(shaped.size(), -1);
+    for (int ri = 0; ri < runs.size(); ++ri) {
+        const TextRun &rr = runs.at(ri);
+        for (int k = rr.start; k < rr.start + rr.len && k < charRun.size(); ++k)
+            charRun[k] = ri;
+    }
+    // Per-run fonts (bold maps to 700) with metrics for advances.
+    QFont runBase = font;
+    QMap<int, QFont> runFonts;
+    QMap<int, QFontMetricsF> runMetrics;
+    runFonts.insert(-1, runBase);
+    runMetrics.insert(-1, QFontMetricsF(runBase));
+    for (int ri = 0; ri < runs.size(); ++ri) {
+        const TextRun &rr = runs.at(ri);
+        QFont rf = runBase;
+        if (rr.bold)
+            VariableFonts::applyTextWeight(rf, rf.family(), 700);
+        if (rr.italic)
+            rf.setItalic(true);
+        runFonts.insert(ri, rf);
+        runMetrics.insert(ri, QFontMetricsF(rf));
+    }
+    auto runAt = [&](int contentOffset) {
+        return (contentOffset >= 0 && contentOffset < charRun.size()) ? charRun.at(contentOffset) : -1;
+    };
+    // One piece per (unit, run) span, in document order. Static fills
+    // group by run; karaoke groups by unit (pieces keep run colors).
+    struct TextPiece {
+        QPainterPath path;
+        int unit = -1;
+        bool hasColor = false;
+        QColor color;
+    };
+    QList<TextPiece> pieces;
+    auto charAdvance = [&](QChar ch, int run) {
+        if (ch == QLatin1Char('\n'))
+            return 0.0;
+        auto it = runMetrics.constFind(run);
+        const QFontMetricsF &m = (it != runMetrics.constEnd()) ? it.value() : fm;
+        return double(m.horizontalAdvance(ch));
+    };
+    // Walk blocks/lines in block-relative layout coords (glyph-run
+    // positions already carry the line offset but not the block origin);
+    // pieces translate to box coords on append, so multi-block units
+    // (words spanning explicit newlines) just work.
+    int coff = 0;
+    for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
+        const QString blockText = block.text();
+        QTextLayout *layout = block.layout();
+        if (!layout) {
+            coff += blockText.size() + 1;
+            continue;
+        }
+        const QPointF blockPos = layout->position();
+        const double orgX = box.x() + blockPos.x();
+        const double orgY = box.y() + dy + blockPos.y();
+        for (int i = 0; i < layout->lineCount(); ++i) {
+            QTextLine line = layout->lineAt(i);
+            if (!line.isValid())
+                continue;
+            const QPointF lp = line.position();
+            const int ls = line.textStart(), tl = line.textLength();
+            const double baseY = orgY + lp.y() + line.ascent();
+            // Segments: consecutive line chars sharing (unit, run), with
+            // block-char ranges and per-segment fonts for the unshaped
+            // fallback below.
+            struct Seg {
+                int u = -1;
+                int run = -1;
+                int a = 0;
+                int b = 0;
+                double x0 = 0.0;
+                double x1 = 0.0;
+            };
+            QList<Seg> segs;
+            double cx = lp.x();
+            for (int ci = ls; ci < ls + tl && ci < blockText.size(); ++ci) {
+                const int co = coff + ci;
+                const int u = (co >= 0 && co < charUnit.size()) ? charUnit.at(co) : -1;
+                const int run = runAt(co);
+                const double w = charAdvance(blockText.at(ci), run);
+                if (u >= 0) {
+                    if (!segs.isEmpty() && segs.last().u == u && segs.last().run == run && segs.last().b == ci) {
+                        segs.last().b = ci + 1;
+                        segs.last().x1 = cx + w;
+                    } else {
+                        segs.append({u, run, ci, ci + 1, cx, cx + w});
+                    }
+                }
+                cx += w;
+            }
+            auto segFont = [&](int run) {
+                auto it = runFonts.constFind(run);
+                return (it != runFonts.constEnd()) ? it.value() : font;
+            };
+            auto addDeco = [&](int u, int run, double rx0, double rx1) {
+                if (u < 0 || rx1 <= rx0)
+                    return;
+                const bool ul = t.underline || (run >= 0 && run < runs.size() && runs.at(run).underline);
+                const bool st = t.strike || (run >= 0 && run < runs.size() && runs.at(run).strike);
+                if (ul) {
+                    QPainterPath r;
+                    r.addRect(QRectF(orgX + rx0, baseY + underlineY - underlineH / 2.0, rx1 - rx0, underlineH));
+                    pieces.append({QPainterPath(), u, false, QColor()});
+                    pieces.last().path.addPath(r);
+                    if (run >= 0 && run < runs.size() && !runs.at(run).color.isEmpty()) {
+                        pieces.last().hasColor = true;
+                        pieces.last().color = QColor(runs.at(run).color);
+                    }
+                }
+                if (st) {
+                    QPainterPath r;
+                    r.addRect(QRectF(orgX + rx0, baseY - strikeY - underlineH / 2.0, rx1 - rx0, underlineH));
+                    pieces.append({QPainterPath(), u, false, QColor()});
+                    pieces.last().path.addPath(r);
+                    if (run >= 0 && run < runs.size() && !runs.at(run).color.isEmpty()) {
+                        pieces.last().hasColor = true;
+                        pieces.last().color = QColor(runs.at(run).color);
+                    }
+                }
+            };
+            // Shaped glyphs for this line (block-relative origins).
+            struct GB {
+                QPainterPath p;
+                double ox = 0.0;
+            };
+            QList<GB> gbs;
+            bool shapedOk = false;
+            const QList<QGlyphRun> glyphRuns = line.glyphRuns();
+            if (!glyphRuns.isEmpty()) {
+                shapedOk = true;
+                for (const QGlyphRun &r : glyphRuns) {
+                    const QRawFont rf = r.rawFont();
+                    if (!rf.isValid()) {
+                        shapedOk = false;
+                        break;
+                    }
+                    const QVector<quint32> idx = r.glyphIndexes();
+                    const QVector<QPointF> pos = r.positions();
+                    for (int g = 0; g < idx.size() && g < pos.size(); ++g) {
+                        QPainterPath gp = rf.pathForGlyph(idx.at(g));
+                        if (gp.isEmpty())
+                            continue;
+                        // Block-relative run origin shifted into box coords.
+                        gp.translate(pos.at(g) + QPointF(orgX, orgY));
+                        gbs.append({gp, pos.at(g).x()});
+                    }
+                }
+            }
+            auto pieceColor = [&](int run, bool *has, QColor *c) {
+                *has = false;
+                if (run >= 0 && run < runs.size() && !runs.at(run).color.isEmpty()) {
+                    const QColor cc(runs.at(run).color);
+                    if (cc.isValid()) {
+                        *has = true;
+                        *c = cc;
+                    }
+                }
+            };
+            if (!shapedOk) {
+                // Fallback: one addText per overlapping unit segment.
+                for (const Seg &sg : segs) {
+                    const QString us = blockText.mid(sg.a, sg.b - sg.a);
+                    if (us.isEmpty())
+                        continue;
+                    QPainterPath up;
+                    up.addText(orgX + sg.x0, baseY, segFont(sg.run), us);
+                    bool has = false;
+                    QColor cc;
+                    pieceColor(sg.run, &has, &cc);
+                    pieces.append({QPainterPath(), sg.u, has, cc});
+                    pieces.last().path.addPath(up);
+                    addDeco(sg.u, sg.run, sg.x0, sg.x1);
+                }
+                continue;
+            }
+            // Assign shaped glyphs to the span containing their origin x
+            // (block-relative on both sides); nearest span is the
+            // RTL/reordered safety net.
+            int tailSpan_ = -1;
+            for (const GB &gb : gbs) {
+                int pick = -1;
+                for (int si = 0; si < segs.size(); ++si) {
+                    const Seg &sg = segs.at(si);
+                    if (gb.ox + 1e-6 >= sg.x0 && (gb.ox < sg.x1 - 1e-6 || sg.x1 >= cx - 1e-6)) {
+                        pick = si;
+                        break;
+                    }
+                }
+                if (pick < 0) {
+                    double best = 1e18;
+                    for (int si = 0; si < segs.size(); ++si) {
+                        const Seg &sg = segs.at(si);
+                        const double d = gb.ox < sg.x0 ? sg.x0 - gb.ox : (gb.ox > sg.x1 ? gb.ox - sg.x1 : 0.0);
+                        if (d < best) {
+                            best = d;
+                            pick = si;
+                        }
+                    }
+                }
+                if (pick < 0)
+                    continue;
+                // One piece per span (spans are line-local; the index
+                // resets per line via tailSpan).
+                if (pick != tailSpan_) {
+                    const Seg &sg = segs.at(pick);
+                    bool has = false;
+                    QColor cc;
+                    pieceColor(sg.run, &has, &cc);
+                    pieces.append({QPainterPath(), sg.u, has, cc});
+                    pieces.last().path.setFillRule(Qt::WindingFill);
+                    tailSpan_ = pick;
+                }
+                pieces.last().path.addPath(gb.p);
+            }
+            for (const Seg &sg : segs)
+                addDeco(sg.u, sg.run, sg.x0, sg.x1);
+        }
+        coff += blockText.size() + 1;
+    }
+    if (!t.autoSize) {
+        QPainterPath clip;
+        clip.addRect(box);
+        for (int i = 0; i < pieces.size(); ++i) {
+            if (!pieces.at(i).path.isEmpty())
+                pieces[i].path = pieces.at(i).path.intersected(clip);
+        }
+    }
+    // Group pieces by unit in document order; every unit index gets an
+    // entry (empty ones keep N exact for timing-only units like newline
+    // separators or bare spaces), so timing always matches the samplers.
+    const int n = gunits.size();
+    const double o = qBound(0.0, t.fxStagger, 1.0);
+    auto unitTiming = [&](int idx, TextFxUnit &u) {
+        if (n <= 1) {
+            u.start = 0.0;
+            u.dur = 1.0;
+        } else {
+            u.start = double(idx) * (1.0 - o) / double(n);
+            u.dur = o + (1.0 - o) / double(n);
+        }
+    };
+    QVector<int> unitPos(n, -1);
+    for (const TextPiece &pc : pieces) {
+        if (pc.unit < 0 || pc.unit >= n || pc.path.isEmpty())
+            continue;
+        if (unitPos[pc.unit] < 0) {
+            TextFxUnit u;
+            unitTiming(pc.unit, u);
+            u.path.setFillRule(Qt::WindingFill);
+            unitPos[pc.unit] = units.size();
+            units.append(u);
+        }
+        TextFxUnit &u = units[unitPos[pc.unit]];
+        u.path.addPath(pc.path);
+        RunGlyphs rg;
+        rg.path = pc.path;
+        rg.hasColor = pc.hasColor;
+        rg.color = pc.color;
+        u.pieces.append(rg);
+    }
+    QList<TextFxUnit> ordered;
+    for (int i = 0; i < n; ++i) {
+        if (unitPos[i] >= 0) {
+            ordered.append(units.at(unitPos[i]));
+        } else {
+            TextFxUnit u;
+            unitTiming(i, u);
+            ordered.append(u);
+        }
+    }
+    units = ordered;
+    return units;
+}
+
+// Vector glyph outline at box.topLeft (device coords): union of the
+// run/unit pieces, so rich spans shape with their own fonts exactly
+// like the painter fills them.
+QPainterPath glyphOutlineFor(const TextOpts &t, double s, const QRectF &box, const QTextDocument &doc,
+    double dy)
+{
+    QPainterPath out;
+    out.setFillRule(Qt::WindingFill);
+    const QList<TextFxUnit> units = textFxUnitsFor(t, s, box, doc, dy);
+    for (const TextFxUnit &u : units) {
+        if (!u.path.isEmpty())
+            out.addPath(u.path);
+    }
+    return out;
 }
 
 } // namespace
@@ -1795,6 +2332,32 @@ void paintTextInner(QPainter *pt, const QPointF &at, const QImage &base, const Q
 QImage textGhost(const TextOpts &text, double w, double h, double scale, bool withOutline)
 {
     return textCoverage(text, w, h, scale > 0 ? scale : 1.0, withOutline, nullptr, nullptr);
+}
+
+QList<RunGlyphs> textRunPaths(const TextOpts &text, double scale, const QRectF &box)
+{
+    QList<RunGlyphs> out;
+    const double s = scale > 0 ? scale : 1.0;
+    QTextDocument doc;
+    setupTextDoc(doc, text, s, Qt::white, 0.0);
+    const double dy = textDy(text, doc.size().height(), box.height());
+    const auto units = textFxUnitsFor(text, s, box, doc, dy);
+    for (const auto &u : units) {
+        for (const RunGlyphs &rg : u.pieces) {
+            if (!rg.path.isEmpty())
+                out.append(rg);
+        }
+    }
+    return out;
+}
+
+QPainterPath textGlyphPath(const TextOpts &text, double scale, const QRectF &box)
+{
+    const double s = scale > 0 ? scale : 1.0;
+    QTextDocument doc;
+    setupTextDoc(doc, text, s, Qt::white, 0.0);
+    const double dy = textDy(text, doc.size().height(), box.height());
+    return glyphOutlineFor(text, s, box, doc, dy);
 }
 
 void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const Style &st,
@@ -1854,93 +2417,222 @@ void paintTextLeaf(QPainter *pt, const QRectF &box, const TextOpts &text, const 
         pt->drawImage(box.topLeft() - QPointF(margin, margin), sharp);
         return;
     }
-    QByteArray tkey;
-    double maxOutline = 0.0;
-    for (const StrokeEntry &se : st.strokes) {
-        if (se.enabled && se.width > 0.01)
-            maxOutline = qMax(maxOutline, se.width);
-    }
-    const bool outlined = maxOutline > 0.01;
-    const QImage cover = textCoverage(text, box.width(), box.height(), s, outlined, maskCache, &tkey);
-    const QImage base = outlined ? textCoverage(text, box.width(), box.height(), s, false, maskCache, nullptr)
-                                 : cover;
+    QByteArray tkey = textKey(text, s);
+    // Vector glyph path (device coords at box.topLeft) via the shared
+    // document layout, so wrap/align/leading match the raster exactly.
+    // Fills/strokes paint vector-crisp (center strokes direct, side
+    // strokes via tile composition: boolean path ops explode on
+    // hundred-element glyph paths); outer halos reuse the raster cover
+    // pipeline (blur hides the difference, no booleans anywhere).
+    // Karaoke/sweep (fx) splits the glyphs into staggered units with
+    // fade+rise, highlight and band.
+    QTextDocument doc;
+    setupTextDoc(doc, text, s, Qt::white, 0.0);
+    const double docH = doc.size().height();
+    const double dy = textDy(text, docH, box.height());
     const QRectF fillBox = box;
+    // Run/unit pieces (always built: static fills consume per-run pieces,
+    // karaoke groups by unit with stagger timing).
+    const auto runUnits = textFxUnitsFor(text, s, box, doc, dy);
+    const bool useFx = text.fx && !runUnits.isEmpty();
+    QPainterPath glyphs;
+    QPainterPath revealedUnion;
+    int fxStarted = 0;
+    double fxMeanLt = 1.0;
+    if (useFx) {
+        glyphs.setFillRule(Qt::WindingFill);
+        revealedUnion.setFillRule(Qt::WindingFill);
+        double sumLt = 0.0;
+        for (const auto &u : runUnits) {
+            if (u.path.isEmpty())
+                continue;
+            glyphs.addPath(u.path);
+            const double lt = fxLocalT(u, text.fxReveal);
+            if (lt > 0.0) {
+                revealedUnion.addPath(u.path);
+                fxStarted++;
+                sumLt += lt;
+            }
+        }
+        if (revealedUnion.isEmpty())
+            return;
+        fxMeanLt = sumLt / qMax(1, fxStarted);
+    } else {
+        glyphs.setFillRule(Qt::WindingFill);
+        for (const auto &u : runUnits) {
+            if (!u.path.isEmpty())
+                glyphs.addPath(u.path);
+        }
+        if (glyphs.isEmpty())
+            return;
+        revealedUnion = glyphs;
+    }
+    // Stroke outline flag for the cover: any enabled width unions in.
+    bool hasStroke = false;
+    for (const StrokeEntry &se : st.strokes) {
+        if (se.enabled && se.width > 0.01) {
+            hasStroke = true;
+            break;
+        }
+    }
+    // Halo quantum: 0 off-fx (stable key across paints), started-unit
+    // count on-fx (the revealed silhouette only changes when a new unit
+    // starts: one blur per step, not one per frame).
+    const int quantum = useFx ? fxStarted : 0;
     // Outer halos under the glyphs, bottom-first so index 0 paints
-    // topmost (closest to the glyphs), like vectors.
+    // topmost (closest to the glyphs), like vectors. Raster cover keeps
+    // this boolean-free; karaoke masks the halo to revealed units and
+    // fades it with mean unit progress.
+    const QImage cover = textCoverage(text, box.width(), box.height(), s, hasStroke, maskCache, nullptr);
+    const double haloOp = pt->opacity() * (useFx ? fxMeanLt : 1.0);
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Shadow &sh = shadows.at(i);
         if (!sh.enabled || sh.inner || sh.color.alpha() <= 0)
             continue;
         double m = 0.0;
-        QImage halo = textHalo(cover, tkey, sh.spread, sh.blur, s, maskCache, &m);
-        tintImage(halo, sh.color);
+        QImage halo = textHaloFrom(cover, textHaloKey(text, s, sh.spread, sh.blur, quantum), sh.spread,
+            sh.blur, s, maskCache, &m);
+        if (useFx) {
+            // Confine to revealed units via painter clip (no In-modes:
+            // they misbehave on uniform-opaque dests in some Qt builds).
+            QImage masked(halo.size(), halo.format());
+            masked.fill(0);
+            {
+                QPainter mp(&masked);
+                mp.setClipPath(revealedUnion.translated(m, m).translated(-box.topLeft()), Qt::IntersectClip);
+                mp.drawImage(0, 0, halo);
+            }
+            halo = masked;
+        }
+        tintHalo(halo, sh.color);
+        pt->save();
+        pt->setOpacity(haloOp);
         pt->drawImage(box.topLeft() + QPointF(-m + sh.x * s, -m + sh.y * s), halo);
+        pt->restore();
     }
     for (int i = glows.size() - 1; i >= 0; --i) {
         const Glow &g = glows.at(i);
         if (!g.enabled || g.inner || g.color.alpha() <= 0)
             continue;
         double m = 0.0;
-        QImage halo = textHalo(cover, tkey, g.spread, g.blur, s, maskCache, &m);
-        tintImage(halo, g.color);
+        QImage halo = textHaloFrom(cover, textHaloKey(text, s, g.spread, g.blur, quantum), g.spread,
+            g.blur, s, maskCache, &m);
+        if (useFx) {
+            // Confine to revealed units via painter clip (no In-modes:
+            // they misbehave on uniform-opaque dests in some Qt builds).
+            QImage masked(halo.size(), halo.format());
+            masked.fill(0);
+            {
+                QPainter mp(&masked);
+                mp.setClipPath(revealedUnion.translated(m, m).translated(-box.topLeft()), Qt::IntersectClip);
+                mp.drawImage(0, 0, halo);
+            }
+            halo = masked;
+        }
+        tintHalo(halo, g.color);
+        pt->save();
+        pt->setOpacity(haloOp);
         pt->drawImage(box.topLeft() + QPointF(-m, -m), halo);
+        pt->restore();
     }
-    // Stacked fills (solid or linear across the box) confined to
-    // the glyphs, bottom-first so index 0 paints topmost.
-    for (int i = st.fills.size() - 1; i >= 0; --i) {
-        const FillEntry &f = st.fills.at(i);
-        if (!f.enabled)
-            continue;
-        QImage fill(base.size(), QImage::Format_ARGB32_Premultiplied);
-        fill.fill(0);
-        {
-            QPainter p(&fill);
-            p.drawImage(0, 0, base);
+    QByteArray geom;
+    {
+        QDataStream ds(&geom, QIODevice::WriteOnly);
+        ds.setVersion(QDataStream::Qt_6_0);
+        ds << tkey;
+    }
+    const QColor fxHi = QColor(text.fxHighlight);
+    const bool useHi = useFx && fxHi.isValid() && fxHi.alpha() > 0;
+    if (!useFx) {
+        // Stacked fills confined to the glyphs, bottom-first so index 0
+        // paints topmost. Runs with a set color paint solid instead of
+        // the box stacks.
+        for (const auto &u : runUnits) {
+            for (const RunGlyphs &rg : u.pieces) {
+                if (rg.path.isEmpty())
+                    continue;
+                if (rg.hasColor)
+                    pt->fillPath(rg.path, QBrush(rg.color));
+                else
+                    paintFills(pt, rg.path, fillBox, QStringLiteral("text"), st);
+            }
         }
-        tintImage(fill, fillBrushFor(fillBox, f));
-        pt->drawImage(box.topLeft(), fill);
-    }
-    // Real inner bands above the fill, index 0 topmost. The tinted
-    // canvas shares the cutter's size and (margin, margin) basis so the
-    // erase registers exactly, like the vector band.
-    for (int i = shadows.size() - 1; i >= 0; --i) {
-        const Shadow &sh = shadows.at(i);
-        if (!sh.enabled || !sh.inner || sh.color.alpha() <= 0)
-            continue;
-        double m = 0.0;
-        QImage cutter = textCutter(base, tkey, sh.spread, sh.blur, sh.x, sh.y, s, maskCache, &m);
-        QImage tinted(cutter.size(), QImage::Format_ARGB32_Premultiplied);
-        tinted.fill(0);
-        {
-            QPainter p(&tinted);
-            p.drawImage(QPointF(m, m), base);
+        // Real inner bands above the fill, index 0 topmost, like vectors.
+        for (int i = shadows.size() - 1; i >= 0; --i) {
+            const Shadow &sh = shadows.at(i);
+            if (sh.enabled && sh.inner && sh.color.alpha() > 0)
+                paintInner(pt, glyphs, sh, s, geom, maskCache);
         }
-        paintTextInner(pt, box.topLeft() + QPointF(-m, -m), tinted, cutter, sh.color);
-    }
-    for (int i = glows.size() - 1; i >= 0; --i) {
-        const Glow &g = glows.at(i);
-        if (!g.enabled || !g.inner || g.color.alpha() <= 0)
-            continue;
-        double m = 0.0;
-        QImage cutter = textCutter(base, tkey, g.spread, g.blur, 0.0, 0.0, s, maskCache, &m);
-        QImage tinted(cutter.size(), QImage::Format_ARGB32_Premultiplied);
-        tinted.fill(0);
-        {
-            QPainter p(&tinted);
-            p.drawImage(QPointF(m, m), base);
+        for (int i = glows.size() - 1; i >= 0; --i) {
+            const Glow &g = glows.at(i);
+            if (g.enabled && g.inner && g.color.alpha() > 0)
+                paintGlowInner(pt, glyphs, g, s, geom, maskCache);
         }
-        paintTextInner(pt, box.topLeft() + QPointF(-m, -m), tinted, cutter, g.color);
+        // Stacked real strokes on top, bottom-first like vectors.
+        // Position (center/inside/outside), dash, join and gradient all apply.
+        for (int i = st.strokes.size() - 1; i >= 0; --i) {
+            const StrokeEntry &se = st.strokes.at(i);
+            if (!se.enabled || se.width <= 0.01)
+                continue;
+            paintOneTextStroke(pt, glyphs, fillBox, text, se, s);
+        }
+        return;
     }
-    // Stacked stroke rings (outer band of the outline) on top,
-    // bottom-first like vectors. Position/dash stay centered rings
-    // for text in v1; width/color/opacity stack per entry.
-    for (int i = st.strokes.size() - 1; i >= 0; --i) {
-        const StrokeEntry &se = st.strokes.at(i);
-        if (!se.enabled || se.width <= 0.01)
+    // Karaoke: per-unit fade+rise fills, union inners, per-unit strokes.
+    // Inners skip the blur cache per unit (shared geom key would alias
+    // across units); halos above already used the union with cache.
+    // Run colors paint solid per piece (highlight still wins when done).
+    for (const auto &u : runUnits) {
+        const double lt = fxLocalT(u, text.fxReveal);
+        if (lt <= 0.0 || u.path.isEmpty())
             continue;
-        QImage ring = textRing(cover, tkey, se.width, s, maskCache);
-        tintImage(ring, strokeBrushFor(fillBox, se));
-        pt->drawImage(box.topLeft(), ring);
+        const double yOff = text.fxRise * s * (1.0 - lt);
+        pt->save();
+        pt->translate(0.0, yOff);
+        const double prevOp = pt->opacity();
+        pt->setOpacity(prevOp * lt);
+        const bool done = lt >= 1.0;
+        if (useHi && done) {
+            pt->fillPath(u.path, QBrush(fxHi));
+        } else {
+            for (const RunGlyphs &rg : u.pieces) {
+                if (rg.path.isEmpty())
+                    continue;
+                if (rg.hasColor)
+                    pt->fillPath(rg.path, QBrush(rg.color));
+                else
+                    paintFills(pt, rg.path, fillBox, QStringLiteral("text"), st);
+            }
+        }
+        for (int i = shadows.size() - 1; i >= 0; --i) {
+            const Shadow &sh = shadows.at(i);
+            if (sh.enabled && sh.inner && sh.color.alpha() > 0)
+                paintInner(pt, u.path, sh, s, QByteArray(), nullptr);
+        }
+        for (int i = glows.size() - 1; i >= 0; --i) {
+            const Glow &g = glows.at(i);
+            if (g.enabled && g.inner && g.color.alpha() > 0)
+                paintGlowInner(pt, u.path, g, s, QByteArray(), nullptr);
+        }
+        for (int i = st.strokes.size() - 1; i >= 0; --i) {
+            const StrokeEntry &se = st.strokes.at(i);
+            if (!se.enabled || se.width <= 0.01)
+                continue;
+            paintOneTextStroke(pt, u.path, fillBox, text, se, s);
+        }
+        pt->restore();
+    }
+    // Sweep band: moving highlight confined to the revealed glyphs.
+    // Rect clip instead of intersected(): no boolean path math.
+    if (text.fxSweep && text.fxReveal > 0.0 && text.fxReveal < 1.0 && !revealedUnion.isEmpty()) {
+        const double bandW = qMax(8.0 * s, box.width() * 0.1);
+        const double bandX = box.x() + text.fxReveal * box.width();
+        pt->save();
+        pt->setClipRect(QRectF(bandX - bandW / 2.0, box.y() - s, bandW, box.height() + 2.0 * s),
+            Qt::IntersectClip);
+        pt->setOpacity(pt->opacity() * 0.55);
+        pt->fillPath(revealedUnion, (useHi ? QBrush(fxHi) : QBrush(Qt::white)));
+        pt->restore();
     }
 }
 

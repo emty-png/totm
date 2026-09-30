@@ -827,11 +827,20 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
     } else if (preset == QLatin1String("customHide")) {
         // Keys hold {v}: absolute visibility, stepping within the
         // segment like every other bool key. Without keys, the instant
-        // cut reads from only at the exact start. Mirrors DocAnimSample.
+        // cut reads from only at the exact start. With fade on, opacity
+        // crossfades from/to across the eased clock while the leaf stays
+        // visible mid-span. Mirrors DocAnimSample.
         QVariantMap hideKv;
         if (genericKeysAt(o, p, hideKv) && hideKv.contains(QStringLiteral("v")))
             out[QStringLiteral("visible")] = hideKv.value(QStringLiteral("v")).toBool();
-        else
+        else if (o.value(QStringLiteral("fade"), false).toBool()) {
+            const double hideFromOp = o.value(QStringLiteral("fromVisible"), true).toBool() ? 1.0 : 0.0;
+            const double hideToOp = o.value(QStringLiteral("toVisible"), false).toBool() ? 1.0 : 0.0;
+            out[QStringLiteral("opacity")] = baseOpacity * (hideFromOp + (hideToOp - hideFromOp) * e);
+            const bool hideFromV = o.value(QStringLiteral("fromVisible"), true).toBool();
+            const bool hideToV = o.value(QStringLiteral("toVisible"), false).toBool();
+            out[QStringLiteral("visible")] = (e <= 0.0) ? hideFromV : ((e >= 1.0) ? hideToV : true);
+        } else
             out[QStringLiteral("visible")] = p <= 0 ? o.value(QStringLiteral("fromVisible"), true).toBool()
                                                      : o.value(QStringLiteral("toVisible"), false).toBool();
     } else if (preset == QLatin1String("customResize")) {
@@ -1305,6 +1314,9 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         // words split on U+0020 keeping empties, lines on LF, letters
         // count UTF-16 units like JS string length. cps seeds the clip
         // duration at apply time; sampling reads eased progress only.
+        // Karaoke/sweep (stagger/rise/highlight/sweep options) keeps the
+        // full text and emits a textFx reveal map for the vector painter
+        // (staggered fade+rise per unit, highlight, moving band).
         QString full = str(base, "textContent");
         full.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
         full.replace(QLatin1Char('\r'), QLatin1Char('\n'));
@@ -1319,16 +1331,36 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             parts = full.split(words ? QLatin1Char(' ') : QLatin1Char('\n'), Qt::KeepEmptyParts);
             total = parts.size();
         }
-        int shown = 0;
+        double frac = inward ? e : 1.0 - e;
         if (total > 0) {
             // Keys hold {frac}: an absolute reveal fraction, mode
             // bypassed. Mirrors DocAnimSample.
             QVariantMap tyKv;
-            const double frac = (genericKeysAt(o, p, tyKv) && tyKv.contains(QStringLiteral("frac")))
-                ? qBound(0.0, tyKv.value(QStringLiteral("frac")).toDouble(), 1.0)
-                : (inward ? e : 1.0 - e);
-            shown = qBound(0, int(frac * total + 1e-6), total);
+            if (genericKeysAt(o, p, tyKv) && tyKv.contains(QStringLiteral("frac")))
+                frac = qBound(0.0, tyKv.value(QStringLiteral("frac")).toDouble(), 1.0);
+        } else {
+            frac = inward ? e : 1.0 - e;
         }
+        const double stagger = qBound(0.0, o.value(QStringLiteral("stagger"), 0.0).toDouble(), 1.0);
+        const double rise = qMax(0.0, o.value(QStringLiteral("rise"), 0.0).toDouble());
+        const QString highlight = o.value(QStringLiteral("highlight")).toString();
+        const bool sweep = o.value(QStringLiteral("sweep"), false).toBool();
+        if (stagger > 0.001 || rise > 0.001 || !highlight.isEmpty() || sweep) {
+            QVariantMap fx;
+            fx[QStringLiteral("fx")] = true;
+            fx[QStringLiteral("fxReveal")] = qBound(0.0, frac, 1.0);
+            fx[QStringLiteral("fxStagger")] = stagger;
+            fx[QStringLiteral("fxRise")] = rise;
+            fx[QStringLiteral("fxHighlight")] = highlight;
+            fx[QStringLiteral("fxSweep")] = sweep;
+            fx[QStringLiteral("fxUnit")] = unit;
+            out[QStringLiteral("textFx")] = fx;
+            out[QStringLiteral("textContent")] = full;
+            return out;
+        }
+        int shown = 0;
+        if (total > 0)
+            shown = qBound(0, int(frac * total + 1e-6), total);
         QString txt;
         if (!words && !lines) {
             txt = full.left(shown);
@@ -1796,7 +1828,8 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
                  QStringLiteral("layerBlur"), QStringLiteral("backgroundBlur"),
                  QStringLiteral("grain"), QStringLiteral("visible"), QStringLiteral("radius"),
                  QStringLiteral("cornerRadii"), QStringLiteral("fills"), QStringLiteral("strokes"),
-                 QStringLiteral("flipH"), QStringLiteral("flipV"), QStringLiteral("textContent")}) {
+                 QStringLiteral("flipH"), QStringLiteral("flipV"), QStringLiteral("textContent"),
+                 QStringLiteral("textFx")}) {
             if (ov.contains(k))
                 m[k] = ov.value(k);
         }

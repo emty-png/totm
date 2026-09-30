@@ -2,9 +2,15 @@
 
 #include <QObject>
 #include <QMap>
+#include <QNetworkAccessManager>
 #include <QQmlEngine>
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
+
+#include <memory>
+
+class QNetworkReply;
+class QTemporaryDir;
 
 // SettingsStore: app preferences, separate from the design library.
 //
@@ -58,6 +64,10 @@ class SettingsStore : public QObject {
     // deleted): the app falls back to the system font and the UI shows
     // a "Font not found" error until another font is picked or reset.
     Q_PROPERTY(bool fontMissing READ fontMissing NOTIFY appearanceChanged)
+    // True once the UI font choice changes this session: QML text
+    // resolves its family at creation, so the new face paints after a
+    // restart (the font card notes it). Clears on relaunch.
+    Q_PROPERTY(bool fontRestartNeeded READ fontRestartNeeded NOTIFY appearanceChanged)
     // Canvas zoom pill visibility (out, percent, in, fit). On by
     // default; toggled from the Appearance tab.
     Q_PROPERTY(bool showZoomPill READ showZoomPill WRITE setShowZoomPill NOTIFY appearanceChanged)
@@ -170,11 +180,14 @@ public:
     int customRadiusXLarge() const;
     void setCustomRadiusXLarge(int v);
 
-    // UI font: empty means system default. Imported .ttf/.otf files live
-    // under <AppData>/totm/fonts/ and are loaded via QFontDatabase at
+    // UI font: empty means Inter (bundled, OFL-1.1 — loaded from
+    // resources at startup), "system" means the OS default font, anything
+    // else is a user override. Imported .ttf/.otf files live under
+    // <AppData>/totm/fonts/ and are loaded via QFontDatabase at
     // startup; importFont copies + registers, removeImportedFont deletes.
     QString fontFamily() const;
     void setFontFamily(const QString &family);
+    bool fontRestartNeeded() const;
     QStringList importedFonts() const;
     QVariantMap importedFontFamilyMap() const;
     bool fontMissing() const;
@@ -195,6 +208,44 @@ public:
     int cursorSize() const;
     void setCursorSize(int pixels);
     Q_INVOKABLE QStringList importedFontFamilies() const;
+    // Web font catalog (curated open-licensed families from
+    // src/fonts/catalog.json): entries carry family/slug/license/
+    // category/fileCount. Extending the catalog is appending one JSON
+    // object; the downloader below is fully generic over the schema.
+    Q_INVOKABLE QVariantList fontCatalog() const;
+    // True for bundled Inter, catalog families already on the system,
+    // and previously installed imports. Used by the installer rows and
+    // by the editor picker to list only usable families.
+    Q_INVOKABLE bool isFontInstalled(const QString &family) const;
+    // Downloads catalog families' files plus each OFL.txt from the
+    // pinned CDN snapshot, validates each with QFontDatabase, then
+    // routes them through importFont() so catalog installs match manual
+    // imports. Families run sequentially through one queue (files
+    // within a family fetch in parallel); false when busy, or when
+    // nothing actionable remains. Progress via the properties below.
+    Q_INVOKABLE bool installCatalogFont(const QString &family);
+    Q_INVOKABLE bool installCatalogFonts(const QStringList &families);
+    Q_INVOKABLE void cancelFontDownload();
+    Q_PROPERTY(bool fontDownloadBusy READ fontDownloadBusy NOTIFY fontDownloadChanged)
+    Q_PROPERTY(QString fontDownloadFamily READ fontDownloadFamily NOTIFY fontDownloadChanged)
+    Q_PROPERTY(int fontDownloadFileIndex READ fontDownloadFileIndex NOTIFY fontDownloadChanged)
+    Q_PROPERTY(int fontDownloadFileCount READ fontDownloadFileCount NOTIFY fontDownloadChanged)
+    Q_PROPERTY(double fontDownloadProgress READ fontDownloadProgress NOTIFY fontDownloadChanged)
+    Q_PROPERTY(QStringList fontDownloadQueue READ fontDownloadQueue NOTIFY fontDownloadChanged)
+    Q_PROPERTY(int fontDownloadQueueTotal READ fontDownloadQueueTotal NOTIFY fontDownloadChanged)
+    Q_PROPERTY(int fontDownloadQueueDone READ fontDownloadQueueDone NOTIFY fontDownloadChanged)
+    Q_PROPERTY(double fontDownloadQueueProgress READ fontDownloadQueueProgress NOTIFY fontDownloadChanged)
+    Q_PROPERTY(QString fontDownloadError READ fontDownloadError NOTIFY fontDownloadChanged)
+    bool fontDownloadBusy() const;
+    QString fontDownloadFamily() const;
+    int fontDownloadFileIndex() const;
+    int fontDownloadFileCount() const;
+    double fontDownloadProgress() const;
+    QStringList fontDownloadQueue() const;
+    int fontDownloadQueueTotal() const;
+    int fontDownloadQueueDone() const;
+    double fontDownloadQueueProgress() const;
+    QString fontDownloadError() const;
     // Available font weights for a canvas text family (Qt 1..1000 scale,
     // sorted, deduplicated). Enumerates QFontDatabase styles since Qt
     // only reports one weight per style. Empty when the family is
@@ -258,6 +309,7 @@ signals:
     void shortcutsChanged();
     void appearanceChanged();
     void generalChanged();
+    void fontDownloadChanged();
 
 private:
     static SettingsStore *s_instance;
@@ -272,6 +324,12 @@ private:
     void loadImportedFonts();
     void applyFontFamily();
     void refreshFontMissing();
+    QVariantList loadFontCatalog();
+    bool fontCatalogEntry(const QString &family, QVariantMap *entry) const;
+    QString fontCatalogBase() const;
+    void startNextFamily();
+    void startFontFiles();
+    void finishFontFamily(const QString &error);
     void refreshSystemDark();
     void onSystemSchemeChanged();
 
@@ -311,6 +369,30 @@ private:
     // from the QFontDatabase id so QML never needs per-row FontLoaders.
     QMap<QString, QString> m_importedFontFamily;
     bool m_fontMissing = false;
+    bool m_fontRestartNeeded = false;
+    // Web font installer state (main thread only). Families run
+    // sequentially through one queue; files within a family fetch in
+    // parallel (capped). Finished files route through importFont() so
+    // catalog installs match manual imports.
+    QNetworkAccessManager *m_fontNet = nullptr;
+    QVariantList m_fontCatalog;
+    bool m_fontCatalogLoaded = false;
+    QList<QNetworkReply *> m_dlActive;
+    QMap<QNetworkReply *, QPair<qint64, qint64>> m_dlProgress;
+    std::unique_ptr<QTemporaryDir> m_dlTemp;
+    QString m_dlFamily;
+    QString m_dlSlug;
+    QStringList m_dlPending;
+    QStringList m_dlSaved;
+    QList<int> m_dlFontIds;
+    int m_dlFileIndex = 0;
+    int m_dlFileCount = 0;
+    QStringList m_dlQueue;
+    int m_dlQueueTotal = 0;
+    int m_dlQueueDone = 0;
+    bool m_dlFinishing = false;
+    bool m_fontDownloadBusy = false;
+    QString m_fontDownloadError;
     // General defaults for new designs + video export.
     int m_defaultSceneWidth = 1920;
     int m_defaultSceneHeight = 1080;

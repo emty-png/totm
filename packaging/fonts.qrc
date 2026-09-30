@@ -1,0 +1,12 @@
+<RCC version="1.0">
+    <!-- Bundled UI typeface: Inter 4.1 (SIL OFL 1.1, see
+         src/fonts/inter/OFL.txt). Loaded via QFontDatabase at startup
+         in main.cpp; the OFL.txt beside them ships in share/doc/totm. -->
+    <qresource prefix="/fonts">
+        <file alias="inter/Inter-Regular.ttf">../src/fonts/inter/Inter-Regular.ttf</file>
+        <file alias="inter/Inter-Medium.ttf">../src/fonts/inter/Inter-Medium.ttf</file>
+        <file alias="inter/Inter-SemiBold.ttf">../src/fonts/inter/Inter-SemiBold.ttf</file>
+        <file alias="inter/Inter-Bold.ttf">../src/fonts/inter/Inter-Bold.ttf</file>
+        <file alias="catalog.json">../src/fonts/catalog.json</file>
+    </qresource>
+</RCC>

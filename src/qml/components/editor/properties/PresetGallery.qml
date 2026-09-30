@@ -214,7 +214,7 @@ ScrollView {
                 },
                 {
                     title: qsTr("Expressive"),
-                    cards: [gallery.textBlurCard(), gallery.textWaveCard(), gallery.popCard()]
+                    cards: [gallery.textBlurCard(), gallery.textWaveCard(), gallery.karaokeCard(), gallery.sweepCard(), gallery.popCard()]
                 }
             ];
         }
@@ -316,6 +316,61 @@ ScrollView {
                 unit: unit,
                 cps: 20,
                 cursor: false
+            },
+            easing: "linear"
+        };
+    }
+
+    // Karaoke: staggered letters fading+rising with a highlight for
+    // revealed units. Same duration rule as type (cps-paced).
+    function karaokeCard() {
+        return {
+            id: "type",
+            name: qsTr("Karaoke"),
+            options: {
+                unit: "letters",
+                cps: 20,
+                cursor: false,
+                stagger: 0.5,
+                rise: 8,
+                highlight: "#ffcc00",
+                sweep: false
+            },
+            apply: {
+                unit: "letters",
+                cps: 20,
+                cursor: false,
+                stagger: 0.5,
+                rise: 8,
+                highlight: "#ffcc00",
+                sweep: false
+            },
+            easing: "linear"
+        };
+    }
+
+    // Sweep: staggered words with a moving highlight band.
+    function sweepCard() {
+        return {
+            id: "type",
+            name: qsTr("Sweep"),
+            options: {
+                unit: "words",
+                cps: 20,
+                cursor: false,
+                stagger: 0.6,
+                rise: 0,
+                highlight: "#ffffff",
+                sweep: true
+            },
+            apply: {
+                unit: "words",
+                cps: 20,
+                cursor: false,
+                stagger: 0.6,
+                rise: 0,
+                highlight: "#ffffff",
+                sweep: true
             },
             easing: "linear"
         };

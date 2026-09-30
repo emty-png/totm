@@ -55,12 +55,18 @@ Item {
     property string fontFamily: "Inter"
     property int fontWeight: 400
     property real fontSize: 16
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrike: false
+    property string fontCaps: "none"
+    property var textRuns: []
     property bool lineHeightAuto: true
     property real lineHeight: 1.2
     property real letterSpacing: 0
     property string hAlign: "left"
     property string vAlign: "top"
     property bool autoSize: true
+    property var textFx: null
     // Stored blob name under LibraryStore images/.
     property string imageSource: ""
     // True while the inline editor owns this text (glyphs hide to avoid
@@ -141,7 +147,7 @@ Item {
     readonly property var enabledShadows: (shape.shadows || []).filter(s => s && s.enabled !== false)
     readonly property bool hasShadow: shape.enabledShadows.length > 0
     readonly property bool hasLayerBlur: shape.layerBlur !== null && shape.layerBlur !== undefined && shape.layerBlur.enabled === true && Number(shape.layerBlur.radius) > 0
-    readonly property bool hasBackgroundBlur: shape.backgroundBlur !== null && shape.backgroundBlur !== undefined && shape.backgroundBlur.enabled === true && Number(shape.backgroundBlur.radius) > 0 && shape.shapeType !== "text"
+    readonly property bool hasBackgroundBlur: shape.backgroundBlur !== null && shape.backgroundBlur !== undefined && shape.backgroundBlur.enabled === true && Number(shape.backgroundBlur.radius) > 0
     readonly property var enabledGlows: (shape.glows || []).filter(g => g && g.enabled !== false)
     readonly property var outerGlows: shape.enabledGlows.filter(g => g.inner !== true)
     readonly property var innerGlows: shape.enabledGlows.filter(g => g.inner === true)
@@ -168,8 +174,10 @@ Item {
     readonly property bool rectFastStroke: shape.enabledStrokes.length === 0 || (shape.enabledStrokes.length === 1 && (shape.firstStroke.type || "solid") !== "linear" && (shape.firstStroke.position || "center") === "inside" && !shape.hasStrokeDash)
     readonly property bool useEffectPaint: shape.isVectorPaint && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 1 || shape.hasLinearStroke || shape.hasStrokeOpacity || shape.hasStrokeDash || shape.hasNonCenterStroke || (shape.shapeType === "rectangle" && !shape.independentCorners && !shape.rectFastStroke && shape.enabledStrokes.length > 0) || shape.hasShadow || shape.hasLayerBlur || shape.hasGlow)
     // Effected text/images ride the shared CPU painter (matches export);
-    // plain variants stay on the fast GPU branches.
-    readonly property bool useTextEffectPaint: shape.shapeType === "text" && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 1 || shape.hasStrokeOpacity || shape.hasShadow || shape.hasGlow || shape.hasLayerBlur)
+    // plain variants stay on the fast GPU branches. Any text stroke,
+    // rich run or karaoke/sweep reveal rides the CPU vector path.
+    readonly property bool hasTextRuns: shape.shapeType === "text" && !!(shape.textRuns && shape.textRuns.length)
+    readonly property bool useTextEffectPaint: shape.shapeType === "text" && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 0 || shape.hasLinearStroke || shape.hasStrokeOpacity || shape.hasStrokeDash || shape.hasNonCenterStroke || shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasTextRuns || !!(shape.textFx && shape.textFx.fx === true))
     readonly property bool useImageEffectPaint: shape.shapeType === "image" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasStrokeDash)
 
     x: shape.sx
@@ -330,6 +338,26 @@ Item {
                             }
                         }
                     }
+
+                    TextGlyphs {
+                        anchors.fill: parent
+                        visible: shape.shapeType === "text"
+                        text: shape.textContent
+                        color: "white"
+                        family: shape.fontFamily
+                        weight: shape.fontWeight
+                        size: shape.fontSize
+                        italic: shape.fontItalic === true
+                        underline: shape.fontUnderline === true
+                        strike: shape.fontStrike === true
+                        caps: shape.fontCaps || "none"
+                        spacingPct: shape.letterSpacing
+                        halign: shape.hAlign
+                        valign: shape.vAlign
+                        wrap: !shape.autoSize
+                        autoLeading: shape.lineHeightAuto
+                        leading: shape.lineHeight
+                    }
                 }
             }
         }
@@ -407,7 +435,20 @@ Item {
                     "leading": shape.lineHeight,
                     "boxW": shape.sw,
                     "boxH": shape.sh,
-                    "outlinePx": shape.maxStrokeWidth
+                    "outlinePx": shape.maxStrokeWidth,
+                    "italic": shape.fontItalic === true,
+                    "underline": shape.fontUnderline === true,
+                    "strike": shape.fontStrike === true,
+                    "join": shape.strokeJoin || "round",
+                    "caps": shape.fontCaps || "none",
+                    "runs": shape.textRuns ?? [],
+                    "fx": !!(shape.textFx && shape.textFx.fx === true),
+                    "fxReveal": Number((shape.textFx ?? {}).fxReveal ?? 1),
+                    "fxStagger": Number((shape.textFx ?? {}).fxStagger ?? 0),
+                    "fxRise": Number((shape.textFx ?? {}).fxRise ?? 0),
+                    "fxHighlight": String((shape.textFx ?? {}).fxHighlight ?? ""),
+                    "fxSweep": (shape.textFx ?? {}).fxSweep === true,
+                    "fxUnit": String((shape.textFx ?? {}).fxUnit ?? "letters")
                 })
             transform: Scale {
                 xScale: shape.flipH ? -1 : 1
@@ -424,11 +465,13 @@ Item {
             visible: !shape.useTextEffectPaint
             text: shape.textContent
             color: shape.firstFill ? shape.firstFillColor : "transparent"
-            style: shape.firstStroke ? Text.Outline : Text.Normal
-            styleColor: shape.firstStroke ? shape.firstStrokeColor : "#000000"
             family: shape.fontFamily
             weight: shape.fontWeight
             size: shape.fontSize
+            italic: shape.fontItalic === true
+            underline: shape.fontUnderline === true
+            strike: shape.fontStrike === true
+            caps: shape.fontCaps || "none"
             spacingPct: shape.letterSpacing
             halign: shape.hAlign
             valign: shape.vAlign
@@ -463,6 +506,10 @@ Item {
             family: shape.fontFamily
             weight: shape.fontWeight
             size: shape.fontSize
+            italic: shape.fontItalic === true
+            underline: shape.fontUnderline === true
+            strike: shape.fontStrike === true
+            caps: shape.fontCaps || "none"
             spacingPct: shape.letterSpacing
             halign: shape.hAlign
             valign: shape.vAlign

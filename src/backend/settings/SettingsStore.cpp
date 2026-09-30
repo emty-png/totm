@@ -1,6 +1,7 @@
 #include "SettingsStore.h"
 
 #include <algorithm>
+#include <utility>
 #include <QColor>
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -10,13 +11,19 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeySequence>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStyleHints>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <QWindow>
 
@@ -229,6 +236,12 @@ bool isSafeFontName(const QString &name) {
     return lower.endsWith(QStringLiteral(".ttf")) || lower.endsWith(QStringLiteral(".otf"))
         || lower.endsWith(QStringLiteral(".ttc")) || lower.endsWith(QStringLiteral(".woff"))
         || lower.endsWith(QStringLiteral(".woff2"));
+}
+
+// Explicit OS-font choice in appearance/fontFamily (empty means bundled
+// Inter). Compared case-insensitively so hand-edited storage still maps.
+bool isSystemFontChoice(const QString &family) {
+    return family.trimmed().compare(QStringLiteral("system"), Qt::CaseInsensitive) == 0;
 }
 } // namespace
 
@@ -590,10 +603,17 @@ void SettingsStore::setFontFamily(const QString &family) {
     if (m_fontFamily == trimmed)
         return;
     m_fontFamily = trimmed;
+    // QML text resolves its family at creation: the new face paints
+    // after a restart (noted on the font card).
+    m_fontRestartNeeded = true;
     persistAppearance();
     refreshFontMissing();
     applyFontFamily();
     emit appearanceChanged();
+}
+
+bool SettingsStore::fontRestartNeeded() const {
+    return m_fontRestartNeeded;
 }
 
 QStringList SettingsStore::importedFonts() const {
@@ -710,10 +730,12 @@ void SettingsStore::setCursorSize(int pixels) {
 }
 
 void SettingsStore::refreshFontMissing() {
-    // Empty means system default, always available. Otherwise the family
-    // must exist in QFontDatabase (system or imported); anything else
-    // fell back visually, so flag it for the "Font not found" error.
-    m_fontMissing = !m_fontFamily.isEmpty() && !QFontDatabase::families().contains(m_fontFamily);
+    // Empty means bundled Inter and "system" means the OS font: both
+    // always available. Otherwise the family must exist in QFontDatabase
+    // (system or imported); anything else fell back visually, so flag it
+    // for the "Font not found" error.
+    m_fontMissing = !m_fontFamily.isEmpty() && !isSystemFontChoice(m_fontFamily)
+        && !QFontDatabase::families().contains(m_fontFamily);
 }
 
 QString SettingsStore::fontsDir() const {
@@ -723,6 +745,425 @@ QString SettingsStore::fontsDir() const {
     if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
         dir += QStringLiteral("/totm");
     return dir + QStringLiteral("/fonts");
+}
+
+QVariantList SettingsStore::loadFontCatalog() {
+    // Curated web catalog (src/fonts/catalog.json, embedded under
+    // :/fonts). Schema per entry: family/slug/license/category plus a
+    // files[] list of repo-relative TTF paths. Extending the catalog is
+    // appending one object; invalid entries warn and skip so one bad
+    // row never breaks the installer.
+    QVariantList out;
+    QFile f(QStringLiteral(":/fonts/catalog.json"));
+    if (!f.open(QIODevice::ReadOnly)) {
+        qWarning() << "totm: font catalog missing from resources";
+        return out;
+    }
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        qWarning() << "totm: font catalog is not valid JSON:" << err.errorString();
+        return out;
+    }
+    const QJsonArray families = doc.object().value(QStringLiteral("families")).toArray();
+    for (const QJsonValue &v : families) {
+        if (!v.isObject())
+            continue;
+        const QJsonObject o = v.toObject();
+        const QString family = o.value(QStringLiteral("family")).toString().trimmed();
+        const QString slug = o.value(QStringLiteral("slug")).toString().trimmed();
+        QStringList files;
+        for (const QJsonValue &fv : o.value(QStringLiteral("files")).toArray()) {
+            const QString s = fv.toString().trimmed();
+            if (!s.isEmpty())
+                files.append(s);
+        }
+        if (family.isEmpty() || slug.isEmpty() || files.isEmpty()
+            || slug.contains(QLatin1Char('/')) || slug.contains(QStringLiteral(".."))) {
+            qWarning() << "totm: skipping invalid font catalog entry:" << family;
+            continue;
+        }
+        QVariantMap entry;
+        entry.insert(QStringLiteral("family"), family);
+        entry.insert(QStringLiteral("slug"), slug);
+        entry.insert(QStringLiteral("license"), o.value(QStringLiteral("license")).toString());
+        entry.insert(QStringLiteral("category"), o.value(QStringLiteral("category")).toString());
+        entry.insert(QStringLiteral("fileCount"), files.size());
+        // Variable families (any [axes] file) interpolate weights at
+        // render instead of shipping static instances; the editor
+        // skips weight snapping for them (see nearestWeight).
+        bool variable = false;
+        for (const QString &path : files) {
+            if (path.contains(QLatin1Char('['))) {
+                variable = true;
+                break;
+            }
+        }
+        entry.insert(QStringLiteral("variable"), variable);
+        out.append(entry);
+    }
+    return out;
+}
+
+QVariantList SettingsStore::fontCatalog() const {
+    if (!m_fontCatalogLoaded) {
+        const_cast<SettingsStore *>(this)->m_fontCatalog =
+            const_cast<SettingsStore *>(this)->loadFontCatalog();
+        const_cast<SettingsStore *>(this)->m_fontCatalogLoaded = true;
+    }
+    return m_fontCatalog;
+}
+
+bool SettingsStore::fontCatalogEntry(const QString &family, QVariantMap *entry) const {
+    // Full entry (with files[]) re-read from the resource so the cached
+    // QML-facing list stays lean; validated the same way on the way in.
+    QFile f(QStringLiteral(":/fonts/catalog.json"));
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject())
+        return false;
+    const QJsonArray families = doc.object().value(QStringLiteral("families")).toArray();
+    for (const QJsonValue &v : families) {
+        if (!v.isObject())
+            continue;
+        const QJsonObject o = v.toObject();
+        if (o.value(QStringLiteral("family")).toString().trimmed().compare(family.trimmed(),
+                                                                            Qt::CaseInsensitive)
+            != 0)
+            continue;
+        const QString slug = o.value(QStringLiteral("slug")).toString().trimmed();
+        QStringList files;
+        for (const QJsonValue &fv : o.value(QStringLiteral("files")).toArray()) {
+            const QString s = fv.toString().trimmed();
+            if (!s.isEmpty())
+                files.append(s);
+        }
+        if (slug.isEmpty() || files.isEmpty() || slug.contains(QLatin1Char('/'))
+            || slug.contains(QStringLiteral("..")))
+            return false;
+        if (entry) {
+            entry->insert(QStringLiteral("family"), o.value(QStringLiteral("family")).toString().trimmed());
+            entry->insert(QStringLiteral("slug"), slug);
+            entry->insert(QStringLiteral("files"), files);
+        }
+        return true;
+    }
+    return false;
+}
+
+QString SettingsStore::fontCatalogBase() const {
+    // Pinned CDN snapshot from the catalog header (cdn + repo + commit).
+    // Downloads refuse any other host/scheme (see installCatalogFont),
+    // so a tampered catalog entry cannot redirect the installer.
+    QFile f(QStringLiteral(":/fonts/catalog.json"));
+    if (!f.open(QIODevice::ReadOnly))
+        return QString();
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject())
+        return QString();
+    const QJsonObject o = doc.object();
+    const QString cdn = o.value(QStringLiteral("cdn")).toString().trimmed();
+    const QString repo = o.value(QStringLiteral("repo")).toString().trimmed();
+    const QString pin = o.value(QStringLiteral("pin")).toString().trimmed();
+    if (cdn.isEmpty() || repo.isEmpty() || pin.isEmpty())
+        return QString();
+    return cdn + QStringLiteral("/gh/") + repo + QStringLiteral("@") + pin + QStringLiteral("/");
+}
+
+bool SettingsStore::isFontInstalled(const QString &family) const {
+    const QString name = family.trimmed();
+    if (name.isEmpty())
+        return false;
+    // Bundled Inter is always present (loaded from resources at startup).
+    if (name.compare(QStringLiteral("Inter"), Qt::CaseInsensitive) == 0)
+        return QFontDatabase::families().contains(QStringLiteral("Inter"));
+    for (auto it = m_importedFontFamily.constBegin(); it != m_importedFontFamily.constEnd(); ++it) {
+        if (it.value().compare(name, Qt::CaseInsensitive) == 0)
+            return true;
+    }
+    // Anything else on the system counts too: the editor picker only
+    // lists families that actually resolve.
+    return QFontDatabase::families().contains(name);
+}
+
+bool SettingsStore::fontDownloadBusy() const {
+    return m_fontDownloadBusy;
+}
+
+QString SettingsStore::fontDownloadFamily() const {
+    return m_dlFamily;
+}
+
+int SettingsStore::fontDownloadFileIndex() const {
+    return m_dlFileIndex;
+}
+
+int SettingsStore::fontDownloadFileCount() const {
+    return m_dlFileCount;
+}
+
+double SettingsStore::fontDownloadProgress() const {
+    if (!m_fontDownloadBusy || m_dlFileCount <= 0)
+        return 0.0;
+    double frac = double(m_dlFileIndex);
+    for (auto it = m_dlProgress.constBegin(); it != m_dlProgress.constEnd(); ++it) {
+        const qint64 total = it.value().second;
+        if (total > 0)
+            frac += qBound(0.0, double(it.value().first) / double(total), 1.0);
+    }
+    return qBound(0.0, frac / double(m_dlFileCount), 1.0);
+}
+
+QStringList SettingsStore::fontDownloadQueue() const {
+    QStringList out;
+    if (!m_dlFamily.isEmpty())
+        out.append(m_dlFamily);
+    out.append(m_dlQueue);
+    return out;
+}
+
+int SettingsStore::fontDownloadQueueTotal() const {
+    return m_dlQueueTotal;
+}
+
+int SettingsStore::fontDownloadQueueDone() const {
+    return m_dlQueueDone;
+}
+
+double SettingsStore::fontDownloadQueueProgress() const {
+    if (!m_fontDownloadBusy || m_dlQueueTotal <= 0)
+        return 0.0;
+    return qBound(0.0, (double(m_dlQueueDone) + fontDownloadProgress()) / double(m_dlQueueTotal), 1.0);
+}
+
+QString SettingsStore::fontDownloadError() const {
+    return m_fontDownloadError;
+}
+
+bool SettingsStore::installCatalogFont(const QString &family) {
+    return installCatalogFonts(QStringList{family.trimmed()});
+}
+
+bool SettingsStore::installCatalogFonts(const QStringList &families) {
+    if (m_fontDownloadBusy || !m_dlActive.isEmpty())
+        return false;
+    const QString base = fontCatalogBase();
+    if (base.isEmpty())
+        return false;
+    // Allowlist: pinned CDN over https only. A catalog entry pointing
+    // anywhere else is refused instead of followed.
+    const QUrl probe(base);
+    if (probe.scheme() != QStringLiteral("https")
+        || probe.host() != QStringLiteral("cdn.jsdelivr.net"))
+        return false;
+    // Resolve, dedupe and drop unknowns/already-installed: the queue
+    // only ever holds actionable families.
+    QStringList queue;
+    for (const QString &raw : families) {
+        QVariantMap entry;
+        if (!fontCatalogEntry(raw, &entry))
+            continue;
+        const QString name = entry.value(QStringLiteral("family")).toString();
+        if (name.isEmpty() || isFontInstalled(name))
+            continue;
+        if (!queue.contains(name, Qt::CaseInsensitive))
+            queue.append(name);
+    }
+    if (queue.isEmpty())
+        return false;
+    if (!m_fontNet)
+        m_fontNet = new QNetworkAccessManager(this);
+    m_dlQueue = queue;
+    m_dlQueueTotal = queue.size();
+    m_dlQueueDone = 0;
+    m_fontDownloadBusy = true;
+    m_fontDownloadError.clear();
+    emit fontDownloadChanged();
+    startNextFamily();
+    return true;
+}
+
+void SettingsStore::startNextFamily() {
+    if (m_dlQueue.isEmpty()) {
+        m_dlFamily.clear();
+        m_dlFileIndex = m_dlFileCount;
+        m_fontDownloadBusy = false;
+        emit fontDownloadChanged();
+        return;
+    }
+    QVariantMap entry;
+    if (!fontCatalogEntry(m_dlQueue.first(), &entry)) {
+        m_dlQueue.removeFirst();
+        startNextFamily();
+        return;
+    }
+    m_dlQueue.removeFirst();
+    const QString slug = entry.value(QStringLiteral("slug")).toString();
+    QStringList pending = entry.value(QStringLiteral("files")).toStringList();
+    pending.append(QStringLiteral("ofl/%1/OFL.txt").arg(slug));
+    auto temp = std::make_unique<QTemporaryDir>();
+    if (!temp->isValid()) {
+        finishFontFamily(QStringLiteral("Could not stage download."));
+        return;
+    }
+    m_dlTemp = std::move(temp);
+    m_dlFamily = entry.value(QStringLiteral("family")).toString();
+    m_dlSlug = slug;
+    m_dlPending = pending;
+    m_dlSaved.clear();
+    m_dlFontIds.clear();
+    m_dlFileIndex = 0;
+    m_dlFileCount = pending.size();
+    emit fontDownloadChanged();
+    startFontFiles();
+}
+
+void SettingsStore::startFontFiles() {
+    // Fill up to kParallelSlots in-flight requests; each finish
+    // validates, launches its replacement, and finalizes the family
+    // once pending and in-flight both drain.
+    constexpr int kParallelSlots = 4;
+    while (m_dlActive.size() < kParallelSlots && !m_dlPending.isEmpty()) {
+        const QString rel = m_dlPending.takeFirst();
+        const QUrl url(fontCatalogBase() + rel);
+        if (url.scheme() != QStringLiteral("https")
+            || url.host() != QStringLiteral("cdn.jsdelivr.net")) {
+            finishFontFamily(QStringLiteral("Blocked unexpected download host."));
+            return;
+        }
+        QNetworkRequest request(url);
+        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                             QNetworkRequest::NoLessSafeRedirectPolicy);
+        QNetworkReply *reply = m_fontNet->get(request);
+        m_dlActive.append(reply);
+        m_dlProgress.insert(reply, qMakePair<qint64, qint64>(0, 0));
+        connect(reply, &QNetworkReply::downloadProgress, this,
+                [this, reply](qint64 received, qint64 total) {
+                    if (!m_dlProgress.contains(reply))
+                        return;
+                    m_dlProgress[reply] = qMakePair(received, total);
+                    emit fontDownloadChanged();
+                });
+        connect(reply, &QNetworkReply::finished, this, [this, reply, rel]() {
+            // Stale signal after cancel()/failure: finalization already
+            // closed the session, so there is nothing left to do.
+            if (m_dlFinishing || !m_fontDownloadBusy || !m_dlActive.contains(reply))
+                return;
+            const QNetworkReply::NetworkError err = reply->error();
+            const QString errStr = reply->errorString();
+            const QByteArray data = reply->readAll();
+            m_dlActive.removeAll(reply);
+            m_dlProgress.remove(reply);
+            reply->deleteLater();
+            if (err != QNetworkReply::NoError) {
+                finishFontFamily(errStr);
+                return;
+            }
+            // Empty/trivial bodies are block pages, not fonts.
+            if (data.size() < 1024) {
+                finishFontFamily(QStringLiteral("Downloaded file is empty."));
+                return;
+            }
+            QString saveName = QFileInfo(rel).fileName();
+            if (!isSafeFontName(saveName) && saveName != QStringLiteral("OFL.txt")) {
+                finishFontFamily(QStringLiteral("Unsafe file name from catalog."));
+                return;
+            }
+            const QString dest = QDir(m_dlTemp->path()).filePath(saveName);
+            QFile out(dest);
+            if (!out.open(QIODevice::WriteOnly) || out.write(data) != data.size()) {
+                finishFontFamily(QStringLiteral("Could not save download."));
+                return;
+            }
+            out.close();
+            // Font files must parse before install; the license travels
+            // alongside unchecked (plain text). Validation registers the
+            // family session-wide, so failures below unregister again.
+            if (saveName != QStringLiteral("OFL.txt")) {
+                const int fontId = QFontDatabase::addApplicationFont(dest);
+                if (fontId < 0) {
+                    finishFontFamily(QStringLiteral("Downloaded file is not a valid font."));
+                    return;
+                }
+                m_dlFontIds.append(fontId);
+            }
+            m_dlSaved.append(dest);
+            m_dlFileIndex++;
+            emit fontDownloadChanged();
+            startFontFiles();
+            if (m_dlPending.isEmpty() && m_dlActive.isEmpty())
+                finishFontFamily(QString());
+        });
+    }
+}
+
+void SettingsStore::finishFontFamily(const QString &error) {
+    // Reentrancy guard: abort() below can synchronously re-emit
+    // finished(), which funnels back here. The outer call owns
+    // completion; the nested one stands down.
+    if (m_dlFinishing)
+        return;
+    m_dlFinishing = true;
+    // Steal the in-flight set first: abort() can synchronously re-emit
+    // finished(), which must observe no live replies (else it
+    // double-frees through a cleared pointer).
+    const QList<QNetworkReply *> actives = m_dlActive;
+    m_dlActive.clear();
+    m_dlProgress.clear();
+    for (QNetworkReply *reply : actives) {
+        reply->abort();
+        reply->deleteLater();
+    }
+    if (!error.isEmpty()) {
+        // Validation above registers families session-wide: pull them
+        // back out so a failed install leaves no ghost entries. The
+        // queue stops at the first failure (predictable beats partial).
+        for (int id : std::as_const(m_dlFontIds))
+            QFontDatabase::removeApplicationFont(id);
+        m_dlQueue.clear();
+    } else {
+        // Route finished files through importFont(): dedup, register and
+        // row bookkeeping identical to manual imports. The OFL.txt is
+        // kept beside them (ignored by the font loader, shipped as the
+        // required license copy).
+        for (const QString &path : std::as_const(m_dlSaved)) {
+            const QString base = QFileInfo(path).fileName();
+            if (base == QStringLiteral("OFL.txt")) {
+                QDir().mkpath(fontsDir());
+                QFile::remove(QDir(fontsDir()).filePath(m_dlSlug + QStringLiteral("-OFL.txt")));
+                QFile::copy(path, QDir(fontsDir()).filePath(m_dlSlug + QStringLiteral("-OFL.txt")));
+                continue;
+            }
+            importFont(QUrl::fromLocalFile(path));
+        }
+        m_dlQueueDone++;
+    }
+    m_dlTemp.reset();
+    m_dlPending.clear();
+    m_dlSaved.clear();
+    m_dlFontIds.clear();
+    m_dlFamily.clear();
+    m_dlFileIndex = m_dlFileCount;
+    m_dlFinishing = false;
+    if (!error.isEmpty()) {
+        m_dlQueue.clear();
+        m_fontDownloadBusy = false;
+        m_fontDownloadError = error;
+        emit fontDownloadChanged();
+        return;
+    }
+    emit fontDownloadChanged();
+    startNextFamily();
+}
+
+void SettingsStore::cancelFontDownload() {
+    if (!m_fontDownloadBusy)
+        return;
+    m_dlQueue.clear();
+    finishFontFamily(QStringLiteral("Cancelled."));
 }
 
 QStringList SettingsStore::importedFontFamilies() const {
@@ -767,12 +1208,24 @@ void SettingsStore::loadImportedFonts() {
 
 void SettingsStore::applyFontFamily() {
     QFont font;
-    if (!m_fontFamily.isEmpty())
-        font.setFamily(m_fontFamily);
+    if (isSystemFontChoice(m_fontFamily)) {
+        // Default-constructed: OS font.
+    } else if (!m_fontFamily.isEmpty()) {
+        // Missing overrides fall back to bundled Inter (flagged via
+        // fontMissing); Qt would otherwise substitute unpredictably.
+        if (QFontDatabase::families().contains(m_fontFamily))
+            font.setFamily(m_fontFamily);
+        else
+            font.setFamily(QStringLiteral("Inter"));
+    } else {
+        // App default: bundled Inter (loaded from resources in main()).
+        font.setFamily(QStringLiteral("Inter"));
+    }
     QGuiApplication::setFont(font);
-    // setFont alone does not always repolish existing QML items in the
-    // same frame: nudge every quick window so the new family paints
-    // immediately instead of on the next restart.
+    // Window updates only repaint: QML text resolves its family at
+    // creation and ignores later setFont() calls, so a changed choice
+    // paints after a restart (main() applies the stored value before
+    // the engine loads; the font card notes the restart).
     for (QWindow *w : QGuiApplication::allWindows()) {
         if (auto *qw = qobject_cast<QQuickWindow *>(w))
             qw->update();
@@ -837,6 +1290,7 @@ void SettingsStore::selectImportedFont(const QString &fileName) {
     if (family.isEmpty() || family == m_fontFamily)
         return;
     m_fontFamily = family;
+    m_fontRestartNeeded = true;
     persistAppearance();
     refreshFontMissing();
     applyFontFamily();
@@ -851,6 +1305,8 @@ void SettingsStore::resetAppearance() {
     m_customRadiusMedium = 8;
     m_customRadiusLarge = 10;
     m_customRadiusXLarge = 12;
+    if (!m_fontFamily.isEmpty())
+        m_fontRestartNeeded = true;
     m_fontFamily.clear();
     m_fontMissing = false;
     m_showZoomPill = true;

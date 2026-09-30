@@ -272,7 +272,11 @@ QtObject {
         "type": {
             unit: "letters",
             cps: 20,
-            cursor: false
+            cursor: false,
+            stagger: 0,
+            rise: 0,
+            highlight: "",
+            sweep: false
         },
         "maskWipe": {
             direction: "left",
@@ -321,7 +325,8 @@ QtObject {
         },
         "customHide": {
             fromVisible: true,
-            toVisible: false
+            toVisible: false,
+            fade: false
         },
         "customResize": {
             fromW: 100,
@@ -618,7 +623,11 @@ QtObject {
         return _withKeys("type", {
             unit: typeUnit(r.unit !== undefined ? r.unit : "letters"),
             cps: clampNum(r.cps !== undefined ? r.cps : 20, 20, 1, 120),
-            cursor: r.cursor === true
+            cursor: r.cursor === true,
+            stagger: clampNum(r.stagger !== undefined ? r.stagger : 0, 0, 0, 1),
+            rise: clampNum(r.rise !== undefined ? r.rise : 0, 0, 0, 100),
+            highlight: typeof r.highlight === "string" ? r.highlight : "",
+            sweep: r.sweep === true
         }, r);
     }
 
@@ -923,10 +932,15 @@ QtObject {
     }
 
     function _normalizeCustomHide(r) {
-        return _withKeys("customHide", {
+        var o = {
             fromVisible: r.fromVisible === undefined ? true : !!r.fromVisible,
             toVisible: r.toVisible === undefined ? false : !!r.toVisible
-        }, r);
+        };
+        // Opt-in so old clips never gain it on rebuild: missing reads
+        // as instant (fade off) in the editor and both samplers.
+        if (r.fade !== undefined)
+            o.fade = r.fade === true;
+        return _withKeys("customHide", o, r);
     }
 
     function _normalizeCustomResize(r) {

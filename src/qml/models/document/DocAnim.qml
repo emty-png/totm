@@ -631,6 +631,14 @@ QtObject {
             };
         }
         if (preset === "type") {
+            // Karaoke/sweep clips keep the full text and carry progress in
+            // textFx.fxReveal: capture that directly so keyframes hold the
+            // reveal fraction instead of a saturated substring ratio.
+            if (leaf.textFx && leaf.textFx.fx === true) {
+                return {
+                    frac: Math.min(1, Math.max(0, anim.round2(Number(leaf.textFx.fxReveal) || 0)))
+                };
+            }
             var full = String(base.textContent !== undefined ? base.textContent : "");
             var norm = full.split("\r\n").join("\n").split("\r").join("\n");
             var live = String(leaf.textContent !== undefined ? leaf.textContent : "");

@@ -447,23 +447,13 @@ Item {
         }
     }
 
-    // Guides above the tools (edges only) but below the breadcrumb
-    // and export pill, so those keep their input.
+    // Guides above the tools (edges only) but below the export pill,
+    // so it keeps its input.
     CanvasGuides {
         doc: canvas.doc
         zoom: canvas.zoom
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
-    }
-
-    DrillBreadcrumb {
-        anchors {
-            left: parent.left
-            top: parent.top
-            leftMargin: 12
-            topMargin: 12
-        }
-        doc: canvas.doc
     }
 
     // Video export entry, top-right. Opens the quality picker; the
@@ -495,7 +485,7 @@ Item {
         }
         width: hintText.implicitWidth + 24
         height: 32
-        radius: 16
+        radius: AppTheme.radiusLarge
         color: AppTheme.surface
         border.width: 1
         border.color: AppTheme.border
@@ -503,7 +493,7 @@ Item {
         Text {
             id: hintText
             anchors.centerIn: parent
-            text: qsTr("Drag points/handles to edit, click to add, Del removes — Enter commits, Esc cancels")
+            text: qsTr("Click to add points, Enter to commit")
             font.pixelSize: 12
             color: AppTheme.foreground
         }
@@ -519,7 +509,7 @@ Item {
         }
         width: imageHintText.implicitWidth + 24
         height: 32
-        radius: 16
+        radius: AppTheme.radiusLarge
         color: AppTheme.surface
         border.width: 1
         border.color: AppTheme.border
@@ -527,7 +517,7 @@ Item {
         Text {
             id: imageHintText
             anchors.centerIn: parent
-            text: qsTr("Click to place, drag for size — Esc cancels")
+            text: qsTr("Click to place, drag to size")
             font.pixelSize: 12
             color: AppTheme.foreground
         }

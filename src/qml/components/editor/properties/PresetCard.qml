@@ -169,7 +169,21 @@ Item {
                 textContent: "Text"
             };
         }
-        return sampler.presetOverlay(card.presetId, "in", card.thumbOptions || {}, base, 40, 40, e, card.phase);
+        var frame = sampler.presetOverlay(card.presetId, "in", card.thumbOptions || {}, base, 40, 40, e, card.phase);
+        // Karaoke/sweep thumbs render through plain TextGlyphs (no per-unit
+        // painter), so sample the legacy substring for the tile text: the
+        // tile reads as a mid-reveal frame like the plain type cards.
+        if (card.presetId === "type" && frame && frame.textFx && frame.textFx.fx === true) {
+            var plain = card.thumbOptions || {};
+            var legacy = sampler.presetOverlay("type", "in", {
+                unit: plain.unit,
+                cps: plain.cps,
+                cursor: plain.cursor === true
+            }, base, 40, 40, e, card.phase);
+            if (legacy && legacy.textContent !== undefined)
+                frame.textContent = legacy.textContent;
+        }
+        return frame;
     }
 
     DocAnimSample {

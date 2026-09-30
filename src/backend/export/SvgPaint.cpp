@@ -15,6 +15,8 @@
 #include <QStandardPaths>
 #include <QtMath>
 
+#include <algorithm>
+
 namespace SvgPaint {
 
 using namespace Anims;
@@ -179,6 +181,8 @@ QString maskTextEl(const QVariantMap &m, double x, double y, double w, double h)
     const int weight = qBound(1, m.value(QStringLiteral("fontWeight"), 400).toInt(), 1000);
     const double size = qMax(1.0, num(m, "fontSize", 16.0));
     const QString halign = str(m, "hAlign", QStringLiteral("left"));
+    const double spacingPx = size * num(m, "letterSpacing") / 100.0;
+    const bool italic = m.value(QStringLiteral("fontItalic"), false).toBool();
     double tx = x;
     QString anchor;
     if (halign == QLatin1String("center")) {
@@ -195,8 +199,12 @@ QString maskTextEl(const QVariantMap &m, double x, double y, double w, double h)
     tAttrs.append(QStringLiteral("font-family=\"%1\"").arg(xmlEscape(family)));
     tAttrs.append(QStringLiteral("font-size=\"%1\"").arg(fmtNum(size)));
     tAttrs.append(QStringLiteral("font-weight=\"%1\"").arg(weight));
+    if (italic)
+        tAttrs.append(QStringLiteral("font-style=\"italic\""));
     if (!anchor.isEmpty())
         tAttrs.append(QStringLiteral("text-anchor=\"%1\"").arg(anchor));
+    if (!qFuzzyIsNull(spacingPx))
+        tAttrs.append(QStringLiteral("letter-spacing=\"%1\"").arg(fmtNum(spacingPx)));
     tAttrs.append(QStringLiteral("fill=\"white\""));
     const QStringList lines = content.split(QLatin1Char('\n'));
     QString el = QStringLiteral("<text %1>").arg(tAttrs.join(QLatin1Char(' ')));
@@ -852,10 +860,16 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
             const QString family = str(m, "fontFamily", QStringLiteral("Inter"));
             const int weight = qBound(1, m.value(QStringLiteral("fontWeight"), 400).toInt(), 1000);
             const double size = qMax(1.0, num(m, "fontSize", 16.0));
-            const double spacing = num(m, "letterSpacing");
+            const double spacingPct = num(m, "letterSpacing");
+            const double spacingPx = size * spacingPct / 100.0;
             const double leading = qMax(0.5, num(m, "lineHeight", 1.2));
             const QString halign = str(m, "hAlign", QStringLiteral("left"));
             const QString valign = str(m, "vAlign", QStringLiteral("top"));
+            const bool italic = m.value(QStringLiteral("fontItalic"), false).toBool();
+            const bool underline = m.value(QStringLiteral("fontUnderline"), false).toBool();
+            const bool strike = m.value(QStringLiteral("fontStrike"), false).toBool();
+            const QString caps = str(m, "fontCaps", QStringLiteral("none"));
+            const QString join = str(m, "strokeJoin", QStringLiteral("round"));
             double tx = x;
             QString anchor;
             if (halign == QLatin1String("center")) {
@@ -870,65 +884,346 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                 ty = y + h / 2.0;
             else if (valign == QLatin1String("bottom"))
                 ty = y + h;
-            // Fill mirrors the PNG text leaf: topmost enabled stack
-            // entry (solid or box-spanning linear with per-entry
-            // opacity). Stacked text fills beyond the first are
-            // out of scope for standalone SVG vectors.
+            // Shared text attributes (no paint): family/size/weight/style,
+            // decoration, case, spacing. Paint layers below carry their own
+            // fill/stroke so stacked entries survive as duplicated <text>
+            // (bottom-first, index 0 topmost like PNG).
+            QStringList baseAttrs;
+            baseAttrs.append(QStringLiteral("x=\"%1\"").arg(fmtNum(tx)));
+            baseAttrs.append(QStringLiteral("y=\"%1\"").arg(fmtNum(ty)));
+            baseAttrs.append(QStringLiteral("font-family=\"%1\"").arg(xmlEscape(family)));
+            baseAttrs.append(QStringLiteral("font-size=\"%1\"").arg(fmtNum(size)));
+            baseAttrs.append(QStringLiteral("font-weight=\"%1\"").arg(weight));
+            if (italic)
+                baseAttrs.append(QStringLiteral("font-style=\"italic\""));
+            if (!anchor.isEmpty())
+                baseAttrs.append(QStringLiteral("text-anchor=\"%1\"").arg(anchor));
+            if (!qFuzzyIsNull(spacingPx))
+                baseAttrs.append(QStringLiteral("letter-spacing=\"%1\"").arg(fmtNum(spacingPx)));
+            QString deco;
+            if (underline && strike)
+                deco = QStringLiteral("underline line-through");
+            else if (underline)
+                deco = QStringLiteral("underline");
+            else if (strike)
+                deco = QStringLiteral("line-through");
+            if (!deco.isEmpty())
+                baseAttrs.append(QStringLiteral("text-decoration=\"%1\"").arg(deco));
+            if (caps == QLatin1String("upper"))
+                baseAttrs.append(QStringLiteral("text-transform=\"uppercase\""));
+            else if (caps == QLatin1String("lower"))
+                baseAttrs.append(QStringLiteral("text-transform=\"lowercase\""));
+            const QString joinSvg = (join == QLatin1String("bevel") || join == QLatin1String("miter"))
+                ? join
+                : QStringLiteral("round");
+            const QStringList lines = content.split(QLatin1Char('\n'));
+            // Rich runs, bridge-canonical (sorted) with defensive clamp.
+            // Offsets are UTF-16 units over content, like the samplers.
+            struct SvgRun {
+                int start = 0;
+                int len = 0;
+                bool bold = false;
+                bool italic = false;
+                bool ul = false;
+                bool strike = false;
+                QString color;
+            };
+            QList<SvgRun> svgRuns;
+            for (const QVariant &rv : m.value(QStringLiteral("textRuns")).toList()) {
+                const QVariantMap rm = rv.toMap();
+                SvgRun r;
+                r.start = qMax(0, rm.value(QStringLiteral("start"), 0).toInt());
+                r.len = qMax(0, rm.value(QStringLiteral("len"), 0).toInt());
+                r.len = qBound(0, r.len, qMax(0, content.size() - r.start));
+                r.bold = rm.value(QStringLiteral("bold"), false).toBool();
+                r.italic = rm.value(QStringLiteral("italic"), false).toBool();
+                r.ul = rm.value(QStringLiteral("underline"), false).toBool();
+                r.strike = rm.value(QStringLiteral("strike"), false).toBool();
+                r.color = rm.value(QStringLiteral("color")).toString();
+                if (r.len > 0 && (r.bold || r.italic || r.ul || r.strike || !r.color.isEmpty()))
+                    svgRuns.append(r);
+            }
+            std::sort(svgRuns.begin(), svgRuns.end(),
+                [](const SvgRun &a, const SvgRun &b) { return a.start < b.start; });
+            auto svgRunAt = [&](int off) {
+                for (int i = 0; i < svgRuns.size(); ++i) {
+                    const SvgRun &r = svgRuns.at(i);
+                    if (off >= r.start && off < r.start + r.len)
+                        return i;
+                }
+                return -1;
+            };
+            struct SvgSeg {
+                QString text;
+                int run = -1;
+            };
+            // Per-line segments split by run; lineOff tracks content offsets.
+            auto lineSegs = [&](const QString &line, int lineOff) {
+                QList<SvgSeg> segs;
+                int i = 0;
+                while (i < line.size()) {
+                    const int r = svgRunAt(lineOff + i);
+                    int j = i + 1;
+                    while (j < line.size() && svgRunAt(lineOff + j) == r)
+                        ++j;
+                    segs.append({line.mid(i, j - i), r});
+                    i = j;
+                }
+                return segs;
+            };
+            auto segDeco = [&](int r) {
+                const bool u = underline || (r >= 0 && svgRuns.at(r).ul);
+                const bool k = strike || (r >= 0 && svgRuns.at(r).strike);
+                if (u && k)
+                    return QStringLiteral("underline line-through");
+                if (u)
+                    return QStringLiteral("underline");
+                if (k)
+                    return QStringLiteral("line-through");
+                return QString();
+            };
+            // Run-aware body: every segment rides a tspan carrying only
+            // its divergences (weight/style/decoration/fill). mode "box"
+            // inherits the layer fill on unset ranges (set ranges hide
+            // with fill=none); mode "color" paints set ranges solid.
+            auto textBody = [&](const QString &extra, const QString &mode, const QString &fillAttr) {
+                QString inner;
+                int lineOff = 0;
+                for (int li2 = 0; li2 < lines.size(); ++li2) {
+                    const QString &ln = lines.at(li2);
+                    const QList<SvgSeg> segs = lineSegs(ln, lineOff);
+                    for (int si = 0; si < segs.size(); ++si) {
+                        const SvgSeg &sg = segs.at(si);
+                        QStringList ta;
+                        if (si == 0 && li2 > 0) {
+                            ta.append(QStringLiteral("x=\"%1\"").arg(fmtNum(tx)));
+                            ta.append(QStringLiteral("dy=\"%1\"").arg(fmtNum(size * leading)));
+                        }
+                        if (sg.run >= 0 && svgRuns.at(sg.run).bold)
+                            ta.append(QStringLiteral("font-weight=\"700\""));
+                        const bool it = italic || (sg.run >= 0 && svgRuns.at(sg.run).italic);
+                        if (it && !italic)
+                            ta.append(QStringLiteral("font-style=\"italic\""));
+                        if (!it && italic)
+                            ta.append(QStringLiteral("font-style=\"normal\""));
+                        const QString rd = segDeco(sg.run);
+                        if (rd != deco)
+                            ta.append(rd.isEmpty() ? QStringLiteral("text-decoration=\"none\"")
+                                                   : QStringLiteral("text-decoration=\"%1\"").arg(rd));
+                        if (mode == QLatin1String("color")) {
+                            if (sg.run >= 0 && !svgRuns.at(sg.run).color.isEmpty()) {
+                                const QColor rc(svgRuns.at(sg.run).color);
+                                ta.append(solidFillAttrOpacity(rc.isValid() ? rc : fillFallback(), true, 1.0));
+                            } else {
+                                ta.append(QStringLiteral("fill=\"none\""));
+                            }
+                        } else if (sg.run >= 0 && !svgRuns.at(sg.run).color.isEmpty()) {
+                            ta.append(QStringLiteral("fill=\"none\""));
+                        }
+                        if (ta.isEmpty())
+                            inner += xmlEscape(sg.text);
+                        else
+                            inner += QStringLiteral("<tspan %1>%2</tspan>").arg(ta.join(QLatin1Char(' '))).arg(xmlEscape(sg.text));
+                    }
+                    lineOff += ln.size() + 1;
+                }
+                return QStringLiteral("<text %1 %2>%3</text>")
+                    .arg(baseAttrs.join(QLatin1Char(' ')))
+                    .arg(extra)
+                    .arg(inner);
+            };
             const Effects::Style stText = Effects::Style::fromMap(m);
-            const Effects::FillEntry *firstFill = stText.fills.isEmpty() ? nullptr : &stText.fills.first();
-            const Effects::StrokeEntry *firstStroke = nullptr;
+            // Stroked text exports glyph outlines as paths (exact width,
+            // dash, join, gradient and center/inside/outside position like
+            // PNG); unstroked text stays selectable <text>. Inside clips
+            // the doubled stroke to the glyphs, outside masks it out.
+            bool needPaths = false;
             for (const Effects::StrokeEntry &se : stText.strokes) {
                 if (se.enabled && se.width > 0.01) {
-                    firstStroke = &se;
+                    needPaths = true;
                     break;
                 }
             }
-            QString fillAttr;
-            if (firstFill && firstFill->type == QLatin1String("linear")) {
-                GradientOut g = gradientFillOpacity(firstFill->gradient, box,
-                    QStringLiteral("svgft%1").arg(gradSeq++), true, firstFill->opacity);
-                defs.append(g.def);
-                fillAttr = g.attr;
-            } else {
-                QColor fc = firstFill ? firstFill->color : QColor(QStringLiteral("#d9d9d9"));
-                if (!fc.isValid())
-                    fc = fillFallback();
-                fillAttr = solidFillAttrOpacity(fc, true, firstFill ? firstFill->opacity : 1.0);
-            }
-            QStringList tAttrs;
-            tAttrs.append(QStringLiteral("x=\"%1\"").arg(fmtNum(tx)));
-            tAttrs.append(QStringLiteral("y=\"%1\"").arg(fmtNum(ty)));
-            tAttrs.append(QStringLiteral("font-family=\"%1\"").arg(xmlEscape(family)));
-            tAttrs.append(QStringLiteral("font-size=\"%1\"").arg(fmtNum(size)));
-            tAttrs.append(QStringLiteral("font-weight=\"%1\"").arg(weight));
-            if (!anchor.isEmpty())
-                tAttrs.append(QStringLiteral("text-anchor=\"%1\"").arg(anchor));
-            if (spacing != 0.0)
-                tAttrs.append(QStringLiteral("letter-spacing=\"%1\"").arg(fmtNum(spacing)));
-            tAttrs.append(fillAttr);
-            if (firstStroke) {
-                QColor sc = firstStroke->color;
-                sc.setAlphaF(qBound(0.0, sc.alphaF() * firstStroke->opacity, 1.0));
-                if (sc.isValid() && sc.alpha() > 0) {
-                    tAttrs.append(QStringLiteral("stroke=\"%1\"").arg(colorHex(sc)));
-                    if (sc.alpha() < 255)
-                        tAttrs.append(QStringLiteral("stroke-opacity=\"%1\"").arg(fmtNum(colorAlpha01(sc))));
-                    tAttrs.append(QStringLiteral("stroke-width=\"%1\"").arg(fmtNum(firstStroke->width)));
+            if (needPaths) {
+                QVariantMap tm;
+                tm[QStringLiteral("content")] = content;
+                tm[QStringLiteral("family")] = family;
+                tm[QStringLiteral("weight")] = weight;
+                tm[QStringLiteral("size")] = size;
+                tm[QStringLiteral("spacing")] = spacingPct;
+                tm[QStringLiteral("halign")] = halign;
+                tm[QStringLiteral("valign")] = valign;
+                tm[QStringLiteral("autoSize")] = m.value(QStringLiteral("autoSize"), true).toBool();
+                tm[QStringLiteral("lineAuto")] = m.value(QStringLiteral("lineHeightAuto"), true).toBool();
+                tm[QStringLiteral("leading")] = leading;
+                tm[QStringLiteral("boxW")] = w;
+                tm[QStringLiteral("boxH")] = h;
+                tm[QStringLiteral("italic")] = italic;
+                tm[QStringLiteral("underline")] = underline;
+                tm[QStringLiteral("strike")] = strike;
+                tm[QStringLiteral("caps")] = caps;
+                tm[QStringLiteral("runs")] = m.value(QStringLiteral("textRuns")).toList();
+                const Effects::TextOpts to = Effects::TextOpts::fromMap(tm);
+                const QPainterPath glyphs = Effects::textGlyphPath(to, 1.0, box);
+                if (glyphs.isEmpty())
+                    continue;
+                const QString gd = pathToSvg(glyphs);
+                if (gd.isEmpty())
+                    continue;
+                QStringList players;
+                // Fills per run piece (box stacks paint unset runs, set
+                // run colors paint solid); bottom-first like PNG.
+                const QList<Effects::RunGlyphs> runPaths = Effects::textRunPaths(to, 1.0, box);
+                auto boxFillAttr = [&](const Effects::FillEntry &f) {
+                    if (f.type == QLatin1String("linear")) {
+                        GradientOut g = gradientFillOpacity(f.gradient, box,
+                            QStringLiteral("svgft%1").arg(gradSeq++), true, f.opacity);
+                        defs.append(g.def);
+                        return g.attr;
+                    }
+                    QColor fc = f.color;
+                    if (!fc.isValid())
+                        fc = fillFallback();
+                    return solidFillAttrOpacity(fc, true, f.opacity);
+                };
+                for (const Effects::RunGlyphs &rg : runPaths) {
+                    if (rg.path.isEmpty())
+                        continue;
+                    const QString pd = pathToSvg(rg.path);
+                    if (pd.isEmpty())
+                        continue;
+                    if (rg.hasColor) {
+                        const QColor rc = rg.color.isValid() ? rg.color : fillFallback();
+                        players.append(QStringLiteral("<path d=\"%1\" %2 stroke=\"none\"/>")
+                                .arg(xmlEscape(pd))
+                                .arg(solidFillAttrOpacity(rc, true, 1.0)));
+                        continue;
+                    }
+                    for (int fi = stText.fills.size() - 1; fi >= 0; --fi) {
+                        const Effects::FillEntry &f = stText.fills.at(fi);
+                        if (!f.enabled)
+                            continue;
+                        const QString fillAttr = boxFillAttr(f);
+                        if (fillAttr == QLatin1String("fill=\"none\""))
+                            continue;
+                        players.append(QStringLiteral("<path d=\"%1\" %2 stroke=\"none\"/>").arg(xmlEscape(pd)).arg(fillAttr));
+                    }
                 }
+                if (players.isEmpty() && stText.fills.isEmpty()) {
+                    QColor fc(QStringLiteral("#d9d9d9"));
+                    players.append(QStringLiteral("<path d=\"%1\" %2 stroke=\"none\"/>")
+                            .arg(xmlEscape(gd))
+                            .arg(solidFillAttrOpacity(fc, true, 1.0)));
+                }
+                for (int si = stText.strokes.size() - 1; si >= 0; --si) {
+                    const Effects::StrokeEntry &se = stText.strokes.at(si);
+                    if (!se.enabled || se.width <= 0.01)
+                        continue;
+                    const bool side = se.position == QLatin1String("inside") || se.position == QLatin1String("outside");
+                    const double sw = side ? se.width * 2.0 : se.width;
+                    QString strokeAttr = QStringLiteral("stroke=\"none\"");
+                    if (se.type == QLatin1String("linear")) {
+                        GradientOut g = gradientFillOpacity(se.gradient, box,
+                            QStringLiteral("svgst%1").arg(gradSeq++), false, se.opacity);
+                        defs.append(g.def);
+                        strokeAttr = QStringLiteral("%1 stroke-width=\"%2\" stroke-linecap=\"%3\" stroke-linejoin=\"%4\"%5")
+                                         .arg(g.attr)
+                                         .arg(fmtNum(sw))
+                                         .arg(capFor(stText.strokeCap))
+                                         .arg(joinSvg)
+                                         .arg(dashAttr(se.dash, se.width));
+                    } else {
+                        QColor sc = se.color;
+                        sc.setAlphaF(qBound(0.0, sc.alphaF() * se.opacity, 1.0));
+                        if (!sc.isValid() || sc.alpha() <= 0)
+                            continue;
+                        strokeAttr = QStringLiteral("stroke=\"%1\"").arg(colorHex(sc));
+                        if (sc.alpha() < 255)
+                            strokeAttr += QStringLiteral(" stroke-opacity=\"%1\"").arg(fmtNum(colorAlpha01(sc)));
+                        strokeAttr += QStringLiteral(" stroke-width=\"%1\" stroke-linecap=\"%2\" stroke-linejoin=\"%3\"%4")
+                                          .arg(fmtNum(sw))
+                                          .arg(capFor(stText.strokeCap))
+                                          .arg(joinSvg)
+                                          .arg(dashAttr(se.dash, se.width));
+                    }
+                    if (strokeAttr == QLatin1String("stroke=\"none\""))
+                        continue;
+                    const QString el = QStringLiteral("<path d=\"%1\" fill=\"none\" %2/>").arg(xmlEscape(gd)).arg(strokeAttr);
+                    if (!side) {
+                        players.append(el);
+                    } else if (se.position == QLatin1String("inside")) {
+                        const QString cid = QStringLiteral("svgclip%1").arg(clipSeq++);
+                        defs.append(QStringLiteral("<clipPath id=\"%1\"><path d=\"%2\"/></clipPath>").arg(cid).arg(xmlEscape(gd)));
+                        players.append(QStringLiteral("<g clip-path=\"url(#%1)\">%2</g>").arg(cid).arg(el));
+                    } else {
+                        const QString mid = QStringLiteral("svgm%1").arg(maskSeq++);
+                        const QRectF gb = glyphs.boundingRect().adjusted(-sw - 1.0, -sw - 1.0, sw + 1.0, sw + 1.0);
+                        defs.append(QStringLiteral("<mask id=\"%1\" maskUnits=\"userSpaceOnUse\" x=\"%2\" y=\"%3\" width=\"%4\" height=\"%5\"><rect x=\"%2\" y=\"%3\" width=\"%4\" height=\"%5\" fill=\"white\"/><path d=\"%6\" fill=\"black\"/></mask>")
+                                .arg(mid)
+                                .arg(fmtNum(gb.x()))
+                                .arg(fmtNum(gb.y()))
+                                .arg(fmtNum(gb.width()))
+                                .arg(fmtNum(gb.height()))
+                                .arg(xmlEscape(gd)));
+                        players.append(QStringLiteral("<path d=\"%1\" fill=\"none\" %2 mask=\"url(#%3)\"/>")
+                                .arg(xmlEscape(gd))
+                                .arg(strokeAttr)
+                                .arg(mid));
+                    }
+                }
+                if (players.isEmpty())
+                    continue;
+                QString el = gOpen + maskPre;
+                for (const QString &layer : players)
+                    el += layer;
+                el += maskPost + QStringLiteral("</g>");
+                body.append(el);
+                continue;
             }
-            const QStringList lines = content.split(QLatin1Char('\n'));
-            QString el = gOpen + maskPre + QStringLiteral("<text %1>").arg(tAttrs.join(QLatin1Char(' ')));
-            for (int li2 = 0; li2 < lines.size(); ++li2) {
-                if (li2 == 0) {
-                    el += xmlEscape(lines.at(li2));
+            QStringList layers;
+            // Stacked fills bottom-first (fill + stroke none). Set run
+            // ranges hide per layer; one color layer paints them solid.
+            for (int fi = stText.fills.size() - 1; fi >= 0; --fi) {
+                const Effects::FillEntry &f = stText.fills.at(fi);
+                if (!f.enabled)
+                    continue;
+                QString fillAttr;
+                if (f.type == QLatin1String("linear")) {
+                    GradientOut g = gradientFillOpacity(f.gradient, box,
+                        QStringLiteral("svgft%1").arg(gradSeq++), true, f.opacity);
+                    defs.append(g.def);
+                    fillAttr = g.attr;
                 } else {
-                    el += QStringLiteral("<tspan x=\"%1\" dy=\"%2\">%3</tspan>")
-                              .arg(fmtNum(tx))
-                              .arg(fmtNum(size * leading))
-                              .arg(xmlEscape(lines.at(li2)));
+                    QColor fc = f.color;
+                    if (!fc.isValid())
+                        fc = fillFallback();
+                    fillAttr = solidFillAttrOpacity(fc, true, f.opacity);
+                }
+                if (fillAttr == QLatin1String("fill=\"none\""))
+                    continue;
+                layers.append(textBody(QStringLiteral("%1 stroke=\"none\"").arg(fillAttr), QStringLiteral("box"), fillAttr));
+            }
+            if (layers.isEmpty() && !stText.fills.isEmpty()) {
+                // All fills disabled: keep one transparent layer so empty
+                // text still skips like before (no naked unfilled text).
+            } else if (layers.isEmpty() && stText.fills.isEmpty()) {
+                QColor fc(QStringLiteral("#d9d9d9"));
+                layers.append(textBody(QStringLiteral("%1 stroke=\"none\"").arg(solidFillAttrOpacity(fc, true, 1.0)), QStringLiteral("box"), QString()));
+            }
+            bool hasColored = false;
+            for (const SvgRun &r : svgRuns) {
+                if (!r.color.isEmpty()) {
+                    hasColored = true;
+                    break;
                 }
             }
-            el += QStringLiteral("</text>") + maskPost + QStringLiteral("</g>");
+            if (hasColored)
+                layers.append(textBody(QStringLiteral("fill=\"none\" stroke=\"none\""), QStringLiteral("color"), QString()));
+            // Unstroked text only reaches here (any enabled stroke takes
+            // the outlined-path branch above), so no stroke layers follow.
+            if (layers.isEmpty())
+                continue;
+            QString el = gOpen + maskPre + layers.join(QString()) + maskPost + QStringLiteral("</g>");
             body.append(el);
             continue;
         }

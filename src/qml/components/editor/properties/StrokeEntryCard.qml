@@ -50,7 +50,6 @@ RowLayout {
             mixedAngle: true
         })
     readonly property bool isLinear: !card.current.mixedType && card.current.value.type === "linear"
-    readonly property bool isText: card.section ? card.section.snapshot.allOfType("text") : false
 
     spacing: 8
 
@@ -107,12 +106,10 @@ RowLayout {
         }
     }
 
-    // Text uses the native 1px outline, so the width value is
-    // meaningless there. Hidden for all-text selections.
+    // Real vector width for every kind, text included.
     NumberField {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        visible: !card.isText
         prefix: "S"
         suffix: qsTr("px")
         minimum: 0
@@ -133,16 +130,6 @@ RowLayout {
             if (card.section)
                 card.section.snapshot.endScrub();
         }
-    }
-
-    Text {
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
-        visible: card.isText
-        text: qsTr("Outline")
-        font.pixelSize: 11
-        color: AppTheme.muted
-        elide: Text.ElideRight
     }
 
     NumberField {

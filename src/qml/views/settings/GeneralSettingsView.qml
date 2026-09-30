@@ -89,6 +89,8 @@ ColumnLayout {
 
             GeneralStorageSection {}
 
+            GeneralFontsSection {}
+
             Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 16

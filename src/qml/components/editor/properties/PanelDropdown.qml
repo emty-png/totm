@@ -5,14 +5,34 @@ import Totm
 
 // Panel dropdown: field-styled button plus popup menu in graph-editor
 // menu styling. Options are [{id, name}]; picked(id) fires on choice.
-// Sizing mirrors SegmentedOption so the two mix in rows.
+// Sizing mirrors SegmentedOption so the two mix in rows. With
+// searchable, the popup gains a filter field and a capped scrollable
+// list (for long menus like font families); rows preview in their own
+// family face in that mode.
 Rectangle {
     id: drop
 
     property var options: []
     property string currentId: ""
+    property bool searchable: false
 
     signal picked(string id)
+
+    // Live filter over options; the current pick always stays visible.
+    readonly property var filteredOptions: {
+        if (!drop.searchable)
+            return drop.options;
+        var q = searchField.text.trim().toLowerCase();
+        var out = [];
+        var list = drop.options || [];
+        for (var i = 0; i < list.length; i++) {
+            var name = String(list[i].name || "");
+            if (q !== "" && String(list[i].id) !== drop.currentId && name.toLowerCase().indexOf(q) < 0)
+                continue;
+            out.push(list[i]);
+        }
+        return out;
+    }
 
     Layout.fillWidth: true
     Layout.minimumWidth: 0
@@ -83,6 +103,12 @@ Rectangle {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         transformOrigin: Item.Top
 
+        onOpened: {
+            searchField.text = "";
+            if (drop.searchable)
+                searchField.forceActiveFocus();
+        }
+
         enter: Transition {
             NumberAnimation {
                 property: "opacity"
@@ -112,8 +138,97 @@ Rectangle {
         contentItem: Column {
             spacing: 2
 
+            TextField {
+                id: searchField
+
+                visible: drop.searchable
+                width: menu.availableWidth
+                implicitHeight: 28
+                placeholderText: qsTr("Search...")
+                placeholderTextColor: AppTheme.muted
+                leftPadding: 10
+                font.pixelSize: 12
+                color: AppTheme.foreground
+                selectByMouse: true
+
+                background: Rectangle {
+                    radius: AppTheme.radiusSmall
+                    color: AppTheme.background
+                    border.width: 1
+                    border.color: searchField.activeFocus ? AppTheme.selection : AppTheme.fieldBorder
+                }
+
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Escape) {
+                        menu.close();
+                        event.accepted = true;
+                    }
+                }
+            }
+
+            ListView {
+                id: optionList
+
+                visible: drop.searchable
+                width: menu.availableWidth
+                height: Math.min(320, Math.max(64, drop.filteredOptions.length * 32))
+                clip: true
+                spacing: 2
+                model: drop.filteredOptions
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: optionList.contentHeight > optionList.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                    contentItem: Rectangle {
+                        implicitWidth: 6
+                        radius: 3
+                        color: AppTheme.border
+                    }
+                    background: Item {
+                        implicitWidth: 6
+                    }
+                }
+
+                delegate: Rectangle {
+                    required property var modelData
+
+                    width: optionList.width
+                    height: 30
+                    radius: AppTheme.radiusSmall
+                    color: modelData.id === drop.currentId ? AppTheme.hover : optMouse.containsMouse || optMouse.pressed ? AppTheme.hover : "transparent"
+
+                    Text {
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            verticalCenter: parent.verticalCenter
+                            leftMargin: 10
+                            rightMargin: 10
+                        }
+                        text: modelData.name
+                        font.pixelSize: 12
+                        font.family: String(modelData.id)
+                        font.weight: modelData.id === drop.currentId ? Font.DemiBold : Font.Normal
+                        color: modelData.id === drop.currentId ? AppTheme.foreground : AppTheme.muted
+                        elide: Text.ElideRight
+                    }
+
+                    MouseArea {
+                        id: optMouse
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            menu.close();
+                            drop.picked(String(modelData.id));
+                        }
+                    }
+                }
+            }
+
             Repeater {
-                model: drop.options
+                model: drop.searchable ? [] : drop.options
 
                 Rectangle {
                     // Explicit popup width minus padding (binding

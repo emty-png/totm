@@ -8,8 +8,9 @@ import Totm
 // width, center/inside/outside position, opacity %, dash pair, eye
 // toggle and order. Per-index values collect across the selection
 // with mixed flags (see EffectShadowCard); edits apply where the
-// index exists, adds apply to every leaf. On text the stroke
-// outlines the glyphs; images paint stacked borders. Shapes only.
+// index exists, adds apply to every leaf. On text the stroke is a
+// real vector outline of the glyphs (width/position/dash/gradient
+// all apply); images paint stacked borders. Shapes only.
 PanelSection {
     id: section
 
@@ -58,12 +59,12 @@ PanelSection {
     // Picker flow: swatch seeds the popup, drags stream through one
     // scrub transaction, typed hex commits discretely on its own.
     // Solid picks land as solid (converting linear entries back);
-    // gradient picks land as linear. Gradient tabs only for vector
-    // shapes (glyph outlines stay solid).
+    // gradient picks land as linear. Text strokes are real vector
+    // outlines now, so gradients apply like vectors (images excluded).
     ColorPickerPopup {
         id: picker
 
-        allowGradient: !section.snapshot.allOfType("text") && !section.snapshot.allOfType("image")
+        allowGradient: !section.snapshot.allOfType("image")
         onScrubStarted: section.snapshot.beginScrub()
         onCommitted: c => {
             if (section.pickerStrokeIndex >= 0)
@@ -243,7 +244,7 @@ PanelSection {
                 }
 
                 SegmentedOption {
-                    visible: !entryMenu.isText && !entryMenu.isImage
+                    visible: !entryMenu.isImage
                     label: qsTr("Gradient")
                     active: entryMenu.isLinear
                     onClicked: section.setStrokeTypeAt(entryMenu.entryIndex, "linear")
@@ -267,7 +268,6 @@ PanelSection {
 
             NumberField {
                 Layout.fillWidth: true
-                visible: !entryMenu.isText
                 prefix: "S"
                 suffix: qsTr("px")
                 minimum: 0
@@ -282,7 +282,7 @@ PanelSection {
             }
 
             RowLayout {
-                visible: !entryMenu.isText && !entryMenu.isImage
+                visible: !entryMenu.isImage
                 Layout.fillWidth: true
                 spacing: 8
 
@@ -312,7 +312,7 @@ PanelSection {
             }
 
             Text {
-                visible: !entryMenu.isText && !entryMenu.isImage
+                visible: !entryMenu.isImage
                 Layout.fillWidth: true
                 text: qsTr("Dash style")
                 font.pixelSize: 11
@@ -320,7 +320,7 @@ PanelSection {
             }
 
             RowLayout {
-                visible: !entryMenu.isText && !entryMenu.isImage
+                visible: !entryMenu.isImage
                 Layout.fillWidth: true
                 spacing: 8
 
@@ -346,7 +346,7 @@ PanelSection {
             }
 
             RowLayout {
-                visible: !entryMenu.isText && !entryMenu.isImage && entryMenu.current && !entryMenu.current.mixedDash && entryMenu.isDashed
+                visible: !entryMenu.isImage && entryMenu.current && !entryMenu.current.mixedDash && entryMenu.isDashed
                 Layout.fillWidth: true
                 spacing: 8
 

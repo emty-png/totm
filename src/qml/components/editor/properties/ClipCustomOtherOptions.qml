@@ -108,6 +108,47 @@ ColumnLayout {
         }
     }
 
+    // Fade toggle: instant cut by default (duration/easing hidden
+    // in ClipTimingOptions); when on, the clip crossfades opacity
+    // across its own duration/easing while staying visible mid-span.
+    RowLayout {
+        visible: section.preset === "customHide"
+        Layout.fillWidth: true
+        spacing: 8
+
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Fade")
+            font.pixelSize: 12
+            color: AppTheme.foreground
+        }
+
+        Rectangle {
+            Layout.preferredWidth: 38
+            Layout.preferredHeight: 22
+            radius: AppTheme.radiusLarge
+            color: section.opts.fade === true ? AppTheme.foreground : AppTheme.surface
+            border.width: 1
+            border.color: section.opts.fade === true ? AppTheme.foreground : AppTheme.fieldBorder
+
+            Rectangle {
+                x: section.opts.fade === true ? parent.width - width - 3 : 3
+                y: 3
+                width: 16
+                height: 16
+                radius: AppTheme.radiusMedium
+                color: section.opts.fade === true ? AppTheme.background : AppTheme.muted
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: section.setOption("fade", !(section.opts.fade === true))
+            }
+        }
+    }
+
     Text {
         visible: section.preset === "customFlip"
         text: qsTr("Axis")

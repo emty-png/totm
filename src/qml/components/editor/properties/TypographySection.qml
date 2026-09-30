@@ -2,51 +2,71 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Typography editors for text shapes: family, weight, size, line
-// height (Auto or factor), letter spacing (percent of size) and full
-// alignment (horizontal + vertical). Hidden unless every selected leaf
-// is text; mixed selections keep the shared sections only.
+// Typography editors for text shapes: family, weight, size, style
+// (italic/underline/strike/caps), line height (Auto or factor),
+// letter spacing (percent of size), stroke join and full alignment
+// (horizontal + vertical). Hidden unless every selected leaf is text;
+// mixed selections keep the shared sections only. Families enumerate
+// installed system fonts at runtime plus bundled Inter; curated names
+// stay pinned on top when installed, with sane fallback otherwise.
 PanelSection {
     id: section
 
     required property var snapshot
 
-    // Curated cross-platform families (plain names so fallback stays
-    // sane where one is missing). Weights map to QML Font weights.
-    property var families: [
-        {
-            id: "Inter",
-            name: "Inter"
-        },
-        {
-            id: "Arial",
-            name: "Arial"
-        },
-        {
-            id: "Helvetica",
-            name: "Helvetica"
-        },
-        {
-            id: "Georgia",
-            name: "Georgia"
-        },
-        {
-            id: "Times New Roman",
-            name: "Times New Roman"
-        },
-        {
-            id: "Courier New",
-            name: "Courier New"
-        },
-        {
-            id: "Verdana",
-            name: "Verdana"
-        },
-        {
-            id: "Trebuchet MS",
-            name: "Trebuchet MS"
+    // Curated cross-platform families pinned first (only when actually
+    // installed: bundled Inter always is), then every installed family.
+    // Reading importedFonts keeps the list live across installs: it
+    // notifies on appearanceChanged, which importFont emits per file.
+    readonly property var families: {
+        var refresh = SettingsStore.importedFonts;
+        var pinned = ["Inter", "Arial", "Helvetica", "Georgia", "Times New Roman", "Courier New", "Verdana", "Trebuchet MS"];
+        var seen = {};
+        var out = [];
+        for (var i = 0; i < pinned.length; i++) {
+            if (!SettingsStore.isFontInstalled(pinned[i]))
+                continue;
+            seen[pinned[i]] = true;
+            out.push({
+                id: pinned[i],
+                name: pinned[i]
+            });
         }
-    ]
+        var sys = [];
+        try {
+            sys = SettingsStore.importedFontFamilies() || [];
+        } catch (e) {
+            sys = [];
+        }
+        // C++ QStringList arrives as array-like; copy by length like radii.
+        if (sys && typeof sys.length === "number") {
+            var extra = [];
+            for (var j = 0; j < sys.length; j++) {
+                var f = String(sys[j]);
+                if (!f || seen[f])
+                    continue;
+                seen[f] = true;
+                extra.push({
+                    id: f,
+                    name: f
+                });
+            }
+            extra.sort((a, b) => a.id.localeCompare(b.id));
+            out = out.concat(extra);
+        }
+        // Live family outside the list (e.g. removed font) still names
+        // itself instead of falling back to the first preset.
+        var cur = "";
+        try {
+            cur = String(section.snapshot.commonOf("fontFamily").value || "");
+        } catch (e) {}
+        if (cur && !seen[cur])
+            out.push({
+                id: cur,
+                name: cur
+            });
+        return out;
+    }
     property var weights: [
         {
             id: "400",
@@ -106,6 +126,7 @@ PanelSection {
         PanelDropdown {
             options: section.families
             currentId: String(section.snapshot.commonOf("fontFamily").value)
+            searchable: true
             onPicked: id => section.commit("fontFamily", id)
         }
     }
@@ -241,6 +262,92 @@ PanelSection {
         spacing: 4
 
         Text {
+            text: qsTr("Style")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("I")
+                active: section.boolIs("fontItalic", true)
+                onClicked: section.commit("fontItalic", !section.boolIs("fontItalic", true))
+            }
+
+            SegmentedOption {
+                label: qsTr("U")
+                active: section.boolIs("fontUnderline", true)
+                onClicked: section.commit("fontUnderline", !section.boolIs("fontUnderline", true))
+            }
+
+            SegmentedOption {
+                label: qsTr("S")
+                active: section.boolIs("fontStrike", true)
+                onClicked: section.commit("fontStrike", !section.boolIs("fontStrike", true))
+            }
+        }
+
+        RowLayout {
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Aa")
+                active: section.alignIs("fontCaps", "none")
+                onClicked: section.commit("fontCaps", "none")
+            }
+
+            SegmentedOption {
+                label: qsTr("AA")
+                active: section.alignIs("fontCaps", "upper")
+                onClicked: section.commit("fontCaps", "upper")
+            }
+
+            SegmentedOption {
+                label: qsTr("aa")
+                active: section.alignIs("fontCaps", "lower")
+                onClicked: section.commit("fontCaps", "lower")
+            }
+        }
+    }
+
+    ColumnLayout {
+        spacing: 4
+
+        Text {
+            text: qsTr("Stroke join")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Round")
+                active: section.alignIs("strokeJoin", "round")
+                onClicked: section.commit("strokeJoin", "round")
+            }
+
+            SegmentedOption {
+                label: qsTr("Bevel")
+                active: section.alignIs("strokeJoin", "bevel")
+                onClicked: section.commit("strokeJoin", "bevel")
+            }
+
+            SegmentedOption {
+                label: qsTr("Miter")
+                active: section.alignIs("strokeJoin", "miter")
+                onClicked: section.commit("strokeJoin", "miter")
+            }
+        }
+    }
+
+    ColumnLayout {
+        spacing: 4
+
+        Text {
             text: qsTr("Alignment")
             font.pixelSize: 11
             color: AppTheme.muted
@@ -312,12 +419,31 @@ PanelSection {
 
     // Custom weight commit: clamp to the Qt 1..1000 scale, then snap to
     // the closest weight the current family actually ships (enumerated
-    // from QFontDatabase styles). Mixed families and unknown families
-    // keep the exact value and let Qt approximate the glyphs.
+    // from QFontDatabase styles). Variable families skip snapping: they
+    // interpolate the wght axis at render, so collapsing to the default
+    // instance would corrupt the stored value. Mixed families and
+    // unknown families keep the exact value and let Qt approximate.
+    function isVariableFamily(name) {
+        var list = [];
+        try {
+            list = SettingsStore.fontCatalog() || [];
+        } catch (e) {
+            list = [];
+        }
+        for (var i = 0; i < list.length; i++) {
+            var e = list[i] || {};
+            if (String(e.family || "") === String(name || ""))
+                return e.variable === true;
+        }
+        return false;
+    }
+
     function nearestWeight(v) {
         var want = Math.min(1000, Math.max(1, Math.round(Number(v) || 400)));
         var fam = section.snapshot.commonOf("fontFamily");
         if (fam.mixed)
+            return want;
+        if (section.isVariableFamily(fam.value))
             return want;
         var list = [];
         try {
@@ -358,5 +484,10 @@ PanelSection {
     function alignIs(role, want) {
         var c = section.snapshot.commonOf(role);
         return !c.mixed && c.value === want;
+    }
+
+    function boolIs(role, want) {
+        var c = section.snapshot.commonOf(role);
+        return !c.mixed && (c.value === want || c.value === (want ? 1 : 0));
     }
 }

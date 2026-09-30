@@ -490,12 +490,26 @@ void paintText(QPainter &pt, const QVariantMap &m, double x, double y, double w,
     tm[QStringLiteral("boxW")] = num(m, "w");
     tm[QStringLiteral("boxH")] = num(m, "h");
     tm[QStringLiteral("outlinePx")] = style.maxStrokeWidth() > 0.0 ? style.maxStrokeWidth() : 0.0;
+    tm[QStringLiteral("italic")] = m.value(QStringLiteral("fontItalic"), false).toBool();
+    tm[QStringLiteral("underline")] = m.value(QStringLiteral("fontUnderline"), false).toBool();
+    tm[QStringLiteral("strike")] = m.value(QStringLiteral("fontStrike"), false).toBool();
+    tm[QStringLiteral("join")] = str(m, "strokeJoin", QStringLiteral("round"));
+    tm[QStringLiteral("caps")] = str(m, "fontCaps", QStringLiteral("none"));
+    tm[QStringLiteral("runs")] = m.value(QStringLiteral("textRuns")).toList();
+    const QVariantMap fxm = m.value(QStringLiteral("textFx")).toMap();
+    tm[QStringLiteral("fx")] = fxm.value(QStringLiteral("fx"), false).toBool();
+    tm[QStringLiteral("fxReveal")] = fxm.value(QStringLiteral("fxReveal"), 1.0).toDouble();
+    tm[QStringLiteral("fxStagger")] = fxm.value(QStringLiteral("fxStagger"), 0.0).toDouble();
+    tm[QStringLiteral("fxRise")] = fxm.value(QStringLiteral("fxRise"), 0.0).toDouble();
+    tm[QStringLiteral("fxHighlight")] = fxm.value(QStringLiteral("fxHighlight")).toString();
+    tm[QStringLiteral("fxSweep")] = fxm.value(QStringLiteral("fxSweep"), false).toBool();
+    tm[QStringLiteral("fxUnit")] = fxm.value(QStringLiteral("fxUnit"), QStringLiteral("letters")).toString();
     const Effects::TextOpts text = Effects::TextOpts::fromMap(tm);
     Effects::paintTextLeaf(&pt, QRectF(x, y, w, h), text, style, shadows, glows, layerBlur, s, &sharedBlurCache());
     // Grain confined to the glyphs: ghost the coverage, keep dots
     // where the ghost is opaque (preview masks its tile the same way).
     if (grain.enabled && grain.amount > 0.001) {
-        const QImage ghost = Effects::textGhost(text, w, h, s, false);
+        const QImage ghost = Effects::textGhost(text, w, h, s, style.maxStrokeWidth() > 0.01);
         QImage dots = Effects::grainDots(ghost.size(), qMax(1.0, grain.size * s),
             Effects::grainSeed(uid, frameNo), grain.amount);
         {
@@ -631,8 +645,7 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
     const Effects::Blur layerBlur = Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap());
     const Effects::Blur backgroundBlur = Effects::Blur::fromMap(m.value(QStringLiteral("backgroundBlur")).toMap());
     const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
-    const bool useBackground = backgroundBlur.enabled && backgroundBlur.radius > 0.01
-        && shapeType != QLatin1String("text");
+    const bool useBackground = backgroundBlur.enabled && backgroundBlur.radius > 0.01;
     const Effects::Grain grain = Effects::Grain::fromMap(m.value(QStringLiteral("grain")).toMap());
     const bool useGrain = grain.enabled && grain.amount > 0.001;
 
@@ -646,8 +659,33 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
 
     if (shapeType == QLatin1String("text")) {
         // Glyph stack through the shared painter: real inner bands,
-        // stacked fills, stroke rings and whole-stack layer blur,
-        // identical to the canvas preview by construction.
+        // stacked fills, real vector strokes and whole-stack layer blur,
+        // identical to the canvas preview by construction. Background blur
+        // samples the frame so far, glyph-masked like the canvas rigMask.
+        if (useBackground) {
+            QVariantMap tm;
+            tm[QStringLiteral("content")] = str(m, "textContent");
+            tm[QStringLiteral("family")] = str(m, "fontFamily", QStringLiteral("Inter"));
+            tm[QStringLiteral("weight")] = m.value(QStringLiteral("fontWeight"), 400).toInt();
+            tm[QStringLiteral("size")] = num(m, "fontSize", 16.0);
+            tm[QStringLiteral("spacing")] = num(m, "letterSpacing");
+            tm[QStringLiteral("halign")] = str(m, "hAlign", QStringLiteral("left"));
+            tm[QStringLiteral("valign")] = str(m, "vAlign", QStringLiteral("top"));
+            tm[QStringLiteral("autoSize")] = m.value(QStringLiteral("autoSize"), true).toBool();
+            tm[QStringLiteral("lineAuto")] = m.value(QStringLiteral("lineHeightAuto"), true).toBool();
+            tm[QStringLiteral("leading")] = num(m, "lineHeight", 1.2);
+            tm[QStringLiteral("boxW")] = num(m, "w");
+            tm[QStringLiteral("boxH")] = num(m, "h");
+            tm[QStringLiteral("italic")] = m.value(QStringLiteral("fontItalic"), false).toBool();
+            tm[QStringLiteral("underline")] = m.value(QStringLiteral("fontUnderline"), false).toBool();
+            tm[QStringLiteral("strike")] = m.value(QStringLiteral("fontStrike"), false).toBool();
+            tm[QStringLiteral("join")] = str(m, "strokeJoin", QStringLiteral("round"));
+            tm[QStringLiteral("caps")] = str(m, "fontCaps", QStringLiteral("none"));
+    tm[QStringLiteral("runs")] = m.value(QStringLiteral("textRuns")).toList();
+            const Effects::TextOpts bt = Effects::TextOpts::fromMap(tm);
+            const QPainterPath gclip = Effects::textGlyphPath(bt, scale, QRectF(x, y, w, h));
+            paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale, backgroundBlur.opacity, gclip);
+        }
         paintText(pt, m, x, y, w, h, scale, style, shadows, glows, layerBlur,
             useGrain ? grain : Effects::Grain(), uid, frameNo);
         pt.restore();
@@ -731,6 +769,11 @@ QImage maskSilhouette(const QVariantMap &mask, double ox, double oy, double scal
         tm[QStringLiteral("boxW")] = num(mask, "w");
         tm[QStringLiteral("boxH")] = num(mask, "h");
         tm[QStringLiteral("outlinePx")] = 0.0;
+        tm[QStringLiteral("italic")] = mask.value(QStringLiteral("fontItalic"), false).toBool();
+        tm[QStringLiteral("underline")] = mask.value(QStringLiteral("fontUnderline"), false).toBool();
+        tm[QStringLiteral("strike")] = mask.value(QStringLiteral("fontStrike"), false).toBool();
+        tm[QStringLiteral("caps")] = str(mask, "fontCaps", QStringLiteral("none"));
+        tm[QStringLiteral("runs")] = mask.value(QStringLiteral("textRuns")).toList();
         const Effects::TextOpts text = Effects::TextOpts::fromMap(tm);
         const QImage ghost = Effects::textGhost(text, w, h, scale, false);
         if (!ghost.isNull())

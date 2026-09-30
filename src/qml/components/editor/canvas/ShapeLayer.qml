@@ -180,12 +180,18 @@ Item {
             fontFamily: n.fontFamily || "Inter",
             fontWeight: n.fontWeight || 400,
             fontSize: n.fontSize || 16,
+            fontItalic: n.fontItalic === true,
+            fontUnderline: n.fontUnderline === true,
+            fontStrike: n.fontStrike === true,
+            fontCaps: n.fontCaps ?? "none",
+            textRuns: d.factory._copyRuns(n.textRuns),
             lineHeightAuto: n.lineHeightAuto !== false,
             lineHeight: n.lineHeight || 1.2,
             letterSpacing: n.letterSpacing || 0,
             hAlign: n.hAlign || "left",
             vAlign: n.vAlign || "top",
             autoSize: n.autoSize !== false,
+            textFx: n.textFx ?? null,
             penFill: n.penFill !== false,
             strokeCap: n.strokeCap || "round",
             strokeJoin: n.strokeJoin || "round",
@@ -357,12 +363,18 @@ Item {
             fontFamily: modelData.fontFamily || "Inter"
             fontWeight: modelData.fontWeight || 400
             fontSize: modelData.fontSize || 16
+            fontItalic: modelData.fontItalic === true
+            fontUnderline: modelData.fontUnderline === true
+            fontStrike: modelData.fontStrike === true
+            fontCaps: modelData.fontCaps || "none"
+            textRuns: modelData.textRuns ?? []
             lineHeightAuto: modelData.lineHeightAuto !== false
             lineHeight: modelData.lineHeight || 1.2
             letterSpacing: modelData.letterSpacing || 0
             hAlign: modelData.hAlign || "left"
             vAlign: modelData.vAlign || "top"
             autoSize: modelData.autoSize !== false
+            textFx: modelData.textFx ?? null
             isBooleanChild: layerRoot.isBooleanLeaf(modelData.uid)
         }
     }

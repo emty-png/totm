@@ -609,10 +609,19 @@ QtObject {
             // Keys hold {v}: absolute visibility, stepping within the
             // segment like every other bool key. Without keys, the
             // instant cut on entry reads from only at the exact start.
+            // With fade on, opacity crossfades from/to across the eased
+            // clock while the leaf stays visible mid-span.
             var hideKeys = genericKeysAt(o, p);
             if (hideKeys && (hideKeys.value || {}).v !== undefined)
                 out.visible = hideKeys.value.v === true;
-            else
+            else if (o.fade === true) {
+                var hideFromOp = (o.fromVisible !== false) ? 1 : 0;
+                var hideToOp = (o.toVisible === true) ? 1 : 0;
+                out.opacity = base.opacity * (hideFromOp + (hideToOp - hideFromOp) * e);
+                var hideFromV = o.fromVisible !== false;
+                var hideToV = o.toVisible === true;
+                out.visible = (e <= 0) ? hideFromV : ((e >= 1) ? hideToV : true);
+            } else
                 out.visible = p <= 0 ? o.fromVisible !== false : o.toVisible === true;
         } else if (preset === "customResize") {
             // Absolute box centered on the leaf's own center (shape-only
@@ -988,18 +997,39 @@ QtObject {
             // canvas preview and video export reveal the same chunks.
             // cps seeds the clip duration at apply time; sampling reads
             // eased progress only, so lane stretches just re-time.
+            // Karaoke/sweep options keep the full text and emit a textFx
+            // reveal map for the vector painter (staggered fade+rise per
+            // unit, highlight, moving band).
             var full = String(base.textContent !== undefined ? base.textContent : "");
             var norm = full.split("\r\n").join("\n").split("\r").join("\n");
             var unit = o.unit === "words" ? "words" : o.unit === "lines" ? "lines" : "letters";
             var sep = unit === "words" ? " " : "\n";
             var total = unit === "letters" ? norm.length : norm.split(sep).length;
-            var shown = 0;
             // Keys hold {frac}: an absolute reveal fraction, mode bypassed.
             var typeKeys = genericKeysAt(o, p);
-            if (total > 0) {
-                var frac = typeKeys && (typeKeys.value || {}).frac !== undefined ? Math.min(1, Math.max(0, Number(typeKeys.value.frac))) : (inward ? e : 1 - e);
-                shown = Math.min(total, Math.max(0, Math.floor(frac * total + 1e-6)));
+            var frac = inward ? e : 1 - e;
+            if (total > 0 && typeKeys && (typeKeys.value || {}).frac !== undefined)
+                frac = Math.min(1, Math.max(0, Number(typeKeys.value.frac)));
+            var stagger = Math.min(1, Math.max(0, Number(o.stagger) || 0));
+            var rise = Math.max(0, Number(o.rise) || 0);
+            var highlight = o.highlight !== undefined ? String(o.highlight) : "";
+            var sweep = o.sweep === true;
+            if (stagger > 0.001 || rise > 0.001 || highlight !== "" || sweep) {
+                out.textContent = norm;
+                out.textFx = {
+                    fx: true,
+                    fxReveal: Math.min(1, Math.max(0, frac)),
+                    fxStagger: stagger,
+                    fxRise: rise,
+                    fxHighlight: highlight,
+                    fxSweep: sweep,
+                    fxUnit: unit
+                };
+                return out;
             }
+            var shown = 0;
+            if (total > 0)
+                shown = Math.min(total, Math.max(0, Math.floor(frac * total + 1e-6)));
             var txt = "";
             if (unit === "letters")
                 txt = norm.substring(0, shown);
@@ -1326,6 +1356,8 @@ QtObject {
                 n.fontWeight = Math.min(1000, Math.max(1, Math.round(Number(ov.fontWeight) || 400)));
             if (ov.textContent !== undefined && n.shapeType === "text")
                 n.textContent = ov.textContent;
+            if (ov.textFx !== undefined && n.shapeType === "text")
+                n.textFx = ov.textFx;
             // Style/effect animation targets the top stack entry (index
             // 0); whole-stack animation rides index-namespaced keys.
             // Legacy single keys from presetOverlay fold onto entry 0 so

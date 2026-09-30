@@ -85,12 +85,25 @@ QtObject {
     property string fontFamily: "Inter"
     property int fontWeight: 400
     property real fontSize: 16
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrike: false
+    property string fontCaps: "none"
+    // Rich spans: [{start, len, bold, italic, underline, strike, color}]
+    // over textContent (UTF-16 offsets); empty = single box style.
+    // Run color ("") paints box fills; set colors paint solid instead.
+    // Bold maps to weight 700, otherwise the box weight applies.
+    property var textRuns: []
     property bool lineHeightAuto: true
     property real lineHeight: 1.2
     property real letterSpacing: 0
     property string hAlign: "left"
     property string vAlign: "top"
     property bool autoSize: true
+    // Sampler-driven karaoke/sweep reveal (plain data, backend-readable):
+    // {fx, fxReveal 0..1, fxStagger 0..1, fxRise px, fxHighlight color,
+    //  fxSweep bool, fxUnit letters|words|lines}. Null = full glyphs.
+    property var textFx: null
     // Local-space mirror flags: paint mirrors about the shape center,
     // geometry and bbox stay untouched.
     property bool flipH: false

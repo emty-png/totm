@@ -2,6 +2,7 @@ qt_add_executable(totm
     main.cpp
     "${PROJECT_SOURCE_DIR}/packaging/icons.qrc"
     "${PROJECT_SOURCE_DIR}/packaging/cursors.qrc"
+    "${PROJECT_SOURCE_DIR}/packaging/fonts.qrc"
     "${PROJECT_SOURCE_DIR}/packaging/official-plugins.qrc"
 )
 
@@ -56,6 +57,10 @@ qt_add_qml_module(totm
         backend/video/AnimSampler.cpp
         backend/video/AnimBridge.h
         backend/video/AnimBridge.cpp
+        backend/text/TextRuns.h
+        backend/text/TextRuns.cpp
+        backend/text/VariableFonts.h
+        backend/text/VariableFonts.cpp
         backend/video/FramePaint.h
         backend/video/FramePaint.cpp
         backend/export/ComponentExporter.h
@@ -133,7 +138,6 @@ qt_add_qml_module(totm
         qml/components/editor/canvas/ShapeLayer.qml
         qml/components/editor/canvas/CanvasOverlays.qml
         qml/components/editor/canvas/MeasurePill.qml
-        qml/components/editor/canvas/DrillBreadcrumb.qml
         # Layers
         qml/components/editor/layers/LayerHighlight.qml
         qml/components/editor/layers/LayerLeading.qml
@@ -291,6 +295,8 @@ qt_add_qml_module(totm
         qml/components/settings/GeneralExportSection.qml
         qml/components/settings/GeneralPerformanceSection.qml
         qml/components/settings/GeneralStorageSection.qml
+        qml/components/settings/GeneralFontsSection.qml
+        qml/components/settings/FontInstallerPopup.qml
         qml/components/settings/AppearanceThemeSection.qml
         qml/components/settings/AppearanceCanvasSection.qml
         qml/components/settings/AppearanceWindowSection.qml
@@ -324,6 +330,7 @@ target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/video
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/export
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/svg
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/text
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/plugins
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/crash
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/cursors
@@ -380,6 +387,7 @@ if(UNIX AND NOT APPLE)
             "${PROJECT_SOURCE_DIR}/src/docs/CREDITS.html"
             "${PROJECT_SOURCE_DIR}/src/docs/CONTRIBUTORS.html"
             "${PROJECT_SOURCE_DIR}/src/docs/CHANGELOG.html"
+            "${PROJECT_SOURCE_DIR}/src/fonts/inter/OFL.txt"
         DESTINATION "share/doc/totm"
     )
 endif()

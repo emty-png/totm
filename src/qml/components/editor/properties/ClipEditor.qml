@@ -316,12 +316,17 @@ ScrollView {
             }
         }
 
-        // Timing and easing.
+        // Timing and easing. Collapses entirely for instant hide/show
+        // (customHide with fade off), whose hidden rows would otherwise
+        // leave a titled but empty gap.
         PanelSection {
             width: parent.width
             title: qsTr("Animation")
+            visible: !timingOpts.isInstantHide()
 
             ClipTimingOptions {
+                id: timingOpts
+
                 Layout.fillWidth: true
                 doc: editor.doc
                 clipId: editor.clipId

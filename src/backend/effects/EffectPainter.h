@@ -146,6 +146,8 @@ struct Grain {
 // off the node (like PathOpts); the painter scales by `scale`.
 // autoSize boxes grow with content, fixed boxes wrap and clip; vAlign
 // parks fixed boxes top/middle/bottom. Plain data, backend-readable.
+// italic/underline/strike mirror QML Text; join picks the visible
+// stroke bends (round default); caps transforms content case.
 struct TextOpts {
     QString content;
     QString family = QStringLiteral("Inter");
@@ -160,6 +162,28 @@ struct TextOpts {
     double boxW = 10.0;
     double boxH = 10.0;
     double outlinePx = 1.0;
+    bool italic = false;
+    bool underline = false;
+    bool strike = false;
+    QString join = QStringLiteral("round");
+    QString caps = QStringLiteral("none");
+    // Karaoke/sweep reveal (sampler-driven, backend-readable plain data).
+    // fx off renders the full glyphs; fx on reveals units (letters/words/
+    // lines) with staggered fade+rise, optional highlight for revealed
+    // units and a moving sweep band. reveal 0..1 is the eased clip
+    // progress; stagger 0..1 overlaps units (0 sequential, 1 together).
+    bool fx = false;
+    double fxReveal = 1.0;
+    double fxStagger = 0.0;
+    double fxRise = 0.0;
+    QString fxHighlight;
+    bool fxSweep = false;
+    QString fxUnit = QStringLiteral("letters");
+    // Rich spans: [{start, len, bold, italic, underline, strike, color}]
+    // over content (UTF-16 offsets); empty = single box style. Run color
+    // ("") paints box fills; set colors paint solid instead. Bold maps
+    // to weight 700, otherwise the box weight applies.
+    QVariantList runs;
 
     static TextOpts fromMap(const QVariantMap &m);
 };
@@ -192,6 +216,20 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
 // Device px throughout (already scaled); clips fixed boxes like the
 // canvas, lets auto-size boxes overflow like the canvas.
 QImage textGhost(const TextOpts &text, double w, double h, double scale, bool withOutline);
+// Vector glyph outline in device coords at box.topLeft (fill silhouette
+// for stroking/filling: real center/inside/outside/dash/gradient strokes
+// via the shared vector pipeline, unlike the raster ring). Built from
+// QTextDocument glyph runs so wrap/align/leading match the raster exactly.
+QPainterPath textGlyphPath(const TextOpts &text, double scale, const QRectF &box);
+// Per-run glyph subsets (same builder as textGlyphPath, partitioned by
+// rich span for fills): path plus the run color when set (box fills
+// paint unset runs). Paths tile the content in document order.
+struct RunGlyphs {
+    QPainterPath path;
+    bool hasColor = false;
+    QColor color;
+};
+QList<RunGlyphs> textRunPaths(const TextOpts &text, double scale, const QRectF &box);
 // Effected text leaf: outer shadows/glows under the glyphs, fill (solid
 // or linear across the box), real inner bands, stroke ring on top, then
 // layer-blur mixes the whole stack. Same fixed order as vectors; grain
