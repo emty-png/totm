@@ -22,6 +22,25 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 * Clip loop modes — Once/Loop/Ping-pong is gone everywhere (timeline badges, Animation section row, gallery labels, presets, templates, saved data). Clips play once and hold their end state; saved `loop` fields are ignored on load and stripped on the next save/edit. Migration: `applyPreset`/`buildClip` drop the `loop` argument (now 8 args) and `setClipLoop`/`normalizeLoop`/`loopProgress` are removed — old 9-arg callers coerce stagger to 0, so update plugins/external QML.
 
+## [0.5.0] - 2026-09-30
+
+### Added
+
+* Bundled Inter 4.1 (OFL-1.1) as the UI and canvas default; the stored family applies before engine load and changes note restart-to-apply; `CREDITS.html` corrected to Inter.
+* Web font installer — General → Fonts offers 1826 curated OFL families with search, multi-select queue, 4-parallel downloads and per-family license copies; the editor picker lists installed families only with search and per-face previews.
+* Variable-font weight interpolation — `wght` axis driven at render in canvas, export, thumbnails and the inline editor instead of collapsing to one instance; weight snap skips variable families.
+* `customHide` fade toggle — duration/easing hide while off and return as the fade's own controls when on; instant clips collapse the Animation section.
+* Stroke-free new shapes — the Stroke section shows title + add until the user adds one.
+
+### Changed
+
+* Canvas hint pills use theme radius with shorter texts; font installer popup is a centered card list with scrollbar and Install/progress/Queued/Installed states.
+
+### Removed
+
+* Group drill breadcrumb (Up/Root pill) — `Esc` and layers remain the exits.
+* Inline text run toolbar — per-span styling stays via paste and the Typography panel.
+
 ## [0.4.0] - 2026-09-27
 
 ### Added

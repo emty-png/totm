@@ -194,7 +194,7 @@ Rectangle {
                     width: optionList.width
                     height: 30
                     radius: AppTheme.radiusSmall
-                    color: modelData.id === drop.currentId ? AppTheme.hover : optMouse.containsMouse || optMouse.pressed ? AppTheme.hover : "transparent"
+                    color: modelData.id === drop.currentId ? AppTheme.hover : optSearchMouse.containsMouse || optSearchMouse.pressed ? AppTheme.hover : "transparent"
 
                     Text {
                         anchors {
@@ -213,7 +213,7 @@ Rectangle {
                     }
 
                     MouseArea {
-                        id: optMouse
+                        id: optSearchMouse
 
                         anchors.fill: parent
                         hoverEnabled: true

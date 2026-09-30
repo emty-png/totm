@@ -89,8 +89,7 @@ Item {
             if (nextText === cur.textContent && textEditor.runsEqual(parsed.runs, cur.textRuns))
                 return;
             textEditor.editDoc.setShapeProp(textEditor.editingUid, "textContent", nextText);
-            textEditor.editDoc.setShapeProp(textEditor.editingUid, "textRuns",
-                TextRuns.normalizeRuns(nextText, parsed.runs));
+            textEditor.editDoc.setShapeProp(textEditor.editingUid, "textRuns", TextRuns.normalizeRuns(nextText, parsed.runs));
             var n = textEditor.editNode();
             if (n && n.autoSize) {
                 var m = textEditor.measureText(nextText, n.fontFamily, n.fontWeight, n.fontSize, n.letterSpacing, n.fontItalic === true);
