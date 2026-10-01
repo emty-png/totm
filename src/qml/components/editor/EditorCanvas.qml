@@ -60,8 +60,10 @@ Item {
 
     property bool altHeld: false
 
-    // True when any leaf has background blur enabled: gates the
-    // backdrop duplicate so non-frosted scenes skip the 2x CPU tax.
+    // True when any leaf or boolean group has background blur enabled:
+    // gates the backdrop duplicate so non-frosted scenes skip the 2x
+    // CPU tax. Group blur lives on the group node (never in leafList),
+    // so booleans scan separately.
     readonly property bool hasFrosted: {
         var d = canvas.doc;
         if (!d)
@@ -75,6 +77,15 @@ Item {
                 continue;
             var bb = n.backgroundBlur;
             if (bb && bb.enabled === true && Number(bb.radius) > 0)
+                return true;
+        }
+        var all = d._allNodes ? d._allNodes() : [];
+        for (var j = 0; j < all.length; j++) {
+            var g = all[j];
+            if (!g || g.kind !== "group" || g.boolOp === undefined || g.boolOp === "none")
+                continue;
+            var gbb = g.backgroundBlur;
+            if (gbb && gbb.enabled === true && Number(gbb.radius) > 0)
                 return true;
         }
         return false;

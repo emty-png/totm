@@ -30,6 +30,7 @@ class BooleanGroupItem : public QQuickPaintedItem
     Q_PROPERTY(QVariantMap layerBlur READ layerBlur WRITE setLayerBlur NOTIFY blurChanged)
     Q_PROPERTY(QVariantList glows READ glows WRITE setGlows NOTIFY glowChanged)
     Q_PROPERTY(QVariantMap grain READ grain WRITE setGrain NOTIFY grainChanged)
+    Q_PROPERTY(QVariantList masks READ masks WRITE setMasks NOTIFY contentChanged)
     Q_PROPERTY(int targetUid READ targetUid WRITE setTargetUid NOTIFY grainChanged)
     Q_PROPERTY(int grainFrame READ grainFrame WRITE setGrainFrame NOTIFY grainChanged)
     Q_PROPERTY(double pad READ pad NOTIFY padChanged)
@@ -59,6 +60,8 @@ public:
     void setGlows(const QVariantList &v);
     QVariantMap grain() const;
     void setGrain(const QVariantMap &v);
+    QVariantList masks() const;
+    void setMasks(const QVariantList &v);
     int targetUid() const;
     void setTargetUid(int v);
     int grainFrame() const;
@@ -88,6 +91,9 @@ private:
     QVariantMap m_layerBlur;
     QVariantList m_glows;
     QVariantMap m_grain;
+    // Group-level mask maps (same preview-map shape MaskLeafItem takes):
+    // empty means unmasked (fast direct paint below).
+    QVariantList m_masks;
     int m_targetUid = -1;
     int m_grainFrame = 0;
     double m_pad = 0.0;

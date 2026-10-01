@@ -2150,10 +2150,9 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
     // Live boolean groups: fold sampled children into one combined entry
     // at the topmost child position. Children animate first (above), the
     // combine follows, mirroring canvas preview (BooleanGroupItem over
-    // live previewMaps). Group style stays static (v1); masks on boolean
-    // content are out of scope and paint direct. Nested booleans are out
-    // of scope: an outer group whose leaves already folded keeps its
-    // remaining direct children only when 2+ survive.
+    // live previewMaps). Groups resolve bottom-up so nested booleans
+    // fold exactly once (inner entries feed the outer fold); degenerate
+    // groups (fewer than 1 paintable child) pass through untouched.
     {
         QMap<int, int> workPos;
         for (int i = 0; i < work.size(); ++i) {
@@ -2176,23 +2175,63 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
             const int guid = g.value(QStringLiteral("uid"), -1).toInt();
             if (guid < 0 || alreadyFolded(guid))
                 continue;
-            const QList<int> kids = ShapePath::descendantLeafUids(g);
+            // Direct children in scene order: sampled leaf entries plus
+            // already-folded inner boolean entries (innermost first above
+            // guarantees they exist). Unfolded subgroups (degenerate:
+            // fewer than 2 paintable children) splice their paintable
+            // leaves inline so nothing paints twice and nothing is lost.
             QVariantList sampled;
+            QList<int> drop;
             int at = work.size();
-            for (int uid : kids) {
-                if (!workPos.contains(uid))
-                    continue;
-                at = qMin(at, workPos.value(uid));
-                sampled.append(work.at(workPos.value(uid)));
-            }
-            if (sampled.size() < 2)
+            std::function<void(const QVariantMap &)> gather = [&](const QVariantMap &parent) {
+                for (const QVariant &cv : parent.value(QStringLiteral("children")).toList()) {
+                    const QVariantMap c = cv.toMap();
+                    if (c.isEmpty() || c.value(QStringLiteral("isMask"), false).toBool())
+                        continue;
+                    const int cuid = c.value(QStringLiteral("uid"), -1).toInt();
+                    if (c.value(QStringLiteral("kind")).toString() != QLatin1String("group")) {
+                        if (cuid >= 0 && workPos.contains(cuid)) {
+                            at = qMin(at, workPos.value(cuid));
+                            sampled.append(work.at(workPos.value(cuid)));
+                            drop.append(workPos.value(cuid));
+                        }
+                        continue;
+                    }
+                    if (ShapePath::isBooleanGroupMap(c) && cuid >= 0 && workPos.contains(cuid)
+                        && (work.at(workPos.value(cuid)).value(QStringLiteral("kind")).toString()
+                            == QLatin1String("boolean"))) {
+                        at = qMin(at, workPos.value(cuid));
+                        sampled.append(work.at(workPos.value(cuid)));
+                        drop.append(workPos.value(cuid));
+                        continue;
+                    }
+                    gather(c);
+                }
+            };
+            gather(g);
+            // A lone surviving child still folds (paints through the
+            // group style on both sides); only a fully empty combine
+            // passes through to nothing.
+            if (sampled.isEmpty())
                 continue;
             const QString op = ShapePath::normOp(g.value(QStringLiteral("boolOp"), QStringLiteral("union")).toString());
             if (!ShapePath::isOp(op))
                 continue;
             const QPainterPath combined = ShapePath::combineNodes(op, sampled);
-            if (combined.isEmpty())
+            if (combined.isEmpty()) {
+                // Empty fold paints nothing (canvas agrees): drop the
+                // consumed children so they don't paint as loose leaves.
+                std::sort(drop.begin(), drop.end(), std::greater<int>());
+                for (int di : drop)
+                    work.removeAt(di);
+                workPos.clear();
+                for (int i = 0; i < work.size(); ++i) {
+                    const int uid = work.at(i).value(QStringLiteral("uid"), -1).toInt();
+                    if (uid >= 0 && !workPos.contains(uid))
+                        workPos[uid] = i;
+                }
                 continue;
+            }
             const QRectF bb = combined.boundingRect();
             // Style rides the writeback-resolved work entry when the
             // group itself is animated, else the static scene map.
@@ -2211,11 +2250,6 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
             entry[QStringLiteral("flipV")] = false;
             entry[QStringLiteral("visible")]
                 = g.value(QStringLiteral("visible"), true).toBool() && chainVisible(roots, guid);
-            QList<int> drop;
-            for (int uid : kids) {
-                if (workPos.contains(uid))
-                    drop.append(workPos.value(uid));
-            }
             std::sort(drop.begin(), drop.end(), std::greater<int>());
             for (int di : drop)
                 work.removeAt(di);
@@ -2370,7 +2404,11 @@ QMap<int, QList<int>> maskMapForWork(const QVariantMap &scene, const QList<QVari
     QList<int> allUids = nodeByUid.keys();
     for (int uid : allUids) {
         const QVariantMap n = nodeByUid.value(uid);
-        if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+        // Plain groups paint through their children (each leaf carries
+        // its own masks); boolean groups paint one silhouette, so they
+        // take group-level masks like a leaf.
+        if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group")
+            && !ShapePath::isBooleanGroupMap(n))
             continue;
         if (isMaskMap(n))
             continue;

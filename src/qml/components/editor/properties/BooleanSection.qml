@@ -3,8 +3,9 @@ import QtQuick.Layouts
 import Totm
 
 // Boolean group editors: op switching plus release. Visible only for a
-// single selected boolean group; style comes from the donor leaf at
-// combine time and stays fixed here (release + recombine to restyle).
+// single selected boolean group. Style stays live: Fill, Stroke,
+// Appearance and Effects sections edit the group's own stacks directly
+// (seeded from the bottommost donor at combine time).
 PanelSection {
     id: section
 

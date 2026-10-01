@@ -275,6 +275,46 @@ uint32_t grainSeed(int uid, int frameNo)
     return uint32_t(uid) * 73856093u ^ uint32_t(frameNo) * 19349663u;
 }
 
+TextOpts textOptsForNode(const QVariantMap &m)
+{
+    // Same mapping (and same fallbacks) as the leaf painters: missing
+    // or corrupt numerics fall back like Anims::num, boxW/H clamp in
+    // fromMap, so silhouettes match painted glyphs exactly.
+    auto num = [&](const char *key, double fallback) {
+        bool ok = false;
+        const double d = m.value(QString::fromLatin1(key)).toDouble(&ok);
+        return ok ? d : fallback;
+    };
+    QVariantMap tm;
+    tm[QStringLiteral("content")] = m.value(QStringLiteral("textContent")).toString();
+    tm[QStringLiteral("family")] = m.value(QStringLiteral("fontFamily"), QStringLiteral("Inter")).toString();
+    tm[QStringLiteral("weight")] = m.value(QStringLiteral("fontWeight"), 400).toInt();
+    tm[QStringLiteral("size")] = num("fontSize", 16.0);
+    tm[QStringLiteral("spacing")] = num("letterSpacing", 0.0);
+    tm[QStringLiteral("halign")] = m.value(QStringLiteral("hAlign"), QStringLiteral("left")).toString();
+    tm[QStringLiteral("valign")] = m.value(QStringLiteral("vAlign"), QStringLiteral("top")).toString();
+    tm[QStringLiteral("autoSize")] = m.value(QStringLiteral("autoSize"), true).toBool();
+    tm[QStringLiteral("lineAuto")] = m.value(QStringLiteral("lineHeightAuto"), true).toBool();
+    tm[QStringLiteral("leading")] = num("lineHeight", 1.2);
+    tm[QStringLiteral("boxW")] = num("w", 0.0);
+    tm[QStringLiteral("boxH")] = num("h", 0.0);
+    tm[QStringLiteral("italic")] = m.value(QStringLiteral("fontItalic"), false).toBool();
+    tm[QStringLiteral("underline")] = m.value(QStringLiteral("fontUnderline"), false).toBool();
+    tm[QStringLiteral("strike")] = m.value(QStringLiteral("fontStrike"), false).toBool();
+    tm[QStringLiteral("join")] = m.value(QStringLiteral("strokeJoin"), QStringLiteral("round")).toString();
+    tm[QStringLiteral("caps")] = m.value(QStringLiteral("fontCaps"), QStringLiteral("none")).toString();
+    tm[QStringLiteral("runs")] = m.value(QStringLiteral("textRuns")).toList();
+    const QVariantMap fxm = m.value(QStringLiteral("textFx")).toMap();
+    tm[QStringLiteral("fx")] = fxm.value(QStringLiteral("fx"), false).toBool();
+    tm[QStringLiteral("fxReveal")] = fxm.value(QStringLiteral("fxReveal"), 1.0).toDouble();
+    tm[QStringLiteral("fxStagger")] = fxm.value(QStringLiteral("fxStagger"), 0.0).toDouble();
+    tm[QStringLiteral("fxRise")] = fxm.value(QStringLiteral("fxRise"), 0.0).toDouble();
+    tm[QStringLiteral("fxHighlight")] = fxm.value(QStringLiteral("fxHighlight")).toString();
+    tm[QStringLiteral("fxSweep")] = fxm.value(QStringLiteral("fxSweep"), false).toBool();
+    tm[QStringLiteral("fxUnit")] = fxm.value(QStringLiteral("fxUnit"), QStringLiteral("letters")).toString();
+    return TextOpts::fromMap(tm);
+}
+
 uint32_t grainHash(uint32_t cx, uint32_t cy, uint32_t seed)
 {
     uint32_t h = cx * 374761393u + cy * 668265263u + seed;

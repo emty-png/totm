@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QImage>
 #include <QPainterPath>
 #include <QRectF>
 #include <QString>
@@ -15,9 +16,23 @@
 // path; callers combine in world space and read boundingRect for the group.
 namespace ShapePath {
 
-// Single node silhouette in world coords. Returns empty when the node is
-// not a combinable vector (text/image/mask/empty pen).
+// Single node silhouette in world coords. Groups resolve recursively
+// (own op, union for plain subgroups, masks excluded); text and image
+// leaves resolve through their providers. Empty for masks and for
+// vector leaves with no silhouette.
 QPainterPath nodeToWorldPath(const QVariantMap &node);
+
+// Silhouette providers for non-vector children (production booleans).
+// Text builds its glyph outline (empty content yields empty); images
+// trace their alpha channel (missing blobs fall back to the node box
+// so broken imports never vanish silently).
+QPainterPath textNodeToPath(const QVariantMap &node);
+QPainterPath imageNodeToPath(const QVariantMap &node);
+// Marching-squares alpha trace at <= maxDim px: one polygon per
+// connected run, merged into a single path, returned in tile px
+// (callers map to their own box). Empty when nothing crosses
+// the 50% alpha threshold.
+QPainterPath traceAlpha(const QImage &img, double maxDim = 256.0);
 
 // Fold helpers over world paths. Empty input yields empty.
 QPainterPath combinePaths(const QString &op, const QList<QPainterPath> &paths);

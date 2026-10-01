@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Effects
+import QtQuick.Shapes
 import Totm
 
 // Scene contents for one canvas. Positions by pan offset and scales
@@ -52,7 +54,7 @@ Item {
         var all = d._allNodes();
         for (var i = 0; i < all.length; i++) {
             var n = all[i];
-            if (n && n.kind === "group" && n.boolOp !== undefined && n.boolOp !== "none")
+            if (n && n.kind === "group" && n.boolOp !== undefined && n.boolOp !== "none" && !layerRoot.isBooleanLeaf(n.uid))
                 out.push(n);
         }
         return out;
@@ -75,7 +77,11 @@ Item {
         return ids;
     }
 
-    // Live child snapshot maps for one boolean group uid.
+    // Live child snapshot maps for one boolean group uid, preserving
+    // nested group structure (same direct-children order as export):
+    // nested groups recurse with their own op so the C++ fold resolves
+    // bottom-up exactly like the sampler. Plain subgroups nest as-is
+    // (union at sample time); masks never contribute geometry.
     function booleanChildrenMaps(uid) {
         var d = layerRoot.doc;
         if (!d)
@@ -84,10 +90,33 @@ Item {
         var g = d.findNode(uid);
         if (!g || g.kind !== "group")
             return [];
+        return layerRoot.booleanChildMaps(g);
+    }
+
+    function booleanChildMaps(g) {
+        var d = layerRoot.doc;
         var out = [];
-        var leaves = d._leavesUnder(g);
-        for (var i = 0; i < leaves.length; i++)
-            out.push(layerRoot.previewMap(leaves[i]));
+        var kids = (g && g.children) || [];
+        for (var i = 0; i < kids.length; i++) {
+            var c = kids[i];
+            if (!c || c.isMask === true)
+                continue;
+            if (c.kind === "group") {
+                var sub = layerRoot.booleanChildMaps(c);
+                if (sub.length === 0)
+                    continue;
+                out.push({
+                    uid: c.uid,
+                    kind: "group",
+                    boolOp: c.boolOp,
+                    visible: c.visible !== false,
+                    children: sub
+                });
+            } else {
+                var leaf = d._find(c.uid);
+                out.push(layerRoot.previewMap(leaf ? leaf.node : c));
+            }
+        }
         return out;
     }
 
@@ -473,6 +502,12 @@ Item {
             readonly property var groupNode: layerRoot.doc ? layerRoot.doc.findNode(groupUid) : null
             readonly property var kidMaps: layerRoot.booleanChildrenMaps(groupUid)
             readonly property var boundRect: layerRoot.booleanBounds(groupUid)
+            // Frosted glass over the combined silhouette (mirrors the
+            // ShapeItem rig): scene-sized MultiEffect masked by the
+            // combined path so corners/curves cut cleanly.
+            readonly property bool hasBb: groupNode && groupNode.backgroundBlur && groupNode.backgroundBlur.enabled === true && Number(groupNode.backgroundBlur.radius) > 0
+            readonly property real sceneW: layerRoot.doc ? Number(layerRoot.doc.sceneWidth) || 0 : 0
+            readonly property real sceneH: layerRoot.doc ? Number(layerRoot.doc.sceneHeight) || 0 : 0
 
             x: (boundRect ? boundRect.x : 0) - pad
             y: (boundRect ? boundRect.y : 0) - pad
@@ -482,7 +517,13 @@ Item {
             visible: {
                 if (layerRoot.doc)
                     layerRoot.doc.rev;
-                return groupNode ? layerRoot.doc.isEffectivelyVisible(groupNode) : false;
+                if (!groupNode || !layerRoot.doc.isEffectivelyVisible(groupNode))
+                    return false;
+                // Backdrop capture hides blurred groups so no sharp copy
+                // leaks into the frosted sample (ShapeItem rule).
+                if (layerRoot.hideBlurShapes && hasBb)
+                    return false;
+                return true;
             }
             opacity: groupNode ? (groupNode.opacity ?? 1) : 1
             childMaps: kidMaps
@@ -495,8 +536,74 @@ Item {
             layerBlur: groupNode ? groupNode.layerBlur : null
             glows: groupNode ? (groupNode.glows ?? []) : []
             grain: groupNode ? groupNode.grain : null
+            masks: layerRoot.maskMapsFor(groupUid)
             targetUid: groupUid
             grainFrame: layerRoot.grainFrame
+
+            // Frosted glass under the combined silhouette (mirrors the
+            // ShapeItem rig): scene-sized MultiEffect masked by the
+            // combined path so the blur never leaks past its edges.
+            Item {
+                z: -1
+                anchors.fill: parent
+                visible: hasBb && layerRoot.backdropItem !== null && !layerRoot.hideBlurShapes
+                clip: true
+
+                Item {
+                    x: -((boundRect ? boundRect.x : 0) - pad)
+                    y: -((boundRect ? boundRect.y : 0) - pad)
+                    width: sceneW
+                    height: sceneH
+
+                    MultiEffect {
+                        anchors.fill: parent
+                        source: layerRoot.backdropItem
+                        autoPaddingEnabled: false
+                        blurEnabled: true
+                        blurMax: 64
+                        blur: Math.min(1, Math.max(0, Number((groupNode.backgroundBlur ?? {}).radius || 0) / 64))
+                        opacity: Math.min(1, Math.max(0, Number((groupNode.backgroundBlur ?? {}).opacity ?? 0.7)))
+                        maskEnabled: true
+                        maskSource: boolRigMask
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 1.0
+                    }
+
+                    Item {
+                        id: boolRigMask
+
+                        anchors.fill: parent
+                        visible: false
+                        layer.enabled: true
+                        layer.smooth: true
+
+                        Item {
+                            x: boundRect ? boundRect.x : 0
+                            y: boundRect ? boundRect.y : 0
+                            width: Math.max(1, boundRect ? boundRect.width : 1)
+                            height: Math.max(1, boundRect ? boundRect.height : 1)
+
+                            Shape {
+                                anchors.fill: parent
+                                antialiasing: true
+                                transform: Translate {
+                                    x: -(boundRect ? boundRect.x : 0)
+                                    y: -(boundRect ? boundRect.y : 0)
+                                }
+
+                                ShapePath {
+                                    fillColor: "white"
+                                    strokeColor: "transparent"
+
+                                    PathSvg {
+                                        path: boolGeo.combineSvg(kidMaps, groupNode ? (groupNode.boolOp || "union") : "union")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

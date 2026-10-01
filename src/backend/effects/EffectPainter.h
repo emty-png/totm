@@ -210,6 +210,11 @@ uint32_t grainHash(uint32_t cx, uint32_t cy, uint32_t seed);
 void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathOpts &opts,
     const Style &st, const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur,
     double scale, QCache<QByteArray, QImage> *maskCache = nullptr);
+// Node-map adapter for TextOpts (same key mapping the leaf painters
+// use): lets boolean combining reuse the shared glyph builder exactly
+// instead of maintaining a parallel mapping. outlinePx stays 0 (fill
+// coverage); stroke-ring callers override after.
+TextOpts textOptsForNode(const QVariantMap &m);
 // White glyph coverage for one text box (fill silhouette plus the
 // outline ring unioned in when outlinePx > 0), laid out by the shared
 // QTextDocument builder so preview and export shape glyphs alike.

@@ -1,9 +1,11 @@
 import QtQuick
 
-// Live boolean groups over vector shapes. A boolean group keeps its
-// children editable (drill-in) and paints one combined silhouette with
-// the group's own style (see ShapePath). Plain groups stay untouched:
-// boolOp "none" never paints. Operates on the owner via `doc`.
+// Live boolean groups over shapes, text, images and nested booleans.
+// A boolean group keeps its children editable (drill-in) and paints
+// one combined silhouette with the group's own style (see ShapePath),
+// live-editable in Fill/Stroke/Appearance/Effects after combine.
+// Plain groups stay untouched: boolOp "none" never paints. Operates
+// on the owner via `doc`.
 QtObject {
     id: docBoolean
     required property var doc
@@ -18,17 +20,30 @@ QtObject {
     }
 
     function isCombinableShape(node) {
-        if (!node || node.kind !== "shape")
+        if (!node || doc.isEffectivelyLocked(node))
+            return false;
+        // Boolean groups nest as operands (their silhouette feeds the
+        // outer fold); hidden subtrees contribute nothing, so they stay
+        // out with the same rule as hidden leaves below.
+        if (node.kind === "group")
+            return isBooleanGroup(node) && doc.isEffectivelyVisible(node);
+        if (node.kind !== "shape")
             return false;
         if (node.isMask === true)
             return false;
-        if (doc.isEffectivelyLocked(node))
+        if (!doc.isEffectivelyVisible(node))
             return false;
         var t = node.shapeType;
-        if (t !== "rectangle" && t !== "ellipse" && t !== "triangle" && t !== "star" && t !== "pen")
+        if (t !== "rectangle" && t !== "ellipse" && t !== "triangle" && t !== "star" && t !== "pen" && t !== "text" && t !== "image")
             return false;
         if (!(node.w > 0.01) || !(node.h > 0.01))
             return false;
+        // Empty text contributes no glyphs; over-long runs exceed the
+        // combine cap (see kMaxCombineGlyphs) and stay out as well.
+        if (t === "text") {
+            var len = String(node.textContent ?? "").length;
+            return len > 0 && len <= 256;
+        }
         if (t === "pen") {
             var subs = node.pathData || [];
             for (var i = 0; i < subs.length; i++) {
@@ -101,6 +116,7 @@ QtObject {
         var norm = String(op ?? "union").toLowerCase();
         if (!isOp(norm) || !canCombine())
             return -1;
+        doc.history.checkpoint();
         var tops = [];
         var every = doc.selectedTops();
         for (var i = 0; i < every.length; i++) {
@@ -178,7 +194,9 @@ QtObject {
             doc._setChildren(parentUid, dest);
         }
         group.boolOp = norm;
-        if (donor && donor.kind === "shape")
+        // Bottommost donor seeds the style (shape or boolean-group
+        // stacks alike); live edits land on the group afterwards.
+        if (donor && (donor.kind === "shape" || isBooleanGroup(donor)))
             _applyStyleFrom(group, donor);
         doc.clearSelectionSilent();
         group.selected = true;
@@ -194,6 +212,9 @@ QtObject {
         var n = doc.findNode(uid);
         if (!n || n.kind !== "group" || doc.isEffectivelyLocked(n))
             return false;
+        if (n.boolOp === norm)
+            return true;
+        doc.history.checkpoint();
         n.boolOp = norm;
         doc._refreshStructural();
         return true;
@@ -208,6 +229,7 @@ QtObject {
         }
         if (targets.length === 0)
             return;
+        doc.history.checkpoint();
         // Deepest-first so indices stay valid (same rule as ungroup).
         var scored = [];
         for (var j = 0; j < targets.length; j++) {

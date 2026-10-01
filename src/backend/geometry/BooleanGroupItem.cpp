@@ -1,8 +1,10 @@
 #include "BooleanGroupItem.h"
 
 #include "EffectPainter.h"
+#include "FramePaint.h"
 #include "ShapePath.h"
 
+#include <QImage>
 #include <QPainter>
 
 BooleanGroupItem::BooleanGroupItem(QQuickItem *parent)
@@ -36,13 +38,58 @@ void BooleanGroupItem::paint(QPainter *painter)
     const Effects::Blur lb = Effects::Blur::fromMap(m_layerBlur);
     const QList<Effects::Glow> gl = Effects::Glow::listFrom(m_glows);
 
-    painter->save();
-    painter->translate(-m_boundX + m_pad, -m_boundY + m_pad);
-    Effects::paintCombinedPath(painter, combined, bounds, st, sh, gl, lb, 1.0, nullptr);
-    const Effects::Grain gr = Effects::Grain::fromMap(m_grain);
-    if (gr.enabled && gr.amount > 0.001)
-        Effects::paintGrainPath(painter, combined, st.maxStrokeWidth(), bounds, gr, m_targetUid, m_grainFrame, 1.0);
-    painter->restore();
+    // Unmasked groups keep the direct fast path; masked groups
+    // composite offscreen (same DestinationIn rule as MaskLeafItem).
+    if (m_masks.isEmpty()) {
+        painter->save();
+        painter->translate(-m_boundX + m_pad, -m_boundY + m_pad);
+        Effects::paintCombinedPath(painter, combined, bounds, st, sh, gl, lb, 1.0, nullptr);
+        const Effects::Grain grDirect = Effects::Grain::fromMap(m_grain);
+        if (grDirect.enabled && grDirect.amount > 0.001)
+            Effects::paintGrainPath(painter, combined, st.maxStrokeWidth(), bounds, grDirect, m_targetUid,
+                m_grainFrame, 1.0);
+        painter->restore();
+        return;
+    }
+    QImage tile(int(width()), int(height()), QImage::Format_ARGB32_Premultiplied);
+    if (tile.isNull())
+        return;
+    tile.fill(Qt::transparent);
+    {
+        QPainter tp(&tile);
+        tp.setRenderHint(QPainter::Antialiasing, true);
+        tp.save();
+        tp.translate(-m_boundX + m_pad, -m_boundY + m_pad);
+        Effects::paintCombinedPath(&tp, combined, bounds, st, sh, gl, lb, 1.0, nullptr);
+        const Effects::Grain gr = Effects::Grain::fromMap(m_grain);
+        if (gr.enabled && gr.amount > 0.001)
+            Effects::paintGrainPath(&tp, combined, st.maxStrokeWidth(), bounds, gr, m_targetUid, m_grainFrame, 1.0);
+        tp.restore();
+    }
+    // Mask silhouettes in item coords (content px at scale 1, like the
+    // tile): same maskSilhouette the masked-leaf preview uses.
+    QImage masked;
+    for (const QVariant &v : m_masks) {
+        const QImage mi = FramePaint::maskSilhouette(
+            v.toMap(), -m_boundX + m_pad, -m_boundY + m_pad, 1.0, tile.size());
+        if (mi.isNull())
+            continue;
+        if (masked.isNull()) {
+            masked = mi.copy();
+        } else {
+            QPainter cp(&masked);
+            cp.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+            cp.drawImage(0, 0, mi);
+            cp.end();
+        }
+    }
+    if (!masked.isNull()) {
+        QPainter ap(&tile);
+        ap.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+        ap.drawImage(0, 0, masked);
+        ap.end();
+    }
+    painter->drawImage(0, 0, tile);
 }
 
 void BooleanGroupItem::updatePad()
@@ -201,6 +248,20 @@ void BooleanGroupItem::setGrain(const QVariantMap &v)
         return;
     m_grain = v;
     emit grainChanged();
+    update();
+}
+
+QVariantList BooleanGroupItem::masks() const
+{
+    return m_masks;
+}
+
+void BooleanGroupItem::setMasks(const QVariantList &v)
+{
+    if (m_masks == v)
+        return;
+    m_masks = v;
+    emit contentChanged();
     update();
 }
 

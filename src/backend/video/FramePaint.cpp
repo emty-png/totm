@@ -476,35 +476,8 @@ void paintText(QPainter &pt, const QVariantMap &m, double x, double y, double w,
     const QList<Effects::Glow> &glows = QList<Effects::Glow>(),
     const Effects::Blur &layerBlur = Effects::Blur(), const Effects::Grain &grain = Effects::Grain(), int uid = -1,
     int frameNo = 0) {
-    QVariantMap tm;
-    tm[QStringLiteral("content")] = str(m, "textContent");
-    tm[QStringLiteral("family")] = str(m, "fontFamily", QStringLiteral("Inter"));
-    tm[QStringLiteral("weight")] = m.value(QStringLiteral("fontWeight"), 400).toInt();
-    tm[QStringLiteral("size")] = num(m, "fontSize", 16.0);
-    tm[QStringLiteral("spacing")] = num(m, "letterSpacing");
-    tm[QStringLiteral("halign")] = str(m, "hAlign", QStringLiteral("left"));
-    tm[QStringLiteral("valign")] = str(m, "vAlign", QStringLiteral("top"));
-    tm[QStringLiteral("autoSize")] = m.value(QStringLiteral("autoSize"), true).toBool();
-    tm[QStringLiteral("lineAuto")] = m.value(QStringLiteral("lineHeightAuto"), true).toBool();
-    tm[QStringLiteral("leading")] = num(m, "lineHeight", 1.2);
-    tm[QStringLiteral("boxW")] = num(m, "w");
-    tm[QStringLiteral("boxH")] = num(m, "h");
-    tm[QStringLiteral("outlinePx")] = style.maxStrokeWidth() > 0.0 ? style.maxStrokeWidth() : 0.0;
-    tm[QStringLiteral("italic")] = m.value(QStringLiteral("fontItalic"), false).toBool();
-    tm[QStringLiteral("underline")] = m.value(QStringLiteral("fontUnderline"), false).toBool();
-    tm[QStringLiteral("strike")] = m.value(QStringLiteral("fontStrike"), false).toBool();
-    tm[QStringLiteral("join")] = str(m, "strokeJoin", QStringLiteral("round"));
-    tm[QStringLiteral("caps")] = str(m, "fontCaps", QStringLiteral("none"));
-    tm[QStringLiteral("runs")] = m.value(QStringLiteral("textRuns")).toList();
-    const QVariantMap fxm = m.value(QStringLiteral("textFx")).toMap();
-    tm[QStringLiteral("fx")] = fxm.value(QStringLiteral("fx"), false).toBool();
-    tm[QStringLiteral("fxReveal")] = fxm.value(QStringLiteral("fxReveal"), 1.0).toDouble();
-    tm[QStringLiteral("fxStagger")] = fxm.value(QStringLiteral("fxStagger"), 0.0).toDouble();
-    tm[QStringLiteral("fxRise")] = fxm.value(QStringLiteral("fxRise"), 0.0).toDouble();
-    tm[QStringLiteral("fxHighlight")] = fxm.value(QStringLiteral("fxHighlight")).toString();
-    tm[QStringLiteral("fxSweep")] = fxm.value(QStringLiteral("fxSweep"), false).toBool();
-    tm[QStringLiteral("fxUnit")] = fxm.value(QStringLiteral("fxUnit"), QStringLiteral("letters")).toString();
-    const Effects::TextOpts text = Effects::TextOpts::fromMap(tm);
+    Effects::TextOpts text = Effects::textOptsForNode(m);
+    text.outlinePx = style.maxStrokeWidth() > 0.0 ? style.maxStrokeWidth() : 0.0;
     Effects::paintTextLeaf(&pt, QRectF(x, y, w, h), text, style, shadows, glows, layerBlur, s, &sharedBlurCache());
     // Grain confined to the glyphs: ghost the coverage, keep dots
     // where the ghost is opaque (preview masks its tile the same way).
@@ -565,9 +538,12 @@ QRectF rotatedBox(const QVariantMap &m) {
 
 // Live boolean group: combine sampled children (content coords), scale
 // to device, and paint through the shared combined stack so export
-// matches canvas preview. v1 paints direct: no mask participation and
-// no background blur (rare combos, documented).
-void paintBooleanGroup(QPainter &pt, const QVariantMap &m, double ox, double oy, double scale, int frameNo) {
+// matches canvas preview. Group-level masks clip the silhouette like a
+// leaf; background blur samples the frame so far under the combined
+// clip (inside a mask it samples the temp, same documented rule as
+// masked leaves).
+void paintBooleanGroup(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, double oy, double scale,
+    int frameNo) {
     const QVariantList kids = m.value(QStringLiteral("children")).toList();
     if (kids.isEmpty())
         return;
@@ -587,12 +563,17 @@ void paintBooleanGroup(QPainter &pt, const QVariantMap &m, double ox, double oy,
     const QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
     const Effects::Blur layerBlur = Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap());
     const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
+    const Effects::Blur backgroundBlur = Effects::Blur::fromMap(m.value(QStringLiteral("backgroundBlur")).toMap());
     const Effects::Grain grain = Effects::Grain::fromMap(m.value(QStringLiteral("grain")).toMap());
     const double opacity = qBound(0.0, Anims::num(m, "opacity", 1.0), 1.0);
     const int uid = m.value(QStringLiteral("uid"), -1).toInt();
     pt.save();
     pt.setOpacity(opacity);
     pt.translate(ox, oy);
+    if (backgroundBlur.enabled && backgroundBlur.radius > 0.01) {
+        paintBackdropBlur(pt, frame, fillBox.x(), fillBox.y(), fillBox.width(), fillBox.height(),
+            backgroundBlur.radius * s, backgroundBlur.opacity, combined);
+    }
     Effects::paintCombinedPath(&pt, combined, fillBox, st, shadows, glows, layerBlur, s, &sharedBlurCache());
     if (grain.enabled && grain.amount > 0.001) {
         Effects::paintGrainPath(&pt, combined, st.maxStrokeWidth() * s, fillBox, grain, uid, frameNo, s);
@@ -663,26 +644,7 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
         // identical to the canvas preview by construction. Background blur
         // samples the frame so far, glyph-masked like the canvas rigMask.
         if (useBackground) {
-            QVariantMap tm;
-            tm[QStringLiteral("content")] = str(m, "textContent");
-            tm[QStringLiteral("family")] = str(m, "fontFamily", QStringLiteral("Inter"));
-            tm[QStringLiteral("weight")] = m.value(QStringLiteral("fontWeight"), 400).toInt();
-            tm[QStringLiteral("size")] = num(m, "fontSize", 16.0);
-            tm[QStringLiteral("spacing")] = num(m, "letterSpacing");
-            tm[QStringLiteral("halign")] = str(m, "hAlign", QStringLiteral("left"));
-            tm[QStringLiteral("valign")] = str(m, "vAlign", QStringLiteral("top"));
-            tm[QStringLiteral("autoSize")] = m.value(QStringLiteral("autoSize"), true).toBool();
-            tm[QStringLiteral("lineAuto")] = m.value(QStringLiteral("lineHeightAuto"), true).toBool();
-            tm[QStringLiteral("leading")] = num(m, "lineHeight", 1.2);
-            tm[QStringLiteral("boxW")] = num(m, "w");
-            tm[QStringLiteral("boxH")] = num(m, "h");
-            tm[QStringLiteral("italic")] = m.value(QStringLiteral("fontItalic"), false).toBool();
-            tm[QStringLiteral("underline")] = m.value(QStringLiteral("fontUnderline"), false).toBool();
-            tm[QStringLiteral("strike")] = m.value(QStringLiteral("fontStrike"), false).toBool();
-            tm[QStringLiteral("join")] = str(m, "strokeJoin", QStringLiteral("round"));
-            tm[QStringLiteral("caps")] = str(m, "fontCaps", QStringLiteral("none"));
-    tm[QStringLiteral("runs")] = m.value(QStringLiteral("textRuns")).toList();
-            const Effects::TextOpts bt = Effects::TextOpts::fromMap(tm);
+            Effects::TextOpts bt = Effects::textOptsForNode(m);
             const QPainterPath gclip = Effects::textGlyphPath(bt, scale, QRectF(x, y, w, h));
             paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale, backgroundBlur.opacity, gclip);
         }
@@ -838,7 +800,54 @@ void paintLeaves(QPainter &pt, QImage &frame, const QList<QVariantMap> &work, co
                 continue;
             if (qBound(0.0, Anims::num(m, "opacity", 1.0), 1.0) <= 0.001)
                 continue;
-            paintBooleanGroup(pt, m, ox, oy, scale, frameNo);
+            QList<int> active;
+            for (int mid : maskMap.value(uid)) {
+                const QVariantMap mm = workByUid.value(mid);
+                if (mm.isEmpty())
+                    continue;
+                if (!mm.value(QStringLiteral("visible"), true).toBool())
+                    continue;
+                const int mSrc = leafIndex.value(mid, -1);
+                if (mSrc >= 0 && !leaves.at(mSrc).ancestorsVisible)
+                    continue;
+                active.append(mid);
+            }
+            if (active.isEmpty()) {
+                paintBooleanGroup(pt, frame, m, ox, oy, scale, frameNo);
+                continue;
+            }
+            QImage combined;
+            for (int mid : active) {
+                if (!maskCache.contains(mid))
+                    maskCache[mid] = maskSilhouette(workByUid.value(mid), ox, oy, scale, frame.size());
+                const QImage &mi = maskCache[mid];
+                if (combined.isNull()) {
+                    combined = mi.copy();
+                } else {
+                    QPainter cp(&combined);
+                    cp.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+                    cp.drawImage(0, 0, mi);
+                    cp.end();
+                }
+            }
+            if (combined.isNull())
+                continue;
+            if (layer.size() != frame.size() || layer.format() != QImage::Format_ARGB32_Premultiplied)
+                layer = QImage(frame.size(), QImage::Format_ARGB32_Premultiplied);
+            layer.fill(Qt::transparent);
+            {
+                QPainter lp(&layer);
+                lp.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+                // Backdrop blur inside masks samples the temp (transparent),
+                // not the frame behind: same documented rule as leaves.
+                paintBooleanGroup(lp, layer, m, ox, oy, scale, frameNo);
+            }
+            {
+                QPainter ap(&layer);
+                ap.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+                ap.drawImage(0, 0, combined);
+            }
+            pt.drawImage(0, 0, layer);
             continue;
         }
         if (str(m, "type", str(m, "shapeType", QStringLiteral("rectangle"))) == QLatin1String("frame")) {

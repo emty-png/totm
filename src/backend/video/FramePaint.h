@@ -27,6 +27,12 @@ namespace FramePaint {
 void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, double oy, double scale,
     int frameNo);
 
+// Live boolean group onto pt (frame is the tile for backdrop-blur
+// sampling, like paintLeaf). Group-level masks clip the silhouette;
+// background blur samples the frame so far under the combined clip.
+void paintBooleanGroup(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, double oy, double scale,
+    int frameNo);
+
 // White alpha silhouette of one sampled mask leaf in frame coords.
 // Vectors use the shared outline path, images a rounded rect, text
 // the glyph ghost; feather blurs the edge, invert flips the alpha.
