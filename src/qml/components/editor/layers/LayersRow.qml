@@ -2,9 +2,11 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// One layers-list row. Inset highlight, leading icon, editable name,
-// hover-revealed toggles. Data arrives as explicit props; clicks leave
-// through policies wired by the view.
+// One layers-list row. Inset pill highlight (like the reference
+// sidebar), leading icon, editable name, hover-revealed toggles. Data
+// arrives as explicit props; clicks leave through policies wired by
+// the view. Plain vertical drags reorder: press arms, 6px lifts, the
+// row follows via dragLift while siblings shift, release commits.
 Item {
     id: rowRoot
 
@@ -47,7 +49,7 @@ Item {
     readonly property bool hovered: rowMouse.containsMouse || toggles.hovered || leading.hovered
 
     Layout.fillWidth: true
-    Layout.preferredHeight: 32
+    Layout.preferredHeight: 36
 
     LayerHighlight {
         selected: rowRoot.selected
@@ -61,6 +63,10 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        // Keep the vertical reorder gesture: once pressed, the parent
+        // flick is locked (see LayersView.interactive) and this guard
+        // stops any residual steal mid-drag.
+        preventStealing: true
         onPressed: event => {
             if (event.button === Qt.RightButton && rowRoot.contextPolicy)
                 rowRoot.contextPolicy(rowRoot.rowUid, event.x, event.y);

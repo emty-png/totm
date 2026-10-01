@@ -1,8 +1,10 @@
 import QtQuick
 import Totm
 
-// Inset card behind a layers row. Selected uses the solid row fill,
-// hover stays neutral, lifted rows gain a selection outline.
+// Inset pill behind a layers row, matching the reference sidebar:
+// 8px side insets, 2px vertical gaps, 10px rounding. Selected uses
+// the solid row fill, hover stays neutral, lifted rows gain a
+// selection outline so the dragged ghost reads floating.
 Rectangle {
     id: highlight
 
@@ -15,7 +17,7 @@ Rectangle {
     anchors.rightMargin: 8
     anchors.topMargin: 2
     anchors.bottomMargin: 2
-    radius: AppTheme.radiusSmall
+    radius: AppTheme.radiusLarge
     color: highlight.selected ? AppTheme.layerSelected : highlight.hovered ? AppTheme.hover : "transparent"
     border.width: highlight.lifted ? 1 : 0
     border.color: AppTheme.selection

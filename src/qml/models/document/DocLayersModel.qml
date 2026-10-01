@@ -63,10 +63,14 @@ QtObject {
     // only bumps rev, never structRev).
     function visibleRowListFiltered(filter) {
         doc.structRev;
-        doc.rev;
         var q = (filter || "").trim().toLowerCase();
         if (!q)
             return visibleRowList();
+        // Live re-filter on renames/selection touches only while a
+        // query is active. The full list stays structural-only so row
+        // delegates survive selection churn mid-drag (a rebuild would
+        // destroy the pressed MouseArea and freeze the reorder).
+        doc.rev;
         var out = [];
         var isMatch = node => {
             if ((node.name || "").toLowerCase().indexOf(q) !== -1)

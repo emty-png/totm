@@ -27,7 +27,7 @@ ColumnLayout {
         Layout.rightMargin: 8
         Layout.topMargin: 10
         Layout.bottomMargin: 6
-        text: qsTr("Layer")
+        text: qsTr("Layers")
         font.pixelSize: 13
         font.weight: Font.DemiBold
         color: AppTheme.foreground
@@ -39,12 +39,13 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.leftMargin: 8
         Layout.rightMargin: 8
-        Layout.bottomMargin: 6
-        implicitHeight: 28
-        visible: header.doc && header.doc.totalCount() > 0
+        Layout.bottomMargin: 8
+        implicitHeight: 32
+        visible: !!(header.doc && header.doc.totalCount() > 0)
         placeholderText: qsTr("Search layers...")
         placeholderTextColor: AppTheme.muted
         leftPadding: 12
+        rightPadding: 12
         font.pixelSize: 12
         color: AppTheme.foreground
         selectByMouse: true
@@ -54,7 +55,7 @@ ColumnLayout {
         }
 
         background: Rectangle {
-            radius: AppTheme.radiusSmall
+            radius: AppTheme.radiusLarge
             color: AppTheme.surface
             border.width: 1
             border.color: searchField.activeFocus ? AppTheme.selection : AppTheme.fieldBorder

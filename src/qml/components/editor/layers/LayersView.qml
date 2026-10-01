@@ -23,6 +23,10 @@ ColumnLayout {
     property int dropIndex: -1
     property real dropY: 0
     property bool dropValid: false
+    // Live cursor Y in view coords while dragging (feeds edge
+    // autoscroll) plus scroll direction (-1 up, 0 off, 1 down).
+    property real lastDragY: 0
+    property int scrollDirection: 0
 
     property var reorder: LayersReorder {
         view: layersView
@@ -50,21 +54,32 @@ ColumnLayout {
         }
     }
 
-    ScrollView {
-        id: rowScroll
+    // Row scroller: a bare Flickable (not ScrollView) so drag-reorder
+    // can lock scrolling the moment a row press arms. While arming or
+    // dragging, interactive goes off so the flick never steals the
+    // vertical gesture (the classic "drag doesn't work" cause); wheel
+    // and scrollbar stay live otherwise, empty-area drags still scroll,
+    // and edge autoscroll carries far rows under the held cursor.
+    Flickable {
+        id: rowFlick
 
         Layout.fillWidth: true
         Layout.fillHeight: true
-        visible: layersView.doc && layersView.doc.totalCount() > 0
-        contentWidth: availableWidth
+        visible: !!(layersView.doc && layersView.doc.totalCount() > 0)
+        contentWidth: width
+        contentHeight: rowColumn.height
         clip: true
-        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+        boundsBehavior: Flickable.StopAtBounds
+        interactive: !layersView.dragArming && !layersView.dragging
+        ScrollBar.vertical: ScrollBar {}
 
         ColumnLayout {
-            width: rowScroll.availableWidth
+            id: rowColumn
+
+            width: rowFlick.width
             // Stretch to the viewport so the empty filler below absorbs
             // slack and keeps empty-area click handling across the panel.
-            height: Math.max(implicitHeight, rowScroll.availableHeight)
+            height: Math.max(implicitHeight, rowFlick.height)
             spacing: 0
 
             Repeater {
@@ -157,7 +172,7 @@ ColumnLayout {
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
                 Layout.topMargin: 12
-                visible: layersView.filtering && rows.count === 0 && layersView.doc && layersView.doc.totalCount() > 0
+                visible: layersView.filtering && rows.count === 0 && !!(layersView.doc && layersView.doc.totalCount() > 0)
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
                 text: qsTr("No layers match the search.")
@@ -197,13 +212,57 @@ ColumnLayout {
         }
     }
 
+    // Edge autoscroll while dragging: parks within 24px of the
+    // viewport edge scroll the list under the held cursor so far rows
+    // stay reachable. Each step re-runs the gap adoption at the held
+    // cursor (same pattern as VerticalTabBar).
+    Timer {
+        id: scrollTimer
+
+        interval: 16
+        repeat: true
+        running: layersView.dragging && layersView.scrollDirection !== 0
+        onTriggered: {
+            var maxY = Math.max(0, rowFlick.contentHeight - rowFlick.height);
+            rowFlick.contentY = Math.min(maxY, Math.max(0, rowFlick.contentY + layersView.scrollDirection * 10));
+            reorder.updateDrop(layersView.lastDragY);
+            reorder.pushLift();
+        }
+    }
+
     function dragPress(uid, y, mods) {
+        layersView.lastDragY = y;
+        layersView.scrollDirection = 0;
         reorder.dragPress(uid, y, mods);
     }
     function dragMove(y) {
+        layersView.lastDragY = y;
         reorder.dragMove(y);
+        // Keep the edge zones live even before the lift threshold so
+        // a held press near the edge still steers the timer.
+        if (layersView.dragging)
+            layersView.updateScroll(y);
     }
     function dragRelease() {
         reorder.dragRelease();
+        layersView.scrollDirection = 0;
+    }
+
+    // Edge zones (24px) steer the autoscroll timer. y is in view
+    // coords; compare against the flick viewport mapped into the same
+    // space so header height never skews the zones.
+    function updateScroll(y) {
+        if (!layersView.dragging) {
+            layersView.scrollDirection = 0;
+            return;
+        }
+        var top = rowFlick.mapToItem(layersView, 0, 0).y;
+        var bottom = top + rowFlick.height;
+        if (y < top + 24)
+            layersView.scrollDirection = -1;
+        else if (y > bottom - 24)
+            layersView.scrollDirection = 1;
+        else
+            layersView.scrollDirection = 0;
     }
 }

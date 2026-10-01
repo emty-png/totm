@@ -67,10 +67,12 @@ Item {
         contextPolicy: (uid, x, y) => leftPanel.openContext(uid, x, y)
     }
 
-    // Drag-reorder insertion line, fed live by the list (view coords
-    // equal panel coords). Above the rows so it draws over the gap.
-    // Only same-parent gaps mark (see LayersView.dropValid).
-    Rectangle {
+    // Drag-reorder insertion indicator, fed live by the list (view
+    // coords equal panel coords). Above the rows so it draws over the
+    // gap. Matches the reference sidebar: a dot handle at the left
+    // with a 2px line across. Only same-parent gaps mark (see
+    // LayersView.dropValid).
+    Item {
         anchors {
             left: parent.left
             right: parent.right
@@ -79,9 +81,28 @@ Item {
         }
         y: list.dropY - 1
         height: 2
-        radius: 1
         visible: list.dragging && list.dropValid
-        color: AppTheme.selection
+
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            x: 0
+            width: 6
+            height: 6
+            radius: 3
+            color: AppTheme.selection
+        }
+
+        Rectangle {
+            anchors {
+                left: parent.left
+                right: parent.right
+                verticalCenter: parent.verticalCenter
+                leftMargin: 2
+            }
+            height: 2
+            radius: 1
+            color: AppTheme.selection
+        }
     }
 
     // Sidebar context menu (Copy / Paste / Duplicate / Group / Arrange /
