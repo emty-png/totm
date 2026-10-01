@@ -2,14 +2,16 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// One context-menu row: text label plus optional trailing hint. No
-// icons; hover fill, dimmed when disabled. Disabled rides the standard
-// `enabled` prop (inherited by the MouseArea); visuals dim manually.
+// One context-menu row: text label plus optional trailing hint or check
+// tick. No icons otherwise; hover fill, dimmed when disabled. Disabled
+// rides the standard `enabled` prop (inherited by the MouseArea);
+// visuals dim manually.
 Rectangle {
     id: menuItem
 
     property string label: ""
     property string hint: ""
+    property bool checked: false
 
     signal clicked
 
@@ -43,10 +45,23 @@ Rectangle {
             verticalCenter: parent.verticalCenter
             rightMargin: 10
         }
-        visible: menuItem.hint !== ""
+        visible: !menuItem.checked && menuItem.hint !== ""
         text: menuItem.hint
         font.pixelSize: 12
         color: AppTheme.muted
+    }
+
+    AppIcon {
+        anchors {
+            right: parent.right
+            verticalCenter: parent.verticalCenter
+            rightMargin: 10
+        }
+        width: 12
+        height: 12
+        visible: menuItem.checked
+        kind: "check"
+        iconColor: AppTheme.muted
     }
 
     MouseArea {

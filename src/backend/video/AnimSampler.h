@@ -2,6 +2,7 @@
 
 #include <QList>
 #include <QMap>
+#include <QPointF>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -40,6 +41,30 @@ struct PathSample {
 // Samples a motion path by arc length. pts: [{x, y, smooth, inX/inY,
 // outX/outY}]. Invalid when fewer than 2 points.
 PathSample samplePath(const QVariantList &pts, bool closed, double e);
+
+// Production path helpers (additive; samplePath above stays the legacy
+// fast path so old clips sample bit-identical). remapPathProgress folds
+// a path-local repeat count into a 0..1 position progress (per-clip
+// traversal repeat, unrelated to the removed clip loop modes);
+// adjustPathAngle applies orient offset/flip; followCompensation shifts
+// top-left by -R(newRot)*pivot so the selected pivot rides the displayed
+// trajectory (base top-left + path offset). (0,0) for legacy top-left.
+double remapPathProgress(double prog, const QVariantMap &o);
+double adjustPathAngle(double angleDelta, const QVariantMap &o);
+// Scene-space correction to add to (base.x + dx, base.y + dy) so the
+// selected follow pivot lands on the path. (0,0) for legacy top-left.
+QPointF pathFollowComp(const QVariantMap &base, double newRotation, const QVariantMap &o);
+// Full production sample: speed select (constant uses linear p, else
+// eased e) + repeat remap + arc sample + angle adjust + follow comp.
+// Returns invalid when fewer than 2 points ride along.
+struct PathSampleEx {
+    bool valid = false;
+    double dx = 0.0;
+    double dy = 0.0;
+    double angleDelta = 0.0;
+};
+PathSampleEx samplePathEx(
+    const QVariantList &pts, const QVariantMap &o, const QVariantMap &base, double e, double p);
 
 // Color. parseHex accepts #rgb/#rrggbb (case-insensitive). lerpColor
 // interpolates in sRGB and returns {} when either endpoint is invalid.

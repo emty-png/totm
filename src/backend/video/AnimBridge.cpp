@@ -48,3 +48,17 @@ QVariant AnimBridge::samplePath(const QVariantList &pts, bool closed, double e)
     out[QStringLiteral("angleDelta")] = s.angleDelta;
     return out;
 }
+
+QVariant AnimBridge::samplePathEx(const QVariantList &pts, const QVariantMap &options,
+    const QVariantMap &base, double e, double p)
+{
+    const Anims::PathSampleEx s = Anims::samplePathEx(pts, options, base, e, p);
+    if (!s.valid)
+        return QVariant();
+    QVariantMap out;
+    out[QStringLiteral("valid")] = true;
+    out[QStringLiteral("dx")] = s.dx;
+    out[QStringLiteral("dy")] = s.dy;
+    out[QStringLiteral("angleDelta")] = s.angleDelta;
+    return out;
+}

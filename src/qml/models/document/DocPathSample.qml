@@ -23,4 +23,19 @@ QtObject {
             angleDelta: s.angleDelta
         };
     }
+
+    // Production sample: options carry speed/loop/reverse/orient-offset/
+    // flip/follow, e is eased progress, p is linear progress, base is the
+    // leaf base row for follow-pivot compensation. Old clips without the
+    // new keys sample exactly like samplePath above (strict compat).
+    function samplePathEx(pts, options, base, e, p) {
+        var s = AnimBridge.samplePathEx(pts || [], options || {}, base || {}, Number(e) || 0, Number(p) || 0);
+        if (s === undefined || s === null)
+            return null;
+        return {
+            dx: s.dx,
+            dy: s.dy,
+            angleDelta: s.angleDelta
+        };
+    }
 }

@@ -23,6 +23,7 @@ Item {
     property var shownDoc: null
     onDocChanged: {
         canvas.commitTextEdit();
+        canvas.exitPathEdit();
         if (canvas.pen)
             canvas.pen.cancel();
         if (canvas.penEdit)
@@ -115,6 +116,17 @@ Item {
         canvas: canvas
         snap: snapEngine
     }
+
+    // Direct on-canvas path editing (select tool): when a custom Path
+    // clip is last-selected, its trajectory loads into pathTool and
+    // anchors/handles edit live with per-gesture undo. Empty-space
+    // presses fall through to marquee/shapes and exit the session.
+    property var pathEdit: ({
+            active: false,
+            clipId: -1,
+            txOpen: false,
+            txDoc: null
+        })
 
     focus: true
     clip: true
@@ -316,6 +328,65 @@ Item {
         }
     }
 
+    // In-select motion-path editing: anchors/handles/edges of the
+    // selected Path clip drag live (one undo entry per gesture).
+    // Empty presses fall through to marquee/shapes and exit the
+    // session, mirroring pen point-edit routing above.
+    MouseArea {
+        id: pathEditMouse
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        hoverEnabled: true
+        cursorShape: Qt.ArrowCursor
+        enabled: ToolState.activeTool === "select" && canvas.doc !== null && canvas.pathEdit && canvas.pathEdit.active
+
+        onPressed: event => {
+            var hit = canvas.pathTool.hitTestScreen(event.x, event.y);
+            if (!hit) {
+                canvas.exitPathEdit();
+                event.accepted = false;
+                return;
+            }
+            canvas.beginPathEditTx();
+            canvas.pathTool.pressAt(event.x, event.y, event.modifiers);
+            // Edge clicks insert immediately; anchor/handle presses
+            // arm a drag that commits on move.
+            if (!canvas.pathTool.editDrag)
+                canvas.commitPathEdit();
+            event.accepted = true;
+        }
+        onPositionChanged: event => {
+            if (pressed) {
+                canvas.pathTool.moveTo(event.x, event.y, event.modifiers, true);
+                if (canvas.pathTool.dragging || canvas.pathTool.editDrag)
+                    canvas.commitPathEdit();
+            } else {
+                canvas.pathTool.refreshHover(event.x, event.y, event.modifiers);
+            }
+        }
+        onExited: {
+            if (!pressed)
+                canvas.pathTool.exitHover();
+        }
+        onReleased: {
+            canvas.pathTool.releaseAt();
+            canvas.commitPathEdit();
+            canvas.endPathEditTx();
+        }
+        onDoubleClicked: event => {
+            if (canvas.pathTool.hitTestScreen(event.x, event.y) && canvas.pathTool.doubleAt(event.x, event.y)) {
+                if (canvas.doc)
+                    canvas.doc.beginTransaction();
+                canvas.commitPathEdit();
+                if (canvas.doc)
+                    canvas.doc.endTransaction();
+                event.accepted = true;
+            } else {
+                event.accepted = false;
+            }
+        }
+    }
+
     // Motion-path input: click adds corners, drag draws symmetric curves.
     // Enter/double-click commits to a Path clip, Esc cancels. Placed with
     // the pen areas so Space still pans above the path.
@@ -380,9 +451,13 @@ Item {
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
         pathActive: ToolState.activeTool === "path" && canvas.doc !== null
+        editActive: ToolState.activeTool === "select" && canvas.doc !== null && canvas.pathEdit && canvas.pathEdit.active
         selectedPts: canvas.selectedPath.pts
         selectedClosed: canvas.selectedPath.closed
-        showSelected: ToolState.activeTool !== "path" && canvas.selectedPath.pts.length >= 2
+        showSelected: ToolState.activeTool !== "path" && !(canvas.pathEdit && canvas.pathEdit.active) && canvas.selectedPath.pts.length >= 2
+        pivotX: canvas.selectedPath.pivotX || 0
+        pivotY: canvas.selectedPath.pivotY || 0
+        showPivot: (ToolState.activeTool !== "path" && canvas.selectedPath.showPivot === true) && (canvas.selectedPath.pts.length >= 1)
     }
 
     PenEditOverlay {
@@ -551,8 +626,13 @@ Item {
                 canvas.imageTool.clearPending();
             if (ToolState.activeTool === "image" && canvas.doc && !canvas.imageTool.hasPending())
                 imagePicker.open();
-            if (ToolState.activeTool !== "path" && canvas.pathTool) {
-                canvas.pathTool.cancel();
+            if (ToolState.activeTool !== "path") {
+                if (canvas.pathEdit && canvas.pathEdit.active && ToolState.activeTool !== "select")
+                    canvas.exitPathEdit();
+                else if (canvas.pathTool)
+                    canvas.pathTool.cancel();
+                if (ToolState.activeTool === "select")
+                    canvas.syncPathEdit();
             } else if (ToolState.activeTool === "path" && canvas.pathTool && ToolState.pathClipId >= 0) {
                 var redraw = canvas.doc ? canvas.doc.animClip(ToolState.pathClipId) : null;
                 if (redraw && redraw.preset === "customPath") {
@@ -581,12 +661,18 @@ Item {
         } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && canvas.penEdit.editUid >= 0) {
             canvas.penEdit.exit();
             event.accepted = true;
+        } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && canvas.pathEdit && canvas.pathEdit.active) {
+            canvas.exitPathEdit();
+            event.accepted = true;
         } else if (event.key === Qt.Key_Escape) {
             if (ToolState.activeTool === "image") {
                 canvas.cancelImageTool();
                 event.accepted = true;
             } else if (ToolState.activeTool === "path") {
                 canvas.cancelPathDraw();
+                event.accepted = true;
+            } else if (canvas.pathEdit && canvas.pathEdit.active) {
+                canvas.exitPathEdit();
                 event.accepted = true;
             } else if (canvas.penEdit.editUid >= 0) {
                 canvas.penEdit.exit();
@@ -604,6 +690,21 @@ Item {
         } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && ToolState.activeTool === "path") {
             if (canvas.pathTool.deleteSelected())
                 event.accepted = true;
+        } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && canvas.pathEdit && canvas.pathEdit.active) {
+            // Edit mode keeps a committable trajectory: refuse drops
+            // below 2 points so the buffer never diverges from the clip.
+            var dropCount = canvas.pathTool.sel.length;
+            if (dropCount > 0 && canvas.pathTool.active.length - dropCount >= 2) {
+                if (canvas.doc)
+                    canvas.doc.beginTransaction();
+                canvas.pathTool.deleteSelected();
+                canvas.commitPathEdit();
+                if (canvas.doc)
+                    canvas.doc.endTransaction();
+                event.accepted = true;
+            } else if (dropCount > 0) {
+                event.accepted = true;
+            }
         } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && canvas.penEdit.editUid >= 0) {
             if (canvas.penEdit.deleteSelected())
                 event.accepted = true;
@@ -655,12 +756,16 @@ Item {
     // overlay (base of the first leaf plus stored start-relative offsets;
     // groups ride rigidly, so the first leaf represents the motion).
     readonly property var selectedPath: canvas.computeSelectedPath()
+    onSelectedPathChanged: canvas.syncPathEdit()
 
     function computeSelectedPath() {
         var d = canvas.doc;
         var empty = {
             pts: [],
-            closed: false
+            closed: false,
+            pivotX: 0,
+            pivotY: 0,
+            showPivot: false
         };
         if (!d || ToolState.activeTool === "path")
             return empty;
@@ -670,9 +775,125 @@ Item {
         var c = d.animClip(ids[ids.length - 1]);
         if (!c || c.preset !== "customPath")
             return empty;
+        var pts = canvas.pathAbsolute(c);
+        var out = {
+            pts: pts,
+            closed: !!(c.options && c.options.closed),
+            pivotX: 0,
+            pivotY: 0,
+            showPivot: false
+        };
+        // Follow-pivot marker: the selected pivot rides the path, so the
+        // marker sits on the trajectory's time-0 anchor (first anchor
+        // normally, stored end for reversed open paths). Top-left needs
+        // no marker (it is the trajectory's first anchor when follow
+        // is topLeft).
+        var o = (c.options) || {};
+        var pv = canvas.pathPivotLocal(o, canvas.pathBaseOf(c));
+        if (pv && pts.length > 0) {
+            var s0 = pts[0] || {};
+            if (!out.closed && canvas.pathStartsAtEnd(o))
+                s0 = pts[pts.length - 1] || {};
+            out.pivotX = Number(s0.x) || 0;
+            out.pivotY = Number(s0.y) || 0;
+            out.showPivot = true;
+        }
+        return out;
+    }
+
+    // Time-0 trajectory end for the pivot marker: reversed open paths
+    // begin at the stored end, except even-count alternate (ping-pong
+    // returns to 0). Closed loops coincide at the first point either
+    // way. Mirrors Anims::remapPathProgress end mapping in samplePathEx.
+    function pathStartsAtEnd(o) {
+        if (!o || o.reverse !== true)
+            return false;
+        if (o.closed === true)
+            return false;
+        var mode = o.repeatMode;
+        if (mode !== "times" && mode !== "alternate")
+            return true;
+        var count = Math.min(8, Math.max(1, Math.round(Number(o.repeatCount) || 1)));
+        if (count <= 1)
+            return true;
+        if (mode === "alternate" && count % 2 === 0)
+            return false;
+        return true;
+    }
+
+    // Base frame a clip's trajectory displays in: playBase while
+    // previewing, else live. Groups resolve to their first leaf.
+    function pathBaseOf(clip) {
+        var d = canvas.doc;
+        if (!d || !clip)
+            return null;
+        var target = d.findNode(clip.targetUid);
+        if (!target)
+            return null;
+        var leaves = target.kind === "group" ? d._leavesUnder(target) : [target];
+        if (leaves.length === 0)
+            return null;
+        var firstUid = leaves[0].uid;
+        if (d.anim && d.anim.playBase && d.anim.playBase[firstUid]) {
+            var pb = d.anim.playBase[firstUid];
+            return {
+                ox: Number(pb.x) || 0,
+                oy: Number(pb.y) || 0,
+                w: Math.max(0, Number(pb.w) || 0),
+                h: Math.max(0, Number(pb.h) || 0),
+                rotation: Number(pb.rotation) || 0
+            };
+        }
         return {
-            pts: canvas.pathAbsolute(c),
-            closed: !!(c.options && c.options.closed)
+            ox: Number(leaves[0].x) || 0,
+            oy: Number(leaves[0].y) || 0,
+            w: Math.max(0, Number(leaves[0].w) || 0),
+            h: Math.max(0, Number(leaves[0].h) || 0),
+            rotation: Number(leaves[0].rotation) || 0
+        };
+    }
+
+    // Follow pivot in base-frame coords, rotated by the base rotation
+    // (mirrors Anims::pathFollowComp's pivot selection). Null for
+    // legacy top-left; non-null means the pivot rides the path and the
+    // marker sits on the time-0 anchor (see pathStartsAtEnd).
+    function pathPivotLocal(o, base) {
+        if (!base)
+            return null;
+        var f = (o && o.follow) || "topLeft";
+        var w = base.w, h = base.h, px = 0, py = 0;
+        if (f === "center") {
+            px = w / 2;
+            py = h / 2;
+        } else if (f === "top") {
+            px = w / 2;
+        } else if (f === "topRight") {
+            px = w;
+        } else if (f === "right") {
+            px = w;
+            py = h / 2;
+        } else if (f === "bottomRight") {
+            px = w;
+            py = h;
+        } else if (f === "bottom") {
+            px = w / 2;
+            py = h;
+        } else if (f === "bottomLeft") {
+            py = h;
+        } else if (f === "left") {
+            py = h / 2;
+        } else if (f === "custom") {
+            px = Math.min(4000, Math.max(-4000, Number(o.followX) || 0));
+            py = Math.min(4000, Math.max(-4000, Number(o.followY) || 0));
+        } else {
+            return null;
+        }
+        if (px === 0 && py === 0)
+            return null;
+        var rad = (base.rotation || 0) * Math.PI / 180;
+        return {
+            x: px * Math.cos(rad) - py * Math.sin(rad),
+            y: px * Math.sin(rad) + py * Math.cos(rad)
         };
     }
 
@@ -686,21 +907,10 @@ Item {
         var rel = (clip.options && clip.options.pts) || [];
         if (rel.length === 0)
             return [];
-        var target = d.findNode(clip.targetUid);
-        if (!target)
+        var base = canvas.pathBaseOf(clip);
+        if (!base)
             return [];
-        var leaves = target.kind === "group" ? d._leavesUnder(target) : [target];
-        if (leaves.length === 0)
-            return [];
-        var firstUid = leaves[0].uid;
-        var ox = 0, oy = 0;
-        if (d.anim && d.anim.playBase && d.anim.playBase[firstUid]) {
-            ox = Number(d.anim.playBase[firstUid].x) || 0;
-            oy = Number(d.anim.playBase[firstUid].y) || 0;
-        } else {
-            ox = Number(leaves[0].x) || 0;
-            oy = Number(leaves[0].y) || 0;
-        }
+        var ox = base.ox, oy = base.oy;
         var out = [];
         for (var i = 0; i < rel.length; i++) {
             var p = rel[i] || {};
@@ -716,6 +926,171 @@ Item {
             });
         }
         return out;
+    }
+
+    // Direct path editing: the selected clip's trajectory rides in
+    // pathTool (absolute coords) while pathEdit is active. Commits
+    // convert back to start-relative, so edits stay valid when the
+    // shape later moves. Drags coalesce to one undo entry via the
+    // doc transaction opened on press and closed on release.
+    function pathEditClip() {
+        var d = canvas.doc;
+        if (!d || ToolState.activeTool !== "select")
+            return null;
+        var ids = d.anim.selectedClipIds;
+        if (ids.length === 0)
+            return null;
+        var c = d.animClip(ids[ids.length - 1]);
+        return c && c.preset === "customPath" ? c : null;
+    }
+
+    function enterPathEdit(clipId) {
+        var d = canvas.doc;
+        var c = d ? d.animClip(clipId) : null;
+        if (!c || c.preset !== "customPath" || !canvas.pathTool)
+            return false;
+        // Mutual exclusion with pen point-edit: both MouseAreas cover
+        // select tool, pathEdit sits on top and would steal presses.
+        if (canvas.penEdit && canvas.penEdit.editUid >= 0)
+            canvas.penEdit.exit();
+        canvas.pathTool.loadAbsolute(canvas.pathAbsolute(c));
+        canvas.pathTool.showClosed = !!(c.options && c.options.closed);
+        canvas.pathEdit = {
+            active: true,
+            clipId: clipId,
+            txOpen: false,
+            txDoc: null
+        };
+        return true;
+    }
+
+    function exitPathEdit() {
+        var exitPe = canvas.pathEdit;
+        if (exitPe && exitPe.txOpen) {
+            var exitDoc = exitPe.txDoc || canvas.doc;
+            if (exitDoc)
+                exitDoc.endTransaction();
+        }
+        canvas.pathEdit = {
+            active: false,
+            clipId: -1,
+            txOpen: false,
+            txDoc: null
+        };
+        if (canvas.pathTool && ToolState.activeTool !== "path")
+            canvas.pathTool.cancel();
+    }
+
+    // Keeps the edit session glued to clip selection: entering when a
+    // path clip becomes last-selected, exiting when it doesn't, and
+    // reloading idle sessions when the stored points change elsewhere
+    // (inspector toggles, undo). Never reloads mid-drag: live commits
+    // rewrite the clip under us and would clobber the gesture.
+    function syncPathEdit() {
+        if (ToolState.activeTool !== "select" || !canvas.doc) {
+            if (canvas.pathEdit && canvas.pathEdit.active)
+                canvas.exitPathEdit();
+            return;
+        }
+        var c = canvas.pathEditClip();
+        if (!c) {
+            if (canvas.pathEdit && canvas.pathEdit.active)
+                canvas.exitPathEdit();
+            return;
+        }
+        var pe = canvas.pathEdit;
+        if (!pe || !pe.active || pe.clipId !== c.id) {
+            if (pe && pe.txOpen) {
+                var switchDoc = pe.txDoc || canvas.doc;
+                if (switchDoc)
+                    switchDoc.endTransaction();
+            }
+            canvas.enterPathEdit(c.id);
+            return;
+        }
+        if (pe.txOpen || (canvas.pathTool && (canvas.pathTool.dragging || canvas.pathTool.editDrag)))
+            return;
+        var fresh = canvas.pathAbsolute(c);
+        var cur = canvas.pathTool ? canvas.pathTool.active : [];
+        if (fresh.length !== cur.length) {
+            canvas.pathTool.loadAbsolute(fresh);
+        } else if (!canvas.pathPtsEqual(fresh, cur)) {
+            canvas.pathTool.loadAbsolute(fresh);
+        }
+        if (canvas.pathTool)
+            canvas.pathTool.showClosed = !!(c.options && c.options.closed);
+    }
+
+    // Absolute-point equality including handles/smooth: anchors-only
+    // compares miss handle-only undos and leave a stale buffer.
+    function pathPtsEqual(a, b) {
+        if (!a || !b || a.length !== b.length)
+            return false;
+        for (var i = 0; i < a.length; i++) {
+            var pa = a[i] || {}, pb = b[i] || {};
+            if ((Number(pa.x) || 0) !== (Number(pb.x) || 0) || (Number(pa.y) || 0) !== (Number(pb.y) || 0))
+                return false;
+            if ((pa.smooth === true) !== (pb.smooth === true))
+                return false;
+            var aix = pa.inX !== undefined ? Number(pa.inX) : (Number(pa.x) || 0);
+            var bix = pb.inX !== undefined ? Number(pb.inX) : (Number(pb.x) || 0);
+            var aiy = pa.inY !== undefined ? Number(pa.inY) : (Number(pa.y) || 0);
+            var biy = pb.inY !== undefined ? Number(pb.inY) : (Number(pb.y) || 0);
+            var aox = pa.outX !== undefined ? Number(pa.outX) : (Number(pa.x) || 0);
+            var box = pb.outX !== undefined ? Number(pb.outX) : (Number(pb.x) || 0);
+            var aoy = pa.outY !== undefined ? Number(pa.outY) : (Number(pa.y) || 0);
+            var boy = pb.outY !== undefined ? Number(pb.outY) : (Number(pb.y) || 0);
+            if (aix !== bix || aiy !== biy || aox !== box || aoy !== boy)
+                return false;
+        }
+        return true;
+    }
+
+    function commitPathEdit() {
+        var pe = canvas.pathEdit;
+        var d = canvas.doc;
+        if (!pe || !pe.active || pe.clipId < 0 || !d || !canvas.pathTool)
+            return false;
+        var clip = d.animClip(pe.clipId);
+        if (!clip)
+            return false;
+        var pts = canvas.pathTool.relativePts();
+        if (pts.length < 2)
+            return false;
+        // Skip no-op writes (e.g. shift-toggle selection, click without
+        // move): setClipOptions always checkpoints+touches, so writing
+        // identical points would pollute undo and bump rev.
+        var old = (clip.options && clip.options.pts) || [];
+        if (canvas.pathPtsEqual(pts, old))
+            return true;
+        d.setClipOptions(pe.clipId, {
+            pts: pts
+        });
+        if (d.anim.playBase)
+            d.anim.seek(d.anim.currentTime);
+        return true;
+    }
+
+    function beginPathEditTx() {
+        var pe = canvas.pathEdit;
+        if (!pe || !pe.active || pe.txOpen || !canvas.doc)
+            return;
+        canvas.doc.beginTransaction();
+        pe.txOpen = true;
+        pe.txDoc = canvas.doc;
+        canvas.pathEdit = pe;
+    }
+
+    function endPathEditTx() {
+        var pe = canvas.pathEdit;
+        if (!pe || !pe.txOpen)
+            return;
+        var txDoc = pe.txDoc || canvas.doc;
+        pe.txOpen = false;
+        pe.txDoc = null;
+        canvas.pathEdit = pe;
+        if (txDoc)
+            txDoc.endTransaction();
     }
 
     // Motion-path commit: relative points become a new Path clip at the
@@ -886,6 +1261,8 @@ Item {
                     canvas.pathTool.refreshHover(event.x, event.y, event.modifiers);
                 else if (ToolState.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc)
                     canvas.penEdit.moveTo(event.x, event.y, event.modifiers);
+                else if (ToolState.activeTool === "select" && canvas.pathEdit && canvas.pathEdit.active && canvas.doc)
+                    canvas.pathTool.refreshHover(event.x, event.y, event.modifiers);
                 return;
             }
             canvas.offsetX += event.x - mouse.lastX;

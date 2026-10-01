@@ -983,7 +983,7 @@ QtObject {
                 size: grnKv && grnKv.size !== undefined ? Math.min(10, Math.max(1, Number(grnKv.size) || 1)) : Math.min(10, Math.max(1, lerp(Number(o.fromSize) || 0, Number(o.toSize) || 0, e)))
             };
         } else if (preset === "customPath") {
-            var sampled = samplerPath.samplePath(o.pts, o.closed === true, e);
+            var sampled = samplerPath.samplePathEx(o.pts, o, base, e, p);
             if (sampled) {
                 out.x = (Number(base.x) || 0) + sampled.dx;
                 out.y = (Number(base.y) || 0) + sampled.dy;

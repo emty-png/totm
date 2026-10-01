@@ -17,6 +17,7 @@
 #include <QKeySequence>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QProcess>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QSet>
@@ -614,6 +615,20 @@ void SettingsStore::setFontFamily(const QString &family) {
 
 bool SettingsStore::fontRestartNeeded() const {
     return m_fontRestartNeeded;
+}
+
+void SettingsStore::restartApp() {
+    QStringList args = QCoreApplication::arguments();
+    args.removeFirst();
+    args << QStringLiteral("--restart-wait");
+    QProcess::startDetached(QCoreApplication::applicationFilePath(), args);
+    // Same shutdown path as closing the window: closing triggers
+    // Main.qml onClosing (saveWindowNow + TabState.saveAllOpen),
+    // covering the debounced autosave window. quit() alone would
+    // skip onClosing and could drop ~800ms of recent edits.
+    for (QWindow *w : QGuiApplication::allWindows())
+        w->close();
+    QCoreApplication::quit();
 }
 
 QStringList SettingsStore::importedFonts() const {

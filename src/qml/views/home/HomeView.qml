@@ -1,6 +1,7 @@
 import QtCore
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 import QtQuick.Layouts
 import Totm
 
@@ -33,14 +34,12 @@ RowLayout {
     property string pendingDeleteWorkspaceId: ""
     property string pendingDeleteWorkspaceName: ""
     property int pendingDeleteCount: 0
+    // Pending designs for the starred-delete confirm popup.
+    property var pendingDeleteDesignIds: []
 
     // Card selection state (components/home/HomeSelection). One instance
     // per HomeView; ids reassign wholesale so card bindings update.
     property var selection: HomeSelection {}
-
-    // Starter templates (components/home/TemplateLibrary). One instance
-    // per HomeView, like the card selection above.
-    property var templateLib: TemplateLibrary {}
 
     // Designs of the selected workspace. Refreshed wholesale on change so
     // the model array identity stays stable for delegates (see Flow below).
@@ -74,21 +73,55 @@ RowLayout {
         homeView.filteredDesigns = out;
     }
 
-    function sortLabel() {
-        if (homeView.sortMode === "name")
-            return qsTr("Name");
-        if (homeView.sortMode === "oldest")
-            return qsTr("Oldest");
-        return qsTr("Recent");
+    function openCreateMenu(btn) {
+        homeView.popupBelow(createPopup, btn, false);
+        createPopup.open();
     }
 
-    function cycleSort() {
-        if (homeView.sortMode === "recent")
-            homeView.sortMode = "name";
-        else if (homeView.sortMode === "name")
-            homeView.sortMode = "oldest";
-        else
-            homeView.sortMode = "recent";
+    function openFilterMenu(btn) {
+        homeView.popupBelow(filterPopup, btn, true);
+        filterPopup.open();
+    }
+
+    // Dropdown placement in overlay coords: below the button,
+    // left-aligned for create, right-aligned for filter, clamped
+    // with an 8px margin (same rule as the panel entry menus).
+    function popupBelow(popup, btn, alignRight) {
+        var ov = Overlay.overlay;
+        if (!ov || !btn) {
+            popup.x = 8;
+            popup.y = 8;
+            return;
+        }
+        var w = popup.implicitWidth;
+        var h = popup.implicitHeight > 0 ? popup.implicitHeight : 200;
+        var p = btn.mapToItem(ov, 0, btn.height + 6);
+        var x = alignRight ? p.x + btn.width - w : p.x;
+        popup.x = Math.min(Math.max(8, Math.round(x)), Math.max(8, ov.width - w - 8));
+        popup.y = Math.min(Math.max(8, Math.round(p.y)), Math.max(8, ov.height - h - 8));
+    }
+
+    // Shadow card shared by the header dropdowns (same language as
+    // the card right-click menu).
+    component MenuBackground: Item {
+        Rectangle {
+            id: card
+            anchors.fill: parent
+            anchors.margins: 10
+            radius: AppTheme.radiusLarge
+            color: AppTheme.surface
+            border.width: 1
+            border.color: AppTheme.fieldBorder
+        }
+        MultiEffect {
+            source: card
+            anchors.fill: card
+            shadowEnabled: true
+            shadowColor: "#4d000000"
+            shadowBlur: 0.45
+            shadowHorizontalOffset: 0
+            shadowVerticalOffset: 4
+        }
     }
 
     onSearchTextChanged: homeView.refreshFiltered()
@@ -222,21 +255,6 @@ RowLayout {
             TabState.openDesign(id);
     }
 
-    // Starts a design from a starter template: creates the design in
-    // the current workspace, opens it, then builds the template scene
-    // (one undo entry) and saves, so the card preview is alive at once.
-    function homeNewFromTemplate(templateId) {
-        var ws = homeView.selectedWorkspaceId || LibraryStore.defaultWorkspaceId;
-        var id = LibraryStore.createDesign(ws, homeView.templateLib.templateName(templateId));
-        if (!id)
-            return;
-        TabState.openDesign(id);
-        var doc = TabState.documentFor(TabState.modelIndexForDesign(id));
-        if (doc && homeView.templateLib.build(doc, templateId))
-            TabState.saveOpenDesign(id);
-        homeView.refreshFiltered();
-    }
-
     function homeOpenSelected() {
         if (homeView.selection.selectedIds.length !== 1)
             return;
@@ -298,10 +316,64 @@ RowLayout {
             LibraryStore.toggleStarred(ids[i]);
     }
 
+    // Deletes route here so starred designs ask first; anything
+    // unstarred deletes immediately with no popup.
+    function requestDeleteDesigns(ids) {
+        var list = (ids || []).slice();
+        if (list.length === 0)
+            return;
+        var starredNames = [];
+        for (var i = 0; i < list.length; i++) {
+            var info = LibraryStore.design(list[i]);
+            if (info && info.starred)
+                starredNames.push(info.name || qsTr("Untitled"));
+        }
+        if (starredNames.length === 0) {
+            homeView.selection.deleteIds(list);
+            return;
+        }
+        homeView.pendingDeleteDesignIds = list;
+        var title;
+        var message;
+        if (starredNames.length === 1) {
+            title = qsTr("Delete starred design?");
+            if (list.length === 1)
+                message = qsTr("“%1” is starred. Delete it anyway?").arg(starredNames[0]);
+            else
+                message = qsTr("“%1” is starred. Delete all %2 selected designs anyway?").arg(starredNames[0]).arg(list.length);
+        } else {
+            title = qsTr("Delete %1 starred designs?").arg(starredNames.length);
+            if (list.length === starredNames.length)
+                message = qsTr("%1 of %2 selected designs are starred. Delete them anyway?").arg(starredNames.length).arg(list.length);
+            else
+                message = qsTr("%1 of %2 selected designs are starred. Delete all anyway?").arg(starredNames.length).arg(list.length);
+        }
+        deleteConfirmPopup.ask(title, message, qsTr("Delete"));
+    }
+
+    function commitPendingDesignDelete() {
+        var list = homeView.pendingDeleteDesignIds.slice();
+        homeView.pendingDeleteDesignIds = [];
+        if (list.length === 0)
+            return;
+        homeView.selection.deleteIds(list);
+        // Same guard as onLibraryChanged below: rebuilding the grid
+        // mid-edit destroys the open rename editor and eats typed
+        // text, so commits/cancels refresh explicitly after.
+        if (homeView.editingDesignId === "" && workspacePanel.editingWorkspaceId === "")
+            homeView.refreshFiltered();
+    }
+
+    function deleteTargetsForCard(designId) {
+        if (homeView.selection.isSelected(designId) && homeView.selection.selectedIds.length > 1)
+            return homeView.selection.selectedIds.slice();
+        return [designId];
+    }
+
     Keys.onDeletePressed: event => {
         if (homeView.editingDesignId !== "" || workspacePanel.editingWorkspaceId !== "")
             return;
-        homeView.selection.deleteSelected();
+        homeView.requestDeleteDesigns(homeView.selection.selectedIds.slice());
         event.accepted = true;
     }
     Keys.onEscapePressed: event => {
@@ -347,7 +419,7 @@ RowLayout {
         onActivated: {
             if (homeView.homeEditing())
                 return;
-            homeView.selection.deleteSelected();
+            homeView.requestDeleteDesigns(homeView.selection.selectedIds.slice());
         }
     }
 
@@ -435,12 +507,14 @@ RowLayout {
             }
 
             Rectangle {
-                Layout.preferredWidth: templateLabel.implicitWidth + 20
+                id: newButton
+
+                Layout.preferredWidth: 28
                 Layout.preferredHeight: 28
                 radius: AppTheme.radiusSmall
                 border.width: 1
                 border.color: AppTheme.fieldBorder
-                color: templateMouse.containsMouse || templateMouse.pressed ? AppTheme.hover : AppTheme.surface
+                color: newBtnMouse.containsMouse || newBtnMouse.pressed ? AppTheme.hover : AppTheme.surface
 
                 Behavior on color {
                     ColorAnimation {
@@ -449,79 +523,35 @@ RowLayout {
                     }
                 }
 
-                Text {
-                    id: templateLabel
+                AppIcon {
                     anchors.centerIn: parent
-                    text: qsTr("Template")
-                    font.pixelSize: 12
-                    color: templateMouse.containsMouse || templateMouse.pressed ? AppTheme.foreground : AppTheme.muted
+                    width: 14
+                    height: 14
+                    kind: "plus"
+                    iconColor: newBtnMouse.containsMouse || newBtnMouse.pressed ? AppTheme.foreground : AppTheme.muted
                 }
 
                 MouseArea {
-                    id: templateMouse
+                    id: newBtnMouse
                     anchors.fill: parent
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: templateMenu.openPicker()
+                    onClicked: homeView.openCreateMenu(newButton)
                 }
             }
-
-            Rectangle {
-                Layout.preferredWidth: importLabel.implicitWidth + 20
-                Layout.preferredHeight: 28
-                radius: AppTheme.radiusSmall
-                border.width: 1
-                border.color: AppTheme.fieldBorder
-                color: importMouse.containsMouse || importMouse.pressed ? AppTheme.hover : AppTheme.surface
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: 100
-                        easing.type: Easing.OutCubic
-                    }
-                }
-
-                Text {
-                    id: importLabel
-                    anchors.centerIn: parent
-                    text: qsTr("Import")
-                    font.pixelSize: 12
-                    color: importMouse.containsMouse || importMouse.pressed ? AppTheme.foreground : AppTheme.muted
-                }
-
-                MouseArea {
-                    id: importMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        importPicker.currentFolder = StandardPaths.writableLocation(StandardPaths.DocumentsLocation);
-                        importPicker.open();
-                    }
-                }
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.leftMargin: 16
-            Layout.rightMargin: 16
-            Layout.bottomMargin: 8
-            spacing: 8
-            visible: !homeView.settingsSelected
 
             TextField {
                 id: searchField
 
-                Layout.fillWidth: true
+                Layout.preferredWidth: 180
                 implicitHeight: 28
                 placeholderText: qsTr("Search designs")
                 placeholderTextColor: AppTheme.muted
                 font.pixelSize: 12
                 color: AppTheme.foreground
                 selectByMouse: true
+                leftPadding: 12
                 rightPadding: 28
                 onTextChanged: {
                     if (homeView.searchText !== text)
@@ -577,12 +607,14 @@ RowLayout {
             }
 
             Rectangle {
-                Layout.preferredWidth: 80
+                id: filterButton
+
+                Layout.preferredWidth: 28
                 Layout.preferredHeight: 28
                 radius: AppTheme.radiusSmall
                 border.width: 1
                 border.color: AppTheme.fieldBorder
-                color: sortMouse.containsMouse || sortMouse.pressed ? AppTheme.hover : AppTheme.surface
+                color: filterBtnMouse.containsMouse || filterBtnMouse.pressed ? AppTheme.hover : AppTheme.surface
 
                 Behavior on color {
                     ColorAnimation {
@@ -591,21 +623,21 @@ RowLayout {
                     }
                 }
 
-                Text {
-                    id: sortText
+                AppIcon {
                     anchors.centerIn: parent
-                    text: homeView.sortLabel()
-                    font.pixelSize: 12
-                    color: sortMouse.containsMouse || sortMouse.pressed ? AppTheme.foreground : AppTheme.muted
+                    width: 14
+                    height: 14
+                    kind: "funnel"
+                    iconColor: filterBtnMouse.containsMouse || filterBtnMouse.pressed ? AppTheme.foreground : AppTheme.muted
                 }
 
                 MouseArea {
-                    id: sortMouse
+                    id: filterBtnMouse
                     anchors.fill: parent
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: homeView.cycleSort()
+                    onClicked: homeView.openFilterMenu(filterButton)
                 }
             }
         }
@@ -835,7 +867,7 @@ RowLayout {
                 movePolicy: wsId => homeView.moveCardSelectionTo(wsId)
                 exportPolicy: id => homeView.homeExportDesign(id)
                 deletePolicy: id => {
-                    homeView.selection.deleteDesignOrSelected(id);
+                    homeView.requestDeleteDesigns(homeView.deleteTargetsForCard(id));
                 }
             }
         }
@@ -872,13 +904,129 @@ RowLayout {
         }
     }
 
-    // Starter-template picker for the header Template button. Same
-    // templates as the strip below, modal so a pick or outside press
-    // resolves it.
-    TemplateMenu {
-        id: templateMenu
-        templateLib: homeView.templateLib
-        usePolicy: id => homeView.homeNewFromTemplate(id)
+    // Create menu for the header + button: new design, import.
+    Popup {
+        id: createPopup
+        parent: Overlay.overlay
+        implicitWidth: 200
+        padding: 16
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        transformOrigin: Item.TopLeft
+
+        enter: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: 120
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                property: "scale"
+                from: 0.97
+                to: 1
+                duration: 120
+                easing.type: Easing.OutCubic
+            }
+        }
+        exit: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 1
+                to: 0
+                duration: 100
+                easing.type: Easing.InCubic
+            }
+        }
+
+        background: MenuBackground {}
+
+        contentItem: ColumnLayout {
+            spacing: 2
+
+            MenuItem {
+                label: qsTr("New design")
+                onClicked: {
+                    createPopup.close();
+                    homeView.homeNewDesign();
+                }
+            }
+            MenuItem {
+                label: qsTr("Import")
+                onClicked: {
+                    createPopup.close();
+                    importPicker.currentFolder = StandardPaths.writableLocation(StandardPaths.DocumentsLocation);
+                    importPicker.open();
+                }
+            }
+        }
+    }
+
+    // Filter menu for the header filter button: grid sort order.
+    Popup {
+        id: filterPopup
+        parent: Overlay.overlay
+        implicitWidth: 180
+        padding: 16
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        transformOrigin: Item.TopRight
+
+        enter: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: 120
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                property: "scale"
+                from: 0.97
+                to: 1
+                duration: 120
+                easing.type: Easing.OutCubic
+            }
+        }
+        exit: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 1
+                to: 0
+                duration: 100
+                easing.type: Easing.InCubic
+            }
+        }
+
+        background: MenuBackground {}
+
+        contentItem: ColumnLayout {
+            spacing: 2
+
+            MenuItem {
+                label: qsTr("Recent")
+                checked: homeView.sortMode === "recent"
+                onClicked: {
+                    homeView.sortMode = "recent";
+                    filterPopup.close();
+                }
+            }
+            MenuItem {
+                label: qsTr("Name")
+                checked: homeView.sortMode === "name"
+                onClicked: {
+                    homeView.sortMode = "name";
+                    filterPopup.close();
+                }
+            }
+            MenuItem {
+                label: qsTr("Oldest")
+                checked: homeView.sortMode === "oldest"
+                onClicked: {
+                    homeView.sortMode = "oldest";
+                    filterPopup.close();
+                }
+            }
+        }
     }
 
     // Overwrite guard for .totm exports: existing destinations resolve
@@ -886,6 +1034,13 @@ RowLayout {
     ConfirmPopup {
         id: overwritePopup
         onConfirmed: homeView.commitExport(homeView.pendingExportUrl, true)
+    }
+
+    // Starred-delete guard: only batches containing a starred design
+    // land here; unstarred deletes never open a popup.
+    ConfirmPopup {
+        id: deleteConfirmPopup
+        onConfirmed: homeView.commitPendingDesignDelete()
     }
 
     // Workspace delete choice: re-home designs to Default (safe) or

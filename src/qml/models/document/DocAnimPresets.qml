@@ -437,7 +437,16 @@ QtObject {
         "customPath": {
             pts: [],
             closed: false,
-            orient: false
+            orient: false,
+            speed: "eased",
+            reverse: false,
+            repeatMode: "once",
+            repeatCount: 1,
+            orientOffset: 0,
+            orientFlip: false,
+            follow: "topLeft",
+            followX: 0,
+            followY: 0
         }
     }
 
@@ -512,7 +521,10 @@ QtObject {
     function normalizePathPts(raw) {
         var out = [];
         var list = raw || [];
-        for (var i = 0; i < list.length; i++) {
+        // Perf cap: pathological hand-edits truncate, normal draws stay
+        // far below it so compat is unaffected.
+        var cap = Math.min(list.length, 512);
+        for (var i = 0; i < cap; i++) {
             var p = list[i] || {};
             out.push({
                 x: clampNum(p.x, 0, -4000, 4000),
@@ -1119,12 +1131,36 @@ QtObject {
         return _withKeys("customGrain", o, r);
     }
 
+    function normalizePathFollow(v) {
+        var ok = ["topLeft", "top", "topRight", "right", "bottomRight", "bottom", "bottomLeft", "left", "center", "custom"];
+        return ok.indexOf(v) >= 0 ? v : "topLeft";
+    }
+
+    function normalizePathRepeatMode(v) {
+        return v === "times" || v === "alternate" ? v : "once";
+    }
+
     function _normalizeCustomPath(r) {
-        return {
+        // Additive only: old clips without the new keys normalize to the
+        // legacy behavior (eased once, top-left follow, no offset).
+        var mode = normalizePathRepeatMode(r.repeatMode);
+        var o = {
             pts: normalizePathPts(r.pts),
             closed: r.closed === true,
-            orient: r.orient === true
+            orient: r.orient === true,
+            speed: r.speed === "constant" ? "constant" : "eased",
+            reverse: r.reverse === true,
+            repeatMode: mode,
+            repeatCount: mode === "once" ? 1 : Math.min(8, Math.max(2, Math.round(Number(r.repeatCount) || 2))),
+            orientOffset: clampNum(r.orientOffset !== undefined ? r.orientOffset : 0, 0, -180, 180),
+            orientFlip: r.orientFlip === true,
+            follow: normalizePathFollow(r.follow)
         };
+        if (o.follow === "custom" || r.followX !== undefined || r.followY !== undefined) {
+            o.followX = clampNum(r.followX !== undefined ? r.followX : 0, 0, -4000, 4000);
+            o.followY = clampNum(r.followY !== undefined ? r.followY : 0, 0, -4000, 4000);
+        }
+        return o;
     }
 
     function normalizeMode(mode) {

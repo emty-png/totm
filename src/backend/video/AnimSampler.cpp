@@ -208,6 +208,108 @@ PathSample samplePath(const QVariantList &pts, bool closed, double e) {
     return out;
 }
 
+double remapPathProgress(double prog, const QVariantMap &o) {
+    const double t = qBound(0.0, prog, 1.0);
+    const QString mode = o.value(QStringLiteral("repeatMode"), QStringLiteral("once")).toString();
+    if (mode != QLatin1String("times") && mode != QLatin1String("alternate"))
+        return t;
+    int count = qRound(o.value(QStringLiteral("repeatCount"), 1).toDouble());
+    count = qBound(1, count, 8);
+    if (count <= 1)
+        return t;
+    if (t <= 0.0)
+        return 0.0;
+    if (t >= 1.0)
+        return mode == QLatin1String("alternate") && (count % 2 == 0) ? 0.0 : 1.0;
+    const double scaled = t * count;
+    const double frac = scaled - qFloor(scaled);
+    if (mode == QLatin1String("times"))
+        return frac;
+    const long cycle = static_cast<long>(qFloor(scaled)) % 2;
+    return cycle == 0 ? frac : 1.0 - frac;
+}
+
+double adjustPathAngle(double angleDelta, const QVariantMap &o) {
+    double a = angleDelta;
+    if (o.value(QStringLiteral("orientFlip")).toBool())
+        a = -a + 180.0;
+    a += o.value(QStringLiteral("orientOffset"), 0.0).toDouble();
+    while (a > 180.0)
+        a -= 360.0;
+    while (a < -180.0)
+        a += 360.0;
+    return a;
+}
+
+QPointF pathFollowComp(const QVariantMap &base, double newRotation, const QVariantMap &o) {
+    const QString follow = o.value(QStringLiteral("follow"), QStringLiteral("topLeft")).toString();
+    if (follow.isEmpty() || follow == QLatin1String("topLeft"))
+        return {0.0, 0.0};
+    const double w = qMax(0.0, num(base, "w"));
+    const double h = qMax(0.0, num(base, "h"));
+    double px = 0.0, py = 0.0;
+    if (follow == QLatin1String("center")) {
+        px = w / 2.0;
+        py = h / 2.0;
+    } else if (follow == QLatin1String("top")) {
+        px = w / 2.0;
+    } else if (follow == QLatin1String("topRight")) {
+        px = w;
+    } else if (follow == QLatin1String("right")) {
+        px = w;
+        py = h / 2.0;
+    } else if (follow == QLatin1String("bottomRight")) {
+        px = w;
+        py = h;
+    } else if (follow == QLatin1String("bottom")) {
+        px = w / 2.0;
+        py = h;
+    } else if (follow == QLatin1String("bottomLeft")) {
+        py = h;
+    } else if (follow == QLatin1String("left")) {
+        py = h / 2.0;
+    } else if (follow == QLatin1String("custom")) {
+        px = qBound(-4000.0, o.value(QStringLiteral("followX"), 0.0).toDouble(), 4000.0);
+        py = qBound(-4000.0, o.value(QStringLiteral("followY"), 0.0).toDouble(), 4000.0);
+    } else {
+        return {0.0, 0.0};
+    }
+    if (qFuzzyIsNull(px) && qFuzzyIsNull(py))
+        return {0.0, 0.0};
+    // Pivot-on-path: the selected pivot rides the displayed trajectory
+    // (base top-left + path offset). Top-left is shifted by -R(newRot)*p
+    // so pivot world = base + s. Legacy topLeft (p==0) is unaffected.
+    const double newRot = qDegreesToRadians(newRotation);
+    const double ex = px * qCos(newRot) - py * qSin(newRot);
+    const double ey = px * qSin(newRot) + py * qCos(newRot);
+    return {-ex, -ey};
+}
+
+PathSampleEx samplePathEx(
+    const QVariantList &pts, const QVariantMap &o, const QVariantMap &base, double e, double p) {
+    PathSampleEx out;
+    if (pts.size() < 2)
+        return out;
+    const bool constant = o.value(QStringLiteral("speed"), QStringLiteral("eased")).toString() == QLatin1String("constant");
+    double prog = qBound(0.0, constant ? p : e, 1.0);
+    if (o.value(QStringLiteral("reverse")).toBool())
+        prog = 1.0 - prog;
+    prog = remapPathProgress(prog, o);
+    const bool closed = o.value(QStringLiteral("closed")).toBool();
+    const PathSample s = samplePath(pts, closed, prog);
+    if (!s.valid)
+        return out;
+    out.valid = true;
+    const bool orient = o.value(QStringLiteral("orient")).toBool();
+    double angle = orient ? adjustPathAngle(s.angleDelta, o) : 0.0;
+    out.angleDelta = angle;
+    const double baseRot = num(base, "rotation");
+    const QPointF comp = pathFollowComp(base, orient ? baseRot + angle : baseRot, o);
+    out.dx = s.dx + comp.x();
+    out.dy = s.dy + comp.y();
+    return out;
+}
+
 bool parseHex(const QString &hex, int &r, int &g, int &b) {
     QString t = hex.trimmed().toLower();
     if (t.startsWith(QLatin1Char('#')))
@@ -1302,7 +1404,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             : qBound(1.0, num(o, "fromSize", 2.0) + (num(o, "toSize", 2.0) - num(o, "fromSize", 2.0)) * e, 10.0);
         out[QStringLiteral("grain")] = g;
     } else if (preset == QLatin1String("customPath")) {
-        const PathSample s = samplePath(o.value(QStringLiteral("pts")).toList(), o.value(QStringLiteral("closed")).toBool(), e);
+        const PathSampleEx s = samplePathEx(o.value(QStringLiteral("pts")).toList(), o, base, e, p);
         if (s.valid) {
             out[QStringLiteral("x")] = num(base, "x") + s.dx;
             out[QStringLiteral("y")] = num(base, "y") + s.dy;

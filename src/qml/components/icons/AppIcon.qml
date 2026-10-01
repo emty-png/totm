@@ -12,6 +12,7 @@ import QtQuick.Shapes
 //     | "redo" | "play" | "pause" | "stop" | "export" | "fit"
 //     | "shadeOuter" | "shadeInner" | "blur" | "backdrop"
 //     | "sparkle" | "glowInner" | "grain" | "gear" | "book"
+//     | "funnel" | "check"
 Item {
     id: icon
     width: 16
@@ -443,5 +444,21 @@ Item {
         box: icon.width
         paint: icon.iconColor
         svg: "M240,56V200a8,8,0,0,1-8,8H160a24,24,0,0,0-24,23.94,7.9,7.9,0,0,1-5.12,7.55A8,8,0,0,1,120,232a24,24,0,0,0-24-24H24a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H88a32,32,0,0,1,32,32v87.73a8.17,8.17,0,0,0,7.47,8.25,8,8,0,0,0,8.53-8V80a32,32,0,0,1,32-32h64A8,8,0,0,1,240,56Z"
+    }
+
+    // Funnel (filter trigger, Phosphor outline).
+    PhShape {
+        active: icon.kind === "funnel"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M230.6,49.53A15.81,15.81,0,0,0,216,40H40A16,16,0,0,0,28.19,66.76l.08.09L96,139.17V216a16,16,0,0,0,24.87,13.32l32-21.34A16,16,0,0,0,160,194.66V139.17l67.74-72.32.08-.09A15.8,15.8,0,0,0,230.6,49.53ZM40,56h0Zm106.18,74.58A8,8,0,0,0,144,136v58.66L112,216V136a8,8,0,0,0-2.16-5.47L40,56H216Z"
+    }
+
+    // Check (selected-row tick).
+    PhShape {
+        active: icon.kind === "check"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"
     }
 }

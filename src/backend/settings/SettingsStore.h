@@ -127,6 +127,11 @@ public:
     bool followSystem() const;
     void setFollowSystem(bool follow);
     Q_INVOKABLE void useSystemTheme();
+    // Relaunches the app (new face after a font change, etc.): spawns a
+    // fresh instance that waits out this one's shutdown (single-instance
+    // socket) via --restart-wait, then quits. Same shutdown path as
+    // closing the window.
+    Q_INVOKABLE void restartApp();
 
     bool systemDark() const;
 

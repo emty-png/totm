@@ -119,6 +119,15 @@ QtObject {
         return tool.sel.indexOf(idx) >= 0;
     }
 
+    // Screen-space hit test for canvas edit mode (no side effects):
+    // handle, anchor or edge under the cursor, else null. Lets the
+    // canvas accept path presses and fall through to marquee/shapes
+    // on empty space, mirroring pen point-edit routing.
+    function hitTestScreen(sx, sy) {
+        var cx = tool.toCX(sx), cy = tool.toCY(sy);
+        return tool.hitHandle(cx, cy) || tool.hitPoint(cx, cy) || tool.edgeHit(cx, cy);
+    }
+
     function hitPoint(cx, cy) {
         var best = null;
         for (var i = 0; i < tool.active.length; i++) {

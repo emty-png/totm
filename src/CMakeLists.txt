@@ -269,9 +269,6 @@ qt_add_qml_module(totm
         qml/components/home/WorkspaceRow.qml
         qml/components/home/DesignCard.qml
         qml/components/home/DesignContextMenu.qml
-        qml/components/home/TemplateLibrary.qml
-        qml/components/home/TemplateCard.qml
-        qml/components/home/TemplateMenu.qml
         # Plugins (permission-gated QML extensions)
         qml/components/plugins/PluginPermissionPopup.qml
         qml/components/plugins/PluginPermissionRow.qml

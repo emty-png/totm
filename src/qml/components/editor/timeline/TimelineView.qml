@@ -2,6 +2,7 @@ import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Shapes
 import QtMultimedia
 import Totm
 
@@ -477,37 +478,83 @@ Item {
                 }
             }
 
-            // Playhead pinned to the viewport above the ruler: pill plus a
-            // line through every lane.
+            // Playhead pinned to the viewport: a pentagon "home plate"
+            // handle sitting on the ruler plus a crisp 2px line down
+            // through every lane. Snapped to whole pixels so the edges
+            // stay sharp while scrubbing.
             Item {
+                id: playhead
+
+                readonly property real handleW: 14
+                readonly property real handleH: 16
+                // Ruler top + 6px: the handle body lines up with the
+                // time labels and the tip points at the tick marks.
+                readonly property real handleTop: timeline.topPad + timeline.headerHeight - timeline.rulerHeight + 6
+
                 z: 3
-                x: timeline.originX + timeline.playheadX
+                x: Math.round(timeline.originX + timeline.playheadX)
                 y: tracks.contentY
                 width: 0
                 height: tracks.height
 
+                // Line starts under the handle's shoulders so the two
+                // read as a single shape.
                 Rectangle {
                     x: -1
-                    y: 0
+                    y: playhead.handleTop + 8
                     width: 2
-                    height: parent.height
+                    height: parent.height - y
                     color: AppTheme.snapGuide
                 }
 
-                Rectangle {
-                    x: -23
-                    y: 21
-                    width: 46
-                    height: 18
-                    radius: 9
-                    color: AppTheme.snapGuide
+                Shape {
+                    x: -playhead.handleW / 2
+                    y: playhead.handleTop
+                    width: playhead.handleW
+                    height: playhead.handleH
+                    layer.enabled: true
+                    layer.samples: 4
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: timeline.doc ? timeline.doc.anim.currentTime.toFixed(2) : "0.00"
-                        font.pixelSize: 10
-                        font.weight: Font.DemiBold
-                        color: "#ffffff"
+                    ShapePath {
+                        fillColor: AppTheme.snapGuide
+                        strokeColor: "transparent"
+                        strokeWidth: 0
+                        startX: 0
+                        startY: 2.5
+
+                        PathArc {
+                            x: 2.5
+                            y: 0
+                            radiusX: 2.5
+                            radiusY: 2.5
+                        }
+                        PathLine {
+                            x: playhead.handleW - 2.5
+                            y: 0
+                        }
+                        PathArc {
+                            x: playhead.handleW
+                            y: 2.5
+                            radiusX: 2.5
+                            radiusY: 2.5
+                        }
+                        // Straight sides, then a 45-degree taper to the tip.
+                        PathLine {
+                            x: playhead.handleW
+                            y: 9
+                        }
+                        PathLine {
+                            x: playhead.handleW / 2
+                            y: playhead.handleH
+                        }
+                        PathLine {
+                            x: 0
+                            y: 9
+                        }
+                        PathLine {
+                            x: 0
+                            y: 2.5
+                        }
                     }
                 }
             }

@@ -40,4 +40,10 @@ public:
     // Motion-path sample by arc length: {valid, dx, dy, angleDelta}.
     // Invalid QVariant when fewer than 2 points ride along.
     Q_INVOKABLE QVariant samplePath(const QVariantList &pts, bool closed, double e);
+    // Production path sample: speed/repeat/reverse/orient-offset/flip/
+    // follow read from options, linear p alongside eased e, base row for
+    // follow-pivot compensation. Old clips without the new keys sample
+    // exactly like samplePath above.
+    Q_INVOKABLE QVariant samplePathEx(const QVariantList &pts, const QVariantMap &options,
+        const QVariantMap &base, double e, double p);
 };

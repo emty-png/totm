@@ -13,6 +13,7 @@
 #include <QQmlContext>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QThread>
 #include <QUrl>
 
 #include "CrashHandler.h"
@@ -66,6 +67,19 @@ public:
             qWarning() << "totm: single-instance server failed:" << m_server->errorString();
         }
         return true;
+    }
+
+    // Restart path (--restart-wait): the old instance may still be
+    // shutting down and holding the socket, so retry instead of
+    // forwarding-and-exiting on the first probe.
+    bool ensurePrimaryWait(int attempts = 24, int intervalMs = 250)
+    {
+        for (int i = 0; i < attempts; ++i) {
+            if (ensurePrimary())
+                return true;
+            QThread::msleep(intervalMs);
+        }
+        return ensurePrimary();
     }
 
     void setReady()
@@ -248,7 +262,10 @@ int main(int argc, char *argv[])
     // for Main.qml to import + open on launch; anything else is ignored.
     CrashHandler::install(QCoreApplication::applicationFilePath());
     QStringList openFiles;
-    const QStringList args = QCoreApplication::arguments();
+    QStringList args = QCoreApplication::arguments();
+    // Internal relaunch flag (see SettingsStore::restartApp): not a file,
+    // stripped before anything else sees argv.
+    const bool restartWait = args.removeOne(QStringLiteral("--restart-wait"));
     for (int i = 1; i < args.size(); ++i) {
         const QFileInfo info(args.at(i));
         if (!info.suffix().compare(QStringLiteral("totm"), Qt::CaseInsensitive)
@@ -262,7 +279,7 @@ int main(int argc, char *argv[])
     SingleInstance single(singleInstanceServerName());
     single.setInitialFiles(openFiles);
     app.installEventFilter(&single);
-    if (!single.ensurePrimary()) {
+    if (!(restartWait ? single.ensurePrimaryWait() : single.ensurePrimary())) {
         return 0;
     }
 

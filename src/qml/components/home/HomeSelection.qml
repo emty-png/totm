@@ -72,30 +72,24 @@ QtObject {
         return null;
     }
 
-    function deleteSelected() {
-        var ids = selection.selectedIds.slice();
-        if (ids.length === 0)
+    function deleteIds(ids) {
+        var list = (ids || []).slice();
+        if (list.length === 0)
             return;
-        for (var i = 0; i < ids.length; i++) {
-            TabState.closeTabByDesign(ids[i]);
-            LibraryStore.deleteDesign(ids[i]);
+        for (var i = 0; i < list.length; i++) {
+            TabState.closeTabByDesign(list[i]);
+            LibraryStore.deleteDesign(list[i]);
         }
-        selection.selectedIds = [];
+        var kept = [];
+        var sel = selection.selectedIds.slice();
+        for (var j = 0; j < sel.length; j++) {
+            if (list.indexOf(sel[j]) < 0)
+                kept.push(sel[j]);
+        }
+        selection.selectedIds = kept;
     }
 
-    function deleteDesignOrSelected(designId) {
-        if (selection.isSelected(designId) && selection.selectedIds.length > 1) {
-            selection.deleteSelected();
-            return selection.selectedIds.length;
-        }
-        TabState.closeTabByDesign(designId);
-        LibraryStore.deleteDesign(designId);
-        var ids = selection.selectedIds.slice();
-        var at = ids.indexOf(designId);
-        if (at >= 0) {
-            ids.splice(at, 1);
-            selection.selectedIds = ids;
-        }
-        return 1;
+    function deleteSelected() {
+        selection.deleteIds(selection.selectedIds.slice());
     }
 }

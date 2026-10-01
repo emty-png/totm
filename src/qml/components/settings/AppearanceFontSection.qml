@@ -1,5 +1,6 @@
 import QtCore
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import Totm
 
@@ -14,6 +15,10 @@ Rectangle {
 
     readonly property bool isSystem: SettingsStore.fontFamily.toLowerCase() === "system"
     readonly property bool hasCustom: SettingsStore.fontFamily !== "" && !fontCard.isSystem
+    // Last family we already prompted a restart for: a fresh pick
+    // re-prompts, repeated appearanceChanged signals for the same
+    // family do not.
+    property string seenFamily: "__none__"
 
     Layout.fillWidth: true
     implicitHeight: fontBody.implicitHeight + 24
@@ -70,13 +75,52 @@ Rectangle {
             color: AppTheme.snapGuide
         }
 
-        Text {
+        RowLayout {
             Layout.fillWidth: true
             visible: SettingsStore.fontRestartNeeded
-            wrapMode: Text.WordWrap
-            text: qsTr("New font applies after a restart.")
-            font.pixelSize: 11
-            color: AppTheme.muted
+            spacing: 8
+
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("New font applies after a restart.")
+                font.pixelSize: 11
+                color: AppTheme.muted
+            }
+
+            Rectangle {
+                Layout.preferredWidth: restartLabel.implicitWidth + 20
+                Layout.preferredHeight: 28
+                radius: AppTheme.radiusSmall
+                border.width: 1
+                border.color: restartMouse.containsMouse ? AppTheme.foreground : AppTheme.fieldBorder
+                color: restartMouse.pressed ? AppTheme.pressed : restartMouse.containsMouse ? AppTheme.hover : AppTheme.surface
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 100
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                Text {
+                    id: restartLabel
+                    anchors.centerIn: parent
+                    text: qsTr("Restart")
+                    font.pixelSize: 12
+                    color: AppTheme.foreground
+                }
+
+                MouseArea {
+                    id: restartMouse
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: SettingsStore.restartApp()
+                }
+            }
         }
 
         Rectangle {
@@ -152,6 +196,24 @@ Rectangle {
             var family = SettingsStore.importFont(fontPicker.selectedFile);
             if (family !== "")
                 SettingsStore.fontFamily = family;
+        }
+    }
+
+    // Restart offer right after a font pick: Restart relaunches at once,
+    // Cancel leaves the inline Restart button above for later.
+    ConfirmPopup {
+        id: restartPopup
+        parent: Overlay.overlay
+        onConfirmed: SettingsStore.restartApp()
+    }
+
+    Connections {
+        target: SettingsStore
+        function onAppearanceChanged() {
+            if (SettingsStore.fontRestartNeeded && fontCard.seenFamily !== SettingsStore.fontFamily) {
+                fontCard.seenFamily = SettingsStore.fontFamily;
+                restartPopup.ask(qsTr("Restart to apply the new font?"), qsTr("The app font applies after a restart. Restart now?"), qsTr("Restart"));
+            }
         }
     }
 }

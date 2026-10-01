@@ -17,6 +17,9 @@ Item {
     required property real offsetX
     required property real offsetY
     required property bool pathActive
+    // In-select direct editing: draws the live edit buffer (same
+    // bright styling as draw mode) instead of the dimmed trajectory.
+    property bool editActive: false
 
     // Absolute content points of the selected clip's trajectory plus its
     // closed flag. Shown only outside draw mode (draw mode shows the
@@ -24,8 +27,13 @@ Item {
     property var selectedPts: []
     property bool selectedClosed: false
     property bool showSelected: false
+    // Follow-pivot marker (absolute content coords at the path start),
+    // drawn with the trajectory so the tracked point reads on canvas.
+    property real pivotX: 0
+    property real pivotY: 0
+    property bool showPivot: false
 
-    visible: (overlay.pathActive && overlay.tool !== null) || overlay.showSelected
+    visible: (overlay.pathActive && overlay.tool !== null) || (overlay.editActive && overlay.tool !== null) || overlay.showSelected
 
     readonly property real cz: overlay.zoom > 0 ? overlay.zoom : 1
     readonly property real dot: 8 / overlay.cz
@@ -81,7 +89,10 @@ Item {
         Shape {
             antialiasing: true
             preferredRendererType: Shape.CurveRenderer
-            visible: overlay.tool ? overlay.tool.previewActive : false
+            // Rubber preview is a draw-mode affordance only: in edit
+            // mode hover just highlights anchors, never trails the
+            // cursor off the committed trajectory.
+            visible: overlay.pathActive && (overlay.tool ? overlay.tool.previewActive : false)
 
             ShapePath {
                 fillColor: "transparent"
@@ -94,7 +105,7 @@ Item {
         }
 
         Rectangle {
-            visible: overlay.tool ? overlay.tool.previewActive : false
+            visible: overlay.pathActive && (overlay.tool ? overlay.tool.previewActive : false)
             x: (overlay.tool ? overlay.tool.snCX : 0) - width / 2
             y: (overlay.tool ? overlay.tool.snCY : 0) - height / 2
             width: overlay.dot
@@ -169,6 +180,37 @@ Item {
                 border.width: 1.5 / overlay.cz
                 border.color: AppTheme.selection
             }
+        }
+
+        // Follow-pivot marker: crosshair plus diamond at the tracked
+        // point (path start), drawn with the trajectory in select mode.
+        Shape {
+            antialiasing: true
+            preferredRendererType: Shape.CurveRenderer
+            visible: overlay.showPivot && (overlay.showSelected || overlay.editActive)
+            opacity: 0.9
+
+            ShapePath {
+                fillColor: "transparent"
+                strokeColor: AppTheme.selection
+                strokeWidth: 1.5 / overlay.cz
+                PathSvg {
+                    path: "M " + (overlay.pivotX - 7 / overlay.cz) + "," + overlay.pivotY + " L " + (overlay.pivotX + 7 / overlay.cz) + "," + overlay.pivotY + " M " + overlay.pivotX + "," + (overlay.pivotY - 7 / overlay.cz) + " L " + overlay.pivotX + "," + (overlay.pivotY + 7 / overlay.cz)
+                }
+            }
+        }
+
+        Rectangle {
+            visible: overlay.showPivot && (overlay.showSelected || overlay.editActive)
+            opacity: 0.9
+            x: overlay.pivotX - width / 2
+            y: overlay.pivotY - height / 2
+            width: 7 / overlay.cz
+            height: 7 / overlay.cz
+            rotation: 45
+            color: AppTheme.selection
+            border.width: 1 / overlay.cz
+            border.color: "#ffffff"
         }
     }
 }
