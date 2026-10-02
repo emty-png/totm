@@ -672,7 +672,7 @@ QtObject {
         return n.uid;
     }
 
-    // Video creation: linked absolute path plus an explicit box.
+    // Video creation: stored blob name (videos/) plus an explicit box.
     // videoDuration is the probed file length (0 = unknown). Rejects
     // empty sources; everything else defaults (loop on, 1x, full volume,
     // aspect-fit so resizes never distort). videoName overrides the

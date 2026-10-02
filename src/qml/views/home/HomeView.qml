@@ -879,9 +879,9 @@ RowLayout {
         suffixes: ["totm"]
         onAccepted: {
             var dest = exportPicker.selectedFile;
-            // Linked videos never pack into the bundle: warn once so
-            // the share doesn't silently lose them, then continue to
-            // the overwrite guard like a plain export.
+            // Legacy linked videos (absolute paths from old designs) still
+            // need a warning since only stored blobs pack into the bundle.
+            // New imports copy into videos/ and export self-contained.
             var links = homeView.exportDesignId !== "" ? LibraryStore.linkedVideoCount(homeView.exportDesignId) : 0;
             if (links > 0) {
                 homeView.pendingExportUrl = dest;

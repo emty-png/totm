@@ -68,27 +68,28 @@ struct AudioInput {
 // Timeline audio resolved against the render duration (same trim rule
 // as the canvas preview: intersect with [0, duration]). Missing blobs
 // are skipped so one lost file never fails the whole render.
-// Detached video audio rides as absolute linked paths (see LibraryStore
-// video links): those bypass the blob dir and feed ffmpeg directly,
-// which extracts their audio track.
+// Detached video sound shares the stored video blob in videos/ (legacy
+// absolute paths still feed ffmpeg directly, which extracts their track).
 QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
     QList<AudioInput> out;
     const QVariantMap audio = scene.value(QStringLiteral("audio")).toMap();
     const QVariantList clips = audio.value(QStringLiteral("clips")).toList();
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    dir += QStringLiteral("/audio");
+    QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (base.isEmpty())
+        base = QDir::homePath() + QStringLiteral("/.totm");
+    if (!base.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
+        base += QStringLiteral("/totm");
+    const QString dir = base + QStringLiteral("/audio");
+    const QString vdir = base + QStringLiteral("/videos");
     for (const QVariant &cv : clips) {
         const QVariantMap c = cv.toMap();
         const QString name = c.value(QStringLiteral("source")).toString();
         if (name.isEmpty())
             continue;
         QString path;
-        // Linked absolute paths (detached video sound) feed directly;
-        // ffmpeg reads their audio track. Blob names resolve under audio/.
+        // Legacy absolute paths (detached sound from old designs) feed
+        // directly; ffmpeg reads their audio track. Blob names resolve
+        // under audio/, then videos/ for detached video sound.
         if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))) {
             if (!QFile::exists(name))
                 continue;
@@ -104,8 +105,12 @@ QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
             if (name.contains(QStringLiteral("..")))
                 continue;
             path = dir + QStringLiteral("/") + name;
-            if (!QFile::exists(path))
-                continue;
+            if (!QFile::exists(path)) {
+                const QString vpath = vdir + QStringLiteral("/") + name;
+                if (!QFile::exists(vpath))
+                    continue;
+                path = vpath;
+            }
         }
         const double start = qMax(0.0, c.value(QStringLiteral("t0"), 0.0).toDouble());
         const double offset = qMax(0.0, c.value(QStringLiteral("offset"), 0.0).toDouble());

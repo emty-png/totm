@@ -79,8 +79,8 @@ DropArea {
 
     // Mirrors the image-tool picker accept: SVGs vectorize at natural
     // size (blob fallback when unconvertible), rasters stamp clamped
-    // so a 4k drop never covers the scene. Videos delegate to the
-    // canvas probe path (link + duration). Centered on (x, y).
+    // so a 4k drop never covers the scene. Videos copy into videos/
+    // (stored blob) then probe for duration. Centered on (x, y).
     function placeFile(u, x, y) {
         var flat = String(u).split("?")[0];
         if (/\.svg$/i.test(flat)) {
@@ -100,6 +100,7 @@ DropArea {
                 intake.canvas.acceptVideoFileAt(intake.asFileUrl(u), x, y);
                 return true;
             }
+            var vdisplay = String(intake.asFileUrl(u)).split("?")[0].replace(/\\/g, "/").split("/").pop();
             var vpath = LibraryStore.normalizeVideoPath(intake.asFileUrl(u));
             if (!vpath)
                 return false;
@@ -112,7 +113,7 @@ DropArea {
                 vh = Math.max(1, Math.round(vh * vk));
             }
             var vsecs = vprobe && vprobe.ok === true ? Math.max(0, Number(vprobe.duration) || 0) : 0;
-            var vname = String(vpath).replace(/\\/g, "/").split("/").pop();
+            var vname = vdisplay || String(vpath).replace(/\\/g, "/").split("/").pop();
             intake.doc.beginTransaction();
             intake.doc.addVideo(vpath, Math.round(x - vw / 2), Math.round(y - vh / 2), vw, vh, vsecs, "fit", vname);
             if (vprobe && vprobe.ok === true && vprobe.hasAudio === true && intake.doc.anim) {

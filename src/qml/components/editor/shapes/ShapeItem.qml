@@ -70,8 +70,9 @@ Item {
     property var textFx: null
     // Stored blob name under LibraryStore images/.
     property string imageSource: ""
-    // Linked video path (absolute local file, link-by-path). Empty means
-    // missing; preview shows a placeholder, export paints a dark tile.
+    // Stored blob name under LibraryStore videos/ (legacy absolute paths
+    // still resolve). Empty means missing; preview shows a placeholder,
+    // export paints a dark tile.
     property string videoSource: ""
     property real videoDuration: 0
     property real videoOffset: 0

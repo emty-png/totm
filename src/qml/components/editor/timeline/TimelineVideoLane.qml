@@ -1,7 +1,7 @@
 import QtQuick
 import Totm
 
-// One video lane row: a moveable span bar for a linked video shape
+// One video lane row: a moveable span bar for a stored video shape
 // (not an anim clip). The bar runs start → start + visibleDur (full
 // comp when looping, trimmed footage length otherwise); missing files
 // draw pulsing dark-red. Dragging the bar moves the video in time

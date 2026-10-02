@@ -156,35 +156,47 @@ public:
     Q_INVOKABLE int audioCount() const;
     Q_INVOKABLE QVariantList audioPeaks(const QString &name, int buckets, double offset, double window);
 
-    // Video links (link-by-path, never copied). Nodes store the absolute
-    // local file path so .totm stays small; missing files resolve to
-    // empty urls and paint placeholders. Allowlist is mp4/webm/mov/m4v/mkv
-    // (Qt Multimedia + ffmpeg both handle them). normalizeVideoPath
-    // validates a picked/dropped url and returns its absolute path ("" on
-    // failure with lastError set). videoUrl/hasVideo resolve stored paths.
+    // Video blobs. Same sidecar pattern as images/audio: files are copied
+    // into <libraryDir>/videos/ and nodes store the file name only, so
+    // deleting/moving the original never breaks the design. Allowlist is
+    // mp4/webm/mov/m4v/mkv (Qt Multimedia + ffmpeg both handle them).
+    // importVideo copies a local file and returns its stored name ("" on
+    // failure). normalizeVideoPath is the legacy entry point and now
+    // copies as well (returns the stored blob name). videoUrl/hasVideo
+    // resolve stored names; legacy absolute paths still resolve when the
+    // file exists (old designs keep working until re-imported).
+    // videoProbe parses a single `ffmpeg -i` stderr dump into {ok,
+    // duration, width, height, hasAudio}. videosDiskUsage/videoCount
+    // report the live footprint (peaks sidecars excluded from the count).
+    Q_INVOKABLE QString importVideo(const QUrl &source);
     Q_INVOKABLE QString normalizeVideoPath(const QUrl &source);
-    Q_INVOKABLE QUrl videoUrl(const QString &path) const;
-    Q_INVOKABLE bool hasVideo(const QString &path) const;
-    // Container probe for one linked file: parses a single `ffmpeg -i`
+    Q_INVOKABLE QUrl videoUrl(const QString &ref) const;
+    Q_INVOKABLE bool hasVideo(const QString &ref) const;
+    // Container probe for one stored video (or legacy absolute path):
+    // parses a single `ffmpeg -i`
     // stderr dump (no decode, milliseconds) into {ok, duration,
     // width, height, hasAudio}. ok=false when the file is missing,
     // unparseable, or carries no video stream. Backend-independent, so
     // durations match export on every OS (unlike MediaPlayer probing
     // through OS backends). Replaces per-site MediaPlayer probes.
-    Q_INVOKABLE QVariantMap videoProbe(const QString &path) const;
-    // Linked-video count for one design's scene (groups included).
-    // .totm bundles never pack linked files, so the share flow warns
-    // when this is nonzero instead of dropping them silently.
+    Q_INVOKABLE QVariantMap videoProbe(const QString &ref) const;
+    // Legacy linked-video count for one design's scene (groups included).
+    // Only absolute-path refs count; stored blob names are packed into
+    // .totm bundles so they never warn. Kept so old designs still warn
+    // until their videos are re-imported as blobs.
     Q_INVOKABLE int linkedVideoCount(const QString &id) const;
-    // Reveal a linked video in the OS file manager (folder of the file,
-    // or the Movies folder when missing). False when nothing to show.
-    Q_INVOKABLE bool revealVideo(const QString &path) const;
+    // Reveal a stored/legacy video in the OS file manager (folder of the
+    // file, or the Movies folder when missing). False when nothing to show.
+    Q_INVOKABLE bool revealVideo(const QString &ref) const;
+    Q_INVOKABLE quint64 videosDiskUsage() const;
+    Q_INVOKABLE int videoCount() const;
 
     // Project share: single-file .totm bundle (JSON with base64 blobs).
-    // exportDesign writes name + normalized scene + referenced image/audio
-    // blobs; importDesign validates, stores blobs under fresh uuid names
-    // with scene refs remapped, creates the design, returns its id ("" on
-    // failure with lastError set). QML drives both via FileDialogs.
+    // exportDesign writes name + normalized scene + referenced
+    // image/audio/video blobs; importDesign validates, stores blobs under
+    // fresh uuid names with scene refs remapped, creates the design,
+    // returns its id ("" on failure with lastError set). QML drives both
+    // via FileDialogs.
     // exportDesign refuses an existing destination unless overwrite is
     // set (QML confirms first via exportDestinationExists, which applies
     // the same .totm suffix rule so the probe never drifts from the write).
@@ -232,6 +244,15 @@ private:
     void sweepOrphanImages();
     // Blob names referenced by any in-memory scene's audio clips.
     QSet<QString> referencedAudio() const;
+    // Blob names referenced by any in-memory scene's video nodes (groups
+    // included) plus audio clips pointing at video blobs (detached sound
+    // shares the video file, so the sweep must keep it while either side
+    // references it).
+    QSet<QString> referencedVideos() const;
+    // Delete video blobs no scene references (plus their .peaks
+    // sidecars, and orphan sidecars whose blob is gone). Startup only,
+    // same reasoning as the image sweep.
+    void sweepOrphanVideos();
     // Delete audio blobs no scene references (plus their .peaks
     // sidecars, and orphan sidecars whose blob is gone). Startup only,
     // same reasoning as the image sweep.
@@ -244,6 +265,18 @@ private:
     QString imagesDir() const;
     // Stored file name guard: uuid + safe suffix, no separators.
     bool isSafeImageName(const QString &name) const;
+    // Video blob directory (<libraryDir>/videos). Created on demand.
+    QString videosDir() const;
+    // Stored file name guard: uuid + safe suffix, no separators.
+    bool isSafeVideoName(const QString &name) const;
+    // Resolve a stored video blob name or legacy absolute path to an
+    // absolute filesystem path ("" when missing). Blobs win; absolute
+    // paths are honored only when the file still exists.
+    QString resolveVideoFile(const QString &ref) const;
+    // Resolve an audio clip source to an absolute path: audio/ blobs,
+    // then video/ blobs (detached sound shares the video file), then
+    // legacy absolute paths. "" when missing.
+    QString resolveAudioFile(const QString &ref) const;
 
     QList<WorkspaceEntry> m_workspaceEntries;
     QList<DesignEntry> m_designEntries;
@@ -256,7 +289,7 @@ private:
     bool m_loaded = false;
     // Waveform peaks for timeline lanes (memoized dense decode).
     AudioPeaks m_peaks;
-    // Container probes for linked videos (memoized per path + mtime +
+    // Container probes for stored videos (memoized per path + mtime +
     // size, so placement, panel, relink and multi-select re-probes
     // share one ffmpeg spawn instead of one per call site).
     mutable QCache<QString, QVariantMap> m_videoProbes{64};

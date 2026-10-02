@@ -2,9 +2,10 @@ import QtQuick
 import Totm
 
 // Video placement drags for one canvas. Picker-then-place like the
-// image tool: the canvas probes the container first (pendingVideo),
-// then click stamps natural size and drag stretches to the box.
-// Draft preview lives here; commit stamps the linked video plus its
+// image tool: the canvas copies into videos/ first (pendingVideo is the
+// stored blob name), then click stamps natural size and drag stretches
+// to the box.
+// Draft preview lives here; commit stamps the stored video plus its
 // auto-detached sound in one undo entry.
 QtObject {
     id: tool
@@ -13,6 +14,7 @@ QtObject {
     required property var snap
 
     property string pendingVideo: ""
+    property string pendingName: ""
     property real pendingW: 0
     property real pendingH: 0
     property real pendingSecs: 0
@@ -29,8 +31,9 @@ QtObject {
         return tool.pendingVideo !== "";
     }
 
-    function setPending(path, w, h, secs, hasAudio) {
+    function setPending(path, w, h, secs, hasAudio, displayName) {
         tool.pendingVideo = String(path);
+        tool.pendingName = displayName ? String(displayName) : "";
         tool.pendingW = Math.max(1, Math.round(w || 640));
         tool.pendingH = Math.max(1, Math.round(h || 360));
         tool.pendingSecs = Math.max(0, Number(secs) || 0);
@@ -41,6 +44,7 @@ QtObject {
 
     function clearPending() {
         tool.pendingVideo = "";
+        tool.pendingName = "";
         tool.pendingW = 0;
         tool.pendingH = 0;
         tool.pendingSecs = 0;
@@ -126,13 +130,14 @@ QtObject {
         var path = tool.pendingVideo;
         var secs = tool.pendingSecs;
         var sounding = tool.pendingAudio;
+        var vname = tool.pendingName;
         if (!tool.moved) {
             var w = tool.pendingW;
             var h = tool.pendingH;
-            c.stampVideo(path, Math.round(tool.startCX - w / 2), Math.round(tool.startCY - h / 2), w, h, secs, sounding);
+            c.stampVideo(path, Math.round(tool.startCX - w / 2), Math.round(tool.startCY - h / 2), w, h, secs, sounding, vname);
         } else if (tool.draft) {
             var d = tool.draft;
-            c.stampVideo(path, d.x, d.y, d.w, d.h, secs, sounding);
+            c.stampVideo(path, d.x, d.y, d.w, d.h, secs, sounding, vname);
         }
         tool.clearPending();
         ToolState.setActiveTool("select");

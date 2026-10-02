@@ -24,7 +24,7 @@ void ImageEffectItem::paint(QPainter *painter)
     // QML transform (parent Item), so the leaf stays axis-aligned here.
     // Background blur is disabled: the QML backdrop rig samples the live
     // scene behind this item like export samples the frame so far.
-    // Video links ride the same item: when videoSource is set the leaf
+    // Video blobs ride the same item: when videoSource is set the leaf
     // paints the decoded frame (FramePaint video branch), else the image.
     QVariantMap leaf;
     const bool isVideo = !m_videoSource.isEmpty();

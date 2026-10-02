@@ -22,6 +22,7 @@ Rectangle {
     // below, same pattern as the design panel's refreshPlugins.
     property string imagesStat: ""
     property string audioStat: ""
+    property string videosStat: ""
 
     function formatBytes(bytes) {
         var b = Number(bytes) || 0;
@@ -37,6 +38,7 @@ Rectangle {
     function refresh() {
         storageCard.imagesStat = storageCard.formatBytes(LibraryStore.imagesDiskUsage());
         storageCard.audioStat = storageCard.formatBytes(LibraryStore.audioDiskUsage());
+        storageCard.videosStat = storageCard.formatBytes(LibraryStore.videosDiskUsage());
     }
 
     Component.onCompleted: storageCard.refresh()
@@ -100,6 +102,25 @@ Rectangle {
 
             Text {
                 text: storageCard.audioStat
+                font.pixelSize: 12
+                color: AppTheme.muted
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Videos")
+                font.pixelSize: 12
+                elide: Text.ElideRight
+                color: AppTheme.foreground
+            }
+
+            Text {
+                text: storageCard.videosStat
                 font.pixelSize: 12
                 color: AppTheme.muted
             }

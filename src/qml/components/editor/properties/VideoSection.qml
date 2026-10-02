@@ -4,9 +4,10 @@ import QtQuick.Layouts
 import QtMultimedia
 import Totm
 
-// Video source section: linked file plus playback controls. Visible
-// only when every selected leaf is a video; link-by-path keeps .totm
-// small, missing files show a placeholder on canvas and a dark tile
+// Video source section: stored blob plus playback controls. Visible
+// only when every selected leaf is a video; files are copied into
+// videos/ on import so deleting the original never breaks the design,
+// missing blobs show a placeholder on canvas and a dark tile
 // in export. Detach copies the file's sound onto an audio lane.
 PanelSection {
     id: section
@@ -236,7 +237,7 @@ PanelSection {
             Text {
                 Layout.fillWidth: true
                 visible: !section.hasFile()
-                text: qsTr("File moved? Replace or drop a video onto the thumbnail to relink. Export paints a dark tile until then.")
+                text: qsTr("Stored file missing? Replace or drop a video onto the thumbnail. Export paints a dark tile until then.")
                 font.pixelSize: 11
                 color: AppTheme.muted
                 wrapMode: Text.WordWrap
@@ -464,7 +465,7 @@ PanelSection {
 
     // Detach: one audio clip per selected video, starting at the
     // playhead, trimmed to the composition end. The clip points at the
-    // same linked file so ffmpeg extracts its track; volume/mute copy
+    // same stored blob so ffmpeg extracts its track; volume/mute copy
     // over for continuity. Video stays visual-only otherwise.
     function detachAudio() {
         if (!section.doc || !section.doc.anim)

@@ -112,10 +112,10 @@ QtObject {
     // shapeType === "image"). Empty means missing; canvas shows a
     // placeholder and export paints a neutral box.
     property string imageSource: ""
-    // Video link (meaningful when shapeType === "video"): absolute
-    // local file path, never a blob name (link-by-path so .totm stays
-    // small). Empty means missing; canvas shows a placeholder and
-    // export paints the poster/neutral box. videoDuration is the
+    // Video blob name under LibraryStore videos/ (meaningful when
+    // shapeType === "video"). Legacy absolute paths still resolve while
+    // the file exists. Empty means missing; canvas shows a placeholder
+    // and export paints the poster/neutral box. videoDuration is the
     // probed file length in seconds (0 = unknown, no looping math).
     property string videoSource: ""
     property real videoDuration: 0

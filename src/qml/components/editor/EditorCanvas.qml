@@ -1268,15 +1268,20 @@ Item {
             canvas.videoTool.clearPending();
         ToolState.setActiveTool("select");
     }
-    // Video picker accept: probe the container (duration, natural size,
-    // audio presence in one fast call) and arm click/drag placement at
-    // natural size. Unprobed files still arm (unknown duration, no loop
-    // math) instead of failing the gesture.
+    // Video picker accept: copy into videos/ (stored blob name), probe
+    // the container (duration, natural size, audio presence in one fast
+    // call) and arm click/drag placement at natural size. Unprobed files
+    // still arm (unknown duration, no loop math) instead of failing the
+    // gesture. The layer keeps the original file basename.
+    function videoDisplayName(file) {
+        return String(file).split("?")[0].replace(/\\/g, "/").split("/").pop();
+    }
     function acceptVideoFile(file) {
         if (!canvas.doc) {
             ToolState.setActiveTool("select");
             return;
         }
+        var display = canvas.videoDisplayName(file);
         var path = LibraryStore.normalizeVideoPath(file);
         if (!path) {
             canvas.cancelVideoTool();
@@ -1294,15 +1299,16 @@ Item {
             h = Math.max(1, Math.round(h * k));
         }
         var sounding = probe && probe.ok === true && probe.hasAudio === true;
-        canvas.videoTool.setPending(path, w, h, secs, sounding);
+        canvas.videoTool.setPending(path, w, h, secs, sounding, display);
     }
     // Immediate stamp at a point (drops/paste): one undo entry for the
     // picture plus its auto-detached sound at the playhead. The layer
-    // takes the file basename (with extension) instead of "Video <uid>".
-    function stampVideo(path, x, y, w, h, secs, sounding) {
+    // takes the original file basename (displayName) when provided,
+    // falling back to the stored blob basename.
+    function stampVideo(path, x, y, w, h, secs, sounding, displayName) {
         if (!canvas.doc || !path)
             return;
-        var vname = String(path).replace(/\\/g, "/").split("/").pop();
+        var vname = displayName ? String(displayName) : String(path).replace(/\\/g, "/").split("/").pop();
         canvas.doc.beginTransaction();
         canvas.doc.addVideo(path, Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)), secs, "fit", vname);
         if (sounding === true && canvas.doc.anim) {
@@ -1319,6 +1325,7 @@ Item {
             ToolState.setActiveTool("select");
             return;
         }
+        var display = canvas.videoDisplayName(file);
         var path = LibraryStore.normalizeVideoPath(file);
         if (!path) {
             ToolState.setActiveTool("select");
@@ -1341,7 +1348,7 @@ Item {
         if (ToolState.activeTool === "video" && canvas.videoTool)
             canvas.videoTool.clearPending();
         ToolState.setActiveTool("select");
-        canvas.stampVideo(path, Math.round(x - w / 2), Math.round(y - h / 2), w, h, secs, sounding);
+        canvas.stampVideo(path, Math.round(x - w / 2), Math.round(y - h / 2), w, h, secs, sounding, display);
     }
     function viewportCenter() {
         var sw = canvas.doc ? Number(canvas.doc.sceneWidth) || 1920 : 1920;

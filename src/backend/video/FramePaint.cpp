@@ -82,7 +82,8 @@ QImage loadExportImage(const QString &name, int targetW, int targetH) {
     return img;
 }
 
-// Video frame for one linked file at a composition frame. frameNo is
+// Video frame for one stored blob (legacy absolute paths still work) at
+// a composition frame. frameNo is
 // the 60Hz grain clock (see Effects::grainFrameNo), so t = frameNo/60
 // recovers composition time within 16ms without changing the shared
 // paintLeaf signature. Rate/offset/loop fold here; missing binaries or
@@ -117,8 +118,39 @@ double videoTimeFor(const QVariantMap &m, int frameNo) {
     return qMax(0.0, vt);
 }
 
-QImage loadVideoFrame(const QString &path, double videoTime, int targetW, int targetH) {
-    if (path.isEmpty() || !QFile::exists(path))
+// Video via stored blob (mirrors image blobs). Legacy absolute paths
+// still resolve while the file exists so old designs keep painting.
+QString exportVideosDir() {
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (dir.isEmpty())
+        dir = QDir::homePath() + QStringLiteral("/.totm");
+    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
+        dir += QStringLiteral("/totm");
+    return dir + QStringLiteral("/videos");
+}
+
+QString resolveVideoFile(const QString &ref) {
+    if (ref.isEmpty())
+        return {};
+    const bool hasSep = ref.contains(QLatin1Char('/')) || ref.contains(QLatin1Char('\\'))
+        || ref.contains(QStringLiteral(".."));
+    if (!hasSep) {
+        const int dot = ref.lastIndexOf(QLatin1Char('.'));
+        if (dot > 0 && dot < ref.size() - 1) {
+            const QString blob = exportVideosDir() + QStringLiteral("/") + ref;
+            if (QFile::exists(blob))
+                return blob;
+        }
+        return {};
+    }
+    if (QFile::exists(ref))
+        return ref;
+    return {};
+}
+
+QImage loadVideoFrame(const QString &ref, double videoTime, int targetW, int targetH) {
+    const QString path = resolveVideoFile(ref);
+    if (path.isEmpty())
         return {};
     const double vt = qMax(0.0, videoTime);
     // Quantize to the 60Hz clock so adjacent export frames with the
