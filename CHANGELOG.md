@@ -5,6 +5,8 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-02
+
 ### Added
 
 * Video layers — import MP4/WebM/MOV/M4V/MKV as linked canvas shapes (link-by-path, `M` shortcut, picker, drag-drop, paste) with MediaPlayer preview (paused seeks to the export frame, 100ms drift repair while playing, hidden leaves stay silent, no autoplay) and ffmpeg-decoded frames in PNG/video export with shadows, glows, blurs, strokes, masks, rounded corners and grain; hide/show, fade, resize, flip, speed (0.25–4x), loop, offset, volume and mute via the Video panel. Sounding videos auto-detach their audio onto timeline lanes at import (silent files stay visual-only); detached lanes get real waveforms, preview and export mixing. Fill/stroke panels, component export and dead-end custom presets (color, gradient, strokes, font size/weight) hide for all-video selections; `.totm` shares warn that linked videos don't travel.
