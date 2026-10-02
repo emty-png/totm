@@ -22,6 +22,11 @@ Item {
     property var jointOrig: ({})
     property real jointDx: 0
     property bool clipDragging: false
+    // Video-drag session shared across video lane delegates. State
+    // lives here, not in the delegate, so Repeater rebuilds mid-drag
+    // (live-node writes notify and recompute the rows) rebind instead
+    // of killing the gesture. Null when idle.
+    property var videoDrag: null
     property bool marqueeDragged: false
     readonly property real originX: 8
     // Wide enough for the transport row (play/stop/record plus the
@@ -46,11 +51,17 @@ Item {
     readonly property real playheadX: timeline.doc ? timeline.doc.anim.currentTime * timeline.pxPerSec : 0
     readonly property var lanes: timeline.computeLanes()
     readonly property var audioRows: timeline.computeAudioRows()
+    readonly property var videoRows: timeline.computeVideoRows()
     readonly property real audioHeadHeight: 28
     // Audio chrome exists only once a clip does; the import button
     // floats over the ruler so adding the first clip is always at hand.
     readonly property bool hasAudio: timeline.audioRows.length > 0
     readonly property real audioTop: timeline.hasAudio ? timeline.audioHeadHeight : 0
+    // Video chrome exists once a video shape does. Rows are
+    // informational (click selects the shape, trim lives in the Video
+    // panel) so footage length/loop state stays visible on the timeline.
+    readonly property bool hasVideoRows: timeline.videoRows.length > 0
+    readonly property real videoTop: timeline.hasVideoRows ? timeline.audioHeadHeight : 0
 
     // Tracks input overlay below the content row: lane/diamond/ruler
     // presses land above; empty tracks and wheel fall through here.
@@ -82,6 +93,7 @@ Item {
                 timeline.doc.anim.pause();
             timeline.doc.clearClipSelection();
             timeline.doc.clearAudioSelection();
+            timeline.doc.clearSelection();
         }
         onWheel: wheel => timeline.handleWheel(wheel)
     }
@@ -126,7 +138,7 @@ Item {
                 interactive: false
                 clip: true
                 contentWidth: timeline.gutterWidth
-                contentHeight: timeline.lanesHeight() + timeline.audioTop + timeline.audioRows.length * timeline.laneHeight
+                contentHeight: timeline.lanesHeight() + timeline.videoTop + timeline.videoRows.length * timeline.laneHeight + timeline.audioTop + timeline.audioRows.length * timeline.laneHeight
                 contentY: tracks.contentY
 
                 Column {
@@ -234,6 +246,85 @@ Item {
                         }
                     }
 
+                    // Video header (picture above sound).
+                    Item {
+                        width: parent.width
+                        height: timeline.audioHeadHeight
+                        visible: timeline.hasVideoRows
+
+                        Text {
+                            anchors {
+                                left: parent.left
+                                verticalCenter: parent.verticalCenter
+                                leftMargin: 12
+                            }
+                            text: qsTr("Video")
+                            font.pixelSize: 11
+                            color: AppTheme.muted
+                        }
+
+                        Rectangle {
+                            anchors {
+                                left: parent.left
+                                right: parent.right
+                                bottom: parent.bottom
+                            }
+                            height: 1
+                            color: AppTheme.border
+                        }
+                    }
+
+                    Repeater {
+                        model: timeline.videoRows
+
+                        Item {
+                            width: timeline.gutterWidth
+                            height: timeline.laneHeight
+
+                            AppIcon {
+                                anchors {
+                                    left: parent.left
+                                    verticalCenter: parent.verticalCenter
+                                    leftMargin: 12
+                                }
+                                width: 14
+                                height: 14
+                                kind: "film"
+                                iconColor: modelData.missing ? AppTheme.closeHover : AppTheme.muted
+                            }
+
+                            Text {
+                                anchors {
+                                    left: parent.left
+                                    right: parent.right
+                                    verticalCenter: parent.verticalCenter
+                                    leftMargin: 32
+                                    rightMargin: 8
+                                }
+                                text: modelData.label
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                                color: AppTheme.foreground
+                            }
+
+                            Rectangle {
+                                anchors {
+                                    left: parent.left
+                                    right: parent.right
+                                    bottom: parent.bottom
+                                }
+                                height: 1
+                                color: AppTheme.border
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton
+                                onClicked: mouse => timeline.onVideoRow(modelData.uid, !!(mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier | Qt.ShiftModifier)))
+                            }
+                        }
+                    }
+
                     // Audio header; import floats top-right over the ruler.
                     Item {
                         width: parent.width
@@ -327,7 +418,7 @@ Item {
             interactive: false
             flickableDirection: Flickable.HorizontalAndVerticalFlick
             contentWidth: Math.max(tracks.width, timeline.tracksWidth())
-            contentHeight: timeline.tracksTop + timeline.lanesHeight() + timeline.audioTop + timeline.audioRows.length * timeline.laneHeight
+            contentHeight: timeline.tracksTop + timeline.lanesHeight() + timeline.videoTop + timeline.videoRows.length * timeline.laneHeight + timeline.audioTop + timeline.audioRows.length * timeline.laneHeight
 
             ScrollBar.horizontal: ScrollBar {
                 policy: ScrollBar.AsNeeded
@@ -429,12 +520,61 @@ Item {
                 }
             }
 
+            // Video header spacer pairing with the gutter header.
+            Item {
+                x: 0
+                width: tracks.contentWidth
+                y: timeline.tracksTop + timeline.lanesHeight()
+                height: timeline.audioHeadHeight
+                visible: timeline.hasVideoRows
+
+                Rectangle {
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        bottom: parent.bottom
+                    }
+                    height: 1
+                    color: AppTheme.border
+                }
+            }
+
+            // Video lanes pan with the ruler (never viewport-pinned).
+            Column {
+                id: videoColumn
+
+                x: 0
+                width: tracks.contentWidth
+                y: timeline.tracksTop + timeline.lanesHeight() + timeline.videoTop
+                height: timeline.videoRows.length * timeline.laneHeight
+
+                Repeater {
+                    id: videoRows
+
+                    model: timeline.videoRows
+                    onItemAdded: (index, item) => {
+                        item.clipPolicy = (uid, additive) => timeline.onVideoRow(uid, additive);
+                        item.view = timeline;
+                    }
+
+                    TimelineVideoLane {
+                        width: tracks.contentWidth
+                        height: timeline.laneHeight
+                        row: modelData
+                        pxPerSec: timeline.pxPerSec
+                        originX: timeline.originX
+                        compDuration: timeline.doc ? timeline.doc.anim.duration : 4.0
+                        doc: timeline.doc
+                    }
+                }
+            }
+
             // Audio header spacer pairing with the gutter header (content
             // geometry, so pans move the hairline with the ruler).
             Item {
                 x: 0
                 width: tracks.contentWidth
-                y: timeline.tracksTop + timeline.lanesHeight()
+                y: timeline.tracksTop + timeline.lanesHeight() + timeline.videoTop + timeline.videoRows.length * timeline.laneHeight
                 height: timeline.audioHeadHeight
                 visible: timeline.hasAudio
 
@@ -455,7 +595,7 @@ Item {
 
                 x: 0
                 width: tracks.contentWidth
-                y: timeline.tracksTop + timeline.lanesHeight() + timeline.audioTop
+                y: timeline.tracksTop + timeline.lanesHeight() + timeline.videoTop + timeline.videoRows.length * timeline.laneHeight + timeline.audioTop
                 height: timeline.audioRows.length * timeline.laneHeight
 
                 Repeater {
@@ -563,7 +703,7 @@ Item {
             Text {
                 x: tracks.contentX + (tracks.width - width) / 2
                 y: tracks.contentY + timeline.tracksTop + (tracks.height - timeline.tracksTop - height) / 2
-                visible: timeline.lanes.length === 0 && timeline.audioRows.length === 0
+                visible: timeline.lanes.length === 0 && timeline.audioRows.length === 0 && timeline.videoRows.length === 0
                 text: qsTr("Apply a preset or custom animation to begin...")
                 font.pixelSize: 13
                 color: AppTheme.muted
@@ -713,6 +853,207 @@ Item {
         d.selectAudioClip(id, additive);
     }
 
+    function onVideoRow(uid, additive) {
+        var d = timeline.doc;
+        if (!d)
+            return;
+        if (additive) {
+            if (d.isSelected(uid))
+                d.toggleSelect(uid);
+            else
+                d.addToSelection(uid);
+        } else {
+            d.selectOnly(uid);
+        }
+    }
+
+    function beginVideoDrag(uid, lx) {
+        var d = timeline.doc;
+        if (!d)
+            return;
+        // A press with a session already open (multi-touch, stale
+        // grab) commits the old one first so transactions never nest.
+        if (timeline.videoDrag)
+            timeline.endVideoDrag();
+        var n = d.findNode(uid);
+        if (!n || n.shapeType !== "video")
+            return;
+        // Passive: selecting must not disturb playback.
+        d.beginPassiveTransaction();
+        var st = Math.max(0, Number(n.videoStart) || 0);
+        timeline.videoDrag = {
+            uid: uid,
+            snapStart: st,
+            cur: st,
+            pressLx: lx,
+            active: false
+        };
+    }
+
+    function moveVideoDrag(lx) {
+        var s = timeline.videoDrag;
+        var d = timeline.doc;
+        if (!s || !d)
+            return;
+        if (!s.active && Math.abs(lx - s.pressLx) < 4)
+            return;
+        var dx = (lx - s.pressLx) / timeline.pxPerSec;
+        var cur = timeline.snapVideoTime(s.snapStart + dx, s.uid);
+        // Reassign wholesale so bindings fire (mutating a field of a
+        // var-held object would not notify).
+        timeline.videoDrag = {
+            uid: s.uid,
+            snapStart: s.snapStart,
+            cur: cur,
+            pressLx: s.pressLx,
+            active: true
+        };
+        d.nudgeVideoStart(s.uid, cur);
+    }
+
+    function endVideoDrag() {
+        var s = timeline.videoDrag;
+        var d = timeline.doc;
+        timeline.videoDrag = null;
+        if (!d)
+            return;
+        if (s && s.active) {
+            // Value already sits final via nudges: one touch stages the
+            // single undo entry that end() commits.
+            d.nudgeVideoStart(s.uid, s.cur);
+            d.touch();
+        }
+        d.endTransaction();
+    }
+
+    // Snap a video start to zero, the playhead, every sibling video
+    // edge and every audio/animation end within 6px, so placements line
+    // up with motion and sound like everything else does.
+    function snapVideoTime(t, skipUid) {
+        var threshold = 6 / timeline.pxPerSec;
+        var best = t, bestDist = threshold;
+        var consider = v => {
+            var dist = Math.abs(t - v);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = v;
+            }
+        };
+        consider(0);
+        var d = timeline.doc;
+        if (!d)
+            return Math.round(Math.max(0, best) * 100) / 100;
+        consider(Number(d.anim.currentTime) || 0);
+        // Sibling video edges from the live tree (same span math as
+        // the lane bars, so bars butt-join cleanly).
+        var comp = Math.max(0.5, Number(d.anim.duration) || 4);
+        var leaves = d.leafList || [];
+        for (var v = 0; v < leaves.length; v++) {
+            var ln = leaves[v];
+            if (!ln || ln.shapeType !== "video" || ln.uid === skipUid)
+                continue;
+            var vs = Math.max(0, Number(ln.videoStart) || 0);
+            consider(vs);
+            var vd = Math.max(0, Number(ln.videoDuration) || 0);
+            var vo = Math.max(0, Number(ln.videoOffset) || 0);
+            var vr = Number(ln.playbackRate) || 1;
+            if (!(vr > 0))
+                vr = 1;
+            vr = Math.min(4, Math.max(0.25, vr));
+            // Same comp-end clamp as the lane bars, so snapped
+            // placements butt-join what is actually drawn.
+            var vfoot = (ln.videoLoop !== false || !(vd > 0)) ? comp : Math.min(comp, Math.max(0.2, (vd - vo) / vr));
+            var vspan = Math.min(vfoot, Math.max(0.2, comp - vs));
+            consider(vs + vspan);
+        }
+        var auds = d.audio.clips;
+        for (var i = 0; i < auds.length; i++) {
+            consider(auds[i].t0);
+            consider(auds[i].t0 + auds[i].duration);
+        }
+        var anims = d.anim.clips;
+        for (var j = 0; j < anims.length; j++) {
+            consider(anims[j].t0);
+            consider(anims[j].t0 + anims[j].duration);
+        }
+        return Math.round(Math.max(0, best) * 100) / 100;
+    }
+
+    function baseName(path) {
+        if (!path)
+            return "";
+        var p = String(path).replace(/\\/g, "/");
+        var i = p.lastIndexOf("/");
+        return i >= 0 ? p.slice(i + 1) : p;
+    }
+
+    // Video rows in paint order; reads rev so edits rebuild. Each row
+    // carries the visible span for the lane bar plus selection/missing.
+    function computeVideoRows() {
+        var d = timeline.doc;
+        if (!d)
+            return [];
+        d.rev;
+        var leaves = d.leafList || [];
+        var out = [];
+        for (var i = 0; i < leaves.length; i++) {
+            var n = leaves[i];
+            if (!n || n.shapeType !== "video")
+                continue;
+            var src = String(n.videoSource ?? "");
+            var missing = src === "";
+            try {
+                if (!missing && typeof LibraryStore !== "undefined")
+                    missing = !LibraryStore.hasVideo(src);
+            } catch (e) {
+                missing = src === "";
+            }
+            var dur = Math.max(0, Number(n.videoDuration) || 0);
+            var off = Math.max(0, Number(n.videoOffset) || 0);
+            var start = Math.max(0, Number(n.videoStart) || 0);
+            var rate = Number(n.playbackRate) || 1;
+            if (!(rate > 0))
+                rate = 1;
+            rate = Math.min(4, Math.max(0.25, rate));
+            var loop = n.videoLoop !== false;
+            var comp = d.anim ? Math.max(0.5, Number(d.anim.duration) || 4) : 4;
+            var visible = comp;
+            if (!loop && dur > 0)
+                visible = Math.min(comp, Math.max(0.2, (dur - off) / rate));
+            if (!(visible > 0))
+                visible = Math.min(comp, 0.2);
+            // The bar stops at the comp end like sound lanes: playback
+            // wraps and export renders exactly the comp, so nothing past
+            // it ever plays. Starts past the end keep a grabbable nub.
+            visible = Math.min(visible, Math.max(0.2, comp - start));
+            var nm = n.name || timeline.baseName(src) || qsTr("Video");
+            var label = missing ? qsTr("%1 · missing").arg(nm) : (dur > 0 ? qsTr("%1 · %2s").arg(nm).arg(dur.toFixed(1)) : nm);
+            if (loop && !missing)
+                label += qsTr(" · loop");
+            if (start > 0.05)
+                label += qsTr(" · @%1s").arg(start.toFixed(1));
+            out.push({
+                uid: n.uid,
+                name: nm,
+                label: label,
+                src: src,
+                missing: missing,
+                duration: dur,
+                offset: off,
+                start: start,
+                rate: rate,
+                loop: loop,
+                visibleDur: visible,
+                selected: d.isSelected(n.uid)
+            });
+        }
+        return out;
+    }
+
+    function videoRowsY() {
+        return timeline.tracksTop + timeline.lanesHeight() + timeline.videoTop;
+    }
+
     // Audio rows earliest-first; reads rev so edits rebuild.
     function computeAudioRows() {
         var d = timeline.doc;
@@ -740,6 +1081,7 @@ Item {
         if (!additive) {
             d.clearClipSelection();
             d.clearAudioSelection();
+            d.clearSelection();
         }
         var lanes = timeline.lanes;
         for (var i = 0; i < lanes.length; i++) {
@@ -761,7 +1103,7 @@ Item {
         }
         var rows = timeline.audioRows;
         for (var m = 0; m < rows.length; m++) {
-            var ay = timeline.tracksTop + timeline.lanesHeight() + timeline.audioTop + m * timeline.laneHeight + timeline.laneHeight / 2;
+            var ay = timeline.tracksTop + timeline.lanesHeight() + timeline.videoTop + timeline.videoRows.length * timeline.laneHeight + timeline.audioTop + m * timeline.laneHeight + timeline.laneHeight / 2;
             if (ay < area.y || ay > area.y + area.height)
                 continue;
             var clip = rows[m].clip;
@@ -769,6 +1111,16 @@ Item {
             var x1 = timeline.originX + (clip.t0 + clip.duration) * timeline.pxPerSec;
             if (x0 <= area.x + area.width && x1 >= area.x)
                 d.addAudioSelection(clip.id);
+        }
+        var vrows = timeline.videoRows;
+        for (var v = 0; v < vrows.length; v++) {
+            var vy = timeline.videoRowsY() + v * timeline.laneHeight + timeline.laneHeight / 2;
+            if (vy < area.y || vy > area.y + area.height)
+                continue;
+            var x0v = timeline.originX + (Number(vrows[v].start) || 0) * timeline.pxPerSec;
+            var x1v = x0v + vrows[v].visibleDur * timeline.pxPerSec;
+            if (x0v <= area.x + area.width && x1v >= area.x)
+                d.addToSelection(vrows[v].uid);
         }
     }
 

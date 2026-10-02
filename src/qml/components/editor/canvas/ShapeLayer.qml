@@ -213,10 +213,13 @@ Item {
             videoSource: n.videoSource ?? "",
             videoDuration: Math.max(0, Number(n.videoDuration) || 0),
             videoOffset: Math.max(0, Number(n.videoOffset) || 0),
+            videoStart: Math.max(0, Number(n.videoStart) || 0),
             videoMuted: n.videoMuted === true,
             videoVolume: Math.min(1, Math.max(0, n.videoVolume !== undefined ? Number(n.videoVolume) : 1)),
             playbackRate: Math.min(4, Math.max(0.25, Number(n.playbackRate) || 1)),
             videoLoop: n.videoLoop !== false,
+            videoFit: (n.videoFit === "cover" || n.videoFit === "fill") ? n.videoFit : "fit",
+            videoTime: (n.videoTime !== undefined && Number(n.videoTime) >= 0) ? Number(n.videoTime) : -1,
             textContent: n.textContent ?? "",
             fontFamily: n.fontFamily || "Inter",
             fontWeight: n.fontWeight || 400,
@@ -403,10 +406,13 @@ Item {
             videoSource: modelData.videoSource ?? ""
             videoDuration: Math.max(0, Number(modelData.videoDuration) || 0)
             videoOffset: Math.max(0, Number(modelData.videoOffset) || 0)
+            videoStart: Math.max(0, Number(modelData.videoStart) || 0)
             videoMuted: modelData.videoMuted === true
             videoVolume: Math.min(1, Math.max(0, modelData.videoVolume !== undefined ? Number(modelData.videoVolume) : 1))
             playbackRate: Math.min(4, Math.max(0.25, Number(modelData.playbackRate) || 1))
             videoLoop: modelData.videoLoop !== false
+            videoFit: (modelData.videoFit === "cover" || modelData.videoFit === "fill") ? modelData.videoFit : "fit"
+            videoTime: (modelData.videoTime !== undefined && Number(modelData.videoTime) >= 0) ? Number(modelData.videoTime) : -1
             previewTime: layerRoot.previewTime
             previewPlaying: layerRoot.previewPlaying
             textContent: modelData.textContent !== undefined ? modelData.textContent : ""

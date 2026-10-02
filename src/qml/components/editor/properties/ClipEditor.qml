@@ -289,6 +289,20 @@ ScrollView {
             }
         }
 
+        // Video time (footage from-to for video leaves; freeze/scrub/
+        // reverse/ramp with keyframe support like other customs).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && editor.clipData.preset === "customVideoTime"
+
+            ClipVideoOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
         // Motion path (closed / orient / redraw).
         PanelSection {
             width: parent.width

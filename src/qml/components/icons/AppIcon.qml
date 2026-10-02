@@ -5,7 +5,7 @@ import QtQuick.Shapes
 // Paths use a 256x256 grid, scaled to fit (Phosphor fill set, MIT).
 // kind: "minimize" | "maximize" | "restore" | "close" | "sun" | "moon"
 //     | "apps" | "plus" | "square" | "circle" | "triangle" | "diamond"
-//     | "hexagon" | "pen" | "text" | "image" | "music" | "caret" | "cursor"
+//     | "hexagon" | "pen" | "text" | "image" | "film" | "music" | "caret" | "cursor"
 //     | "eye" | "eyeOff" | "lock" | "unlock" | "star" | "starFill"
 //     | "dots" | "contrast" | "corner" | "cornerTL" | "cornerTR" | "cornerBR"
 //     | "cornerBL" | "rotate" | "flipH" | "flipV" | "undo"
@@ -244,6 +244,14 @@ Item {
         box: icon.width
         paint: icon.iconColor
         svg: "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V158.75l-26.07-26.06a16,16,0,0,0-22.63,0l-20,20-44-44a16,16,0,0,0-22.62,0L40,149.37V56ZM40,172l52-52,80,80H40Zm176,28H194.63l-36-36,20-20L216,181.38V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z"
+    }
+
+    // Film strip (video tool / layers, Phosphor fill FilmStrip).
+    PhShape {
+        active: icon.kind === "film"
+        box: icon.width
+        paint: icon.iconColor
+        svg: "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,88h80v80H40Zm96-16V56h32V72Zm-16,0H88V56h32Zm0,112v16H88V184Zm16,0h32v16H136Zm0-16V88h80v80Zm80-96H184V56h32ZM72,56V72H40V56ZM40,184H72v16H40Zm176,16H184V184h32v16Z"
     }
 
     // Music note with plus (audio import)

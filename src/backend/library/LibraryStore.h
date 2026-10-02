@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QCache>
 #include <QDateTime>
 #include <QLockFile>
 #include <QObject>
@@ -175,6 +176,9 @@ public:
     // .totm bundles never pack linked files, so the share flow warns
     // when this is nonzero instead of dropping them silently.
     Q_INVOKABLE int linkedVideoCount(const QString &id) const;
+    // Reveal a linked video in the OS file manager (folder of the file,
+    // or the Movies folder when missing). False when nothing to show.
+    Q_INVOKABLE bool revealVideo(const QString &path) const;
 
     // Project share: single-file .totm bundle (JSON with base64 blobs).
     // exportDesign writes name + normalized scene + referenced image/audio
@@ -252,4 +256,8 @@ private:
     bool m_loaded = false;
     // Waveform peaks for timeline lanes (memoized dense decode).
     AudioPeaks m_peaks;
+    // Container probes for linked videos (memoized per path + mtime +
+    // size, so placement, panel, relink and multi-select re-probes
+    // share one ffmpeg spawn instead of one per call site).
+    mutable QCache<QString, QVariantMap> m_videoProbes{64};
 };

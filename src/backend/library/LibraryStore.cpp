@@ -2,6 +2,7 @@
 
 #include "SvgImport.h"
 
+#include <QCache>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -13,6 +14,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDesktopServices>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
@@ -641,6 +643,22 @@ bool LibraryStore::hasVideo(const QString &path) const {
     return !path.isEmpty() && QFile::exists(path);
 }
 
+bool LibraryStore::revealVideo(const QString &path) const {
+    QString dir;
+    if (!path.isEmpty()) {
+        QFileInfo info(path);
+        if (info.exists())
+            dir = info.absolutePath();
+        else if (!info.absolutePath().isEmpty())
+            dir = info.absolutePath();
+    }
+    if (dir.isEmpty() || !QDir(dir).exists())
+        dir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+    if (dir.isEmpty() || !QDir(dir).exists())
+        return false;
+    return QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+}
+
 int LibraryStore::linkedVideoCount(const QString &id) const {
     const int at = findDesign(id);
     if (at < 0)
@@ -673,36 +691,53 @@ QVariantMap LibraryStore::videoProbe(const QString &path) const {
     out[QStringLiteral("width")] = 0;
     out[QStringLiteral("height")] = 0;
     out[QStringLiteral("hasAudio")] = false;
-    if (path.isEmpty() || !QFile::exists(path))
+    if (path.isEmpty())
         return out;
+    // Missing files bypass the cache (no spawn, instant return) so a
+    // restored file probes fresh on the next pass instead of sticking
+    // to a cached failure.
+    QFileInfo info(path);
+    if (!info.exists() || !info.isFile())
+        return out;
+    // Memoized per content generation: placement, panel, timeline and
+    // relink probes share one ffmpeg spawn; edits bust the key.
+    const QString key = path + QLatin1Char('@')
+        + QString::number(info.lastModified().toMSecsSinceEpoch()) + QLatin1Char('@')
+        + QString::number(info.size());
+    if (QVariantMap *hit = m_videoProbes.object(key))
+        return *hit;
+    auto cached = [&](const QVariantMap &r) {
+        m_videoProbes.insert(key, new QVariantMap(r));
+        return r;
+    };
     const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
     if (ffmpeg.isEmpty())
-        return out;
+        return cached(out);
     QProcess proc;
     proc.start(ffmpeg, {QStringLiteral("-hide_banner"), QStringLiteral("-i"), path});
     if (!proc.waitForFinished(8000))
-        return out;
+        return cached(out);
     // One stderr dump carries everything: Duration line plus per-stream
     // descriptors. Labels print in English regardless of locale.
     const QString err = QString::fromLocal8Bit(proc.readAllStandardError());
     static const QRegularExpression durRe(QStringLiteral("Duration:\\s*(\\d+):(\\d+):([\\d.]+)"));
     const QRegularExpressionMatch durMatch = durRe.match(err);
     if (!durMatch.hasMatch())
-        return out;
+        return cached(out);
     const double secs = durMatch.captured(1).toDouble() * 3600.0 + durMatch.captured(2).toDouble() * 60.0
         + durMatch.captured(3).toDouble();
     if (!(secs > 0.0))
-        return out;
+        return cached(out);
     static const QRegularExpression videoRe(QStringLiteral("Stream[^\\n]*?Video:[^\\n]*?(\\d{2,5})x(\\d{2,5})"));
     const QRegularExpressionMatch videoMatch = videoRe.match(err);
     if (!videoMatch.hasMatch())
-        return out;
+        return cached(out);
     out[QStringLiteral("ok")] = true;
     out[QStringLiteral("duration")] = secs;
     out[QStringLiteral("width")] = videoMatch.captured(1).toInt();
     out[QStringLiteral("height")] = videoMatch.captured(2).toInt();
     out[QStringLiteral("hasAudio")] = err.contains(QStringLiteral("Audio:"));
-    return out;
+    return cached(out);
 }
 
 bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool overwrite) {

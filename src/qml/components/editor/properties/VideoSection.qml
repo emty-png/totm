@@ -24,6 +24,14 @@ PanelSection {
         return section.snapshot.sel[0].videoSource ?? "";
     }
 
+    function baseName(path) {
+        if (!path)
+            return "";
+        var p = String(path).replace(/\\/g, "/");
+        var i = p.lastIndexOf("/");
+        return i >= 0 ? p.slice(i + 1) : p;
+    }
+
     function hasFile() {
         return section.currentSource() !== "" && LibraryStore.hasVideo(section.currentSource());
     }
@@ -44,6 +52,9 @@ PanelSection {
     property var audioMap: ({})
     property string probedLeaves: ""
     property bool previewFailed: false
+    // Probed length for the current source (Fit-comp needs it even
+    // with no meta line displayed).
+    property real probedDur: 0
 
     onVisibleChanged: {
         if (visible)
@@ -72,6 +83,7 @@ PanelSection {
         var pr = LibraryStore.videoProbe(src);
         section.fileOk = pr && pr.ok === true;
         section.fileProbed = true;
+        section.probedDur = section.fileOk ? Math.max(0, Number(pr.duration) || 0) : 0;
         var am = section.audioMap;
         var sound = false;
         for (var j = 0; j < keys.length; j++) {
@@ -101,38 +113,130 @@ PanelSection {
         spacing: 8
 
         Rectangle {
+            id: thumb
+
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
             Layout.alignment: Qt.AlignVCenter
             radius: AppTheme.radiusSmall
             color: "#1a1a1a"
             border.width: 1
-            border.color: AppTheme.fieldBorder
+            border.color: thumbDrop.containsDrag ? AppTheme.foreground : AppTheme.fieldBorder
             clip: true
+
+            Behavior on border.color {
+                ColorAnimation {
+                    duration: 120
+                    easing.type: Easing.OutCubic
+                }
+            }
 
             AppIcon {
                 anchors.centerIn: parent
-                kind: "play"
+                kind: "film"
                 iconColor: AppTheme.muted
+            }
+
+            Text {
+                anchors {
+                    horizontalCenter: parent.horizontalCenter
+                    bottom: parent.bottom
+                    bottomMargin: 2
+                }
+                visible: thumbDrop.containsDrag
+                text: qsTr("Drop")
+                font.pixelSize: 9
+                color: AppTheme.foreground
+            }
+
+            DropArea {
+                id: thumbDrop
+                anchors.fill: parent
+                onDropped: drop => section.relinkDropped(drop)
+            }
+
+            SequentialAnimation {
+                id: shake
+                NumberAnimation {
+                    target: thumb
+                    property: "x"
+                    to: -4
+                    duration: 45
+                }
+                NumberAnimation {
+                    target: thumb
+                    property: "x"
+                    to: 4
+                    duration: 60
+                }
+                NumberAnimation {
+                    target: thumb
+                    property: "x"
+                    to: -2
+                    duration: 60
+                }
+                NumberAnimation {
+                    target: thumb
+                    property: "x"
+                    to: 0
+                    duration: 60
+                }
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 4
+            spacing: 2
 
             Text {
                 Layout.fillWidth: true
-                text: section.snapshot.commonOf("videoSource").mixed ? qsTr("Mixed") : (section.currentSource() === "" ? qsTr("Missing video") : section.currentSource())
-                font.pixelSize: 11
-                color: section.hasFile() ? AppTheme.muted : AppTheme.closeHover
+                text: section.snapshot.commonOf("videoSource").mixed ? qsTr("Mixed") : (section.currentSource() === "" ? qsTr("Missing video") : section.baseName(section.currentSource()))
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: section.hasFile() ? AppTheme.foreground : AppTheme.closeHover
                 elide: Text.ElideMiddle
             }
 
             Text {
                 Layout.fillWidth: true
+                visible: !section.snapshot.commonOf("videoSource").mixed && section.currentSource() !== ""
+                text: section.currentSource()
+                font.pixelSize: 10
+                color: AppTheme.muted
+                elide: Text.ElideMiddle
+            }
+
+            Text {
+                Layout.fillWidth: true
+                visible: section.hasFile() && !section.fileProbed
+                text: qsTr("Probing…")
+                font.pixelSize: 11
+                color: AppTheme.muted
+
+                SequentialAnimation on opacity {
+                    loops: Animation.Infinite
+                    running: section.hasFile() && !section.fileProbed
+                    onRunningChanged: {
+                        if (!running)
+                            opacity = 1;
+                    }
+                    NumberAnimation {
+                        to: 0.35
+                        duration: 500
+                        easing.type: Easing.InOutQuad
+                    }
+                    NumberAnimation {
+                        to: 1
+                        duration: 500
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
                 visible: !section.hasFile()
-                text: qsTr("File moved? Replace to relink. Export paints a dark tile until then.")
+                text: qsTr("File moved? Replace or drop a video onto the thumbnail to relink. Export paints a dark tile until then.")
                 font.pixelSize: 11
                 color: AppTheme.muted
                 wrapMode: Text.WordWrap
@@ -163,10 +267,24 @@ PanelSection {
                     onClicked: replacePicker.open()
                 }
                 SegmentedOption {
+                    label: qsTr("Reveal")
+                    enabled: section.currentSource() !== ""
+                    onClicked: LibraryStore.revealVideo(section.currentSource())
+                }
+                SegmentedOption {
                     label: qsTr("Detach audio")
                     visible: section.hasSound
                     enabled: section.hasFile()
                     onClicked: section.detachAudio()
+                }
+            }
+
+            RowLayout {
+                spacing: 8
+                visible: section.hasFile() && section.fileOk
+                SegmentedOption {
+                    label: qsTr("Fit comp to video")
+                    onClicked: section.fitCompToVideo()
                 }
             }
         }
@@ -232,6 +350,56 @@ PanelSection {
             onScrubStarted: section.snapshot.beginScrub()
             onScrubFinished: section.snapshot.endScrub()
         }
+
+        Text {
+            text: qsTr("Start")
+            font.pixelSize: 12
+            color: AppTheme.foreground
+        }
+        NumberField {
+            Layout.fillWidth: true
+            value: section.snapshot.commonOf("videoStart").mixed ? 0 : Number(section.snapshot.commonOf("videoStart").value ?? 0)
+            mixed: section.snapshot.commonOf("videoStart").mixed
+            minimum: 0
+            maximum: 3600
+            scrubStep: 0.05
+            suffix: "s"
+            onCommitted: v => section.snapshot.setAll("videoStart", Math.max(0, Number(v) || 0))
+            onScrubStarted: section.snapshot.beginScrub()
+            onScrubFinished: section.snapshot.endScrub()
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 8
+        visible: section.hasFile() && section.fileOk
+
+        SegmentedOption {
+            label: qsTr("Move to playhead")
+            onClicked: section.moveToPlayhead()
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 8
+
+        SegmentedOption {
+            label: qsTr("Fit")
+            active: !section.snapshot.commonOf("videoFit").mixed && (section.snapshot.commonOf("videoFit").value ?? "fit") === "fit"
+            onClicked: section.snapshot.setAll("videoFit", "fit")
+        }
+        SegmentedOption {
+            label: qsTr("Cover")
+            active: !section.snapshot.commonOf("videoFit").mixed && section.snapshot.commonOf("videoFit").value === "cover"
+            onClicked: section.snapshot.setAll("videoFit", "cover")
+        }
+        SegmentedOption {
+            label: qsTr("Stretch")
+            active: !section.snapshot.commonOf("videoFit").mixed && section.snapshot.commonOf("videoFit").value === "fill"
+            onClicked: section.snapshot.setAll("videoFit", "fill")
+        }
     }
 
     RowLayout {
@@ -263,6 +431,37 @@ PanelSection {
         section.snapshot.setAll("videoLoop", next);
     }
 
+    // Jump the selection's timeline start to the playhead (one undo
+    // entry): the precise counterpart to dragging the timeline bar.
+    function moveToPlayhead() {
+        if (!section.doc || !section.doc.anim)
+            return;
+        var t = Math.max(0, Number(section.doc.anim.currentTime) || 0);
+        section.snapshot.setAll("videoStart", t);
+    }
+
+    function fitCompToVideo() {
+        if (!section.doc || !section.doc.anim)
+            return;
+        var off = section.snapshot.sel.length > 0 ? Number(section.snapshot.sel[0].videoOffset || 0) : 0;
+        var rate = section.snapshot.sel.length > 0 ? Number(section.snapshot.sel[0].playbackRate || 1) : 1;
+        if (!(rate > 0))
+            rate = 1;
+        var dur = section.probedDur > 0 ? section.probedDur : (section.snapshot.sel.length > 0 ? Number(section.snapshot.sel[0].videoDuration || 0) : 0);
+        if (!(dur > 0))
+            return;
+        var loop = section.snapshot.sel.length > 0 ? (section.snapshot.sel[0].videoLoop !== false) : true;
+        var visible = loop ? dur : Math.max(0.5, (dur - off) / rate);
+        visible = Math.min(60, Math.max(0.5, visible));
+        // The span starts at the timeline start, so the comp must cover
+        // both (start 0 keeps the legacy exact length).
+        var start = section.snapshot.sel.length > 0 ? Math.max(0, Number(section.snapshot.sel[0].videoStart || 0)) : 0;
+        visible = Math.min(60, Math.max(0.5, start + visible));
+        section.doc.beginTransaction();
+        section.doc.anim.setDuration(visible);
+        section.doc.endTransaction();
+    }
+
     // Detach: one audio clip per selected video, starting at the
     // playhead, trimmed to the composition end. The clip points at the
     // same linked file so ffmpeg extracts its track; volume/mute copy
@@ -292,30 +491,55 @@ PanelSection {
         section.doc.endTransaction();
     }
 
+    // Shake the thumbnail when a probe completes undecodable: a
+    // motion cue that the dark tile is not just loading slowly.
+    onFileOkChanged: {
+        if (section.visible && section.fileProbed && !section.fileOk && section.hasFile())
+            shake.restart();
+    }
+
+    // Shared relink: probe once, then one undo entry for source +
+    // length + offset reset. Unprobed files still relink (unknown
+    // duration, no loop math) instead of failing the gesture.
+    function relinkToPath(path) {
+        if (!path)
+            return;
+        var pr = LibraryStore.videoProbe(path);
+        if (section.doc)
+            section.doc.beginTransaction();
+        section.snapshot.setAll("videoSource", path);
+        section.snapshot.setAll("videoDuration", pr && pr.ok === true ? Math.max(0, Number(pr.duration) || 0) : 0);
+        section.snapshot.setAll("videoOffset", 0);
+        if (section.doc)
+            section.doc.endTransaction();
+        // Clear the caches so the timer re-probes this file once
+        // (one extra spawn on an explicit user action, then cached).
+        section.probedFor = "";
+        section.probedLeaves = "";
+        section.refreshProbe();
+    }
+
+    // Thumbnail drop-to-relink: video files only, first URL wins.
+    function relinkDropped(drop) {
+        var urls = (drop && drop.urls) || [];
+        if (urls.length === 0)
+            return;
+        var flat = String(urls[0]).split("?")[0];
+        if (!/\.(mp4|webm|mov|m4v|mkv)$/i.test(flat))
+            return;
+        var path = LibraryStore.normalizeVideoPath(urls[0]);
+        if (!path)
+            return;
+        section.relinkToPath(path);
+    }
+
     FilePicker {
         id: replacePicker
         suffixes: ["mp4", "webm", "mov", "m4v", "mkv"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.MoviesLocation)
         onAccepted: {
             var path = LibraryStore.normalizeVideoPath(selectedFile);
-            if (!path)
-                return;
-            // Same single-probe rule as placement: unprobed files still
-            // relink (unknown duration, no loop math) instead of failing.
-            var pr = LibraryStore.videoProbe(path);
-            // One undo entry for the whole relink (source + length).
-            if (section.doc)
-                section.doc.beginTransaction();
-            section.snapshot.setAll("videoSource", path);
-            section.snapshot.setAll("videoDuration", pr && pr.ok === true ? Math.max(0, Number(pr.duration) || 0) : 0);
-            section.snapshot.setAll("videoOffset", 0);
-            if (section.doc)
-                section.doc.endTransaction();
-            // Clear the caches so the timer re-probes this file once
-            // (one extra spawn on an explicit user action, then cached).
-            section.probedFor = "";
-            section.probedLeaves = "";
-            section.refreshProbe();
+            section.relinkToPath(path);
         }
     }
 

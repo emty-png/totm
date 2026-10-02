@@ -146,10 +146,12 @@ QtObject {
                 videoSource: n.videoSource ?? "",
                 videoDuration: Math.max(0, Number(n.videoDuration) || 0),
                 videoOffset: Math.max(0, Number(n.videoOffset) || 0),
+                videoStart: Math.max(0, Number(n.videoStart) || 0),
                 videoMuted: n.videoMuted === true,
                 videoVolume: Math.min(1, Math.max(0, n.videoVolume !== undefined ? Number(n.videoVolume) : 1)),
                 playbackRate: Math.min(4, Math.max(0.25, Number(n.playbackRate) || 1)),
-                videoLoop: n.videoLoop !== false
+                videoLoop: n.videoLoop !== false,
+                videoFit: (n.videoFit === "cover" || n.videoFit === "fill") ? n.videoFit : "fit"
             };
             if (n.shapeType === "pen")
                 entry.pathData = doc.factory._copyPath(n.pathData);
@@ -289,6 +291,8 @@ QtObject {
                 n.videoDuration = Math.max(0, Number(b.videoDuration) || 0);
             if (b.videoOffset !== undefined)
                 n.videoOffset = Math.max(0, Number(b.videoOffset) || 0);
+            if (b.videoStart !== undefined)
+                n.videoStart = Math.max(0, Number(b.videoStart) || 0);
             if (b.videoMuted !== undefined)
                 n.videoMuted = b.videoMuted === true;
             if (b.videoVolume !== undefined)
@@ -297,6 +301,11 @@ QtObject {
                 n.playbackRate = Math.min(4, Math.max(0.25, Number(b.playbackRate) || 1));
             if (b.videoLoop !== undefined)
                 n.videoLoop = b.videoLoop !== false;
+            if (b.videoFit !== undefined)
+                n.videoFit = (b.videoFit === "cover" || b.videoFit === "fill") ? b.videoFit : "fit";
+            // Transient preview override, never authored: always clear so
+            // seeks/wraps never leak a sampled frame into the base.
+            n.videoTime = -1;
         }
     }
 }

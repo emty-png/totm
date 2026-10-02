@@ -304,6 +304,23 @@ QtObject {
     function nudgeAudioClip(id, t0) {
         return audio.nudge(id, t0);
     }
+    // Silent in-place timeline-start nudge for video lane drags: no
+    // checkpoint, no touch; release touches once for the single entry.
+    // Mirrors audio.nudge (clamped to the composition start). Refreshes
+    // the open preview base so seeks after a paused drag read the new
+    // start instead of the stale pre-drag one.
+    function nudgeVideoStart(uid, t) {
+        var n = findNode(uid);
+        if (!n || n.kind !== "shape" || n.shapeType !== "video")
+            return false;
+        var nt = Math.max(0, Number(t) || 0);
+        if (isNaN(nt) || n.videoStart === nt)
+            return false;
+        n.videoStart = nt;
+        if (root.anim.playBase && root.anim.playBase[uid])
+            root.anim.playBase[uid].videoStart = nt;
+        return true;
+    }
     function deleteAudioClips(ids) {
         return audio.deleteClips(ids);
     }
@@ -451,9 +468,9 @@ QtObject {
         history.checkpoint();
         return factory.addImage(imageSource, x, y, w, h);
     }
-    function addVideo(videoSource, x, y, w, h, videoDuration) {
+    function addVideo(videoSource, x, y, w, h, videoDuration, videoFit, videoName) {
         history.checkpoint();
-        return factory.addVideo(videoSource, x, y, w, h, videoDuration);
+        return factory.addVideo(videoSource, x, y, w, h, videoDuration, videoFit, videoName);
     }
     function snapshotNode(node) {
         return clipboard.snapshotNode(node);

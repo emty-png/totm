@@ -79,6 +79,12 @@ Item {
     property real videoVolume: 1
     property real playbackRate: 1
     property bool videoLoop: true
+    property string videoFit: "fit"
+    // Timeline start in composition seconds (hidden before it).
+    property real videoStart: 0
+    // Transient footage-time override from Video time clips (-1 = off).
+    // Written by the sampler during preview, reset on seeks/wraps.
+    property real videoTime: -1
     // Composition clock for preview sync (from ShapeLayer): paused seeks
     // to the export frame, playing re-anchors past ~5 frames of drift.
     property real previewTime: 0
@@ -850,13 +856,18 @@ Item {
         readonly property url videoFileUrl: shape.videoSource ? LibraryStore.videoUrl(shape.videoSource) : ""
         readonly property bool hasFile: videoFileUrl.toString() !== ""
         readonly property double wantTime: {
+            // Sampler override wins while a Video time clip covers the
+            // playhead (freeze/scrub/reverse/ramp); else legacy math.
+            if (Number(shape.videoTime) >= 0)
+                return Math.max(0, Number(shape.videoTime));
             var t = Math.max(0, Number(shape.previewTime) || 0);
             var off = Math.max(0, Number(shape.videoOffset) || 0);
+            var start = Math.max(0, Number(shape.videoStart) || 0);
             var rate = Number(shape.playbackRate) || 1;
             if (!(rate > 0))
                 rate = 1;
             rate = Math.min(4, Math.max(0.25, rate));
-            var vt = off + t * rate;
+            var vt = off + Math.max(0, t - start) * rate;
             var dur = Math.max(0, Number(shape.videoDuration) || 0);
             if (dur > 0.05 && shape.videoLoop !== false)
                 vt = vt % dur;
@@ -916,7 +927,7 @@ Item {
             id: videoOut
             anchors.fill: parent
             visible: videoRoot.hasFile && videoPlayer.hasVideo
-            fillMode: VideoOutput.Stretch
+            fillMode: shape.videoFit === "cover" ? VideoOutput.PreserveAspectCrop : (shape.videoFit === "fill" ? VideoOutput.Stretch : VideoOutput.PreserveAspectFit)
         }
 
         // Rounded corners + layer blur reuse the image mask path.
@@ -1012,6 +1023,8 @@ Item {
         videoOffset: shape.videoOffset
         playbackRate: shape.playbackRate
         videoLoop: shape.videoLoop !== false
+        videoFit: (shape.videoFit === "cover" || shape.videoFit === "fill") ? shape.videoFit : "fit"
+        videoTime: (shape.videoTime !== undefined && Number(shape.videoTime) >= 0) ? Number(shape.videoTime) : -1
         shadows: shape.shadows ?? []
         glows: shape.glows ?? []
         layerBlur: shape.layerBlur ?? ({

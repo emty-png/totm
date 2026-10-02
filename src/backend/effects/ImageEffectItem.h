@@ -37,6 +37,8 @@ class ImageEffectItem : public QQuickPaintedItem {
     Q_PROPERTY(double videoOffset READ videoOffset WRITE setVideoOffset NOTIFY shapeChanged)
     Q_PROPERTY(double playbackRate READ playbackRate WRITE setPlaybackRate NOTIFY shapeChanged)
     Q_PROPERTY(bool videoLoop READ videoLoop WRITE setVideoLoop NOTIFY shapeChanged)
+    Q_PROPERTY(QString videoFit READ videoFit WRITE setVideoFit NOTIFY shapeChanged)
+    Q_PROPERTY(double videoTime READ videoTime WRITE setVideoTime NOTIFY shapeChanged)
     Q_PROPERTY(QVariantList shadows READ shadows WRITE setShadows NOTIFY effectChanged)
     Q_PROPERTY(QVariantList glows READ glows WRITE setGlows NOTIFY effectChanged)
     Q_PROPERTY(QVariantMap layerBlur READ layerBlur WRITE setLayerBlur NOTIFY effectChanged)
@@ -69,6 +71,10 @@ public:
     void setPlaybackRate(double v);
     bool videoLoop() const;
     void setVideoLoop(bool v);
+    QString videoFit() const;
+    void setVideoFit(const QString &v);
+    double videoTime() const;
+    void setVideoTime(double v);
     QVariantList shadows() const;
     void setShadows(const QVariantList &v);
     QVariantList glows() const;
@@ -102,6 +108,8 @@ private:
     double m_videoOffset = 0.0;
     double m_playbackRate = 1.0;
     bool m_videoLoop = true;
+    QString m_videoFit = QStringLiteral("fit");
+    double m_videoTime = -1.0;
     QVariantList m_shadows;
     QVariantList m_glows;
     QVariantMap m_layerBlur;

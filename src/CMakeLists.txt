@@ -124,6 +124,7 @@ qt_add_qml_module(totm
         qml/components/editor/canvas/BezierMath.qml
         qml/components/editor/canvas/ShapeDrawTool.qml
         qml/components/editor/canvas/ImageTool.qml
+        qml/components/editor/canvas/VideoTool.qml
         qml/components/editor/canvas/TextEditor.qml
         qml/components/editor/canvas/CanvasCamera.qml
         qml/components/editor/canvas/CanvasGuides.qml
@@ -170,6 +171,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ClipCustomBlurOptions.qml
         qml/components/editor/properties/ClipCustomGlowOptions.qml
         qml/components/editor/properties/ClipCustomGrainOptions.qml
+        qml/components/editor/properties/ClipVideoOptions.qml
         qml/components/editor/properties/ClipCustomOtherOptions.qml
         qml/components/editor/properties/ClipEntryDropdown.qml
         qml/components/editor/properties/ClipAlphaWell.qml
@@ -232,6 +234,7 @@ qt_add_qml_module(totm
         qml/components/editor/timeline/TimelineView.qml
         qml/components/editor/timeline/TimelineLane.qml
         qml/components/editor/timeline/TimelineAudioLane.qml
+        qml/components/editor/timeline/TimelineVideoLane.qml
         qml/components/editor/timeline/TimelineRuler.qml
         qml/components/editor/timeline/TimelineTransport.qml
         qml/components/editor/EditorBottomPanel.qml

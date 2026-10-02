@@ -580,6 +580,18 @@ QtObject {
                 out.opacity = opV !== undefined ? Math.min(1, Math.max(0, Number(opV))) : Number(base.opacity);
             } else
                 out.opacity = lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+        } else if (preset === "customVideoTime") {
+            // Footage-time override for video leaves (freeze/scrub/
+            // reverse/ramp): keys hold {v} footage seconds, from-to
+            // lerps the footage clock (easing shapes the ramp). Clamped
+            // to the probed length so export never seeks past EOF.
+            // Non-video targets are ignored (gallery gates them anyway).
+            if (base.shapeType === "video") {
+                var vtKeys = genericKeysAt(o, p);
+                var vtRaw = vtKeys && (vtKeys.value || {}).v !== undefined ? Number(vtKeys.value.v) : lerp(Number(o.from) || 0, Number(o.to) || 0, e);
+                var vtDur = Math.max(0, Number(base.videoDuration) || 0);
+                out.videoTime = vtDur > 0.05 ? Math.min(vtDur - 0.04, Math.max(0, vtRaw)) : Math.max(0, vtRaw);
+            }
         } else if (preset === "customColor") {
             var fIdx = entryIndexOf(o, "fillIndex");
             var colKeys = genericKeysAt(o, p);
@@ -1241,6 +1253,23 @@ QtObject {
             entry2.y = (Number(bentry.y) || 0) + total.dy;
             acc[uid] = entry2;
         }
+        // Timeline placement gate: absolute per-tick visibility for
+        // video leaves (ticks never restore base, so a one-sided false
+        // would stick forever and the video would never appear). Before
+        // the start nothing shows; after it, clip-resolved visibility
+        // (hide clips) wins over the base flag.
+        var gateLeaves = doc.tree ? doc.tree.allLeaves() : (doc.leafList || []);
+        for (var g = 0; g < gateLeaves.length; g++) {
+            var glf = gateLeaves[g];
+            if (!glf || glf.shapeType !== "video")
+                continue;
+            var gb = base && base[glf.uid] ? base[glf.uid] : glf;
+            var gstart = Math.max(0, Number(gb.videoStart) || 0);
+            var gentry = acc[glf.uid] || {};
+            var gclipVis = gentry.visible !== undefined ? gentry.visible : (gb.visible !== false);
+            gentry.visible = (t >= gstart) && gclipVis;
+            acc[glf.uid] = gentry;
+        }
         return acc;
     }
 
@@ -1350,6 +1379,10 @@ QtObject {
                 n.rotation = ov.rotation;
             if (ov.opacity !== undefined)
                 n.opacity = ov.opacity;
+            // Footage-time override from Video time clips (transient:
+            // restoreBaseValues resets it, snapshots never persist it).
+            if (ov.videoTime !== undefined && n.shapeType === "video")
+                n.videoTime = Math.max(0, Number(ov.videoTime) || 0);
             if (ov.fontSize !== undefined && n.shapeType === "text")
                 n.fontSize = ov.fontSize;
             if (ov.fontWeight !== undefined && n.shapeType === "text")

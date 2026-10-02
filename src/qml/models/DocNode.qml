@@ -124,6 +124,19 @@ QtObject {
     property real videoVolume: 1
     property real playbackRate: 1
     property bool videoLoop: true
+    // Object-fit for the decoded frame inside the shape box: "fit"
+    // preserves aspect with transparent letterbox, "cover" crops to fill,
+    // "fill" stretches (legacy). Missing normalizes to "fit".
+    property string videoFit: "fit"
+    // Timeline placement in composition seconds: the video is hidden
+    // before videoStart, then plays offset + (t - start) * rate.
+    // Default 0 reproduces the legacy always-from-zero behavior.
+    property real videoStart: 0
+    // Transient footage-time override in footage seconds, written by
+    // customVideoTime clips during preview (-1 = off, legacy
+    // offset/rate/loop math applies). Never snapshotted: snapshotNode
+    // whitelists persisted fields, and restoreBaseValues resets it.
+    property real videoTime: -1
     // Mask role (layer masks): when true on a shape inside a
     // group, it clips siblings above it in the same group and never
     // paints itself. maskFeather softens the edge (content px),

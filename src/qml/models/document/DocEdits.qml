@@ -212,8 +212,12 @@ QtObject {
             value = Math.min(4, Math.max(0.25, Number(value) || 1));
         if (role === "videoDuration" || role === "videoOffset")
             value = Math.max(0, Number(value) || 0);
+        if (role === "videoStart")
+            value = Math.max(0, Number(value) || 0);
         if (role === "videoMuted" || role === "videoLoop")
             value = value === true;
+        if (role === "videoFit")
+            value = (value === "cover" || value === "fill") ? value : "fit";
         if (role === "points") {
             value = Math.min(12, Math.max(3, Math.round(value)));
             n[role] = value;
@@ -255,8 +259,12 @@ QtObject {
                 value = Math.min(4, Math.max(0.25, Number(value) || 1));
             if (role === "videoDuration" || role === "videoOffset")
                 value = Math.max(0, Number(value) || 0);
+            if (role === "videoStart")
+                value = Math.max(0, Number(value) || 0);
             if (role === "videoMuted" || role === "videoLoop")
                 value = value === true;
+            if (role === "videoFit")
+                value = (value === "cover" || value === "fill") ? value : "fit";
             if (role === "points") {
                 var pv = Math.min(12, Math.max(3, Math.round(value)));
                 leaves[j][role] = pv;

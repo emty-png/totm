@@ -187,7 +187,8 @@ QtObject {
                 videoMuted: n.videoMuted === true,
                 videoVolume: propCopy._op(n.videoVolume, 1),
                 playbackRate: Math.min(4, Math.max(0.25, Number(n.playbackRate) || 1)),
-                videoLoop: n.videoLoop !== false
+                videoLoop: n.videoLoop !== false,
+                videoFit: (n.videoFit === "cover" || n.videoFit === "fill") ? n.videoFit : "fit"
             } : null,
             fills: fills,
             strokes: strokes,
@@ -349,6 +350,7 @@ QtObject {
             n.videoVolume = propCopy._op(v.video.videoVolume, 1);
             n.playbackRate = Math.min(4, Math.max(0.25, Number(v.video.playbackRate) || 1));
             n.videoLoop = v.video.videoLoop !== false;
+            n.videoFit = (v.video.videoFit === "cover" || v.video.videoFit === "fill") ? v.video.videoFit : "fit";
         }
         var dst = f._copyFills(n.fills, n);
         var lim = Math.min(dst.length, v.fills.length);

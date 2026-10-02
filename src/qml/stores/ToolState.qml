@@ -61,7 +61,7 @@ QtObject {
         case "image":
             return "image";
         case "video":
-            return "play";
+            return "film";
         default:
             return "square";
         }

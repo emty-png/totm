@@ -88,13 +88,25 @@ QImage loadExportImage(const QString &name, int targetW, int targetH) {
 // paintLeaf signature. Rate/offset/loop fold here; missing binaries or
 // files return null so callers paint the placeholder tile.
 double videoTimeFor(const QVariantMap &m, int frameNo) {
+    // Sampler override wins while a Video time clip covers the frame
+    // (freeze/scrub/reverse/ramp); else legacy offset/rate/loop math.
+    if (m.contains(QStringLiteral("videoTime"))) {
+        const double vt0 = m.value(QStringLiteral("videoTime")).toDouble();
+        if (vt0 >= 0.0) {
+            const double dur0 = qMax(0.0, m.value(QStringLiteral("videoDuration"), 0.0).toDouble());
+            if (dur0 > 0.05)
+                return qBound(0.0, vt0, dur0 - 0.04);
+            return qMax(0.0, vt0);
+        }
+    }
     const double t = qMax(0.0, double(frameNo) / 60.0);
     const double offset = qMax(0.0, m.value(QStringLiteral("videoOffset"), 0.0).toDouble());
+    const double start = qMax(0.0, m.value(QStringLiteral("videoStart"), 0.0).toDouble());
     double rate = m.value(QStringLiteral("playbackRate"), 1.0).toDouble();
     if (!(rate > 0.0))
         rate = 1.0;
     rate = qBound(0.25, rate, 4.0);
-    double vt = offset + t * rate;
+    double vt = offset + qMax(0.0, t - start) * rate;
     const double dur = qMax(0.0, m.value(QStringLiteral("videoDuration"), 0.0).toDouble());
     if (dur > 0.05) {
         if (m.value(QStringLiteral("videoLoop"), true).toBool())
@@ -566,10 +578,14 @@ void paintVideo(QPainter &pt, const QVariantMap &m, double x, double y, double w
             paintImageGlow(pt, clip, w, h, r, g, s, cache);
     }
     QImage img = loadVideoFrame(path, videoTimeFor(m, frameNo), qMax(1, qRound(w)), qMax(1, qRound(h)));
+    QString fit = m.value(QStringLiteral("videoFit")).toString();
+    if (fit != QStringLiteral("cover") && fit != QStringLiteral("fill"))
+        fit = QStringLiteral("fit");
     if (img.isNull()) {
         QImage tile(qMax(1, qRound(w)), qMax(1, qRound(h)), QImage::Format_ARGB32_Premultiplied);
         tile.fill(QColor(QStringLiteral("#1a1a1a")));
         img = tile;
+        fit = QStringLiteral("fill");
     }
     if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
         const double rad = layerBlur.radius * s;
@@ -596,7 +612,21 @@ void paintVideo(QPainter &pt, const QVariantMap &m, double x, double y, double w
     }
     pt.save();
     pt.setClipPath(clip, Qt::IntersectClip);
-    pt.drawImage(QRectF(x, y, w, h), img);
+    if (fit == QStringLiteral("fit") && img.width() > 0 && img.height() > 0 && w > 0 && h > 0) {
+        const double scale = qMin(w / double(img.width()), h / double(img.height()));
+        const double dw = img.width() * scale;
+        const double dh = img.height() * scale;
+        pt.drawImage(QRectF(x + (w - dw) / 2.0, y + (h - dh) / 2.0, dw, dh), img);
+    } else if (fit == QStringLiteral("cover") && img.width() > 0 && img.height() > 0 && w > 0 && h > 0) {
+        const double scale = qMax(w / double(img.width()), h / double(img.height()));
+        const double sw = w / scale;
+        const double sh = h / scale;
+        const double sx = (img.width() - sw) / 2.0;
+        const double sy = (img.height() - sh) / 2.0;
+        pt.drawImage(QRectF(x, y, w, h), img, QRectF(sx, sy, sw, sh));
+    } else {
+        pt.drawImage(QRectF(x, y, w, h), img);
+    }
     pt.restore();
     for (int i = shadows.size() - 1; i >= 0; --i) {
         const Effects::Shadow &sh = shadows.at(i);

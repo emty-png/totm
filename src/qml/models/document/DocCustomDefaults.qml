@@ -10,11 +10,59 @@ QtObject {
     function seededOptions(presets, d, tops, presetId, entryIndex) {
         var first = tops.length > 0 ? tops[0] : null;
         var leaf = first ? defaults.seedTarget(d, first, presetId) : null;
+        if (presetId === "customVideoTime") {
+            if (leaf && leaf.shapeType === "video" && d)
+                return defaults._seedVideoTime(d, leaf);
+            return presets.defaultsFor(presetId);
+        }
         var ei = Math.min(32, Math.max(0, Math.round(Number(entryIndex) || 0)));
         var seed = defaults._seedFor(presetId);
         if (seed && leaf)
             return seed(leaf, ei);
         return presets.defaultsFor(presetId);
+    }
+
+    // Footage seconds under the playhead for one video leaf: the live
+    // override while a Video time clip covers it (sampled frame), else
+    // the legacy offset/rate/loop math shifted by the timeline start.
+    function footageNowAt(d, leaf, t) {
+        if (!leaf || leaf.shapeType !== "video")
+            return 0;
+        if (leaf.videoTime !== undefined && Number(leaf.videoTime) >= 0)
+            return Math.max(0, Number(leaf.videoTime));
+        var now = Math.max(0, Number(t) || 0);
+        var off = Math.max(0, Number(leaf.videoOffset) || 0);
+        var start = Math.max(0, Number(leaf.videoStart) || 0);
+        var rate = Number(leaf.playbackRate) || 1;
+        if (!(rate > 0))
+            rate = 1;
+        rate = Math.min(4, Math.max(0.25, rate));
+        var vt = off + Math.max(0, now - start) * rate;
+        var dur = Math.max(0, Number(leaf.videoDuration) || 0);
+        if (dur > 0.05) {
+            if (leaf.videoLoop !== false)
+                vt = vt % dur;
+            else
+                vt = Math.min(vt, dur - 0.04);
+        }
+        return Math.max(0, vt);
+    }
+
+    function _seedVideoTime(d, leaf) {
+        var now = d && d.anim ? Number(d.anim.currentTime) || 0 : 0;
+        var from = defaults._round2(defaults.footageNowAt(d, leaf, now));
+        var dur = Math.max(0, Number(leaf.videoDuration) || 0);
+        var to = from + 2;
+        if (dur > 0.05)
+            to = Math.min(dur - 0.04, to);
+        // At the tail there is no room ahead: freeze instead of
+        // clamping to a zero-length ramp.
+        if (!(to > from + 0.05))
+            to = from;
+        return {
+            from: from,
+            to: defaults._round2(Math.max(0, to))
+        };
     }
 
     // Style clips on groups seed from the group's own stacks (mirrors

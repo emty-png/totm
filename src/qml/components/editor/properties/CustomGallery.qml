@@ -144,7 +144,7 @@ ScrollView {
                                 hoverEnabled: true
                                 acceptedButtons: Qt.LeftButton
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: gallery.activateRow(modelData.id)
+                                onClicked: gallery.activateRow(modelData)
                             }
                         }
                     }
@@ -391,7 +391,82 @@ ScrollView {
         // rather than minting no-op clips. Mixed selections keep them.
         if (gallery.allVideoTargets())
             return gallery.filterVideoRows(all);
+        if (gallery.anyVideoTargets())
+            return [gallery.videoSection()].concat(all);
         return all;
+    }
+
+    // Video section: footage-time templates plus Ken Burns, shown when
+    // any selected leaf is video. Rows carry a variant; activation
+    // builds specific options (freeze/scrub/reverse/boomerang/kenburns)
+    // instead of the generic seed.
+    function videoSection() {
+        return {
+            title: qsTr("Video"),
+            rows: [
+                {
+                    id: "customVideoTime",
+                    variant: "freeze",
+                    name: qsTr("Freeze frame"),
+                    icon: "pause"
+                },
+                {
+                    id: "customVideoTime",
+                    variant: "scrub",
+                    name: qsTr("Scrub forward"),
+                    icon: "film"
+                },
+                {
+                    id: "customVideoTime",
+                    variant: "reverse",
+                    name: qsTr("Reverse"),
+                    icon: "undo"
+                },
+                {
+                    id: "customVideoTime",
+                    variant: "boomerang",
+                    name: qsTr("Boomerang"),
+                    icon: "redo"
+                },
+                {
+                    id: "kenburns",
+                    name: qsTr("Ken Burns"),
+                    icon: "fit"
+                }
+            ]
+        };
+    }
+
+    function anyVideoTargets() {
+        var d = gallery.doc;
+        if (!d)
+            return false;
+        var tops = d.selectedTops();
+        if (tops.length === 0)
+            return false;
+        for (var i = 0; i < tops.length; i++) {
+            var leaves = tops[i].kind === "group" ? d._leavesUnder(tops[i]) : [tops[i]];
+            for (var j = 0; j < leaves.length; j++) {
+                if (leaves[j].shapeType === "video")
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    function firstVideoLeaf() {
+        var d = gallery.doc;
+        if (!d)
+            return null;
+        var tops = d.selectedTops();
+        for (var i = 0; i < tops.length; i++) {
+            var leaves = tops[i].kind === "group" ? d._leavesUnder(tops[i]) : [tops[i]];
+            for (var j = 0; j < leaves.length; j++) {
+                if (leaves[j].shapeType === "video")
+                    return leaves[j];
+            }
+        }
+        return null;
     }
 
     function allVideoTargets() {
@@ -441,13 +516,153 @@ ScrollView {
         return out;
     }
 
-    function activateRow(presetId) {
-        if (presetId === "customPath") {
+    function activateRow(row) {
+        var pid = typeof row === "string" ? row : (row ? row.id : "");
+        var variant = (row && typeof row === "object") ? row.variant : undefined;
+        if (pid === "customPath") {
             if (gallery.drawPolicy)
                 gallery.drawPolicy();
             return;
         }
-        gallery.applyCustom(presetId);
+        if (pid === "kenburns") {
+            gallery.applyKenBurns();
+            return;
+        }
+        if (pid === "customVideoTime" && variant) {
+            gallery.applyVideoTime(variant);
+            return;
+        }
+        gallery.applyCustom(pid);
+    }
+
+    function round2(v) {
+        return Math.round(Number(v) * 100) / 100;
+    }
+
+    // Footage-time template: builds variant-specific options (and keys
+    // for boomerang) seeded from the first video leaf at the playhead.
+    function applyVideoTime(variant) {
+        var d = gallery.doc;
+        if (!d)
+            return;
+        var tops = d.selectedTops();
+        if (tops.length === 0)
+            return;
+        var leaf = gallery.firstVideoLeaf();
+        if (!leaf)
+            return;
+        var t0 = d.anim.currentTime;
+        var f = gallery.round2(gallery.defaults.footageNowAt(d, leaf, t0));
+        var dur = Math.max(0, Number(leaf.videoDuration) || 0);
+        var options = null;
+        var clipDur = 1.6;
+        if (variant === "freeze") {
+            clipDur = 2.0;
+            options = {
+                from: f,
+                to: f
+            };
+        } else if (variant === "reverse") {
+            options = {
+                from: f,
+                to: gallery.round2(Math.max(0, f - 2))
+            };
+        } else if (variant === "boomerang") {
+            var peak = dur > 0.05 ? Math.min(dur - 0.04, f + 1) : f + 1;
+            peak = gallery.round2(Math.max(0, peak));
+            // Degenerate at the tail (no room ahead): freeze instead of
+            // a zero-width out-and-back.
+            if (!(peak > f + 0.05)) {
+                clipDur = 2.0;
+                options = {
+                    from: f,
+                    to: f
+                };
+            } else {
+                options = {
+                    from: f,
+                    to: f,
+                    keys: [
+                        {
+                            t: 0,
+                            value: {
+                                v: f
+                            },
+                            easing: {
+                                id: "easeInOut"
+                            }
+                        },
+                        {
+                            t: 0.5,
+                            value: {
+                                v: peak
+                            },
+                            easing: {
+                                id: "easeInOut"
+                            }
+                        },
+                        {
+                            t: 1,
+                            value: {
+                                v: f
+                            },
+                            easing: {
+                                id: "easeInOut"
+                            }
+                        }
+                    ]
+                };
+            }
+        } else {
+            // Scrub forward (default): eased ramp over ~2s of footage,
+            // freezing at the tail when nothing lies ahead.
+            var end = dur > 0.05 ? Math.min(dur - 0.04, f + 2) : f + 2;
+            end = gallery.round2(Math.max(0, end));
+            options = {
+                from: f,
+                to: end > f + 0.05 ? end : f
+            };
+        }
+        var uids = [];
+        for (var i = 0; i < tops.length; i++)
+            uids.push(tops[i].uid);
+        var made = d.applyPreset("customVideoTime", uids, t0, clipDur, "in", options, null, gallery.stagger);
+        if (made.length > 0) {
+            d.anim.currentTime = t0;
+            d.anim.play();
+        }
+    }
+
+    // Ken Burns: slow zoom + drift from one transaction (scale and move
+    // clips sharing t0/duration), seeded explicitly so images and video
+    // alike start at their live look.
+    function applyKenBurns() {
+        var d = gallery.doc;
+        if (!d)
+            return;
+        var tops = d.selectedTops();
+        if (tops.length === 0)
+            return;
+        var uids = [];
+        for (var i = 0; i < tops.length; i++)
+            uids.push(tops[i].uid);
+        var t0 = d.anim.currentTime;
+        d.beginTransaction();
+        var madeA = d.applyPreset("customScale", uids, t0, 3.0, "in", {
+            from: 1,
+            to: 1.15
+        }, null, gallery.stagger);
+        var madeB = d.applyPreset("customMove", uids, t0, 3.0, "in", {
+            fromX: 0,
+            fromY: 0,
+            toX: -60,
+            toY: -34
+        }, null, 0);
+        d.endTransaction();
+        if (madeA.length + madeB.length > 0) {
+            d.anim.currentTime = t0;
+            d.anim.play();
+        }
     }
 
     function applyCustom(presetId) {

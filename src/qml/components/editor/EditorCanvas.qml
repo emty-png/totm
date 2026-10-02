@@ -34,6 +34,8 @@ Item {
             ToolState.cancelPathDraw();
         if (canvas.imageTool)
             canvas.imageTool.clearPending();
+        if (canvas.videoTool)
+            canvas.videoTool.clearPending();
         canvas.showDocument(canvas.doc);
     }
 
@@ -127,6 +129,10 @@ Item {
         canvas: canvas
         snap: snapEngine
     }
+    property var videoTool: VideoTool {
+        canvas: canvas
+        snap: snapEngine
+    }
 
     // Direct on-canvas path editing (select tool): when a custom Path
     // clip is last-selected, its trajectory loads into pathTool and
@@ -161,7 +167,7 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
-        enabled: ToolState.activeTool !== "shapes" && ToolState.activeTool !== "pen" && ToolState.activeTool !== "path" && ToolState.activeTool !== "image"
+        enabled: ToolState.activeTool !== "shapes" && ToolState.activeTool !== "pen" && ToolState.activeTool !== "path" && ToolState.activeTool !== "image" && ToolState.activeTool !== "video"
 
         onPressed: event => {
             canvas.commitTextEdit();
@@ -277,6 +283,28 @@ Item {
         }
         onReleased: {
             canvas.imageTool.releaseAt();
+        }
+    }
+
+    // Video placement drags. Only armed once a file is pending (picker
+    // accepted); click stamps natural size, drag stretches to the box.
+    MouseArea {
+        id: videoMouse
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        hoverEnabled: true
+        cursorShape: Qt.CrossCursor
+        enabled: ToolState.activeTool === "video" && canvas.doc !== null && canvas.videoTool.hasPending()
+
+        onPressed: event => {
+            canvas.videoTool.pressAt(event.x, event.y, event.modifiers);
+        }
+        onPositionChanged: event => {
+            if (pressed)
+                canvas.videoTool.moveTo(event.x, event.y, event.modifiers, true);
+        }
+        onReleased: {
+            canvas.videoTool.releaseAt();
         }
     }
 
@@ -433,7 +461,7 @@ Item {
 
     CanvasOverlays {
         doc: canvas.doc
-        draft: canvas.imageTool.draft ?? canvas.drawTool.draft
+        draft: canvas.imageTool.draft ?? canvas.videoTool.draft ?? canvas.drawTool.draft
         zoom: canvas.zoom
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
@@ -624,23 +652,49 @@ Item {
         }
     }
 
-    // Video picker (link-then-place). Links by absolute path so .totm
-    // stays small; the container probe below stamps natural size and
-    // duration. Cancel falls back to select like the image tool.
+    // Video placement hint, top-centered while a file is pending.
+    Rectangle {
+        visible: ToolState.activeTool === "video" && canvas.videoTool.hasPending()
+        anchors {
+            horizontalCenter: parent.horizontalCenter
+            top: parent.top
+            topMargin: 12
+        }
+        width: videoHintText.implicitWidth + 24
+        height: 32
+        radius: AppTheme.radiusLarge
+        color: AppTheme.surface
+        border.width: 1
+        border.color: AppTheme.border
+
+        Text {
+            id: videoHintText
+            anchors.centerIn: parent
+            text: qsTr("Click to place, drag to size")
+            font.pixelSize: 12
+            color: AppTheme.foreground
+        }
+    }
+
+    // Video picker (picker-then-place like images). Links by absolute
+    // path so .totm stays small; accept arms a pending placement,
+    // cancel without pending falls back to select.
     FilePicker {
         id: videoPicker
 
         suffixes: ["mp4", "webm", "mov", "m4v", "mkv"]
         currentFolder: StandardPaths.writableLocation(StandardPaths.MoviesLocation)
         onAccepted: canvas.acceptVideoFile(selectedFile)
-        onRejected: ToolState.setActiveTool("select")
+        onRejected: {
+            if (!canvas.videoTool.hasPending())
+                ToolState.setActiveTool("select");
+        }
     }
 
     // Leaving the pen drops the in-progress sketch so a stale draft
     // never leaks into the next tool or tab. Entering path redraw seeds
     // the existing trajectory so redraws show what they replace.
-    // Entering image opens the picker; leaving it drops the pending blob.
-    // Entering video opens its picker; leaving returns to select.
+    // Entering image/video opens the picker; leaving drops the pending.
     Connections {
         target: ToolState
         function onActiveToolChanged() {
@@ -648,9 +702,11 @@ Item {
                 canvas.pen.cancel();
             if (ToolState.activeTool !== "image" && canvas.imageTool)
                 canvas.imageTool.clearPending();
+            if (ToolState.activeTool !== "video" && canvas.videoTool)
+                canvas.videoTool.clearPending();
             if (ToolState.activeTool === "image" && canvas.doc && !canvas.imageTool.hasPending())
                 imagePicker.open();
-            if (ToolState.activeTool === "video" && canvas.doc)
+            if (ToolState.activeTool === "video" && canvas.doc && !canvas.videoTool.hasPending())
                 videoPicker.open();
             if (ToolState.activeTool !== "path") {
                 if (canvas.pathEdit && canvas.pathEdit.active && ToolState.activeTool !== "select")
@@ -695,7 +751,7 @@ Item {
                 canvas.cancelImageTool();
                 event.accepted = true;
             } else if (ToolState.activeTool === "video") {
-                ToolState.setActiveTool("select");
+                canvas.cancelVideoTool();
                 event.accepted = true;
             } else if (ToolState.activeTool === "path") {
                 canvas.cancelPathDraw();
@@ -1207,16 +1263,56 @@ Item {
             canvas.imageTool.clearPending();
         ToolState.setActiveTool("select");
     }
-    // Video intake: link, probe the container (duration, natural size,
-    // audio presence in one fast call), then stamp at natural size and
-    // auto-detach sounding files. Unprobed files still place (unknown
-    // duration, no loop math, no lane) instead of failing the gesture.
+    function cancelVideoTool() {
+        if (canvas.videoTool)
+            canvas.videoTool.clearPending();
+        ToolState.setActiveTool("select");
+    }
+    // Video picker accept: probe the container (duration, natural size,
+    // audio presence in one fast call) and arm click/drag placement at
+    // natural size. Unprobed files still arm (unknown duration, no loop
+    // math) instead of failing the gesture.
     function acceptVideoFile(file) {
-        var c = canvas.viewportCenter ? canvas.viewportCenter() : {
-            x: (canvas.doc ? canvas.doc.sceneWidth : 1920) / 2,
-            y: (canvas.doc ? canvas.doc.sceneHeight : 1080) / 2
-        };
-        canvas.acceptVideoFileAt(file, c.x, c.y);
+        if (!canvas.doc) {
+            ToolState.setActiveTool("select");
+            return;
+        }
+        var path = LibraryStore.normalizeVideoPath(file);
+        if (!path) {
+            canvas.cancelVideoTool();
+            return;
+        }
+        var probe = LibraryStore.videoProbe(path);
+        var secs = probe && probe.ok === true ? Math.max(0, Number(probe.duration) || 0) : 0;
+        var w = probe && probe.ok === true ? Math.max(1, Math.round(Number(probe.width) || 0)) : 640;
+        var h = probe && probe.ok === true ? Math.max(1, Math.round(Number(probe.height) || 0)) : 360;
+        // Oversized footage stamps clamped so a 4k pick never covers
+        // the scene; drags can still stretch larger (image rule).
+        if (w > 800 || h > 800) {
+            var k = Math.min(800 / w, 800 / h);
+            w = Math.max(1, Math.round(w * k));
+            h = Math.max(1, Math.round(h * k));
+        }
+        var sounding = probe && probe.ok === true && probe.hasAudio === true;
+        canvas.videoTool.setPending(path, w, h, secs, sounding);
+    }
+    // Immediate stamp at a point (drops/paste): one undo entry for the
+    // picture plus its auto-detached sound at the playhead. The layer
+    // takes the file basename (with extension) instead of "Video <uid>".
+    function stampVideo(path, x, y, w, h, secs, sounding) {
+        if (!canvas.doc || !path)
+            return;
+        var vname = String(path).replace(/\\/g, "/").split("/").pop();
+        canvas.doc.beginTransaction();
+        canvas.doc.addVideo(path, Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)), secs, "fit", vname);
+        if (sounding === true && canvas.doc.anim) {
+            var t0 = Number(canvas.doc.anim.currentTime) || 0;
+            var dur = secs > 0 ? secs : Math.max(0.5, Number(canvas.doc.anim.duration) - t0);
+            var id = canvas.doc.addAudioClip(path, t0, dur);
+            if (id >= 0)
+                canvas.doc.selectAudioClip(id, false);
+        }
+        canvas.doc.endTransaction();
     }
     function acceptVideoFileAt(file, x, y) {
         if (!canvas.doc) {
@@ -1239,21 +1335,13 @@ Item {
             w = Math.max(1, Math.round(w * k));
             h = Math.max(1, Math.round(h * k));
         }
+        var sounding = probe && probe.ok === true && probe.hasAudio === true;
+        // Drops stamp immediately at the drop point (no pending dance);
+        // the picker path arms pending instead (see acceptVideoFile).
+        if (ToolState.activeTool === "video" && canvas.videoTool)
+            canvas.videoTool.clearPending();
         ToolState.setActiveTool("select");
-        // One undo entry: the picture plus its auto-detached sound.
-        canvas.doc.beginTransaction();
-        canvas.doc.addVideo(path, Math.round(x - w / 2), Math.round(y - h / 2), w, h, secs);
-        // Sounding videos separate automatically onto an audio lane at
-        // the playhead (same linked file, trimmed to the composition
-        // end). Silent or unprobed files stay visual-only.
-        if (probe && probe.ok === true && probe.hasAudio === true && canvas.doc.anim) {
-            var t0 = Number(canvas.doc.anim.currentTime) || 0;
-            var dur = secs > 0 ? secs : Math.max(0.5, Number(canvas.doc.anim.duration) - t0);
-            var id = canvas.doc.addAudioClip(path, t0, dur);
-            if (id >= 0)
-                canvas.doc.selectAudioClip(id, false);
-        }
-        canvas.doc.endTransaction();
+        canvas.stampVideo(path, Math.round(x - w / 2), Math.round(y - h / 2), w, h, secs, sounding);
     }
     function viewportCenter() {
         var sw = canvas.doc ? Number(canvas.doc.sceneWidth) || 1920 : 1920;

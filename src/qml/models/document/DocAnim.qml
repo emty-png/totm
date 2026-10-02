@@ -809,6 +809,14 @@ QtObject {
                 size: Math.min(10, Math.max(1, anim.round2(gn.size ?? 2)))
             };
         }
+        if (preset === "customVideoTime") {
+            if (!leaf || leaf.shapeType !== "video")
+                return null;
+            var vt = anim.customDefaults.footageNowAt(anim.doc, leaf, anim.currentTime);
+            return {
+                v: Math.min(3600, Math.max(0, anim.round2(vt)))
+            };
+        }
         return null;
     }
 

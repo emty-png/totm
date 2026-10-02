@@ -42,6 +42,9 @@ void ImageEffectItem::paint(QPainter *painter)
     leaf[QStringLiteral("videoOffset")] = m_videoOffset;
     leaf[QStringLiteral("playbackRate")] = m_playbackRate;
     leaf[QStringLiteral("videoLoop")] = m_videoLoop;
+    leaf[QStringLiteral("videoFit")] = (m_videoFit == QStringLiteral("cover") || m_videoFit == QStringLiteral("fill")) ? m_videoFit : QStringLiteral("fit");
+    if (m_videoTime >= 0.0)
+        leaf[QStringLiteral("videoTime")] = qMax(0.0, m_videoTime);
     leaf[QStringLiteral("shadows")] = m_shadows;
     leaf[QStringLiteral("glows")] = m_glows;
     leaf[QStringLiteral("layerBlur")] = m_layerBlur;
@@ -211,6 +214,36 @@ void ImageEffectItem::setVideoLoop(bool v)
     if (m_videoLoop == v)
         return;
     m_videoLoop = v;
+    emit shapeChanged();
+    update();
+}
+
+QString ImageEffectItem::videoFit() const
+{
+    return m_videoFit;
+}
+
+void ImageEffectItem::setVideoFit(const QString &v)
+{
+    QString nv = (v == QStringLiteral("cover") || v == QStringLiteral("fill")) ? v : QStringLiteral("fit");
+    if (m_videoFit == nv)
+        return;
+    m_videoFit = nv;
+    emit shapeChanged();
+    update();
+}
+
+double ImageEffectItem::videoTime() const
+{
+    return m_videoTime;
+}
+
+void ImageEffectItem::setVideoTime(double v)
+{
+    const double nv = v >= 0.0 ? v : -1.0;
+    if (qFuzzyCompare(m_videoTime + 1.0, nv + 1.0))
+        return;
+    m_videoTime = nv;
     emit shapeChanged();
     update();
 }

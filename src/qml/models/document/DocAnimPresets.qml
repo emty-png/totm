@@ -79,7 +79,7 @@ QtObject {
     }
 
     function presetIds() {
-        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "maskWipe", "maskIris", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customStrokeGradient", "customFontSize", "customFontWeight", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customPath"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "maskWipe", "maskIris", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customStrokeGradient", "customFontSize", "customFontWeight", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customVideoTime", "customPath"];
     }
 
     // Stepped presets render as one diamond at t0 with a locked 0.1s
@@ -130,6 +130,8 @@ QtObject {
             return ["visibility"];
         if (presetId === "customFlip")
             return ["flip"];
+        if (presetId === "customVideoTime")
+            return ["video"];
         if (presetId === "customMove")
             return ["position"];
         if (presetId === "customResize")
@@ -155,6 +157,7 @@ QtObject {
             "rotation": qsTr("Rotation"),
             "reveal": qsTr("Reveal"),
             "mask": qsTr("Mask"),
+            "video": qsTr("Video"),
             "size": qsTr("Size"),
             "radius": qsTr("Radius"),
             "color": qsTr("Color"),
@@ -203,6 +206,7 @@ QtObject {
             "customBackgroundBlur": qsTr("Background Blur"),
             "customGlow": qsTr("Glow"),
             "customGrain": qsTr("Grain"),
+            "customVideoTime": qsTr("Video time"),
             "customPath": qsTr("Path")
         };
         return names[presetId] !== undefined ? names[presetId] : qsTr("Fade");
@@ -434,6 +438,10 @@ QtObject {
             fromSize: 2,
             toSize: 2
         },
+        "customVideoTime": {
+            from: 0,
+            to: 2
+        },
         "customPath": {
             pts: [],
             closed: false,
@@ -579,6 +587,7 @@ QtObject {
             "customBackgroundBlur": presets._normalizeCustomBackgroundBlur,
             "customGlow": presets._normalizeCustomGlow,
             "customGrain": presets._normalizeCustomGrain,
+            "customVideoTime": presets._normalizeCustomVideoTime,
             "customPath": presets._normalizeCustomPath
         };
         return table[presetId];
@@ -845,6 +854,12 @@ QtObject {
         } else if (presetId === "customGrain") {
             put("amount", v.amount !== undefined ? clampNum(v.amount, 0, 0, 1) : undefined);
             put("size", v.size !== undefined ? clampNum(v.size, 2, 1, 10) : undefined);
+        } else if (presetId === "customVideoTime") {
+            // Footage seconds; partial keys fall back to the from-to
+            // line at sample time so single-field edits never snap.
+            put("v", v.v !== undefined ? clampNum(v.v, 0, 0, 3600) : undefined);
+            if (o.v === undefined)
+                return null;
         } else {
             return null;
         }
@@ -1129,6 +1144,17 @@ QtObject {
             toSize: clampNum(r.toSize !== undefined ? r.toSize : 2, 2, 1, 10)
         };
         return _withKeys("customGrain", o, r);
+    }
+
+    // Footage-time endpoints in footage seconds (0..3600, offset scale).
+    // From == To freezes the frame; From > To plays in reverse. Keys
+    // hold {v} footage seconds for scrub/boomerang shapes.
+    function _normalizeCustomVideoTime(r) {
+        var o = {
+            from: clampNum(r.from !== undefined ? r.from : 0, 0, 0, 3600),
+            to: clampNum(r.to !== undefined ? r.to : 2, 2, 0, 3600)
+        };
+        return _withKeys("customVideoTime", o, r);
     }
 
     function normalizePathFollow(v) {

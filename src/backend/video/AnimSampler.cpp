@@ -898,6 +898,20 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             out[QStringLiteral("opacity")] = qBound(0.0, opKv.value(QStringLiteral("v")).toDouble(), 1.0);
         else
             out[QStringLiteral("opacity")] = num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+    } else if (preset == QLatin1String("customVideoTime")) {
+        // Footage-time override for video leaves (freeze/scrub/reverse/
+        // ramp). Keys hold {v} footage seconds, from-to lerps the footage
+        // clock. Clamped to the probed length. Mirrors DocAnimSample.
+        if (shapeType == QLatin1String("video")) {
+            QVariantMap vtKv;
+            const bool hasVtKeys = genericKeysAt(o, p, vtKv) && vtKv.contains(QStringLiteral("v"));
+            const double vtRaw = hasVtKeys ? vtKv.value(QStringLiteral("v")).toDouble()
+                : num(o, "from") + (num(o, "to") - num(o, "from")) * e;
+            const double vtDur = qMax(0.0, num(base, "videoDuration"));
+            out[QStringLiteral("videoTime")] = vtDur > 0.05
+                ? qBound(0.0, vtRaw, vtDur - 0.04)
+                : qMax(0.0, vtRaw);
+        }
     } else if (preset == QLatin1String("customColor")) {
         const int fIdx = entryIndexOf(o, "fillIndex");
         QVariantMap colKv;
@@ -1534,10 +1548,13 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
         b[QStringLiteral("videoSource")] = m.value(QStringLiteral("videoSource")).toString();
         b[QStringLiteral("videoDuration")] = qMax(0.0, m.value(QStringLiteral("videoDuration"), 0.0).toDouble());
         b[QStringLiteral("videoOffset")] = qMax(0.0, m.value(QStringLiteral("videoOffset"), 0.0).toDouble());
+        b[QStringLiteral("videoStart")] = qMax(0.0, m.value(QStringLiteral("videoStart"), 0.0).toDouble());
         b[QStringLiteral("videoMuted")] = m.value(QStringLiteral("videoMuted"), false).toBool();
         b[QStringLiteral("videoVolume")] = qBound(0.0, m.value(QStringLiteral("videoVolume"), 1.0).toDouble(), 1.0);
         b[QStringLiteral("playbackRate")] = qBound(0.25, m.value(QStringLiteral("playbackRate"), 1.0).toDouble(), 4.0);
         b[QStringLiteral("videoLoop")] = m.value(QStringLiteral("videoLoop"), true).toBool();
+        const QString fit = m.value(QStringLiteral("videoFit")).toString();
+        b[QStringLiteral("videoFit")] = (fit == QLatin1String("cover") || fit == QLatin1String("fill")) ? fit : QStringLiteral("fit");
         base[uid] = b;
     }
     return base;
@@ -1872,6 +1889,29 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         acc[uid] = entry;
     }
 
+    // Timeline placement gate (mirrors DocAnimSample): absolute
+    // per-frame visibility for video leaves, since frames never restore
+    // base first — a one-sided false would stick and the video would
+    // never appear. Before the start nothing shows; after it,
+    // clip-resolved visibility wins over the base flag.
+    for (const Leaf &l : leaves) {
+        const QVariantMap lm = l.map;
+        const QString lt = str(lm, "type", str(lm, "shapeType", QString()));
+        if (lt != QLatin1String("video"))
+            continue;
+        const int luid = lm.value(QStringLiteral("uid"), -1).toInt();
+        if (luid < 0 || !base.contains(luid))
+            continue;
+        const QVariantMap lb = base[luid];
+        const double lstart = qMax(0.0, lb.value(QStringLiteral("videoStart"), 0.0).toDouble());
+        QVariantMap gentry = acc.value(luid);
+        const bool lclipVis = gentry.contains(QStringLiteral("visible"))
+            ? gentry.value(QStringLiteral("visible")).toBool()
+            : lb.value(QStringLiteral("visible"), true).toBool();
+        gentry[QStringLiteral("visible")] = (t >= lstart) && lclipVis;
+        acc[luid] = gentry;
+    }
+
     // Group style overlays ride work entries so the shared writeback
     // folds them; painters skip kind-group entries (no geometry).
     for (auto git = acc.constBegin(); git != acc.constEnd(); ++git) {
@@ -1942,6 +1982,10 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
             if (ov.contains(k))
                 m[k] = ov.value(k);
         }
+        // Footage-time override from Video time clips (video leaves
+        // only); paintVideo prefers it over offset/rate/loop math.
+        if (ov.contains(QStringLiteral("videoTime")) && shapeType == QLatin1String("video"))
+            m[QStringLiteral("videoTime")] = qMax(0.0, ov.value(QStringLiteral("videoTime")).toDouble());
         // Shadow/glow top-entry clips fold onto entry 0 like fill/stroke
         // legacy keys, preserving the rest of the stack. Multi-entry
         // arrays (legacy fallback) replace whole.

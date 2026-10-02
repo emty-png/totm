@@ -257,7 +257,7 @@ Rectangle {
         }
 
         ToolbarButton {
-            iconKind: "play"
+            iconKind: "film"
             active: ToolState.activeTool === "video"
             onClicked: ToolState.setActiveTool("video")
         }

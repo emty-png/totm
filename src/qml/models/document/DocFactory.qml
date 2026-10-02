@@ -44,10 +44,12 @@ QtObject {
             videoSource: s.videoSource ?? "",
             videoDuration: Math.max(0, Number(s.videoDuration) || 0),
             videoOffset: Math.max(0, Number(s.videoOffset) || 0),
+            videoStart: Math.max(0, Number(s.videoStart) || 0),
             videoMuted: s.videoMuted === true,
             videoVolume: Math.min(1, Math.max(0, s.videoVolume !== undefined ? Number(s.videoVolume) : 1)),
             playbackRate: Math.min(4, Math.max(0.25, Number(s.playbackRate) || 1)),
             videoLoop: s.videoLoop !== false,
+            videoFit: (s.videoFit === "cover" || s.videoFit === "fill") ? s.videoFit : "fit",
             isMask: s.isMask === true,
             maskMode: s.maskMode === "luminance" ? "luminance" : "alpha",
             maskFeather: Math.max(0, Number(s.maskFeather) || 0),
@@ -672,20 +674,26 @@ QtObject {
 
     // Video creation: linked absolute path plus an explicit box.
     // videoDuration is the probed file length (0 = unknown). Rejects
-    // empty sources; everything else defaults (loop on, 1x, full volume).
-    function addVideo(videoSource, x, y, w, h, videoDuration) {
+    // empty sources; everything else defaults (loop on, 1x, full volume,
+    // aspect-fit so resizes never distort). videoName overrides the
+    // auto "Video <uid>" label (placement passes the file basename).
+    function addVideo(videoSource, x, y, w, h, videoDuration, videoFit, videoName) {
         if (!videoSource)
             return -1;
         var container = doc._activeContainerUid();
         doc.clearSelection();
-        var n = _makeShapeNode("video", {
+        var snap = {
             x: Math.round(x),
             y: Math.round(y),
             w: Math.max(1, Math.round(w)),
             h: Math.max(1, Math.round(h)),
             videoSource: String(videoSource),
-            videoDuration: Math.max(0, Number(videoDuration) || 0)
-        });
+            videoDuration: Math.max(0, Number(videoDuration) || 0),
+            videoFit: (videoFit === "cover" || videoFit === "fill") ? videoFit : "fit"
+        };
+        if (videoName)
+            snap.name = String(videoName);
+        var n = _makeShapeNode("video", snap);
         var list = doc._childrenOf(container).slice();
         list.unshift(n);
         doc._setChildren(container, list);
