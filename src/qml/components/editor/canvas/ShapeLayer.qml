@@ -34,6 +34,11 @@ Item {
     // or scrubbing and freezes on a deterministic field otherwise.
     // Low-spec mode pins it at zero: static grain, no per-frame churn.
     readonly property int grainFrame: SettingsStore.lowSpecMode ? 0 : (layerRoot.doc && layerRoot.doc.anim ? Math.floor(Number(layerRoot.doc.anim.currentTime || 0) * 60) : 0)
+    // Video preview clock: composition time + playing flag drive the
+    // ShapeItem MediaPlayer sync (paused seeks to the export frame,
+    // playing free-runs at playbackRate like AudioPreview).
+    readonly property real previewTime: layerRoot.doc && layerRoot.doc.anim ? Number(layerRoot.doc.anim.currentTime || 0) : 0
+    readonly property bool previewPlaying: layerRoot.doc && layerRoot.doc.anim ? layerRoot.doc.anim.playing === true : false
 
     // Plain sampled map for the CPU mask preview (same keys as export
     // snapshots, including kind: ShapePath::isCombinableNode requires
@@ -205,6 +210,13 @@ Item {
             flipH: n.flipH === true,
             flipV: n.flipV === true,
             imageSource: n.imageSource ?? "",
+            videoSource: n.videoSource ?? "",
+            videoDuration: Math.max(0, Number(n.videoDuration) || 0),
+            videoOffset: Math.max(0, Number(n.videoOffset) || 0),
+            videoMuted: n.videoMuted === true,
+            videoVolume: Math.min(1, Math.max(0, n.videoVolume !== undefined ? Number(n.videoVolume) : 1)),
+            playbackRate: Math.min(4, Math.max(0.25, Number(n.playbackRate) || 1)),
+            videoLoop: n.videoLoop !== false,
             textContent: n.textContent ?? "",
             fontFamily: n.fontFamily || "Inter",
             fontWeight: n.fontWeight || 400,
@@ -388,6 +400,15 @@ Item {
             flipV: modelData.flipV
             paintDepth: modelData.zOrder
             imageSource: modelData.imageSource ?? ""
+            videoSource: modelData.videoSource ?? ""
+            videoDuration: Math.max(0, Number(modelData.videoDuration) || 0)
+            videoOffset: Math.max(0, Number(modelData.videoOffset) || 0)
+            videoMuted: modelData.videoMuted === true
+            videoVolume: Math.min(1, Math.max(0, modelData.videoVolume !== undefined ? Number(modelData.videoVolume) : 1))
+            playbackRate: Math.min(4, Math.max(0.25, Number(modelData.playbackRate) || 1))
+            videoLoop: modelData.videoLoop !== false
+            previewTime: layerRoot.previewTime
+            previewPlaying: layerRoot.previewPlaying
             textContent: modelData.textContent !== undefined ? modelData.textContent : ""
             fontFamily: modelData.fontFamily || "Inter"
             fontWeight: modelData.fontWeight || 400

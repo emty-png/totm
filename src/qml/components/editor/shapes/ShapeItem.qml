@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Shapes
+import QtMultimedia
 import Totm
 
 // One canvas shape; root geometry IS the shape geometry. Reports
@@ -69,6 +70,19 @@ Item {
     property var textFx: null
     // Stored blob name under LibraryStore images/.
     property string imageSource: ""
+    // Linked video path (absolute local file, link-by-path). Empty means
+    // missing; preview shows a placeholder, export paints a dark tile.
+    property string videoSource: ""
+    property real videoDuration: 0
+    property real videoOffset: 0
+    property bool videoMuted: false
+    property real videoVolume: 1
+    property real playbackRate: 1
+    property bool videoLoop: true
+    // Composition clock for preview sync (from ShapeLayer): paused seeks
+    // to the export frame, playing re-anchors past ~5 frames of drift.
+    property real previewTime: 0
+    property bool previewPlaying: false
     // True while the inline editor owns this text (glyphs hide to avoid
     // double-draw).
     property bool editing: false
@@ -179,6 +193,7 @@ Item {
     readonly property bool hasTextRuns: shape.shapeType === "text" && !!(shape.textRuns && shape.textRuns.length)
     readonly property bool useTextEffectPaint: shape.shapeType === "text" && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 0 || shape.hasLinearStroke || shape.hasStrokeOpacity || shape.hasStrokeDash || shape.hasNonCenterStroke || shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasTextRuns || !!(shape.textFx && shape.textFx.fx === true))
     readonly property bool useImageEffectPaint: shape.shapeType === "image" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasStrokeDash)
+    readonly property bool useVideoEffectPaint: shape.shapeType === "video" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasStrokeDash)
 
     x: shape.sx
     y: shape.sy
@@ -270,7 +285,7 @@ Item {
         readonly property real sceneW: shape.backdropItem && shape.backdropItem.doc ? Number(shape.backdropItem.doc.sceneWidth) || 1920 : 1920
         readonly property real sceneH: shape.backdropItem && shape.backdropItem.doc ? Number(shape.backdropItem.doc.sceneHeight) || 1080 : 1080
         readonly property bool plainRect: shape.shapeType === "rectangle" && !shape.independentCorners
-        readonly property bool needsMask: !((backdropRoot.plainRect || shape.shapeType === "image") && !(Number(shape.radius) > 0))
+        readonly property bool needsMask: !((backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "video") && !(Number(shape.radius) > 0))
 
         Item {
             id: blurRig
@@ -321,14 +336,14 @@ Item {
 
                     Rectangle {
                         anchors.fill: parent
-                        visible: backdropRoot.plainRect || shape.shapeType === "image"
-                        radius: shape.shapeType === "image" ? Math.max(0, shape.radius) : Math.min(shape.radius, Math.min(shape.sw, shape.sh) / 2)
+                        visible: backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "video"
+                        radius: (shape.shapeType === "image" || shape.shapeType === "video") ? Math.max(0, shape.radius) : Math.min(shape.radius, Math.min(shape.sw, shape.sh) / 2)
                         color: "white"
                     }
 
                     Shape {
                         anchors.fill: parent
-                        visible: !(backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "text")
+                        visible: !(backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "video" || shape.shapeType === "text")
                         antialiasing: true
                         ShapePath {
                             fillColor: "white"
@@ -363,10 +378,10 @@ Item {
         }
     }
 
-    // Stroked/filled vector path (images paint below, never here).
+    // Stroked/filled vector path (images/videos paint below, never here).
     Shape {
         anchors.fill: parent
-        visible: (((shape.shapeType !== "rectangle" && shape.shapeType !== "text" && shape.shapeType !== "image") || (shape.shapeType === "rectangle" && shape.independentCorners)) && !shape.useEffectPaint) && !shape.paintHidden
+        visible: (((shape.shapeType !== "rectangle" && shape.shapeType !== "text" && shape.shapeType !== "image" && shape.shapeType !== "video") || (shape.shapeType === "rectangle" && shape.independentCorners)) && !shape.useEffectPaint) && !shape.paintHidden
         antialiasing: true
         opacity: shape.shapeOpacity
         transform: Scale {
@@ -814,16 +829,222 @@ Item {
         }
     }
 
-    // Film grain over vectors/images (text has its own glyph-masked copy).
+    // Video: linked file preview via MediaPlayer. Paused seeks to the
+    // export frame (previewTime clock); while playing a 100ms poll
+    // re-anchors past ~5 frames of drift so preview tracks the export
+    // clock (unknown durations free-run until Replace probes them).
+    // Missing files show a dark tile with a play glyph.
+    Item {
+        id: videoRoot
+
+        anchors.fill: parent
+        visible: shape.shapeType === "video" && !shape.paintHidden && !shape.useVideoEffectPaint
+        opacity: shape.shapeOpacity
+        transform: Scale {
+            xScale: shape.flipH ? -1 : 1
+            yScale: shape.flipV ? -1 : 1
+            origin.x: shape.sw / 2
+            origin.y: shape.sh / 2
+        }
+
+        readonly property url videoFileUrl: shape.videoSource ? LibraryStore.videoUrl(shape.videoSource) : ""
+        readonly property bool hasFile: videoFileUrl.toString() !== ""
+        readonly property double wantTime: {
+            var t = Math.max(0, Number(shape.previewTime) || 0);
+            var off = Math.max(0, Number(shape.videoOffset) || 0);
+            var rate = Number(shape.playbackRate) || 1;
+            if (!(rate > 0))
+                rate = 1;
+            rate = Math.min(4, Math.max(0.25, rate));
+            var vt = off + t * rate;
+            var dur = Math.max(0, Number(shape.videoDuration) || 0);
+            if (dur > 0.05 && shape.videoLoop !== false)
+                vt = vt % dur;
+            return Math.max(0, vt);
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Math.max(0, shape.radius)
+            color: "#1a1a1a"
+            visible: !videoRoot.hasFile || videoPlayer.error !== MediaPlayer.NoError || videoPlayer.mediaStatus === MediaPlayer.NoMedia
+        }
+
+        AppIcon {
+            anchors.centerIn: parent
+            kind: "play"
+            iconColor: AppTheme.muted
+            visible: !videoRoot.hasFile || videoPlayer.error !== MediaPlayer.NoError || videoPlayer.mediaStatus === MediaPlayer.NoMedia
+        }
+
+        MediaPlayer {
+            id: videoPlayer
+            source: videoRoot.videoFileUrl
+            // Never autoplay: the picture only moves while the
+            // composition plays (see previewPlaying below); paused
+            // seeks to the export frame instead.
+            autoPlay: false
+            loops: shape.videoLoop !== false ? MediaPlayer.Infinite : 1
+            audioOutput: AudioOutput {
+                // Hidden leaves stay silent (eye/group/hide clip);
+                // fades keep sound by design. Backdrop duplicates
+                // (frosted-glass sampling) never contribute audio.
+                muted: shape.videoMuted === true || shape.shapeVisible !== true || shape.isBackdropCapture
+                volume: {
+                    var vv = Number(shape.videoVolume);
+                    if (!(vv >= 0))
+                        vv = 1;
+                    return Math.min(1, Math.max(0, vv));
+                }
+            }
+            playbackRate: Math.min(4, Math.max(0.25, Number(shape.playbackRate) || 1))
+            videoOutput: videoOut
+            onHasVideoChanged: {
+                if (!hasVideo || !videoRoot.hasFile || shape.isBackdropCapture)
+                    return;
+                if (shape.previewPlaying) {
+                    if (videoPlayer.seekable)
+                        videoPlayer.position = Math.round(videoRoot.wantTime * 1000);
+                    videoPlayer.play();
+                } else if (videoPlayer.seekable) {
+                    videoPlayer.position = Math.round(videoRoot.wantTime * 1000);
+                }
+            }
+        }
+
+        VideoOutput {
+            id: videoOut
+            anchors.fill: parent
+            visible: videoRoot.hasFile && videoPlayer.hasVideo
+            fillMode: VideoOutput.Stretch
+        }
+
+        // Rounded corners + layer blur reuse the image mask path.
+        Rectangle {
+            id: videoMaskRect
+            anchors.fill: parent
+            radius: Math.max(0, shape.radius)
+            color: "white"
+            visible: false
+            layer.enabled: true
+            layer.smooth: true
+        }
+
+        MultiEffect {
+            anchors.fill: parent
+            source: videoOut
+            visible: videoRoot.hasFile && (shape.radius > 0 || shape.hasLayerBlur)
+            autoPaddingEnabled: false
+            maskEnabled: shape.radius > 0
+            maskSource: videoMaskRect
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+            blurEnabled: shape.hasLayerBlur
+            blurMax: 64
+            blur: shape.hasLayerBlur ? Math.min(1, Math.max(0, Number((shape.layerBlur ?? {}).radius || 0) / 64)) : 0
+        }
+
+        Connections {
+            target: shape
+            function onPreviewTimeChanged() {
+                if (!shape.previewPlaying && videoPlayer.hasVideo && videoPlayer.seekable) {
+                    var want = Math.round(videoRoot.wantTime * 1000);
+                    if (Math.abs(videoPlayer.position - want) > 120)
+                        videoPlayer.position = want;
+                }
+            }
+            function onPreviewPlayingChanged() {
+                if (!videoRoot.hasFile || shape.isBackdropCapture)
+                    return;
+                if (shape.previewPlaying) {
+                    if (videoPlayer.hasVideo && videoPlayer.seekable)
+                        videoPlayer.position = Math.round(videoRoot.wantTime * 1000);
+                    videoPlayer.play();
+                } else {
+                    videoPlayer.pause();
+                    if (videoPlayer.hasVideo && videoPlayer.seekable)
+                        videoPlayer.position = Math.round(videoRoot.wantTime * 1000);
+                }
+            }
+        }
+
+        // Drift repair while playing: the media clock and the
+        // composition clock diverge (rate rounding, loop-wrap timing,
+        // decode stalls), so re-anchor when past ~5 frames. Skipped
+        // while the duration is unknown (no loop math to anchor to):
+        // free-run until Replace probes it. Mirrors AudioPreview's
+        // poll-repair at a tighter visual threshold.
+        Timer {
+            interval: 100
+            repeat: true
+            running: videoRoot.visible && shape.previewPlaying && videoRoot.hasFile && !shape.isBackdropCapture
+            onTriggered: {
+                if (!videoPlayer.hasVideo || !videoPlayer.seekable)
+                    return;
+                if (videoPlayer.playbackState !== MediaPlayer.PlayingState) {
+                    videoPlayer.play();
+                    return;
+                }
+                if (!(Number(shape.videoDuration) > 0.05))
+                    return;
+                var want = Math.round(videoRoot.wantTime * 1000);
+                if (Math.abs(videoPlayer.position - want) > 150)
+                    videoPlayer.position = want;
+            }
+        }
+    }
+
+    // Effected videos via the shared CPU painter (same pad rule).
+    ImageEffectItem {
+        id: videoEffectPaint
+
+        x: -videoEffectPaint.pad
+        y: -videoEffectPaint.pad
+        width: shape.sw + videoEffectPaint.pad * 2
+        height: shape.sh + videoEffectPaint.pad * 2
+        visible: shape.useVideoEffectPaint && !shape.paintHidden
+        opacity: shape.shapeOpacity
+        boxW: shape.sw
+        boxH: shape.sh
+        radius: shape.radius
+        videoSource: shape.videoSource
+        videoDuration: shape.videoDuration
+        videoOffset: shape.videoOffset
+        playbackRate: shape.playbackRate
+        videoLoop: shape.videoLoop !== false
+        shadows: shape.shadows ?? []
+        glows: shape.glows ?? []
+        layerBlur: shape.layerBlur ?? ({
+                "enabled": false,
+                "radius": 0,
+                "opacity": 1
+            })
+        grain: shape.grain ?? ({
+                "enabled": false,
+                "amount": 0.5,
+                "size": 2
+            })
+        strokes: shape.strokes ?? []
+        uid: shape.uid
+        frameNo: shape.grainFrame
+        transform: Scale {
+            xScale: shape.flipH ? -1 : 1
+            yScale: shape.flipV ? -1 : 1
+            origin.x: videoEffectPaint.pad + shape.sw / 2
+            origin.y: videoEffectPaint.pad + shape.sh / 2
+        }
+    }
+
+    // Film grain over vectors/images/videos (text has its own glyph-masked copy).
     GrainOverlay {
         anchors.fill: parent
-        visible: shape.hasGrain && shape.shapeType !== "text" && !shape.paintHidden && !shape.useImageEffectPaint
+        visible: shape.hasGrain && shape.shapeType !== "text" && !shape.paintHidden && !shape.useImageEffectPaint && !shape.useVideoEffectPaint
         opacity: shape.shapeOpacity
         uid: shape.uid
         frameNo: shape.grainFrame
         amount: Number((shape.grain ?? {}).amount ?? 0.5)
         grainSize: Number((shape.grain ?? {}).size ?? 2)
-        maskKind: (shape.shapeType === "rectangle" && !shape.independentCorners) || shape.shapeType === "image" ? "rect" : "path"
+        maskKind: (shape.shapeType === "rectangle" && !shape.independentCorners) || shape.shapeType === "image" || shape.shapeType === "video" ? "rect" : "path"
         maskRadius: shape.radius
         maskPath: shape.geometry.vectorPath(shape)
         maskStroke: shape.maxStrokeWidth

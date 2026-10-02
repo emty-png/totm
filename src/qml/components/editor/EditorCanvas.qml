@@ -624,10 +624,23 @@ Item {
         }
     }
 
+    // Video picker (link-then-place). Links by absolute path so .totm
+    // stays small; the container probe below stamps natural size and
+    // duration. Cancel falls back to select like the image tool.
+    FilePicker {
+        id: videoPicker
+
+        suffixes: ["mp4", "webm", "mov", "m4v", "mkv"]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.MoviesLocation)
+        onAccepted: canvas.acceptVideoFile(selectedFile)
+        onRejected: ToolState.setActiveTool("select")
+    }
+
     // Leaving the pen drops the in-progress sketch so a stale draft
     // never leaks into the next tool or tab. Entering path redraw seeds
     // the existing trajectory so redraws show what they replace.
     // Entering image opens the picker; leaving it drops the pending blob.
+    // Entering video opens its picker; leaving returns to select.
     Connections {
         target: ToolState
         function onActiveToolChanged() {
@@ -637,6 +650,8 @@ Item {
                 canvas.imageTool.clearPending();
             if (ToolState.activeTool === "image" && canvas.doc && !canvas.imageTool.hasPending())
                 imagePicker.open();
+            if (ToolState.activeTool === "video" && canvas.doc)
+                videoPicker.open();
             if (ToolState.activeTool !== "path") {
                 if (canvas.pathEdit && canvas.pathEdit.active && ToolState.activeTool !== "select")
                     canvas.exitPathEdit();
@@ -678,6 +693,9 @@ Item {
         } else if (event.key === Qt.Key_Escape) {
             if (ToolState.activeTool === "image") {
                 canvas.cancelImageTool();
+                event.accepted = true;
+            } else if (ToolState.activeTool === "video") {
+                ToolState.setActiveTool("select");
                 event.accepted = true;
             } else if (ToolState.activeTool === "path") {
                 canvas.cancelPathDraw();
@@ -1188,6 +1206,63 @@ Item {
         if (canvas.imageTool)
             canvas.imageTool.clearPending();
         ToolState.setActiveTool("select");
+    }
+    // Video intake: link, probe the container (duration, natural size,
+    // audio presence in one fast call), then stamp at natural size and
+    // auto-detach sounding files. Unprobed files still place (unknown
+    // duration, no loop math, no lane) instead of failing the gesture.
+    function acceptVideoFile(file) {
+        var c = canvas.viewportCenter ? canvas.viewportCenter() : {
+            x: (canvas.doc ? canvas.doc.sceneWidth : 1920) / 2,
+            y: (canvas.doc ? canvas.doc.sceneHeight : 1080) / 2
+        };
+        canvas.acceptVideoFileAt(file, c.x, c.y);
+    }
+    function acceptVideoFileAt(file, x, y) {
+        if (!canvas.doc) {
+            ToolState.setActiveTool("select");
+            return;
+        }
+        var path = LibraryStore.normalizeVideoPath(file);
+        if (!path) {
+            ToolState.setActiveTool("select");
+            return;
+        }
+        var probe = LibraryStore.videoProbe(path);
+        var secs = probe && probe.ok === true ? Math.max(0, Number(probe.duration) || 0) : 0;
+        var w = probe && probe.ok === true ? Math.max(1, Math.round(Number(probe.width) || 0)) : 640;
+        var h = probe && probe.ok === true ? Math.max(1, Math.round(Number(probe.height) || 0)) : 360;
+        // Oversized footage stamps clamped so a 4k drop never covers
+        // the scene; drags can still stretch larger (image rule).
+        if (w > 800 || h > 800) {
+            var k = Math.min(800 / w, 800 / h);
+            w = Math.max(1, Math.round(w * k));
+            h = Math.max(1, Math.round(h * k));
+        }
+        ToolState.setActiveTool("select");
+        // One undo entry: the picture plus its auto-detached sound.
+        canvas.doc.beginTransaction();
+        canvas.doc.addVideo(path, Math.round(x - w / 2), Math.round(y - h / 2), w, h, secs);
+        // Sounding videos separate automatically onto an audio lane at
+        // the playhead (same linked file, trimmed to the composition
+        // end). Silent or unprobed files stay visual-only.
+        if (probe && probe.ok === true && probe.hasAudio === true && canvas.doc.anim) {
+            var t0 = Number(canvas.doc.anim.currentTime) || 0;
+            var dur = secs > 0 ? secs : Math.max(0.5, Number(canvas.doc.anim.duration) - t0);
+            var id = canvas.doc.addAudioClip(path, t0, dur);
+            if (id >= 0)
+                canvas.doc.selectAudioClip(id, false);
+        }
+        canvas.doc.endTransaction();
+    }
+    function viewportCenter() {
+        var sw = canvas.doc ? Number(canvas.doc.sceneWidth) || 1920 : 1920;
+        var sh = canvas.doc ? Number(canvas.doc.sceneHeight) || 1080 : 1080;
+        // Viewport center in content coords: pan offset + half view.
+        return {
+            x: (canvas.width / 2 - canvas.offsetX) / Math.max(0.02, canvas.zoom),
+            y: (canvas.height / 2 - canvas.offsetY) / Math.max(0.02, canvas.zoom)
+        };
     }
     // Text editing pass-throughs (session lives in TextEditor).
     function beginTextEdit(uid) {

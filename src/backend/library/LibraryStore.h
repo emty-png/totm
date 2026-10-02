@@ -155,6 +155,27 @@ public:
     Q_INVOKABLE int audioCount() const;
     Q_INVOKABLE QVariantList audioPeaks(const QString &name, int buckets, double offset, double window);
 
+    // Video links (link-by-path, never copied). Nodes store the absolute
+    // local file path so .totm stays small; missing files resolve to
+    // empty urls and paint placeholders. Allowlist is mp4/webm/mov/m4v/mkv
+    // (Qt Multimedia + ffmpeg both handle them). normalizeVideoPath
+    // validates a picked/dropped url and returns its absolute path ("" on
+    // failure with lastError set). videoUrl/hasVideo resolve stored paths.
+    Q_INVOKABLE QString normalizeVideoPath(const QUrl &source);
+    Q_INVOKABLE QUrl videoUrl(const QString &path) const;
+    Q_INVOKABLE bool hasVideo(const QString &path) const;
+    // Container probe for one linked file: parses a single `ffmpeg -i`
+    // stderr dump (no decode, milliseconds) into {ok, duration,
+    // width, height, hasAudio}. ok=false when the file is missing,
+    // unparseable, or carries no video stream. Backend-independent, so
+    // durations match export on every OS (unlike MediaPlayer probing
+    // through OS backends). Replaces per-site MediaPlayer probes.
+    Q_INVOKABLE QVariantMap videoProbe(const QString &path) const;
+    // Linked-video count for one design's scene (groups included).
+    // .totm bundles never pack linked files, so the share flow warns
+    // when this is nonzero instead of dropping them silently.
+    Q_INVOKABLE int linkedVideoCount(const QString &id) const;
+
     // Project share: single-file .totm bundle (JSON with base64 blobs).
     // exportDesign writes name + normalized scene + referenced image/audio
     // blobs; importDesign validates, stores blobs under fresh uuid names

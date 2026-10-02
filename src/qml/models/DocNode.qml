@@ -112,6 +112,18 @@ QtObject {
     // shapeType === "image"). Empty means missing; canvas shows a
     // placeholder and export paints a neutral box.
     property string imageSource: ""
+    // Video link (meaningful when shapeType === "video"): absolute
+    // local file path, never a blob name (link-by-path so .totm stays
+    // small). Empty means missing; canvas shows a placeholder and
+    // export paints the poster/neutral box. videoDuration is the
+    // probed file length in seconds (0 = unknown, no looping math).
+    property string videoSource: ""
+    property real videoDuration: 0
+    property real videoOffset: 0
+    property bool videoMuted: false
+    property real videoVolume: 1
+    property real playbackRate: 1
+    property bool videoLoop: true
     // Mask role (layer masks): when true on a shape inside a
     // group, it clips siblings above it in the same group and never
     // paints itself. maskFeather softens the edge (content px),

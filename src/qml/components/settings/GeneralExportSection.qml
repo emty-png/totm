@@ -86,6 +86,12 @@ Rectangle {
                 active: SettingsStore.defaultFps === 60
                 onClicked: SettingsStore.defaultFps = 60
             }
+
+            SegmentedOption {
+                label: qsTr("120 fps")
+                active: SettingsStore.defaultFps === 120
+                onClicked: SettingsStore.defaultFps = 120
+            }
         }
 
         Text {

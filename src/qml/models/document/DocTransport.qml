@@ -142,7 +142,14 @@ QtObject {
                 isMask: n.isMask === true,
                 maskMode: n.maskMode === "luminance" ? "luminance" : "alpha",
                 maskFeather: Math.max(0, Number(n.maskFeather) || 0),
-                maskInverted: n.maskInverted === true
+                maskInverted: n.maskInverted === true,
+                videoSource: n.videoSource ?? "",
+                videoDuration: Math.max(0, Number(n.videoDuration) || 0),
+                videoOffset: Math.max(0, Number(n.videoOffset) || 0),
+                videoMuted: n.videoMuted === true,
+                videoVolume: Math.min(1, Math.max(0, n.videoVolume !== undefined ? Number(n.videoVolume) : 1)),
+                playbackRate: Math.min(4, Math.max(0.25, Number(n.playbackRate) || 1)),
+                videoLoop: n.videoLoop !== false
             };
             if (n.shapeType === "pen")
                 entry.pathData = doc.factory._copyPath(n.pathData);
@@ -276,6 +283,20 @@ QtObject {
                 n.maskFeather = Math.max(0, Number(b.maskFeather) || 0);
             if (b.maskInverted !== undefined)
                 n.maskInverted = b.maskInverted === true;
+            if (b.videoSource !== undefined)
+                n.videoSource = String(b.videoSource ?? "");
+            if (b.videoDuration !== undefined)
+                n.videoDuration = Math.max(0, Number(b.videoDuration) || 0);
+            if (b.videoOffset !== undefined)
+                n.videoOffset = Math.max(0, Number(b.videoOffset) || 0);
+            if (b.videoMuted !== undefined)
+                n.videoMuted = b.videoMuted === true;
+            if (b.videoVolume !== undefined)
+                n.videoVolume = Math.min(1, Math.max(0, Number(b.videoVolume) || 1));
+            if (b.playbackRate !== undefined)
+                n.playbackRate = Math.min(4, Math.max(0.25, Number(b.playbackRate) || 1));
+            if (b.videoLoop !== undefined)
+                n.videoLoop = b.videoLoop !== false;
         }
     }
 }

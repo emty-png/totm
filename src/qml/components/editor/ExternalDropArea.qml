@@ -1,14 +1,14 @@
 import QtQuick
 import Totm
 
-// OS-level image intake for the editor: file drops anywhere over the
-// window plus system-clipboard paste (copied files and raw pixel data
-// like screenshots or browser copies). Drops stamp centered on the
+// OS-level image/video intake for the editor: file drops anywhere over
+// the window plus system-clipboard paste (copied files and raw pixel
+// data like screenshots or browser copies). Drops stamp centered on the
 // drop point, pastes land at the viewport center; multi-file gestures
 // cascade and commit as one undo entry. SVGs vectorize through the
 // same path as the image-tool picker (image-blob fallback when
-// unconvertible); anything else is skipped. Inbound only: app content
-// never reaches the OS clipboard.
+// unconvertible); videos link by path with duration probe; anything
+// else is skipped. Inbound only: app content never reaches the OS.
 DropArea {
     id: intake
 
@@ -47,7 +47,7 @@ DropArea {
             // Local files only: remote URLs have no local path to import.
             if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(s) && !/^file:\/\//i.test(s))
                 continue;
-            if (/\.svg$/i.test(s) || /\.(png|jpe?g|webp|gif)$/i.test(s))
+            if (/\.svg$/i.test(s) || /\.(png|jpe?g|webp|gif)$/i.test(s) || /\.(mp4|webm|mov|m4v|mkv)$/i.test(s))
                 out.push(list[i]);
         }
         return out;
@@ -79,7 +79,8 @@ DropArea {
 
     // Mirrors the image-tool picker accept: SVGs vectorize at natural
     // size (blob fallback when unconvertible), rasters stamp clamped
-    // so a 4k drop never covers the scene. Centered on (x, y).
+    // so a 4k drop never covers the scene. Videos delegate to the
+    // canvas probe path (link + duration). Centered on (x, y).
     function placeFile(u, x, y) {
         var flat = String(u).split("?")[0];
         if (/\.svg$/i.test(flat)) {
@@ -91,6 +92,37 @@ DropArea {
                 intake.doc.importSvgPaths(vec.paths, base, Math.round(x - vw / 2), Math.round(y - vh / 2), 1, 1);
                 return true;
             }
+        }
+        if (/\.(mp4|webm|mov|m4v|mkv)$/i.test(flat)) {
+            if (intake.canvas && intake.canvas.acceptVideoFileAt) {
+                // Probe is async; count the gesture as placed so the
+                // single undo entry still opens (commit lands after).
+                intake.canvas.acceptVideoFileAt(intake.asFileUrl(u), x, y);
+                return true;
+            }
+            var vpath = LibraryStore.normalizeVideoPath(intake.asFileUrl(u));
+            if (!vpath)
+                return false;
+            var vprobe = LibraryStore.videoProbe(vpath);
+            var vw = vprobe && vprobe.ok === true ? Math.max(1, Math.round(Number(vprobe.width) || 0)) : 640;
+            var vh = vprobe && vprobe.ok === true ? Math.max(1, Math.round(Number(vprobe.height) || 0)) : 360;
+            if (vw > 800 || vh > 800) {
+                var vk = Math.min(800 / vw, 800 / vh);
+                vw = Math.max(1, Math.round(vw * vk));
+                vh = Math.max(1, Math.round(vh * vk));
+            }
+            var vsecs = vprobe && vprobe.ok === true ? Math.max(0, Number(vprobe.duration) || 0) : 0;
+            intake.doc.beginTransaction();
+            intake.doc.addVideo(vpath, Math.round(x - vw / 2), Math.round(y - vh / 2), vw, vh, vsecs);
+            if (vprobe && vprobe.ok === true && vprobe.hasAudio === true && intake.doc.anim) {
+                var t0 = Number(intake.doc.anim.currentTime) || 0;
+                var dur = vsecs > 0 ? vsecs : Math.max(0.5, Number(intake.doc.anim.duration) - t0);
+                var aid = intake.doc.addAudioClip(vpath, t0, dur);
+                if (aid >= 0)
+                    intake.doc.selectAudioClip(aid, false);
+            }
+            intake.doc.endTransaction();
+            return true;
         }
         if (!/\.(png|jpe?g|webp|gif|svg)$/i.test(flat))
             return false;

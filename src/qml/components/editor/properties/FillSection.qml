@@ -33,7 +33,7 @@ PanelSection {
     }
 
     title: qsTr("Fill")
-    visible: section.snapshot.sel.length > 0 && (!section.snapshot.hasGroup || section.snapshot.singleGroupTop() !== null) && !section.snapshot.allOfType("image")
+    visible: section.snapshot.sel.length > 0 && (!section.snapshot.hasGroup || section.snapshot.singleGroupTop() !== null) && !section.snapshot.allOfType("image") && !section.snapshot.allOfType("video")
     enabled: !section.snapshot.allLocked
     compact: section.fillCount === 0
     showAdd: true
@@ -61,7 +61,7 @@ PanelSection {
     ColorPickerPopup {
         id: picker
 
-        allowGradient: !section.snapshot.allOfType("text") && !section.snapshot.allOfType("image")
+        allowGradient: !section.snapshot.allOfType("text") && !section.snapshot.allOfType("image") && !section.snapshot.allOfType("video")
         onScrubStarted: section.snapshot.beginScrub()
         onCommitted: c => {
             if (section.pickerFillIndex >= 0)

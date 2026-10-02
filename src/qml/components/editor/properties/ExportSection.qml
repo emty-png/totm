@@ -28,7 +28,30 @@ PanelSection {
     compact: !section.expanded
     onAddClicked: section.expanded = true
     onRemoveClicked: section.expanded = false
-    visible: section.hasSelection()
+    visible: section.hasSelection() && !section.allVideoSelected()
+
+    function allVideoSelected() {
+        // Component stills are meaningless for decoded frames: PNG
+        // would freeze an arbitrary poster and SVG has no raster
+        // branch, so the section hides when every target is video.
+        // Mixed selections keep it.
+        if (!section.doc)
+            return false;
+        section.doc.rev;
+        var tops = section.doc.selectedTops();
+        if (tops.length === 0)
+            return false;
+        for (var i = 0; i < tops.length; i++) {
+            var leaves = tops[i].kind === "group" ? section.doc._leavesUnder(tops[i]) : [tops[i]];
+            if (leaves.length === 0)
+                return false;
+            for (var j = 0; j < leaves.length; j++) {
+                if (leaves[j].shapeType !== "video")
+                    return false;
+            }
+        }
+        return true;
+    }
 
     // Collapsed by default; expands on + and stays until - .
     property bool expanded: false

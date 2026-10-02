@@ -170,6 +170,8 @@ QtObject {
             return "Path";
         case "image":
             return "Image";
+        case "video":
+            return "Video";
         case "group":
             return "Group";
         default:
@@ -448,6 +450,10 @@ QtObject {
     function addImage(imageSource, x, y, w, h) {
         history.checkpoint();
         return factory.addImage(imageSource, x, y, w, h);
+    }
+    function addVideo(videoSource, x, y, w, h, videoDuration) {
+        history.checkpoint();
+        return factory.addVideo(videoSource, x, y, w, h, videoDuration);
     }
     function snapshotNode(node) {
         return clipboard.snapshotNode(node);

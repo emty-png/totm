@@ -1385,7 +1385,7 @@ void SettingsStore::loadGeneral() {
     const QString quality = settings.value(QString::fromLatin1(kGenQualityKey), QStringLiteral("hd")).toString().trimmed().toLower();
     m_defaultQuality = isKnownQuality(quality) ? quality : QStringLiteral("hd");
     const int fps = settings.value(QString::fromLatin1(kGenFpsKey), 30).toInt();
-    m_defaultFps = (fps == 60) ? 60 : 30;
+    m_defaultFps = (fps == 60 || fps == 120) ? fps : 30;
     const QString performance = settings.value(QString::fromLatin1(kGenPerformanceKey), QStringLiteral("normal")).toString().trimmed().toLower();
     m_defaultPerformance = isKnownPerformance(performance) ? performance : QStringLiteral("normal");
     const QString format = settings.value(QString::fromLatin1(kGenFormatKey), QStringLiteral("mp4")).toString().trimmed().toLower();
@@ -1479,7 +1479,7 @@ int SettingsStore::defaultFps() const {
 }
 
 void SettingsStore::setDefaultFps(int v) {
-    v = (v == 60) ? 60 : 30;
+    v = (v == 60 || v == 120) ? v : 30;
     if (m_defaultFps == v)
         return;
     m_defaultFps = v;

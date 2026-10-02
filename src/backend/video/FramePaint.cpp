@@ -9,10 +9,12 @@
 #include <QDataStream>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QImageReader>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QPainterPathStroker>
+#include <QProcess>
 #include <QStandardPaths>
 #include <QSvgRenderer>
 #include <QTransform>
@@ -77,6 +79,74 @@ QImage loadExportImage(const QString &name, int targetW, int targetH) {
         QMutexLocker lock(&s_mutex);
         s_cache.insert(key, new QImage(img), qMax(1, int(img.sizeInBytes())));
     }
+    return img;
+}
+
+// Video frame for one linked file at a composition frame. frameNo is
+// the 60Hz grain clock (see Effects::grainFrameNo), so t = frameNo/60
+// recovers composition time within 16ms without changing the shared
+// paintLeaf signature. Rate/offset/loop fold here; missing binaries or
+// files return null so callers paint the placeholder tile.
+double videoTimeFor(const QVariantMap &m, int frameNo) {
+    const double t = qMax(0.0, double(frameNo) / 60.0);
+    const double offset = qMax(0.0, m.value(QStringLiteral("videoOffset"), 0.0).toDouble());
+    double rate = m.value(QStringLiteral("playbackRate"), 1.0).toDouble();
+    if (!(rate > 0.0))
+        rate = 1.0;
+    rate = qBound(0.25, rate, 4.0);
+    double vt = offset + t * rate;
+    const double dur = qMax(0.0, m.value(QStringLiteral("videoDuration"), 0.0).toDouble());
+    if (dur > 0.05) {
+        if (m.value(QStringLiteral("videoLoop"), true).toBool())
+            vt = std::fmod(vt, dur);
+        else
+            vt = qMin(vt, dur - 0.04);
+    }
+    return qMax(0.0, vt);
+}
+
+QImage loadVideoFrame(const QString &path, double videoTime, int targetW, int targetH) {
+    if (path.isEmpty() || !QFile::exists(path))
+        return {};
+    const double vt = qMax(0.0, videoTime);
+    // Quantize to the 60Hz clock so adjacent export frames with the
+    // same video instant share the decode; size rounds to 32px buckets
+    // so zoom jitters don't bust the cache.
+    const int tick = qRound(vt * 60.0);
+    const int bw = qMax(1, qRound(double(qMax(1, targetW)) / 32.0));
+    const int bh = qMax(1, qRound(double(qMax(1, targetH)) / 32.0));
+    const QString key = path + QStringLiteral("@") + QString::number(tick) + QStringLiteral("@")
+        + QString::number(bw) + QStringLiteral("x") + QString::number(bh);
+    static QCache<QString, QImage> s_vcache(64 * 1024 * 1024);
+    static QMutex s_vmutex;
+    {
+        QMutexLocker lock(&s_vmutex);
+        if (QImage *hit = s_vcache.object(key))
+            return *hit;
+    }
+    QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    if (ffmpeg.isEmpty())
+        return {};
+    QProcess proc;
+    const QStringList args = {QStringLiteral("-hide_banner"), QStringLiteral("-loglevel"),
+        QStringLiteral("error"), QStringLiteral("-ss"), QString::number(vt, 'f', 3),
+        QStringLiteral("-i"), path, QStringLiteral("-vframes"), QStringLiteral("1"),
+        QStringLiteral("-f"), QStringLiteral("image2pipe"), QStringLiteral("-vcodec"),
+        QStringLiteral("png"), QStringLiteral("-")};
+    proc.start(ffmpeg, args);
+    if (!proc.waitForStarted(3000))
+        return {};
+    if (!proc.waitForFinished(5000))
+        return {};
+    if (proc.exitCode() != 0)
+        return {};
+    QImage img = QImage::fromData(proc.readAllStandardOutput(), "PNG");
+    if (img.isNull())
+        return {};
+    if (img.format() != QImage::Format_ARGB32_Premultiplied)
+        img.convertTo(QImage::Format_ARGB32_Premultiplied);
+    QMutexLocker lock(&s_vmutex);
+    s_vcache.insert(key, new QImage(img), qMax(1, int(img.sizeInBytes())));
     return img;
 }
 
@@ -467,6 +537,112 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
         Effects::paintGrainPath(&pt, clip, maxSw, QRectF(x, y, w, h), grain, uid, frameNo, s);
 }
 
+// Video leaf: same box model as images (rounded clip, shadows/glows,
+// layer blur, strokes, grain) but the raster is a decoded ffmpeg frame
+// at videoTimeFor(m, frameNo). Missing files/binaries paint the neutral
+// tile so broken links never vanish silently.
+void paintVideo(QPainter &pt, const QVariantMap &m, double x, double y, double w, double h, double s,
+    int frameNo, const QList<Effects::StrokeEntry> &strokes,
+    const Effects::Blur &layerBlur = Effects::Blur(),
+    const QList<Effects::Glow> &glows = QList<Effects::Glow>(),
+    const QList<Effects::Shadow> &shadows = QList<Effects::Shadow>(),
+    const Effects::Grain &grain = Effects::Grain(), int uid = -1,
+    QCache<QByteArray, QImage> *cache = nullptr) {
+    const QString path = m.value(QStringLiteral("videoSource")).toString();
+    const double r = qMin(qMax(0.0, num(m, "radius") * s), qMin(w, h) / 2.0);
+    QPainterPath clip;
+    if (r > 0.01)
+        clip.addRoundedRect(QRectF(x, y, w, h), r, r);
+    else
+        clip.addRect(QRectF(x, y, w, h));
+    for (int i = shadows.size() - 1; i >= 0; --i) {
+        const Effects::Shadow &sh = shadows.at(i);
+        if (sh.enabled && !sh.inner && sh.color.alpha() > 0)
+            paintImageShadow(pt, clip, w, h, r, sh, s, cache);
+    }
+    for (int i = glows.size() - 1; i >= 0; --i) {
+        const Effects::Glow &g = glows.at(i);
+        if (g.enabled && !g.inner && g.color.alpha() > 0)
+            paintImageGlow(pt, clip, w, h, r, g, s, cache);
+    }
+    QImage img = loadVideoFrame(path, videoTimeFor(m, frameNo), qMax(1, qRound(w)), qMax(1, qRound(h)));
+    if (img.isNull()) {
+        QImage tile(qMax(1, qRound(w)), qMax(1, qRound(h)), QImage::Format_ARGB32_Premultiplied);
+        tile.fill(QColor(QStringLiteral("#1a1a1a")));
+        img = tile;
+    }
+    if (layerBlur.enabled && layerBlur.radius > 0.01 && layerBlur.opacity > 0.001) {
+        const double rad = layerBlur.radius * s;
+        QByteArray bkey;
+        {
+            QDataStream ds(&bkey, QIODevice::WriteOnly);
+            ds.setVersion(QDataStream::Qt_6_0);
+            ds << quint8('V') << path << img.width() << img.height() << rad << qRound(videoTimeFor(m, frameNo) * 60.0);
+        }
+        QImage blurred;
+        if (cache) {
+            if (QImage *hit = cache->object(bkey))
+                blurred = *hit;
+        }
+        if (blurred.isNull()) {
+            blurred = img.copy();
+            Effects::blurImage(blurred, rad);
+            if (cache && !blurred.isNull())
+                cache->insert(bkey, new QImage(blurred), qMax(1, int(blurred.sizeInBytes())));
+        }
+        QImage sharp = img.copy();
+        Effects::mixBlurred(sharp, blurred, layerBlur.opacity);
+        img = sharp;
+    }
+    pt.save();
+    pt.setClipPath(clip, Qt::IntersectClip);
+    pt.drawImage(QRectF(x, y, w, h), img);
+    pt.restore();
+    for (int i = shadows.size() - 1; i >= 0; --i) {
+        const Effects::Shadow &sh = shadows.at(i);
+        if (sh.enabled && sh.inner && sh.color.alpha() > 0)
+            paintImageShadowInner(pt, clip, w, h, r, sh, s, cache);
+    }
+    for (int i = glows.size() - 1; i >= 0; --i) {
+        const Effects::Glow &g = glows.at(i);
+        if (g.enabled && g.inner && g.color.alpha() > 0)
+            paintImageGlowInner(pt, clip, w, h, r, g, s, cache);
+    }
+    double maxSw = 0.0;
+    for (int i = strokes.size() - 1; i >= 0; --i) {
+        const Effects::StrokeEntry &se = strokes.at(i);
+        if (!se.enabled || se.width <= 0.01)
+            continue;
+        const double sw = se.width * s;
+        maxSw = qMax(maxSw, sw);
+        QColor sc = se.color;
+        sc.setAlphaF(qBound(0.0, sc.alphaF() * se.opacity, 1.0));
+        QPen pen(sc, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        if (!se.dash.isEmpty()) {
+            pen.setStyle(Qt::CustomDashLine);
+            pen.setDashPattern(se.dash);
+        }
+        QRectF rect(x, y, w, h);
+        double rr = r;
+        if (se.position == QLatin1String("outside")) {
+            rect.adjust(-sw / 2.0, -sw / 2.0, sw / 2.0, sw / 2.0);
+            rr = r + sw / 2.0;
+        } else if (se.position == QLatin1String("center")) {
+            rect.adjust(0, 0, 0, 0);
+        } else {
+            rect.adjust(sw / 2.0, sw / 2.0, -sw / 2.0, -sw / 2.0);
+            rr = qMax(0.0, r - sw / 2.0);
+        }
+        if (rect.width() <= 0 || rect.height() <= 0)
+            continue;
+        pt.setPen(pen);
+        pt.setBrush(Qt::NoBrush);
+        pt.drawRoundedRect(rect, rr, rr);
+    }
+    if (grain.enabled && grain.amount > 0.001)
+        Effects::paintGrainPath(&pt, clip, maxSw, QRectF(x, y, w, h), grain, uid, frameNo, s);
+}
+
 // Text through the shared glyph-stack painter (mirrors the canvas
 // EffectItem branch): outer/inner shadows and glows, stacked fills,
 // stacked stroke rings, whole-stack layer blur. Grain stays
@@ -496,8 +672,8 @@ void paintText(QPainter &pt, const QVariantMap &m, double x, double y, double w,
 
 // Effect pad for one sampled leaf in content px: the canvas sizing
 // rule (EffectItem::updatePad, miter-pen clause included) so crops
-// match the preview silhouette exactly. Images add the glow halo the
-// shared pad does not cover (their glow paints outside the clip).
+// match the preview silhouette exactly. Images and videos add the glow
+// halo the shared pad does not cover (their glow paints outside).
 double leafPad(const QVariantMap &m) {
     const QString shapeType = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
     const QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
@@ -508,7 +684,7 @@ double leafPad(const QVariantMap &m) {
     if (shapeType == QLatin1String("pen") && str(m, "strokeJoin", QStringLiteral("round")) == QLatin1String("miter")
         && st.maxStrokeWidth() > 0)
         pad = qMax(pad, st.maxStrokeWidth());
-    if (shapeType == QLatin1String("image"))
+    if (shapeType == QLatin1String("image") || shapeType == QLatin1String("video"))
         pad = qMax(pad, Effects::glowsPad(glows));
     return pad;
 }
@@ -663,6 +839,15 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
         return;
     }
 
+    if (shapeType == QLatin1String("video")) {
+        if (useBackground)
+            paintBackdropBlur(pt, frame, x, y, w, h, backgroundBlur.radius * scale, backgroundBlur.opacity);
+        paintVideo(pt, m, x, y, w, h, scale, frameNo, style.strokes, layerBlur, glows, shadows,
+            useGrain ? grain : Effects::Grain(), uid, &sharedBlurCache());
+        pt.restore();
+        return;
+    }
+
     // Vector shapes share the CPU engine with canvas preview
     // (EffectItem), so export matches preview by construction.
     // Background blur composites here (backdrop is the frame so far);
@@ -689,8 +874,8 @@ void paintLeaf(QPainter &pt, QImage &frame, const QVariantMap &m, double ox, dou
 }
 
 // White alpha silhouette of one sampled mask leaf in frame coords.
-// Vectors use the shared outline path, images a rounded rect, text
-// the glyph ghost; feather blurs the edge, invert flips the alpha.
+// Vectors use the shared outline path, images/videos a rounded rect,
+// text the glyph ghost; feather blurs the edge, invert flips the alpha.
 // Only alpha carries meaning (DestinationIn); color stays white.
 QImage maskSilhouette(const QVariantMap &mask, double ox, double oy, double scale, const QSize &size) {
     QImage img(size, QImage::Format_ARGB32_Premultiplied);
@@ -742,7 +927,7 @@ QImage maskSilhouette(const QVariantMap &mask, double ox, double oy, double scal
             pt.drawImage(QRectF(x, y, w, h), ghost);
         else
             pt.drawRect(QRectF(x, y, w, h));
-    } else if (shapeType == QLatin1String("image")) {
+    } else if (shapeType == QLatin1String("image") || shapeType == QLatin1String("video")) {
         const double r = qMin(qMax(0.0, num(mask, "radius") * scale), qMin(w, h) / 2.0);
         if (r > 0.01)
             pt.drawRoundedRect(QRectF(x, y, w, h), r, r);

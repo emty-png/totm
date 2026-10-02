@@ -28,6 +28,38 @@ QVariantList AudioPeaks::peaksFor(
     Dense dense;
     if (!denseFor(audioDir, name, dense) || dense.peak.isEmpty() || dense.sampleRate <= 0.0)
         return empty;
+    return windowPeaks(dense, buckets, offsetSec, windowSec);
+}
+
+QVariantList AudioPeaks::peaksForAbsolute(const QString &path, int buckets, double offsetSec, double windowSec) {
+    QVariantList empty;
+    if (path.isEmpty() || !QFile::exists(path))
+        return empty;
+    if (buckets <= 0 || !qIsFinite(offsetSec) || !qIsFinite(windowSec) || windowSec <= 0.0)
+        return empty;
+    buckets = qBound(1, buckets, kMaxBuckets);
+    const qint64 size = QFileInfo(path).size();
+    if (size <= 0)
+        return empty;
+    // Memory cache only, keyed by path: linked files can change under
+    // us, so a size match validates and mismatches re-decode. No
+    // sidecar (never write next to user media).
+    const QString key = QStringLiteral("abs:") + path;
+    if (m_cache.contains(key)) {
+        const Dense cached = m_cache.value(key);
+        if (cached.fileSize == size && !cached.peak.isEmpty() && cached.sampleRate > 0.0)
+            return windowPeaks(cached, buckets, offsetSec, windowSec);
+        m_cache.remove(key);
+    }
+    Dense dense;
+    if (!decodeDense(path, size, dense) || dense.peak.isEmpty() || dense.sampleRate <= 0.0)
+        return empty;
+    m_cache.insert(key, dense);
+    return windowPeaks(dense, buckets, offsetSec, windowSec);
+}
+
+QVariantList AudioPeaks::windowPeaks(const Dense &dense, int buckets, double offsetSec, double windowSec) {
+    QVariantList empty;
     const double fileDur = double(dense.peak.size()) / dense.sampleRate;
     const double start = qMax(0.0, offsetSec);
     if (start >= fileDur)

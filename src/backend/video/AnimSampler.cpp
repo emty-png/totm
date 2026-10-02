@@ -1531,6 +1531,13 @@ QMap<int, QVariantMap> captureBase(const QList<Leaf> &leaves) {
         b[QStringLiteral("radius")] = num(m, "radius");
         b[QStringLiteral("independentCorners")] = m.value(QStringLiteral("independentCorners")).toBool();
         b[QStringLiteral("cornerRadii")] = m.value(QStringLiteral("cornerRadii")).toList();
+        b[QStringLiteral("videoSource")] = m.value(QStringLiteral("videoSource")).toString();
+        b[QStringLiteral("videoDuration")] = qMax(0.0, m.value(QStringLiteral("videoDuration"), 0.0).toDouble());
+        b[QStringLiteral("videoOffset")] = qMax(0.0, m.value(QStringLiteral("videoOffset"), 0.0).toDouble());
+        b[QStringLiteral("videoMuted")] = m.value(QStringLiteral("videoMuted"), false).toBool();
+        b[QStringLiteral("videoVolume")] = qBound(0.0, m.value(QStringLiteral("videoVolume"), 1.0).toDouble(), 1.0);
+        b[QStringLiteral("playbackRate")] = qBound(0.25, m.value(QStringLiteral("playbackRate"), 1.0).toDouble(), 4.0);
+        b[QStringLiteral("videoLoop")] = m.value(QStringLiteral("videoLoop"), true).toBool();
         base[uid] = b;
     }
     return base;

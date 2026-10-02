@@ -124,6 +124,11 @@ ScrollView {
             snapshot: panel.snapshot
         }
 
+        VideoSection {
+            Layout.fillWidth: true
+            snapshot: panel.snapshot
+        }
+
         TypographySection {
             Layout.fillWidth: true
             snapshot: panel.snapshot

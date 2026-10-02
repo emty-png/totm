@@ -60,6 +60,8 @@ QtObject {
             return "pen";
         case "image":
             return "image";
+        case "video":
+            return "play";
         default:
             return "square";
         }

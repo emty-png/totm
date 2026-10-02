@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Totm
 
-// Export quality picker: SD/HD/4K plus 30/60fps plus Slow/Normal/Fast
+// Export quality picker: SD/HD/4K plus 30/60/120fps plus Slow/Normal/Fast
 // encode effort plus MP4/WebM/GIF container, then Render. Centered modal;
 // Render snapshots the scene fresh so later edits only affect the next
 // export. Styling mirrors the panel popups (r10 surface, 1px hairline,
@@ -143,6 +143,13 @@ Popup {
                 active: qualityPopup.fps === 60
                 onClicked: qualityPopup.fps = 60
             }
+
+            SegmentedOption {
+                label: qsTr("120 fps")
+                visible: qualityPopup.format !== "gif"
+                active: qualityPopup.fps === 120
+                onClicked: qualityPopup.fps = 120
+            }
         }
 
         Text {
@@ -201,7 +208,13 @@ Popup {
             SegmentedOption {
                 label: qsTr("GIF")
                 active: qualityPopup.format === "gif"
-                onClicked: qualityPopup.format = "gif"
+                onClicked: {
+                    // GIF caps at 60fps (120fps GIFs would be absurd;
+                    // the exporter coerces too, this keeps the UI honest).
+                    if (qualityPopup.fps > 60)
+                        qualityPopup.fps = 60;
+                    qualityPopup.format = "gif";
+                }
             }
         }
 

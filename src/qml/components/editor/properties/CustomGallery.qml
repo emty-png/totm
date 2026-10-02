@@ -259,7 +259,7 @@ ScrollView {
     }
 
     function sections() {
-        return [
+        var all = [
             {
                 title: qsTr("Transform"),
                 rows: [
@@ -386,6 +386,59 @@ ScrollView {
                 ]
             }
         ];
+        // Videos paint decoded frames, so fill/stroke/text customs are
+        // dead ends on them: hide those rows when every target is video
+        // rather than minting no-op clips. Mixed selections keep them.
+        if (gallery.allVideoTargets())
+            return gallery.filterVideoRows(all);
+        return all;
+    }
+
+    function allVideoTargets() {
+        var d = gallery.doc;
+        if (!d)
+            return false;
+        var tops = d.selectedTops();
+        if (tops.length === 0)
+            return false;
+        for (var i = 0; i < tops.length; i++) {
+            var leaves = tops[i].kind === "group" ? d._leavesUnder(tops[i]) : [tops[i]];
+            if (leaves.length === 0)
+                return false;
+            for (var j = 0; j < leaves.length; j++) {
+                if (leaves[j].shapeType !== "video")
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    function filterVideoRows(all) {
+        var dead = {
+            "customColor": true,
+            "customGradient": true,
+            "customStroke": true,
+            "customStrokeColor": true,
+            "customStrokeGradient": true,
+            "customFontSize": true,
+            "customFontWeight": true
+        };
+        var out = [];
+        for (var s = 0; s < all.length; s++) {
+            var rows = [];
+            var src = all[s].rows || [];
+            for (var r = 0; r < src.length; r++) {
+                if (!dead[src[r].id])
+                    rows.push(src[r]);
+            }
+            if (rows.length > 0) {
+                out.push({
+                    title: all[s].title,
+                    rows: rows
+                });
+            }
+        }
+        return out;
     }
 
     function activateRow(presetId) {

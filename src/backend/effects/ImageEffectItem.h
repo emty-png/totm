@@ -32,6 +32,11 @@ class ImageEffectItem : public QQuickPaintedItem {
     Q_PROPERTY(double boxH READ boxH WRITE setBoxH NOTIFY shapeChanged)
     Q_PROPERTY(double radius READ radius WRITE setRadius NOTIFY shapeChanged)
     Q_PROPERTY(QString imageSource READ imageSource WRITE setImageSource NOTIFY shapeChanged)
+    Q_PROPERTY(QString videoSource READ videoSource WRITE setVideoSource NOTIFY shapeChanged)
+    Q_PROPERTY(double videoDuration READ videoDuration WRITE setVideoDuration NOTIFY shapeChanged)
+    Q_PROPERTY(double videoOffset READ videoOffset WRITE setVideoOffset NOTIFY shapeChanged)
+    Q_PROPERTY(double playbackRate READ playbackRate WRITE setPlaybackRate NOTIFY shapeChanged)
+    Q_PROPERTY(bool videoLoop READ videoLoop WRITE setVideoLoop NOTIFY shapeChanged)
     Q_PROPERTY(QVariantList shadows READ shadows WRITE setShadows NOTIFY effectChanged)
     Q_PROPERTY(QVariantList glows READ glows WRITE setGlows NOTIFY effectChanged)
     Q_PROPERTY(QVariantMap layerBlur READ layerBlur WRITE setLayerBlur NOTIFY effectChanged)
@@ -54,6 +59,16 @@ public:
     void setRadius(double v);
     QString imageSource() const;
     void setImageSource(const QString &v);
+    QString videoSource() const;
+    void setVideoSource(const QString &v);
+    double videoDuration() const;
+    void setVideoDuration(double v);
+    double videoOffset() const;
+    void setVideoOffset(double v);
+    double playbackRate() const;
+    void setPlaybackRate(double v);
+    bool videoLoop() const;
+    void setVideoLoop(bool v);
     QVariantList shadows() const;
     void setShadows(const QVariantList &v);
     QVariantList glows() const;
@@ -82,6 +97,11 @@ private:
     double m_boxH = 10.0;
     double m_radius = 0.0;
     QString m_imageSource;
+    QString m_videoSource;
+    double m_videoDuration = 0.0;
+    double m_videoOffset = 0.0;
+    double m_playbackRate = 1.0;
+    bool m_videoLoop = true;
     QVariantList m_shadows;
     QVariantList m_glows;
     QVariantMap m_layerBlur;

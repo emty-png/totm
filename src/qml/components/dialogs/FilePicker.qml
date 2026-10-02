@@ -38,6 +38,7 @@ Popup {
 
     readonly property var imageSuffixes: ["png", "jpg", "jpeg", "webp", "gif", "svg"]
     readonly property var audioSuffixes: ["mp3", "wav", "ogg", "flac"]
+    readonly property var videoSuffixes: ["mp4", "webm", "mov", "m4v", "mkv"]
 
     anchors.centerIn: parent
     implicitWidth: 640
@@ -613,6 +614,8 @@ Popup {
             return "music";
         if (picker.imageSuffixes.indexOf(suffix) >= 0)
             return "image";
+        if (picker.videoSuffixes.indexOf(suffix) >= 0)
+            return "film";
         return "file";
     }
 

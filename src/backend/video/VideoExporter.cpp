@@ -68,6 +68,9 @@ struct AudioInput {
 // Timeline audio resolved against the render duration (same trim rule
 // as the canvas preview: intersect with [0, duration]). Missing blobs
 // are skipped so one lost file never fails the whole render.
+// Detached video audio rides as absolute linked paths (see LibraryStore
+// video links): those bypass the blob dir and feed ffmpeg directly,
+// which extracts their audio track.
 QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
     QList<AudioInput> out;
     const QVariantMap audio = scene.value(QStringLiteral("audio")).toMap();
@@ -81,12 +84,29 @@ QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
     for (const QVariant &cv : clips) {
         const QVariantMap c = cv.toMap();
         const QString name = c.value(QStringLiteral("source")).toString();
-        if (name.isEmpty() || name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
-            || name.contains(QStringLiteral("..")))
+        if (name.isEmpty())
             continue;
-        const QString path = dir + QStringLiteral("/") + name;
-        if (!QFile::exists(path))
-            continue;
+        QString path;
+        // Linked absolute paths (detached video sound) feed directly;
+        // ffmpeg reads their audio track. Blob names resolve under audio/.
+        if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))) {
+            if (!QFile::exists(name))
+                continue;
+            const QString suf = QFileInfo(name).suffix().toLower();
+            static const QStringList directOk = {QStringLiteral("mp3"), QStringLiteral("wav"),
+                QStringLiteral("ogg"), QStringLiteral("flac"), QStringLiteral("mp4"),
+                QStringLiteral("webm"), QStringLiteral("mov"), QStringLiteral("m4v"),
+                QStringLiteral("mkv")};
+            if (!directOk.contains(suf))
+                continue;
+            path = name;
+        } else {
+            if (name.contains(QStringLiteral("..")))
+                continue;
+            path = dir + QStringLiteral("/") + name;
+            if (!QFile::exists(path))
+                continue;
+        }
         const double start = qMax(0.0, c.value(QStringLiteral("t0"), 0.0).toDouble());
         const double offset = qMax(0.0, c.value(QStringLiteral("offset"), 0.0).toDouble());
         const double end = qMin(c.value(QStringLiteral("t0"), 0.0).toDouble() + qMax(0.0, c.value(QStringLiteral("duration"), 0.0).toDouble()), duration);
@@ -562,9 +582,14 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
     QString resolvedLabel;
     resolveQuality(quality, outW, outH, resolvedLabel);
     Q_UNUSED(resolvedLabel); // Dimensions drive the render; the title uses shortQ below.
-    if (fps != 60)
+    // Frame rates: 30/60 plus 120 for high-refresh footage. GIF stays
+    // capped at 60 (120fps GIFs would be absurd); the popup guards the
+    // picker, this coerces anything else so corrupt callers stay safe.
+    if (fps != 60 && fps != 120)
         fps = 30;
     const QString outFormat = normalizeFormat(format);
+    if (outFormat == QLatin1String("gif") && fps > 60)
+        fps = 60;
     QString preset;
     int crf = 18;
     QString perfLabel;

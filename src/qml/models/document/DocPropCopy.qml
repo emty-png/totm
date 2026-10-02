@@ -180,6 +180,15 @@ QtObject {
             image: n.shapeType === "image" ? {
                 imageSource: String(n.imageSource ?? "")
             } : null,
+            video: n.shapeType === "video" ? {
+                videoSource: String(n.videoSource ?? ""),
+                videoDuration: Math.max(0, Number(n.videoDuration) || 0),
+                videoOffset: Math.max(0, Number(n.videoOffset) || 0),
+                videoMuted: n.videoMuted === true,
+                videoVolume: propCopy._op(n.videoVolume, 1),
+                playbackRate: Math.min(4, Math.max(0.25, Number(n.playbackRate) || 1)),
+                videoLoop: n.videoLoop !== false
+            } : null,
             fills: fills,
             strokes: strokes,
             shadows: shadows,
@@ -328,6 +337,19 @@ QtObject {
         }
         if (v.image && n.shapeType === "image" && v.image.imageSource !== "")
             n.imageSource = String(v.image.imageSource);
+        if (v.video && n.shapeType === "video") {
+            if (v.video.videoSource !== "")
+                n.videoSource = String(v.video.videoSource);
+            // Duration/offset describe the file itself, so they travel
+            // with the source; without them loop math would run against
+            // the target's stale length.
+            n.videoDuration = Math.max(0, Number(v.video.videoDuration) || 0);
+            n.videoOffset = Math.max(0, Number(v.video.videoOffset) || 0);
+            n.videoMuted = v.video.videoMuted === true;
+            n.videoVolume = propCopy._op(v.video.videoVolume, 1);
+            n.playbackRate = Math.min(4, Math.max(0.25, Number(v.video.playbackRate) || 1));
+            n.videoLoop = v.video.videoLoop !== false;
+        }
         var dst = f._copyFills(n.fills, n);
         var lim = Math.min(dst.length, v.fills.length);
         for (var fi = 0; fi < lim; fi++) {

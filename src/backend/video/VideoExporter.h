@@ -55,9 +55,10 @@ public:
     QString lastError() const;
     QString format() const;
 
-    // Starts a render. quality: "sd"|"hd"|"4k" (default hd); fps: 30|60
-    // (other values coerce to 30); performance: "slow"|"normal"|"fast";
-    // format: "mp4"|"webm"|"gif" (other values coerce to mp4).
+    // Starts a render. quality: "sd"|"hd"|"4k" (default hd); fps:
+    // 30|60|120 (other values coerce to 30, gif caps at 60);
+    // performance: "slow"|"normal"|"fast"; format: "mp4"|"webm"|"gif"
+    // (other values coerce to mp4).
     // qualityLabel reads "Rendering <design> <quality><fps> <format>".
     // Returns false when already rendering, the scene is empty, or ffmpeg
     // is missing.

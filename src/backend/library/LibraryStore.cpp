@@ -13,6 +13,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
@@ -544,6 +546,14 @@ QString LibraryStore::importAudio(const QUrl &source) {
 }
 
 QUrl LibraryStore::audioUrl(const QString &name) const {
+    if (name.isEmpty())
+        return {};
+    // Linked absolute paths (detached video sound) resolve directly.
+    if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))) {
+        if (!QFile::exists(name))
+            return {};
+        return QUrl::fromLocalFile(name);
+    }
     if (!isSafeAudioName(name))
         return {};
     const QString path = audioDir() + QStringLiteral("/") + name;
@@ -553,6 +563,11 @@ QUrl LibraryStore::audioUrl(const QString &name) const {
 }
 
 bool LibraryStore::hasAudio(const QString &name) const {
+    if (name.isEmpty())
+        return false;
+    // Linked absolute paths (detached video sound) count when present.
+    if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\')))
+        return QFile::exists(name);
     if (!isSafeAudioName(name))
         return false;
     return QFile::exists(audioDir() + QStringLiteral("/") + name);
@@ -579,9 +594,115 @@ int LibraryStore::audioCount() const {
 }
 
 QVariantList LibraryStore::audioPeaks(const QString &name, int buckets, double offset, double window) {
+    if (name.isEmpty())
+        return {};
+    // Linked absolute paths (detached video sound) decode straight from
+    // the file with a memory-only cache; blob names use the sidecar path.
+    if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))) {
+        if (!QFile::exists(name))
+            return {};
+        return m_peaks.peaksForAbsolute(name, buckets, offset, window);
+    }
     if (!isSafeAudioName(name) || !hasAudio(name))
         return {};
     return m_peaks.peaksFor(audioDir(), name, buckets, offset, window);
+}
+
+QString LibraryStore::normalizeVideoPath(const QUrl &source) {
+    QString local = source.isLocalFile() ? source.toLocalFile() : source.toString();
+    if (local.isEmpty()) {
+        setLastError(tr("Pick a video file first."));
+        return {};
+    }
+    QFileInfo info(local);
+    if (!info.exists() || !info.isFile()) {
+        setLastError(tr("Could not read that video file."));
+        return {};
+    }
+    static const QStringList allowed = {QStringLiteral("mp4"), QStringLiteral("webm"),
+        QStringLiteral("mov"), QStringLiteral("m4v"), QStringLiteral("mkv")};
+    if (!allowed.contains(info.suffix().toLower())) {
+        setLastError(tr("That video type is not supported (mp4, webm, mov, m4v, mkv)."));
+        return {};
+    }
+    clearError();
+    return info.absoluteFilePath();
+}
+
+QUrl LibraryStore::videoUrl(const QString &path) const {
+    if (path.isEmpty())
+        return {};
+    if (!QFile::exists(path))
+        return {};
+    return QUrl::fromLocalFile(path);
+}
+
+bool LibraryStore::hasVideo(const QString &path) const {
+    return !path.isEmpty() && QFile::exists(path);
+}
+
+int LibraryStore::linkedVideoCount(const QString &id) const {
+    const int at = findDesign(id);
+    if (at < 0)
+        return 0;
+    int count = 0;
+    QList<QVariantList> stack;
+    stack.append(m_designEntries.at(at).scene.value(QStringLiteral("nodes")).toList());
+    while (!stack.isEmpty()) {
+        const QVariantList nodes = stack.takeLast();
+        for (const QVariant &v : nodes) {
+            const QVariantMap n = v.toMap();
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group")) {
+                stack.append(n.value(QStringLiteral("children")).toList());
+                continue;
+            }
+            const QString t = n.value(QStringLiteral("type")).toString();
+            const QString st = n.value(QStringLiteral("shapeType")).toString();
+            if ((t == QLatin1String("video") || st == QLatin1String("video"))
+                && !n.value(QStringLiteral("videoSource")).toString().isEmpty())
+                count++;
+        }
+    }
+    return count;
+}
+
+QVariantMap LibraryStore::videoProbe(const QString &path) const {
+    QVariantMap out;
+    out[QStringLiteral("ok")] = false;
+    out[QStringLiteral("duration")] = 0.0;
+    out[QStringLiteral("width")] = 0;
+    out[QStringLiteral("height")] = 0;
+    out[QStringLiteral("hasAudio")] = false;
+    if (path.isEmpty() || !QFile::exists(path))
+        return out;
+    const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    if (ffmpeg.isEmpty())
+        return out;
+    QProcess proc;
+    proc.start(ffmpeg, {QStringLiteral("-hide_banner"), QStringLiteral("-i"), path});
+    if (!proc.waitForFinished(8000))
+        return out;
+    // One stderr dump carries everything: Duration line plus per-stream
+    // descriptors. Labels print in English regardless of locale.
+    const QString err = QString::fromLocal8Bit(proc.readAllStandardError());
+    static const QRegularExpression durRe(QStringLiteral("Duration:\\s*(\\d+):(\\d+):([\\d.]+)"));
+    const QRegularExpressionMatch durMatch = durRe.match(err);
+    if (!durMatch.hasMatch())
+        return out;
+    const double secs = durMatch.captured(1).toDouble() * 3600.0 + durMatch.captured(2).toDouble() * 60.0
+        + durMatch.captured(3).toDouble();
+    if (!(secs > 0.0))
+        return out;
+    static const QRegularExpression videoRe(QStringLiteral("Stream[^\\n]*?Video:[^\\n]*?(\\d{2,5})x(\\d{2,5})"));
+    const QRegularExpressionMatch videoMatch = videoRe.match(err);
+    if (!videoMatch.hasMatch())
+        return out;
+    out[QStringLiteral("ok")] = true;
+    out[QStringLiteral("duration")] = secs;
+    out[QStringLiteral("width")] = videoMatch.captured(1).toInt();
+    out[QStringLiteral("height")] = videoMatch.captured(2).toInt();
+    out[QStringLiteral("hasAudio")] = err.contains(QStringLiteral("Audio:"));
+    return out;
 }
 
 bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool overwrite) {

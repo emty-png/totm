@@ -41,6 +41,13 @@ QtObject {
             flipH: s.flipH ?? false,
             flipV: s.flipV ?? false,
             imageSource: s.imageSource ?? "",
+            videoSource: s.videoSource ?? "",
+            videoDuration: Math.max(0, Number(s.videoDuration) || 0),
+            videoOffset: Math.max(0, Number(s.videoOffset) || 0),
+            videoMuted: s.videoMuted === true,
+            videoVolume: Math.min(1, Math.max(0, s.videoVolume !== undefined ? Number(s.videoVolume) : 1)),
+            playbackRate: Math.min(4, Math.max(0.25, Number(s.playbackRate) || 1)),
+            videoLoop: s.videoLoop !== false,
             isMask: s.isMask === true,
             maskMode: s.maskMode === "luminance" ? "luminance" : "alpha",
             maskFeather: Math.max(0, Number(s.maskFeather) || 0),
@@ -654,6 +661,30 @@ QtObject {
             w: Math.max(1, Math.round(w)),
             h: Math.max(1, Math.round(h)),
             imageSource: String(imageSource)
+        });
+        var list = doc._childrenOf(container).slice();
+        list.unshift(n);
+        doc._setChildren(container, list);
+        doc.anchorUid = n.uid;
+        doc._refreshStructural();
+        return n.uid;
+    }
+
+    // Video creation: linked absolute path plus an explicit box.
+    // videoDuration is the probed file length (0 = unknown). Rejects
+    // empty sources; everything else defaults (loop on, 1x, full volume).
+    function addVideo(videoSource, x, y, w, h, videoDuration) {
+        if (!videoSource)
+            return -1;
+        var container = doc._activeContainerUid();
+        doc.clearSelection();
+        var n = _makeShapeNode("video", {
+            x: Math.round(x),
+            y: Math.round(y),
+            w: Math.max(1, Math.round(w)),
+            h: Math.max(1, Math.round(h)),
+            videoSource: String(videoSource),
+            videoDuration: Math.max(0, Number(videoDuration) || 0)
         });
         var list = doc._childrenOf(container).slice();
         list.unshift(n);

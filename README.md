@@ -32,7 +32,8 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 * In-app file picker replacing stock dialogs, with overwrite guards on `.totm` export and video save
 * Animate with presets plus custom from-to properties (scale, rotate, move, opacity, color, hide/show, resize, corner radius, stroke) with per-key easing keyframes on every custom clip, and drawable motion paths with full point editing, easing graphs and a timeline (zoom slider + fit, keyframe ticks with click-seek and drag-retime, multi-clip joint drag).
 * Audio: import MP3 / WAV / OGG / FLAC onto timeline lanes with zoom-adaptive waveforms and live preview, mixed into the export
-* Video export: SD / HD / 4K at 30 / 60fps MP4 / WebM / GIF through system ffmpeg, with progress + cancel
+* Video layers: import MP4 / WebM / MOV / M4V / MKV as linked canvas shapes (files stay in place, `.totm` bundles don't pack them) with speed, loop, offset, volume and mute plus auto-detached sound lanes; canvas preview plays through Qt Multimedia's OS backend, so WebM/MKV may not preview on macOS/Windows while ffmpeg export still renders them — relink or replace when a file moves, and report backend gaps you find
+* Video export: SD / HD / 4K at 30 / 60 / 120fps MP4 / WebM / GIF (GIF caps at 60fps) through system ffmpeg, with progress + cancel
 * Component export: per-selection PNGs at 1x / 2x / 3x plus resolution-independent SVG vectors on transparency from the design panel, multi-file packs as `{Design}.zip`
 * Crash reporter: standalone window with log copy and Report on GitHub (library autosaves, so designs survive)
 

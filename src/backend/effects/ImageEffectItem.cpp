@@ -24,9 +24,12 @@ void ImageEffectItem::paint(QPainter *painter)
     // QML transform (parent Item), so the leaf stays axis-aligned here.
     // Background blur is disabled: the QML backdrop rig samples the live
     // scene behind this item like export samples the frame so far.
+    // Video links ride the same item: when videoSource is set the leaf
+    // paints the decoded frame (FramePaint video branch), else the image.
     QVariantMap leaf;
-    leaf[QStringLiteral("type")] = QStringLiteral("image");
-    leaf[QStringLiteral("shapeType")] = QStringLiteral("image");
+    const bool isVideo = !m_videoSource.isEmpty();
+    leaf[QStringLiteral("type")] = isVideo ? QStringLiteral("video") : QStringLiteral("image");
+    leaf[QStringLiteral("shapeType")] = isVideo ? QStringLiteral("video") : QStringLiteral("image");
     leaf[QStringLiteral("x")] = m_pad;
     leaf[QStringLiteral("y")] = m_pad;
     leaf[QStringLiteral("w")] = m_boxW;
@@ -34,6 +37,11 @@ void ImageEffectItem::paint(QPainter *painter)
     leaf[QStringLiteral("radius")] = m_radius;
     leaf[QStringLiteral("imageSource")] = m_imageSource;
     leaf[QStringLiteral("image")] = m_imageSource;
+    leaf[QStringLiteral("videoSource")] = m_videoSource;
+    leaf[QStringLiteral("videoDuration")] = m_videoDuration;
+    leaf[QStringLiteral("videoOffset")] = m_videoOffset;
+    leaf[QStringLiteral("playbackRate")] = m_playbackRate;
+    leaf[QStringLiteral("videoLoop")] = m_videoLoop;
     leaf[QStringLiteral("shadows")] = m_shadows;
     leaf[QStringLiteral("glows")] = m_glows;
     leaf[QStringLiteral("layerBlur")] = m_layerBlur;
@@ -127,6 +135,82 @@ void ImageEffectItem::setImageSource(const QString &v)
     if (m_imageSource == v)
         return;
     m_imageSource = v;
+    emit shapeChanged();
+    update();
+}
+
+QString ImageEffectItem::videoSource() const
+{
+    return m_videoSource;
+}
+
+void ImageEffectItem::setVideoSource(const QString &v)
+{
+    if (m_videoSource == v)
+        return;
+    m_videoSource = v;
+    emit shapeChanged();
+    update();
+}
+
+double ImageEffectItem::videoDuration() const
+{
+    return m_videoDuration;
+}
+
+void ImageEffectItem::setVideoDuration(double v)
+{
+    const double nv = qMax(0.0, v);
+    if (qFuzzyCompare(m_videoDuration, nv))
+        return;
+    m_videoDuration = nv;
+    emit shapeChanged();
+    update();
+}
+
+double ImageEffectItem::videoOffset() const
+{
+    return m_videoOffset;
+}
+
+void ImageEffectItem::setVideoOffset(double v)
+{
+    const double nv = qMax(0.0, v);
+    if (qFuzzyCompare(m_videoOffset, nv))
+        return;
+    m_videoOffset = nv;
+    emit shapeChanged();
+    update();
+}
+
+double ImageEffectItem::playbackRate() const
+{
+    return m_playbackRate;
+}
+
+void ImageEffectItem::setPlaybackRate(double v)
+{
+    double nv = v;
+    if (!(nv > 0.0))
+        nv = 1.0;
+    nv = qBound(0.25, nv, 4.0);
+    if (qFuzzyCompare(m_playbackRate, nv))
+        return;
+    m_playbackRate = nv;
+    emit shapeChanged();
+    update();
+}
+
+bool ImageEffectItem::videoLoop() const
+{
+    return m_videoLoop;
+}
+
+void ImageEffectItem::setVideoLoop(bool v)
+{
+    if (m_videoLoop == v)
+        return;
+    m_videoLoop = v;
     emit shapeChanged();
     update();
 }

@@ -879,7 +879,14 @@ RowLayout {
         suffixes: ["totm"]
         onAccepted: {
             var dest = exportPicker.selectedFile;
-            if (homeView.exportDesignId !== "" && LibraryStore.exportDestinationExists(dest)) {
+            // Linked videos never pack into the bundle: warn once so
+            // the share doesn't silently lose them, then continue to
+            // the overwrite guard like a plain export.
+            var links = homeView.exportDesignId !== "" ? LibraryStore.linkedVideoCount(homeView.exportDesignId) : 0;
+            if (links > 0) {
+                homeView.pendingExportUrl = dest;
+                linkWarningPopup.ask(qsTr("Share without videos?"), qsTr("%1 linked video(s) stay on this device and show as placeholders on import.").arg(links), qsTr("Export"));
+            } else if (homeView.exportDesignId !== "" && LibraryStore.exportDestinationExists(dest)) {
                 homeView.pendingExportUrl = dest;
                 overwritePopup.ask(qsTr("Overwrite design?"), qsTr("“%1” already exists. Overwriting replaces it.").arg(homeView.fileName(dest)), qsTr("Overwrite"));
             } else {
@@ -1034,6 +1041,19 @@ RowLayout {
     ConfirmPopup {
         id: overwritePopup
         onConfirmed: homeView.commitExport(homeView.pendingExportUrl, true)
+    }
+
+    // Linked-video notice for .totm exports: confirmed here, then the
+    // overwrite guard still runs so both gates compose in order.
+    ConfirmPopup {
+        id: linkWarningPopup
+        onConfirmed: {
+            var dest = homeView.pendingExportUrl;
+            if (homeView.exportDesignId !== "" && LibraryStore.exportDestinationExists(dest))
+                overwritePopup.ask(qsTr("Overwrite design?"), qsTr("“%1” already exists. Overwriting replaces it.").arg(homeView.fileName(dest)), qsTr("Overwrite"));
+            else
+                homeView.commitExport(dest, false);
+        }
     }
 
     // Starred-delete guard: only batches containing a starred design

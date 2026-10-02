@@ -202,7 +202,7 @@ PanelSection {
                     iconKind: "corner"
                     filled: true
                     active: section.cornersExpanded
-                    visible: !section.snapshot.allOfType("image")
+                    visible: !section.snapshot.allOfType("image") && !section.snapshot.allOfType("video")
                     onClicked: {
                         if (!section.independentActive())
                             section.snapshot.doc.toggleIndependentCorners(true);
@@ -214,7 +214,7 @@ PanelSection {
     }
 
     ColumnLayout {
-        visible: section.cornersExpanded && section.independentActive() && section.cornerType() !== "" && !section.snapshot.allOfType("image")
+        visible: section.cornersExpanded && section.independentActive() && section.cornerType() !== "" && !section.snapshot.allOfType("image") && !section.snapshot.allOfType("video")
         spacing: 8
 
         GridLayout {

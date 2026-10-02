@@ -34,6 +34,7 @@ QtObject {
     property string toolPen: SettingsStore.shortcutOverrides["toolPen"] || "P"
     property string toolText: SettingsStore.shortcutOverrides["toolText"] || "X"
     property string toolImage: SettingsStore.shortcutOverrides["toolImage"] || "I"
+    property string toolVideo: SettingsStore.shortcutOverrides["toolVideo"] || "M"
 
     // Canvas edits.
     property string editUndo: SettingsStore.shortcutOverrides["editUndo"] || "Ctrl+Z"
@@ -81,7 +82,7 @@ QtObject {
     property string timelineZoomOut: SettingsStore.shortcutOverrides["timelineZoomOut"] || "-"
 
     // All editable ids in stable order (matches groups below).
-    readonly property var allIds: ["homeNew", "homeOpen", "homeRename", "homeDelete", "homeDuplicate", "homeStar", "toolSelect", "toolRect", "toolEllipse", "toolTriangle", "toolStar", "toolPen", "toolText", "toolImage", "editUndo", "editRedo", "editCopy", "editPaste", "editDuplicate", "editDelete", "editGroup", "editUngroup", "arrangeFront", "arrangeBack", "arrangeForward", "arrangeBackward", "layersRename", "nudgeLeft", "nudgeRight", "nudgeUp", "nudgeDown", "nudgeLeftBig", "nudgeRightBig", "nudgeUpBig", "nudgeDownBig", "canvasZoomIn", "canvasZoomOut", "canvasZoomFit", "modeToggle", "modeDesign", "modeAnimate", "transportPlay", "transportStepBack", "transportStepFwd", "transportStart", "transportEnd", "timelineZoomIn", "timelineZoomOut"]
+    readonly property var allIds: ["homeNew", "homeOpen", "homeRename", "homeDelete", "homeDuplicate", "homeStar", "toolSelect", "toolRect", "toolEllipse", "toolTriangle", "toolStar", "toolPen", "toolText", "toolImage", "toolVideo", "editUndo", "editRedo", "editCopy", "editPaste", "editDuplicate", "editDelete", "editGroup", "editUngroup", "arrangeFront", "arrangeBack", "arrangeForward", "arrangeBackward", "layersRename", "nudgeLeft", "nudgeRight", "nudgeUp", "nudgeDown", "nudgeLeftBig", "nudgeRightBig", "nudgeUpBig", "nudgeDownBig", "canvasZoomIn", "canvasZoomOut", "canvasZoomFit", "modeToggle", "modeDesign", "modeAnimate", "transportPlay", "transportStepBack", "transportStepFwd", "transportStart", "transportEnd", "timelineZoomIn", "timelineZoomOut"]
 
     function defaultFor(id) {
         switch (id) {
@@ -113,6 +114,8 @@ QtObject {
             return "X";
         case "toolImage":
             return "I";
+        case "toolVideo":
+            return "M";
         case "editUndo":
             return "Ctrl+Z";
         case "editRedo":
@@ -216,6 +219,8 @@ QtObject {
             return qsTr("Text");
         case "toolImage":
             return qsTr("Image");
+        case "toolVideo":
+            return qsTr("Video");
         case "editUndo":
             return qsTr("Undo");
         case "editRedo":
@@ -319,6 +324,8 @@ QtObject {
             return shortcutState.toolText;
         case "toolImage":
             return shortcutState.toolImage;
+        case "toolVideo":
+            return shortcutState.toolVideo;
         case "editUndo":
             return shortcutState.editUndo;
         case "editRedo":
@@ -537,6 +544,11 @@ QtObject {
                         id: "toolImage",
                         label: shortcutState.labelFor("toolImage"),
                         sequence: shortcutState.toolImage
+                    },
+                    {
+                        id: "toolVideo",
+                        label: shortcutState.labelFor("toolVideo"),
+                        sequence: shortcutState.toolVideo
                     }
                 ]
             },

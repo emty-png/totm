@@ -9,7 +9,9 @@
 //
 // Ownership: pure helpers plus a memoizing instance held by
 // LibraryStore (audio blobs never move under a name, so dense peaks
-// cache by blob name for the process lifetime).
+// cache by blob name for the process lifetime; linked absolute paths
+// cache by path with no sidecar since the file can change under us —
+// a size match still validates, mismatches re-decode).
 // Source: decodes with system ffmpeg (mono 8kHz f32le); missing
 // binaries, missing blobs and decode failures all yield an empty
 // list so lanes fall back to the plain bar.
@@ -27,6 +29,10 @@ public:
     // 1..2048). Empty when anything is unknown or undecodable.
     QVariantList peaksFor(const QString &audioDir, const QString &name, int buckets, double offsetSec,
         double windowSec);
+    // Same windowing for a linked absolute file path (detached video
+    // sound): no sidecar, memory cache only. Empty on any failure so
+    // lanes fall back to the plain bar.
+    QVariantList peaksForAbsolute(const QString &path, int buckets, double offsetSec, double windowSec);
 
 private:
     struct Dense {
@@ -39,6 +45,9 @@ private:
     static QString sidecarFor(const QString &audioDir, const QString &name);
     static bool isSafeName(const QString &name);
     static QString ffmpegPath();
+    // Shared RMS + window-normalize windowing over a decoded dense
+    // vector. Buckets must already be clamped 1..2048.
+    static QVariantList windowPeaks(const Dense &dense, int buckets, double offsetSec, double windowSec);
 
     bool denseFor(const QString &audioDir, const QString &name, Dense &out);
     bool loadSidecar(const QString &path, qint64 fileSize, Dense &out) const;

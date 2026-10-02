@@ -67,6 +67,13 @@ QtObject {
                     flipH: s.flipH,
                     flipV: s.flipV,
                     imageSource: s.imageSource ?? "",
+                    videoSource: s.videoSource ?? "",
+                    videoDuration: Math.max(0, Number(s.videoDuration) || 0),
+                    videoOffset: Math.max(0, Number(s.videoOffset) || 0),
+                    videoMuted: s.videoMuted === true,
+                    videoVolume: Math.min(1, Math.max(0, s.videoVolume !== undefined ? Number(s.videoVolume) : 1)),
+                    playbackRate: Math.min(4, Math.max(0.25, Number(s.playbackRate) || 1)),
+                    videoLoop: s.videoLoop !== false,
                     textContent: s.textContent,
                     fontFamily: s.fontFamily,
                     fontWeight: s.fontWeight,
@@ -266,13 +273,13 @@ QtObject {
     }
 
     // Corner radius applies to every pointed shape except the ellipse.
-    // Images support uniform radius only (no per-corner UI).
+    // Images and videos support uniform radius only (no per-corner UI).
     function supportsRadius() {
         if (snapshot.sel.length === 0)
             return false;
         for (var j = 0; j < snapshot.sel.length; j++) {
             var t = snapshot.sel[j].type;
-            if (t !== "rectangle" && t !== "triangle" && t !== "star" && t !== "image")
+            if (t !== "rectangle" && t !== "triangle" && t !== "star" && t !== "image" && t !== "video")
                 return false;
         }
         return true;

@@ -463,6 +463,16 @@ Item {
         }
     }
 
+    Shortcut {
+        sequences: [ShortcutState.toolVideo]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            ToolState.setActiveTool("video");
+        }
+    }
+
     // Design / Animate.
     Shortcut {
         sequences: [ShortcutState.modeToggle]

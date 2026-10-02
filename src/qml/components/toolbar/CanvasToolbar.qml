@@ -256,6 +256,12 @@ Rectangle {
             onClicked: ToolState.setActiveTool("image")
         }
 
+        ToolbarButton {
+            iconKind: "play"
+            active: ToolState.activeTool === "video"
+            onClicked: ToolState.setActiveTool("video")
+        }
+
         // Plugin tools (ui.slots). Each entry loads one plugin QML file
         // with doc + pluginId injected when the item declares them.
         Repeater {
