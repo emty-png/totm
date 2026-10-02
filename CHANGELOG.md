@@ -5,6 +5,10 @@ versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
 ## [Unreleased]
 
+### Changed
+
+* Video storage — imports copy into `<library>/videos/` as stored blobs (nodes keep blob names, original basename kept as layer name) instead of link-by-path, so deleting/moving the original never breaks the design; `normalizeVideoPath` is now a copy entry point, and url/probe/peaks resolve blobs with legacy absolute-path fallback while the file exists. `.totm` bundles pack video blobs (node sources plus detached-sound clips sharing the file, legacy paths packed by content, 1GB per-blob cap) and remap to fresh names on import; `linkedVideoCount` warns only for legacy absolute refs. Orphan videos sweep at startup and storage settings reports video usage.
+
 ## [0.6.0] - 2026-10-02
 
 ### Added
