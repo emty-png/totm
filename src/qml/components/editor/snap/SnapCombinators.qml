@@ -58,6 +58,14 @@ QtObject {
         var thresh = engine.threshFor(zoom);
         var others = engine.collectOthers(doc);
         var targets = engine.targetLists(doc, others);
+        return snapResizeWithTargets(targets, thresh, newBox, hid);
+    }
+
+    // Resize snap against precomputed targets (see resizeTargets): same
+    // edge math as snapResize without the per-tick collectOthers walk.
+    // The selection's own boxes never move during a resize gesture, so
+    // the caller may snapshot targets once on press and reuse them.
+    function snapResizeWithTargets(targets, thresh, newBox, hid) {
         var box = {
             x: newBox.x,
             y: newBox.y,

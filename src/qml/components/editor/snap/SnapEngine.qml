@@ -46,6 +46,15 @@ QtObject {
     function snapResize(doc, newBox, hid, zoom) {
         return combos.snapResize(doc, newBox, hid, zoom);
     }
+    // Snapshot-once targets for a resize gesture (others don't move
+    // while resizing, so per-tick collectOthers is pure overhead).
+    function resizeTargets(doc) {
+        var others = collectOthers(doc);
+        return targetLists(doc, others);
+    }
+    function snapResizeWithTargets(targets, thresh, newBox, hid) {
+        return combos.snapResizeWithTargets(targets, thresh, newBox, hid);
+    }
     function snapPoint(doc, px, py, zoom) {
         return combos.snapPoint(doc, px, py, zoom);
     }

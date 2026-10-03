@@ -10,6 +10,14 @@ QtObject {
         return hid === "nw" || hid === "ne" || hid === "sw" || hid === "se";
     }
 
+    // Frame signature for the press-time snap cache: scene size plus
+    // guide values. Compared per apply (cheap string compare, no tree
+    // walk); a mismatch refreshes the cached targets.
+    function snapSigFor(d) {
+        var gx = d.guideX || [], gy = d.guideY || [];
+        return d.sceneWidth + "x" + d.sceneHeight + "|x:" + gx.join(",") + "|y:" + gy.join(",");
+    }
+
     function resizePressed(hid, cx, cy, mods) {
         canvas.forceActiveFocus();
         canvas.altHeld = !!(mods & Qt.AltModifier);
@@ -27,7 +35,14 @@ QtObject {
                 w: b.w,
                 h: b.h
             },
-            orig: orig
+            orig: orig,
+            // Others don't move mid-gesture: snapshot snap targets once
+            // instead of walking the whole tree per mousemove. The frame
+            // signature below refreshes the cache when the scene size or
+            // guides change mid-gesture; animated shapes keep press-time
+            // targets by design (stable magnets beat chasing motion).
+            snapTargets: snap.resizeTargets ? snap.resizeTargets(d) : null,
+            snapSig: snapSigFor(d)
         };
         canvas.snapXGuides = [];
         canvas.snapYGuides = [];
@@ -121,13 +136,34 @@ QtObject {
             canvas.snapYGuides = [];
         } else {
             // Smart-snap the dragged edges (skipped while aspect-locked
-            // so Shift keeps exact proportions).
-            var snappedBox = snap.snapResize(d, {
-                x: nx,
-                y: ny,
-                w: nw,
-                h: nh
-            }, st.hid, canvas.zoom);
+            // so Shift keeps exact proportions). Targets are press-time
+            // cached (see resizePressed), refreshed only when the scene
+            // frame or guides change mid-gesture; fall back to the live
+            // walk when the cache is unavailable. Threshold stays live so
+            // mid-gesture zooms keep the 5px feel.
+            var snappedBox;
+            if (snap.resizeTargets) {
+                var sig = snapSigFor(d);
+                if (sig !== st.snapSig) {
+                    st.snapTargets = snap.resizeTargets(d);
+                    st.snapSig = sig;
+                }
+            }
+            if (st.snapTargets && snap.snapResizeWithTargets && snap.threshFor) {
+                snappedBox = snap.snapResizeWithTargets(st.snapTargets, snap.threshFor(canvas.zoom), {
+                    x: nx,
+                    y: ny,
+                    w: nw,
+                    h: nh
+                }, st.hid);
+            } else {
+                snappedBox = snap.snapResize(d, {
+                    x: nx,
+                    y: ny,
+                    w: nw,
+                    h: nh
+                }, st.hid, canvas.zoom);
+            }
             nx = snappedBox.box.x;
             ny = snappedBox.box.y;
             nw = snappedBox.box.w;

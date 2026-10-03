@@ -36,6 +36,8 @@ Item {
             canvas.imageTool.clearPending();
         if (canvas.videoTool)
             canvas.videoTool.clearPending();
+        canvas.resizePending = null;
+        canvas.resizeState = null;
         canvas.showDocument(canvas.doc);
     }
 
@@ -46,6 +48,16 @@ Item {
     property var selBox: canvas.doc ? canvas.doc.selectionBBox() : null
 
     property var resizeState: null
+    // Latest unapplied resize mousemove (see resizeMoved): flushed once
+    // per event-loop turn so high-rate input coalesces to ~frame rate.
+    property var resizePending: null
+
+    Timer {
+        id: resizeFlushTimer
+        interval: 0
+        repeat: false
+        onTriggered: canvas.flushResize()
+    }
     // Unsnapped move travel for the active drag (base box at press plus
     // accumulated raw deltas). Snapping reads this, never the live box.
     property var moveState: null
@@ -232,7 +244,7 @@ Item {
         showFrame: canvas.selBox ? (canvas.selBox.count > 1 || canvas.selBox.rotated || canvas.selBox.singleGroup) : false
         pressPolicy: (hid, cx, cy, mods) => canvas.resizePressed(hid, cx, cy, mods)
         movePolicy: (cx, cy, mods) => canvas.resizeMoved(cx, cy, mods)
-        releasePolicy: () => canvas.resizeReleased()
+        releasePolicy: (cx, cy, mods) => canvas.resizeReleased(cx, cy, mods)
         doublePolicy: (hid, cx, cy, mods) => canvas.handleDoubleClicked(cx, cy, mods)
     }
 
@@ -1394,18 +1406,49 @@ Item {
         return resizePolicy.isCornerHandle(hid);
     }
     function resizePressed(hid, cx, cy, mods) {
+        // Drop any stale coalesced move from a previous gesture, then
+        // press synchronously so the handle grabs with zero lag.
+        canvas.resizePending = null;
+        resizeFlushTimer.stop();
         resizePolicy.resizePressed(hid, cx, cy, mods);
     }
+    // Mousemove lands at input rate (100Hz+): keep only the latest and
+    // apply once per event-loop turn so scale + snap + rev work runs at
+    // most ~once per frame instead of once per event.
     function resizeMoved(cx, cy, mods) {
-        resizePolicy.resizeMoved(cx, cy, mods);
+        canvas.resizePending = {
+            cx: cx,
+            cy: cy,
+            mods: mods
+        };
+        resizeFlushTimer.restart();
     }
-    function resizeReleased() {
+    function flushResize() {
+        var p = canvas.resizePending;
+        canvas.resizePending = null;
+        if (p)
+            resizePolicy.resizeMoved(p.cx, p.cy, p.mods);
+    }
+    function resizeReleased(cx, cy, mods) {
+        // Settle at the release point itself (freshest position + live
+        // modifiers) so a Shift/Alt change after the last mousemove still
+        // applies; any older coalesced move is dropped. Missing args
+        // (programmatic release) fall back to the pending move.
+        var p = canvas.resizePending;
+        canvas.resizePending = null;
+        resizeFlushTimer.stop();
+        if (cx !== undefined && cy !== undefined && mods !== undefined)
+            resizePolicy.resizeMoved(cx, cy, mods);
+        else if (p)
+            resizePolicy.resizeMoved(p.cx, p.cy, p.mods);
         resizePolicy.resizeReleased();
     }
     function topLeafAt(cx, cy) {
         return selectPolicy.topLeafAt(cx, cy);
     }
     function handleDoubleClicked(cx, cy, mods) {
+        canvas.resizePending = null;
+        resizeFlushTimer.stop();
         resizePolicy.handleDoubleClicked(cx, cy, mods);
     }
     function resizeApply(cx, cy, mods) {

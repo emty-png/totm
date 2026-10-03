@@ -105,9 +105,9 @@ Item {
                 if (pressed && h.hmove)
                     h.hmove(h.toCX(h.x + event.x), h.toCY(h.y + event.y), event.modifiers);
             }
-            onReleased: {
+            onReleased: event => {
                 if (h.hrelease)
-                    h.hrelease();
+                    h.hrelease(h.toCX(h.x + event.x), h.toCY(h.y + event.y), event.modifiers);
             }
             onDoubleClicked: event => {
                 if (h.hdouble)
