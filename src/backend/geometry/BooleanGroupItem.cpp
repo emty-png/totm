@@ -43,7 +43,7 @@ void BooleanGroupItem::paint(QPainter *painter)
     if (m_masks.isEmpty()) {
         painter->save();
         painter->translate(-m_boundX + m_pad, -m_boundY + m_pad);
-        Effects::paintCombinedPath(painter, combined, bounds, st, sh, gl, lb, 1.0, nullptr);
+        Effects::paintCombinedPath(painter, combined, bounds, st, sh, gl, lb, 1.0);
         const Effects::Grain grDirect = Effects::Grain::fromMap(m_grain);
         if (grDirect.enabled && grDirect.amount > 0.001)
             Effects::paintGrainPath(painter, combined, st.maxStrokeWidth(), bounds, grDirect, m_targetUid,
@@ -60,7 +60,7 @@ void BooleanGroupItem::paint(QPainter *painter)
         tp.setRenderHint(QPainter::Antialiasing, true);
         tp.save();
         tp.translate(-m_boundX + m_pad, -m_boundY + m_pad);
-        Effects::paintCombinedPath(&tp, combined, bounds, st, sh, gl, lb, 1.0, nullptr);
+        Effects::paintCombinedPath(&tp, combined, bounds, st, sh, gl, lb, 1.0);
         const Effects::Grain gr = Effects::Grain::fromMap(m_grain);
         if (gr.enabled && gr.amount > 0.001)
             Effects::paintGrainPath(&tp, combined, st.maxStrokeWidth(), bounds, gr, m_targetUid, m_grainFrame, 1.0);

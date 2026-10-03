@@ -16,6 +16,10 @@
 #include <QThread>
 #include <QUrl>
 
+#ifndef Q_OS_WIN
+#include <unistd.h>
+#endif
+
 #include "CrashHandler.h"
 #include "CrashReporter.h"
 #include "PluginNetworkGuard.h"
@@ -125,18 +129,34 @@ private slots:
             return;
         }
         connect(client, &QLocalSocket::readyRead, this, [this, client]() {
+            // Bound the forward buffer: a slow-loris peer must not OOM
+            // the primary. Drop oversize forwards outright.
+            if (m_buffers.value(client).size() > kMaxForwardBytes) {
+                client->disconnectFromServer();
+                return;
+            }
             m_buffers[client] += client->readAll();
+            if (m_buffers.value(client).size() > kMaxForwardBytes) {
+                m_buffers.remove(client);
+                client->disconnectFromServer();
+            }
         });
         connect(client, &QLocalSocket::disconnected, this, [this, client]() {
-            m_buffers[client] += client->readAll();
-            const QStringList files = QString::fromUtf8(m_buffers.take(client))
-                                          .split(u'\n', Qt::SkipEmptyParts);
+            QByteArray pending = m_buffers.take(client);
+            pending += client->readAll();
             client->deleteLater();
+            if (pending.size() > kMaxForwardBytes)
+                return;
+            QStringList files = QString::fromUtf8(pending).split(u'\n', Qt::SkipEmptyParts);
+            if (files.size() > kMaxForwardFiles)
+                files = files.mid(0, kMaxForwardFiles);
             emit filesRequested(files);
         });
     }
 
 private:
+    static constexpr int kMaxForwardBytes = 64 * 1024;
+    static constexpr int kMaxForwardFiles = 64;
     QString m_serverName;
     QStringList m_initial;
     QStringList m_pending;
@@ -147,10 +167,16 @@ private:
 
 QString singleInstanceServerName()
 {
+    // Prefer the real uid over the spoofable $USER env so a crafted
+    // environment cannot hijack or collide the socket name.
+#ifndef Q_OS_WIN
+    const QString user = QString::number(::getuid());
+#else
     QString user = QString::fromUtf8(qgetenv("USER"));
     if (user.isEmpty()) {
         user = QString::fromUtf8(qgetenv("USERNAME"));
     }
+#endif
     const QString base = QStringLiteral("totm-single-instance");
     return user.isEmpty() ? base : base + u'-' + user;
 }

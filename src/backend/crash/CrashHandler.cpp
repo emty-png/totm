@@ -31,7 +31,19 @@ void CrashHandler::spawnReporter()
         return;
     if (g_exe[0] == '\0')
         return;
+#ifdef Q_OS_WIN
     QProcess::startDetached(QString::fromLocal8Bit(g_exe), {QStringLiteral("--crash-report")});
+#else
+    // Async-signal-safe path: fork+execl uses no Qt/heap locks, unlike
+    // QProcess::startDetached. Safe from fatal signals and terminate
+    // with a possibly-corrupt heap. Parent never waits; the reporter
+    // is detached by exec.
+    pid_t pid = fork();
+    if (pid == 0) {
+        execl(g_exe, g_exe, "--crash-report", (char *)nullptr);
+        _exit(127);
+    }
+#endif
 }
 
 #ifndef Q_OS_WIN

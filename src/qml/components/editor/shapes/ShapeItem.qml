@@ -877,7 +877,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            radius: Math.max(0, shape.radius)
+            radius: Math.min(Math.max(0, shape.radius), Math.min(shape.sw, shape.sh) / 2)
             color: "#1a1a1a"
             visible: !videoRoot.hasFile || videoPlayer.error !== MediaPlayer.NoError || videoPlayer.mediaStatus === MediaPlayer.NoMedia
         }
@@ -929,31 +929,59 @@ Item {
             anchors.fill: parent
             visible: videoRoot.hasFile && videoPlayer.hasVideo
             fillMode: shape.videoFit === "cover" ? VideoOutput.PreserveAspectCrop : (shape.videoFit === "fill" ? VideoOutput.Stretch : VideoOutput.PreserveAspectFit)
+            // Rounded corners + layer blur mask in place (mirrors the
+            // image branch): a separate masked MultiEffect copy would
+            // double-draw the raw square frame underneath and leak
+            // square corners through the transparent mask.
+            layer.enabled: videoPlayer.hasVideo && (shape.radius > 0 || shape.hasLayerBlur)
+            layer.smooth: true
+            layer.effect: MultiEffect {
+                maskEnabled: shape.radius > 0
+                maskSource: videoMaskRect
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
+                blurEnabled: shape.hasLayerBlur
+                blurMax: 64
+                blur: shape.hasLayerBlur ? Math.min(1, Math.max(0, Number((shape.layerBlur ?? {}).radius || 0) / 64)) : 0
+            }
         }
 
-        // Rounded corners + layer blur reuse the image mask path.
+        // White silhouette as the mask (mirrors the image maskRect).
+        // Radius clamps to half the smallest side like export
+        // (FramePaint roundedClipPath) so oversized values can't
+        // overflow the mask and look lopsided.
         Rectangle {
             id: videoMaskRect
             anchors.fill: parent
-            radius: Math.max(0, shape.radius)
+            radius: Math.min(Math.max(0, shape.radius), Math.min(shape.sw, shape.sh) / 2)
             color: "white"
             visible: false
             layer.enabled: true
             layer.smooth: true
         }
 
-        MultiEffect {
-            anchors.fill: parent
-            source: videoOut
-            visible: videoRoot.hasFile && (shape.radius > 0 || shape.hasLayerBlur)
-            autoPaddingEnabled: false
-            maskEnabled: shape.radius > 0
-            maskSource: videoMaskRect
-            maskThresholdMin: 0.5
-            maskSpreadAtMin: 1.0
-            blurEnabled: shape.hasLayerBlur
-            blurMax: 64
-            blur: shape.hasLayerBlur ? Math.min(1, Math.max(0, Number((shape.layerBlur ?? {}).radius || 0) / 64)) : 0
+        // Stacked strokes, bottom-first (mirrors the image branch);
+        // plain strokes paint here, dashed ride the effect painter.
+        Repeater {
+            model: shape.shapeType === "video" && !shape.useVideoEffectPaint ? shape.enabledStrokes.slice().reverse() : []
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: {
+                    var pos = (modelData ?? {}).position || "center";
+                    var w = Number((modelData ?? {}).width) || 0;
+                    if (pos === "outside")
+                        return -w;
+                    if (pos === "center")
+                        return -w / 2;
+                    return 0;
+                }
+                radius: Math.min(Math.max(0, shape.radius), Math.min(shape.sw, shape.sh) / 2) + Math.max(0, -anchors.margins)
+                color: "transparent"
+                opacity: Math.min(1, Math.max(0, Number((modelData ?? {}).opacity ?? 1)))
+                border.width: Number((modelData ?? {}).width) || 0
+                border.color: String((modelData ?? {}).color ?? "#000000")
+            }
         }
 
         Connections {

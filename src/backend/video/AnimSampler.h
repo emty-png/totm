@@ -120,6 +120,6 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t);
 bool isMaskMap(const QVariantMap &m);
 // Leaf uid -> mask uids clipping it, walking up the ancestor chain
 // (nested masks intersect). Mirrors DocTree.maskUidsForLeaf.
-QMap<int, QList<int>> maskMapForWork(const QVariantMap &scene, const QList<QVariantMap> &work);
+QMap<int, QList<int>> maskMapForWork(const QVariantMap &scene);
 
 } // namespace Anims

@@ -1,5 +1,6 @@
 #include "LibraryStore.h"
 
+#include "AppPaths.h"
 #include "SvgImport.h"
 
 #include <QCache>
@@ -26,6 +27,10 @@
 namespace {
 constexpr int kSchemaVersion = 2;
 constexpr int kMaxNameLength = 120;
+// .totm import cap: blobs allow 100MB image/audio + 1GB video; base64
+// inflates ~4/3. 1.5GiB covers a maxed-out design without letting a
+// malicious file OOM the app via readAll() before per-blob checks.
+constexpr qint64 kMaxImportBytes = qint64(1536) * 1024 * 1024;
 
 QString nowIso() {
     return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
@@ -40,18 +45,52 @@ QString newId() {
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
-// Resolved .totm destination: local path with the suffix appended when
-// missing ("", when no usable path). Shared by the write and the QML
-// overwrite probe so the two can never disagree on the target file.
+QString sanitizeStem(const QString &raw) {
+    QString safe;
+    safe.reserve(raw.size());
+    for (QChar c : raw) {
+        const uint u = c.unicode();
+        if ((u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || c == u'-' || c == u'_')
+            safe.append(c);
+        else
+            safe.append(u'_');
+    }
+    return safe;
+}
+
+QString thumbsDir() {
+    return AppPaths::totmBaseDir() + QStringLiteral("/thumbs");
+}
+
+void sweepThumbPrefix(const QString &prefix) {
+    const QString safe = sanitizeStem(prefix);
+    const QString dir = thumbsDir();
+    for (const QString &f : QDir(dir).entryList(QDir::Files)) {
+        if (f.startsWith(safe + QStringLiteral("_")) && f.endsWith(QStringLiteral(".png")))
+            QFile::remove(dir + QStringLiteral("/") + f);
+    }
+}
+
+QSet<QString> collectNodeStringRefs(QList<QVariantList> stack, const QString &key) {
+    QSet<QString> out;
+    while (!stack.isEmpty()) {
+        const QVariantList nodes = stack.takeLast();
+        for (const QVariant &v : nodes) {
+            const QVariantMap n = v.toMap();
+            const QString src = n.value(key).toString();
+            if (!src.isEmpty())
+                out.insert(src);
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+                stack.append(n.value(QStringLiteral("children")).toList());
+        }
+    }
+    return out;
+}
+
+// Resolved .totm destination: delegates to AppPaths so the write and
+// the QML overwrite probe share one suffix rule.
 QString exportLocalPath(const QUrl &destination) {
-    QString local = destination.isLocalFile() ? destination.toLocalFile() : destination.toString();
-    if (local.isEmpty()) {
-        return {};
-    }
-    if (!local.endsWith(QStringLiteral(".totm"), Qt::CaseInsensitive)) {
-        local += QStringLiteral(".totm");
-    }
-    return local;
+    return AppPaths::resolveLocalFileWithSuffix(destination, QStringLiteral(".totm"));
 }
 
 QVariantMap entryToScene(const QVariantMap &scene) {
@@ -244,26 +283,7 @@ bool LibraryStore::deleteDesign(const QString &id) {
     // Best effort: a leftover file is swept next boot and never blocks.
     QFile::remove(designsDir() + QStringLiteral("/") + id + QStringLiteral(".json"));
     // Drop cached home-grid thumbnails (stale stamps sweep on render).
-    QString thumbs = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (thumbs.isEmpty())
-        thumbs = QDir::homePath() + QStringLiteral("/.totm");
-    if (!thumbs.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        thumbs += QStringLiteral("/totm");
-    thumbs += QStringLiteral("/thumbs");
-    QString safe;
-    safe.reserve(id.size());
-    for (QChar c : id) {
-        const uint u = c.unicode();
-        if ((u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || c == u'-' || c == u'_')
-            safe.append(c);
-        else
-            safe.append(u'_');
-    }
-    const QStringList stale = QDir(thumbs).entryList(QDir::Files);
-    for (const QString &f : stale) {
-        if (f.startsWith(safe + QStringLiteral("_")) && f.endsWith(QStringLiteral(".png")))
-            QFile::remove(thumbs + QStringLiteral("/") + f);
-    }
+    sweepThumbPrefix(id);
     if (!persist())
         return false;
     rebuild();
@@ -376,9 +396,7 @@ QString LibraryStore::importImage(const QUrl &source) {
         return {};
     }
     QString suffix = info.suffix().toLower();
-    static const QStringList allowed = {QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
-        QStringLiteral("webp"), QStringLiteral("gif"), QStringLiteral("svg")};
-    if (!allowed.contains(suffix))
+    if (!AppPaths::imageExtensions().contains(suffix))
         suffix = QStringLiteral("png");
     QDir().mkpath(imagesDir());
     const QString name = newId() + QStringLiteral(".") + suffix;
@@ -505,24 +523,12 @@ int LibraryStore::imageCount() const {
 }
 
 QSet<QString> LibraryStore::referencedImages() const {
-    QSet<QString> out;
-    QList<QVariantList> stack;
+    QList<QVariantList> roots;
     for (const DesignEntry &entry : m_designEntries)
-        stack.append(entry.scene.value(QStringLiteral("nodes")).toList());
+        roots.append(entry.scene.value(QStringLiteral("nodes")).toList());
     for (const AssetEntry &entry : m_assetEntries)
-        stack.append(entry.payload.value(QStringLiteral("nodes")).toList());
-    while (!stack.isEmpty()) {
-        const QVariantList nodes = stack.takeLast();
-        for (const QVariant &v : nodes) {
-            const QVariantMap n = v.toMap();
-            const QString src = n.value(QStringLiteral("imageSource")).toString();
-            if (!src.isEmpty())
-                out.insert(src);
-            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
-                stack.append(n.value(QStringLiteral("children")).toList());
-        }
-    }
-    return out;
+        roots.append(entry.payload.value(QStringLiteral("nodes")).toList());
+    return collectNodeStringRefs(roots, QStringLiteral("imageSource"));
 }
 
 void LibraryStore::sweepOrphanImages() {
@@ -546,9 +552,7 @@ QString LibraryStore::importAudio(const QUrl &source) {
         return {};
     }
     const QString suffix = info.suffix().toLower();
-    static const QStringList allowed = {QStringLiteral("mp3"), QStringLiteral("wav"),
-        QStringLiteral("ogg"), QStringLiteral("flac")};
-    if (!allowed.contains(suffix)) {
+    if (!AppPaths::audioExtensions().contains(suffix)) {
         setLastError(tr("That audio type is not supported (mp3, wav, ogg, flac)."));
         return {};
     }
@@ -876,9 +880,7 @@ bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool
             audioBlobs[name] = QString::fromLatin1(raw.toBase64());
     }
     QJsonObject videoBlobs;
-    static const QSet<QString> videoOk{
-        QStringLiteral("mp4"), QStringLiteral("webm"), QStringLiteral("mov"),
-        QStringLiteral("m4v"), QStringLiteral("mkv")};
+    const QSet<QString> &videoOk = AppPaths::videoExtensions();
     for (const QString &ref : videoRefs) {
         QString filePath;
         QString suffix;
@@ -948,8 +950,17 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
         setLastError(tr("Could not read that file."));
         return {};
     }
+    if (f.size() > kMaxImportBytes) {
+        setLastError(tr("That file is too large to import."));
+        return {};
+    }
+    const QByteArray rawJson = f.readAll();
+    if (rawJson.size() > kMaxImportBytes) {
+        setLastError(tr("That file is too large to import."));
+        return {};
+    }
     QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &parseError);
+    const QJsonDocument doc = QJsonDocument::fromJson(rawJson, &parseError);
     const QJsonObject root = doc.object();
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()
         || root.value(QStringLiteral("app")).toString() != QLatin1String("totm")
@@ -964,15 +975,9 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
     const QJsonObject imageBlobs = blobs.value(QStringLiteral("images")).toObject();
     const QJsonObject audioBlobs = blobs.value(QStringLiteral("audio")).toObject();
     const QJsonObject videoBlobs = blobs.value(QStringLiteral("videos")).toObject();
-    static const QSet<QString> imageOk{
-        QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
-        QStringLiteral("webp"), QStringLiteral("gif"), QStringLiteral("svg")};
-    static const QSet<QString> audioOk{
-        QStringLiteral("mp3"), QStringLiteral("wav"),
-        QStringLiteral("ogg"), QStringLiteral("flac")};
-    static const QSet<QString> videoOk{
-        QStringLiteral("mp4"), QStringLiteral("webm"), QStringLiteral("mov"),
-        QStringLiteral("m4v"), QStringLiteral("mkv")};
+    const QSet<QString> &imageOk = AppPaths::imageExtensions();
+    const QSet<QString> &audioOk = AppPaths::audioExtensions();
+    const QSet<QString> &videoOk = AppPaths::videoExtensions();
     // Remap helper: store each referenced blob under a fresh uuid name so
     // imports never collide with library files. Missing/invalid blobs
     // keep their refs (canvas shows the neutral placeholder, export
@@ -1206,26 +1211,7 @@ bool LibraryStore::deleteAsset(const QString &id) {
     m_assetEntries.removeAt(at);
     QFile::remove(assetsDir() + QStringLiteral("/") + id + QStringLiteral(".json"));
     // Drop cached asset thumbnails (stale stamps sweep on render).
-    QString thumbs = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (thumbs.isEmpty())
-        thumbs = QDir::homePath() + QStringLiteral("/.totm");
-    if (!thumbs.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        thumbs += QStringLiteral("/totm");
-    thumbs += QStringLiteral("/thumbs");
-    QString safe;
-    const QString stem = QStringLiteral("asset-") + id;
-    safe.reserve(stem.size());
-    for (QChar c : stem) {
-        const uint u = c.unicode();
-        if ((u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || c == u'-' || c == u'_')
-            safe.append(c);
-        else
-            safe.append(u'_');
-    }
-    for (const QString &f : QDir(thumbs).entryList(QDir::Files)) {
-        if (f.startsWith(safe + QStringLiteral("_")) && f.endsWith(QStringLiteral(".png")))
-            QFile::remove(thumbs + QStringLiteral("/") + f);
-    }
+    sweepThumbPrefix(QStringLiteral("asset-") + id);
     if (!persist())
         return false;
     rebuild();
@@ -1272,9 +1258,9 @@ void LibraryStore::sweepOrphanAudio() {
 
 QSet<QString> LibraryStore::referencedVideos() const {
     QSet<QString> out;
-    QList<QVariantList> stack;
+    QList<QVariantList> roots;
     for (const DesignEntry &entry : m_designEntries) {
-        stack.append(entry.scene.value(QStringLiteral("nodes")).toList());
+        roots.append(entry.scene.value(QStringLiteral("nodes")).toList());
         const QVariantMap audio = entry.scene.value(QStringLiteral("audio")).toMap();
         for (const QVariant &v : audio.value(QStringLiteral("clips")).toList()) {
             const QString src = v.toMap().value(QStringLiteral("source")).toString();
@@ -1283,17 +1269,11 @@ QSet<QString> LibraryStore::referencedVideos() const {
         }
     }
     for (const AssetEntry &entry : m_assetEntries)
-        stack.append(entry.payload.value(QStringLiteral("nodes")).toList());
-    while (!stack.isEmpty()) {
-        const QVariantList nodes = stack.takeLast();
-        for (const QVariant &v : nodes) {
-            const QVariantMap n = v.toMap();
-            const QString src = n.value(QStringLiteral("videoSource")).toString();
-            if (!src.isEmpty() && isSafeVideoName(src))
-                out.insert(src);
-            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
-                stack.append(n.value(QStringLiteral("children")).toList());
-        }
+        roots.append(entry.payload.value(QStringLiteral("nodes")).toList());
+    const QSet<QString> nodes = collectNodeStringRefs(roots, QStringLiteral("videoSource"));
+    for (const QString &s : nodes) {
+        if (isSafeVideoName(s))
+            out.insert(s);
     }
     return out;
 }
@@ -1318,17 +1298,21 @@ void LibraryStore::load() {
 
     QDir().mkpath(libraryDir());
     // Second-instance guard. Contention only warns; concurrent writers
-    // remain last-writer-wins.
-    if (!m_lock.lock()) {
+    // remain last-writer-wins. Sweeps are lock-gated below so a second
+    // instance never deletes the first instance's in-memory-only blobs.
+    m_hasLock = m_lock.lock();
+    if (!m_hasLock) {
         setLastError(tr("Another copy of totm seems to be running; saves may overwrite each other."));
     }
 
     QFile file(libraryPath());
     if (!file.exists()) {
         installFreshDefault();
-        sweepOrphanImages();
-        sweepOrphanAudio();
-        sweepOrphanVideos();
+        if (m_hasLock) {
+            sweepOrphanImages();
+            sweepOrphanAudio();
+            sweepOrphanVideos();
+        }
         persist();
         rebuild();
         return;
@@ -1337,9 +1321,11 @@ void LibraryStore::load() {
         setLastError(tr("Could not read library: %1").arg(file.errorString()));
         // Invariant: in-memory state stays valid even when disk is not.
         installFreshDefault();
-        sweepOrphanImages();
-        sweepOrphanAudio();
-        sweepOrphanVideos();
+        if (m_hasLock) {
+            sweepOrphanImages();
+            sweepOrphanAudio();
+            sweepOrphanVideos();
+        }
         rebuild();
         return;
     }
@@ -1364,9 +1350,11 @@ void LibraryStore::load() {
         m_designEntries.clear();
         m_assetEntries.clear();
         installFreshDefault();
-        sweepOrphanImages();
-        sweepOrphanAudio();
-        sweepOrphanVideos();
+        if (m_hasLock) {
+            sweepOrphanImages();
+            sweepOrphanAudio();
+            sweepOrphanVideos();
+        }
         persist();
         rebuild();
         return;
@@ -1414,8 +1402,10 @@ void LibraryStore::load() {
                 m_assetEntries.append(entry);
             }
         }
-        sweepOrphanDesignFiles();
-        sweepOrphanAssetFiles();
+        if (m_hasLock) {
+            sweepOrphanDesignFiles();
+            sweepOrphanAssetFiles();
+        }
     }
 
     // Invariants restored on every load: exactly one Default workspace
@@ -1455,9 +1445,11 @@ void LibraryStore::load() {
     // Healed state must persist even without further edits.
     if (healed)
         persist();
-    sweepOrphanImages();
-    sweepOrphanAudio();
-    sweepOrphanVideos();
+    if (m_hasLock) {
+        sweepOrphanImages();
+        sweepOrphanAudio();
+        sweepOrphanVideos();
+    }
     rebuild();
 }
 
@@ -1674,50 +1666,27 @@ void LibraryStore::sweepOrphanAssetFiles() {
 }
 
 QSet<QString> LibraryStore::referencedAssetImages() const {
-    QSet<QString> out;
-    QList<QVariantList> stack;
+    QList<QVariantList> roots;
     for (const AssetEntry &entry : m_assetEntries)
-        stack.append(entry.payload.value(QStringLiteral("nodes")).toList());
-    while (!stack.isEmpty()) {
-        const QVariantList nodes = stack.takeLast();
-        for (const QVariant &v : nodes) {
-            const QVariantMap n = v.toMap();
-            const QString src = n.value(QStringLiteral("imageSource")).toString();
-            if (!src.isEmpty())
-                out.insert(src);
-            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
-                stack.append(n.value(QStringLiteral("children")).toList());
-        }
-    }
-    return out;
+        roots.append(entry.payload.value(QStringLiteral("nodes")).toList());
+    return collectNodeStringRefs(roots, QStringLiteral("imageSource"));
 }
 
 QSet<QString> LibraryStore::referencedAssetVideos() const {
-    QSet<QString> out;
-    QList<QVariantList> stack;
+    QList<QVariantList> roots;
     for (const AssetEntry &entry : m_assetEntries)
-        stack.append(entry.payload.value(QStringLiteral("nodes")).toList());
-    while (!stack.isEmpty()) {
-        const QVariantList nodes = stack.takeLast();
-        for (const QVariant &v : nodes) {
-            const QVariantMap n = v.toMap();
-            const QString src = n.value(QStringLiteral("videoSource")).toString();
-            if (!src.isEmpty() && isSafeVideoName(src))
-                out.insert(src);
-            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
-                stack.append(n.value(QStringLiteral("children")).toList());
-        }
+        roots.append(entry.payload.value(QStringLiteral("nodes")).toList());
+    const QSet<QString> all = collectNodeStringRefs(roots, QStringLiteral("videoSource"));
+    QSet<QString> out;
+    for (const QString &s : all) {
+        if (isSafeVideoName(s))
+            out.insert(s);
     }
     return out;
 }
 
 QString LibraryStore::libraryDir() const {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    return dir;
+    return AppPaths::totmBaseDir();
 }
 
 QString LibraryStore::imagesDir() const {

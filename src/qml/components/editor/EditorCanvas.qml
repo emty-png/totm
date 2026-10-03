@@ -1291,6 +1291,16 @@ Item {
     // convertible, otherwise (and all rasters) copy into the library and
     // arm placement at natural size. Failures fall back to select so the
     // tool never sticks.
+    // Shared stamp clamp: oversized rasters/footage stamp at <=800px so a
+    // 4k pick never covers the scene; drags can still stretch larger.
+    function clampStampSize(w, h) {
+        if (w > 800 || h > 800) {
+            var k = Math.min(800 / w, 800 / h);
+            w = Math.max(1, Math.round(w * k));
+            h = Math.max(1, Math.round(h * k));
+        }
+        return [w, h];
+    }
     function acceptImageFile(file) {
         var flat = String(file).split("?")[0];
         if (/\.svg$/i.test(flat)) {
@@ -1314,14 +1324,8 @@ Item {
         var info = LibraryStore.imageInfo(name);
         var w = Number(info.width) || 400;
         var h = Number(info.height) || 300;
-        // Oversized rasters stamp clamped so a 4k photo never covers the
-        // scene; drags can still stretch larger.
-        if (w > 800 || h > 800) {
-            var k = Math.min(800 / w, 800 / h);
-            w = Math.max(1, Math.round(w * k));
-            h = Math.max(1, Math.round(h * k));
-        }
-        canvas.imageTool.setPending(name, w, h);
+        var clamped = canvas.clampStampSize(w, h);
+        canvas.imageTool.setPending(name, clamped[0], clamped[1]);
     }
     function cancelImageTool() {
         if (canvas.imageTool)
@@ -1361,13 +1365,9 @@ Item {
         var secs = probe && probe.ok === true ? Math.max(0, Number(probe.duration) || 0) : 0;
         var w = probe && probe.ok === true ? Math.max(1, Math.round(Number(probe.width) || 0)) : 640;
         var h = probe && probe.ok === true ? Math.max(1, Math.round(Number(probe.height) || 0)) : 360;
-        // Oversized footage stamps clamped so a 4k pick never covers
-        // the scene; drags can still stretch larger (image rule).
-        if (w > 800 || h > 800) {
-            var k = Math.min(800 / w, 800 / h);
-            w = Math.max(1, Math.round(w * k));
-            h = Math.max(1, Math.round(h * k));
-        }
+        var clamped = canvas.clampStampSize(w, h);
+        w = clamped[0];
+        h = clamped[1];
         var sounding = probe && probe.ok === true && probe.hasAudio === true;
         canvas.videoTool.setPending(path, w, h, secs, sounding, display);
     }
@@ -1405,13 +1405,9 @@ Item {
         var secs = probe && probe.ok === true ? Math.max(0, Number(probe.duration) || 0) : 0;
         var w = probe && probe.ok === true ? Math.max(1, Math.round(Number(probe.width) || 0)) : 640;
         var h = probe && probe.ok === true ? Math.max(1, Math.round(Number(probe.height) || 0)) : 360;
-        // Oversized footage stamps clamped so a 4k drop never covers
-        // the scene; drags can still stretch larger (image rule).
-        if (w > 800 || h > 800) {
-            var k = Math.min(800 / w, 800 / h);
-            w = Math.max(1, Math.round(w * k));
-            h = Math.max(1, Math.round(h * k));
-        }
+        var clamped = canvas.clampStampSize(w, h);
+        w = clamped[0];
+        h = clamped[1];
         var sounding = probe && probe.ok === true && probe.hasAudio === true;
         // Drops stamp immediately at the drop point (no pending dance);
         // the picker path arms pending instead (see acceptVideoFile).

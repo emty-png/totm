@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPointer>
 #include <QQmlEngine>
 #include <QString>
 #include <QUrl>
@@ -88,7 +89,6 @@ signals:
 
 private:
     void setRendering(bool rendering);
-    void setProgress(int current, int total);
     void setLastError(const QString &message);
     void onWorkerFinished(const QString &tempPath, const QString &error, bool wasCancelled);
 
@@ -103,5 +103,5 @@ private:
     QString m_format = QStringLiteral("mp4");
 
     class RenderThread;
-    RenderThread *m_thread = nullptr;
+    QPointer<RenderThread> m_thread;
 };

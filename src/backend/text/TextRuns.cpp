@@ -1,6 +1,7 @@
 #include "TextRuns.h"
 #include "VariableFonts.h"
 
+#include <QColor>
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -142,8 +143,14 @@ QString TextRuns::htmlFromRuns(const QString &content, const QVariantList &runs)
         flushPlain(pos, r.start);
         QString open, close;
         if (!r.color.isEmpty()) {
-            open += QStringLiteral("<font color=\"%1\">").arg(r.color);
-            close = QStringLiteral("</font>") + close;
+            // Sanitize: scene/import data rides here, so only emit
+            // normalized hex. QColor::name() strips any HTML/attribute
+            // injection like 'red"><img ...>'.
+            const QColor safe(r.color);
+            if (safe.isValid()) {
+                open += QStringLiteral("<font color=\"%1\">").arg(safe.name());
+                close = QStringLiteral("</font>") + close;
+            }
         }
         if (r.bold) {
             open += QStringLiteral("<b>");

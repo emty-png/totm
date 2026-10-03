@@ -1530,8 +1530,7 @@ void paintLeaf(QPainter *pt, const QString &kind, const QRectF &box, const PathO
 }
 
 void paintCombinedPath(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const Style &st,
-    const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur, double scale,
-    QCache<QByteArray, QImage> *maskCache)
+    const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur, double scale)
 {
     if (!pt || path.isEmpty())
         return;
@@ -1551,13 +1550,12 @@ void paintCombinedPath(QPainter *pt, const QPainterPath &path, const QRectF &fil
             Blur off;
             // Combined paths skip the raster cache (few instances,
             // always recompute like the single-effect tails).
-            paintCombinedPath(&tp, path, fillBox, st, shadows, glows, off, scale, nullptr);
+            paintCombinedPath(&tp, path, fillBox, st, shadows, glows, off, scale);
         }
         QImage blurred = sharp.copy();
         blurImageImpl(blurred, rad);
         mixBlurred(sharp, blurred, layerBlur.opacity);
         pt->drawImage(path.boundingRect().topLeft() - QPointF(margin, margin), sharp);
-        Q_UNUSED(maskCache);
         return;
     }
     const double s = scale > 0 ? scale : 1.0;
@@ -1656,16 +1654,6 @@ QList<TextRun> normalizeTextRuns(int contentLen, const QVariantList &raw) {
         out.append(r);
     }
     return out;
-}
-
-// Run index covering a content offset, or -1 (box style).
-int runIndexAt(const QList<TextRun> &runs, int offset) {
-    for (int i = 0; i < runs.size(); ++i) {
-        const TextRun &r = runs.at(i);
-        if (offset >= r.start && offset < r.start + r.len)
-            return i;
-    }
-    return -1;
 }
 
 // Shared QTextDocument builder: mirrors the canvas TextGlyphs settings

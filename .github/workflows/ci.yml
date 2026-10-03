@@ -14,7 +14,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: "6.11.*"
-          modules: qtquick3d qtshadertools
+          modules: qtshadertools
           cache: true
       - name: qmlformat check
         run: |

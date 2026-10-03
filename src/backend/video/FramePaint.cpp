@@ -1,6 +1,7 @@
 #include "FramePaint.h"
 
 #include "AnimSampler.h"
+#include "AppPaths.h"
 #include "EffectPainter.h"
 #include "ShapePath.h"
 
@@ -26,15 +27,21 @@ using namespace Anims;
 
 namespace {
 
+// Forward: shared raster-box helpers defined later (used by paintImage/paintVideo).
+QPainterPath roundedClipPath(double x, double y, double w, double h, double r);
+void paintOuterRasterEffects(QPainter &pt, const QPainterPath &clip, double w, double h, double r,
+    const QList<Effects::Shadow> &shadows, const QList<Effects::Glow> &glows, double s,
+    QCache<QByteArray, QImage> *cache);
+void paintInnerRasterEffects(QPainter &pt, const QPainterPath &clip, double w, double h, double r,
+    const QList<Effects::Shadow> &shadows, const QList<Effects::Glow> &glows, double s,
+    QCache<QByteArray, QImage> *cache);
+double paintRoundedStrokes(QPainter &pt, double x, double y, double w, double h, double r,
+    const QList<Effects::StrokeEntry> &strokes, double s);
+
 // Image via stored blob (mirrors ShapeItem stretch). Missing blobs
 // paint a neutral box so broken imports never vanish silently.
 QString exportImagesDir() {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    return dir + QStringLiteral("/images");
+    return AppPaths::totmBaseDir() + QStringLiteral("/images");
 }
 
 QImage loadExportImage(const QString &name, int targetW, int targetH) {
@@ -121,12 +128,7 @@ double videoTimeFor(const QVariantMap &m, int frameNo) {
 // Video via stored blob (mirrors image blobs). Legacy absolute paths
 // still resolve while the file exists so old designs keep painting.
 QString exportVideosDir() {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    return dir + QStringLiteral("/videos");
+    return AppPaths::totmBaseDir() + QStringLiteral("/videos");
 }
 
 QString resolveVideoFile(const QString &ref) {
@@ -473,24 +475,8 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
 {
     const QString name = str(m, "imageSource", str(m, "image", QString()));
     const double r = qMin(qMax(0.0, num(m, "radius") * s), qMin(w, h) / 2.0);
-    QPainterPath clip;
-    if (r > 0.01)
-        clip.addRoundedRect(QRectF(x, y, w, h), r, r);
-    else
-        clip.addRect(QRectF(x, y, w, h));
-    // Outer shadows under everything (stack order), bottom-first so
-    // index 0 paints topmost.
-    for (int i = shadows.size() - 1; i >= 0; --i) {
-        const Effects::Shadow &sh = shadows.at(i);
-        if (sh.enabled && !sh.inner && sh.color.alpha() > 0)
-            paintImageShadow(pt, clip, w, h, r, sh, s, cache);
-    }
-    // Outer glows: bottom-first so index 0 paints topmost.
-    for (int i = glows.size() - 1; i >= 0; --i) {
-        const Effects::Glow &g = glows.at(i);
-        if (g.enabled && !g.inner && g.color.alpha() > 0)
-            paintImageGlow(pt, clip, w, h, r, g, s, cache);
-    }
+    const QPainterPath clip = roundedClipPath(x, y, w, h, r);
+    paintOuterRasterEffects(pt, clip, w, h, r, shadows, glows, s, cache);
     QImage img = loadExportImage(name, qMax(1, qRound(w)), qMax(1, qRound(h)));
     if (img.isNull()) {
         QImage tile(qMax(1, qRound(w)), qMax(1, qRound(h)), QImage::Format_ARGB32_Premultiplied);
@@ -527,55 +513,8 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
     pt.setClipPath(clip, Qt::IntersectClip);
     pt.drawImage(QRectF(x, y, w, h), img);
     pt.restore();
-    // Inner shadows over the pixels, then inner glows (stack order),
-    // index 0 topmost inside each group.
-    for (int i = shadows.size() - 1; i >= 0; --i) {
-        const Effects::Shadow &sh = shadows.at(i);
-        if (sh.enabled && sh.inner && sh.color.alpha() > 0)
-            paintImageShadowInner(pt, clip, w, h, r, sh, s, cache);
-    }
-    // Inner glows over the pixels, index 0 topmost.
-    for (int i = glows.size() - 1; i >= 0; --i) {
-        const Effects::Glow &g = glows.at(i);
-        if (g.enabled && g.inner && g.color.alpha() > 0)
-            paintImageGlowInner(pt, clip, w, h, r, g, s, cache);
-    }
-    // Stacked strokes as rect borders, bottom-first so index 0 paints
-    // topmost. Position maps to border placement: inside rides the
-    // clip edge, center straddles it, outside grows past it.
-    double maxSw = 0.0;
-    for (int i = strokes.size() - 1; i >= 0; --i) {
-        const Effects::StrokeEntry &se = strokes.at(i);
-        if (!se.enabled || se.width <= 0.01)
-            continue;
-        const double sw = se.width * s;
-        maxSw = qMax(maxSw, sw);
-        QColor sc = se.color;
-        sc.setAlphaF(qBound(0.0, sc.alphaF() * se.opacity, 1.0));
-        QPen pen(sc, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-        if (!se.dash.isEmpty()) {
-            pen.setStyle(Qt::CustomDashLine);
-            pen.setDashPattern(se.dash);
-        }
-        QRectF rect(x, y, w, h);
-        double rr = r;
-        if (se.position == QLatin1String("outside")) {
-            rect.adjust(-sw / 2.0, -sw / 2.0, sw / 2.0, sw / 2.0);
-            rr = r + sw / 2.0;
-        } else if (se.position == QLatin1String("center")) {
-            rect.adjust(0, 0, 0, 0);
-        } else {
-            // Inside: inset by half width so the centered pen lands
-            // inside the clip (matches the QML Rectangle border).
-            rect.adjust(sw / 2.0, sw / 2.0, -sw / 2.0, -sw / 2.0);
-            rr = qMax(0.0, r - sw / 2.0);
-        }
-        if (rect.width() <= 0 || rect.height() <= 0)
-            continue;
-        pt.setPen(pen);
-        pt.setBrush(Qt::NoBrush);
-        pt.drawRoundedRect(rect, rr, rr);
-    }
+    paintInnerRasterEffects(pt, clip, w, h, r, shadows, glows, s, cache);
+    const double maxSw = paintRoundedStrokes(pt, x, y, w, h, r, strokes, s);
     // Grain over pixels and stroke (preview tiles the same way).
     if (grain.enabled && grain.amount > 0.001)
         Effects::paintGrainPath(&pt, clip, maxSw, QRectF(x, y, w, h), grain, uid, frameNo, s);
@@ -594,21 +533,8 @@ void paintVideo(QPainter &pt, const QVariantMap &m, double x, double y, double w
     QCache<QByteArray, QImage> *cache = nullptr) {
     const QString path = m.value(QStringLiteral("videoSource")).toString();
     const double r = qMin(qMax(0.0, num(m, "radius") * s), qMin(w, h) / 2.0);
-    QPainterPath clip;
-    if (r > 0.01)
-        clip.addRoundedRect(QRectF(x, y, w, h), r, r);
-    else
-        clip.addRect(QRectF(x, y, w, h));
-    for (int i = shadows.size() - 1; i >= 0; --i) {
-        const Effects::Shadow &sh = shadows.at(i);
-        if (sh.enabled && !sh.inner && sh.color.alpha() > 0)
-            paintImageShadow(pt, clip, w, h, r, sh, s, cache);
-    }
-    for (int i = glows.size() - 1; i >= 0; --i) {
-        const Effects::Glow &g = glows.at(i);
-        if (g.enabled && !g.inner && g.color.alpha() > 0)
-            paintImageGlow(pt, clip, w, h, r, g, s, cache);
-    }
+    const QPainterPath clip = roundedClipPath(x, y, w, h, r);
+    paintOuterRasterEffects(pt, clip, w, h, r, shadows, glows, s, cache);
     QImage img = loadVideoFrame(path, videoTimeFor(m, frameNo), qMax(1, qRound(w)), qMax(1, qRound(h)));
     QString fit = m.value(QStringLiteral("videoFit")).toString();
     if (fit != QStringLiteral("cover") && fit != QStringLiteral("fill"))
@@ -660,47 +586,8 @@ void paintVideo(QPainter &pt, const QVariantMap &m, double x, double y, double w
         pt.drawImage(QRectF(x, y, w, h), img);
     }
     pt.restore();
-    for (int i = shadows.size() - 1; i >= 0; --i) {
-        const Effects::Shadow &sh = shadows.at(i);
-        if (sh.enabled && sh.inner && sh.color.alpha() > 0)
-            paintImageShadowInner(pt, clip, w, h, r, sh, s, cache);
-    }
-    for (int i = glows.size() - 1; i >= 0; --i) {
-        const Effects::Glow &g = glows.at(i);
-        if (g.enabled && g.inner && g.color.alpha() > 0)
-            paintImageGlowInner(pt, clip, w, h, r, g, s, cache);
-    }
-    double maxSw = 0.0;
-    for (int i = strokes.size() - 1; i >= 0; --i) {
-        const Effects::StrokeEntry &se = strokes.at(i);
-        if (!se.enabled || se.width <= 0.01)
-            continue;
-        const double sw = se.width * s;
-        maxSw = qMax(maxSw, sw);
-        QColor sc = se.color;
-        sc.setAlphaF(qBound(0.0, sc.alphaF() * se.opacity, 1.0));
-        QPen pen(sc, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-        if (!se.dash.isEmpty()) {
-            pen.setStyle(Qt::CustomDashLine);
-            pen.setDashPattern(se.dash);
-        }
-        QRectF rect(x, y, w, h);
-        double rr = r;
-        if (se.position == QLatin1String("outside")) {
-            rect.adjust(-sw / 2.0, -sw / 2.0, sw / 2.0, sw / 2.0);
-            rr = r + sw / 2.0;
-        } else if (se.position == QLatin1String("center")) {
-            rect.adjust(0, 0, 0, 0);
-        } else {
-            rect.adjust(sw / 2.0, sw / 2.0, -sw / 2.0, -sw / 2.0);
-            rr = qMax(0.0, r - sw / 2.0);
-        }
-        if (rect.width() <= 0 || rect.height() <= 0)
-            continue;
-        pt.setPen(pen);
-        pt.setBrush(Qt::NoBrush);
-        pt.drawRoundedRect(rect, rr, rr);
-    }
+    paintInnerRasterEffects(pt, clip, w, h, r, shadows, glows, s, cache);
+    const double maxSw = paintRoundedStrokes(pt, x, y, w, h, r, strokes, s);
     if (grain.enabled && grain.amount > 0.001)
         Effects::paintGrainPath(&pt, clip, maxSw, QRectF(x, y, w, h), grain, uid, frameNo, s);
 }
@@ -772,6 +659,90 @@ QRectF rotatedBox(const QVariantMap &m) {
     return QRectF(QPointF(x0, y0), QPointF(x1, y1));
 }
 
+// Shared raster-box helpers: paintImage/paintVideo share the rounded clip,
+// outer/inner shadow+glow order, and rect-stroke loop. One implementation
+// so border/position fixes land in both leaves.
+QPainterPath roundedClipPath(double x, double y, double w, double h, double r)
+{
+    QPainterPath clip;
+    if (r > 0.01)
+        clip.addRoundedRect(QRectF(x, y, w, h), r, r);
+    else
+        clip.addRect(QRectF(x, y, w, h));
+    return clip;
+}
+
+void paintOuterRasterEffects(QPainter &pt, const QPainterPath &clip, double w, double h, double r,
+    const QList<Effects::Shadow> &shadows, const QList<Effects::Glow> &glows, double s,
+    QCache<QByteArray, QImage> *cache)
+{
+    for (int i = shadows.size() - 1; i >= 0; --i) {
+        const Effects::Shadow &sh = shadows.at(i);
+        if (sh.enabled && !sh.inner && sh.color.alpha() > 0)
+            paintImageShadow(pt, clip, w, h, r, sh, s, cache);
+    }
+    for (int i = glows.size() - 1; i >= 0; --i) {
+        const Effects::Glow &g = glows.at(i);
+        if (g.enabled && !g.inner && g.color.alpha() > 0)
+            paintImageGlow(pt, clip, w, h, r, g, s, cache);
+    }
+}
+
+void paintInnerRasterEffects(QPainter &pt, const QPainterPath &clip, double w, double h, double r,
+    const QList<Effects::Shadow> &shadows, const QList<Effects::Glow> &glows, double s,
+    QCache<QByteArray, QImage> *cache)
+{
+    for (int i = shadows.size() - 1; i >= 0; --i) {
+        const Effects::Shadow &sh = shadows.at(i);
+        if (sh.enabled && sh.inner && sh.color.alpha() > 0)
+            paintImageShadowInner(pt, clip, w, h, r, sh, s, cache);
+    }
+    for (int i = glows.size() - 1; i >= 0; --i) {
+        const Effects::Glow &g = glows.at(i);
+        if (g.enabled && g.inner && g.color.alpha() > 0)
+            paintImageGlowInner(pt, clip, w, h, r, g, s, cache);
+    }
+}
+
+// Stacked rect strokes, bottom-first so index 0 paints topmost.
+// Returns the max stroke width for the grain union.
+double paintRoundedStrokes(QPainter &pt, double x, double y, double w, double h, double r,
+    const QList<Effects::StrokeEntry> &strokes, double s)
+{
+    double maxSw = 0.0;
+    for (int i = strokes.size() - 1; i >= 0; --i) {
+        const Effects::StrokeEntry &se = strokes.at(i);
+        if (!se.enabled || se.width <= 0.01)
+            continue;
+        const double sw = se.width * s;
+        maxSw = qMax(maxSw, sw);
+        QColor sc = se.color;
+        sc.setAlphaF(qBound(0.0, sc.alphaF() * se.opacity, 1.0));
+        QPen pen(sc, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        if (!se.dash.isEmpty()) {
+            pen.setStyle(Qt::CustomDashLine);
+            pen.setDashPattern(se.dash);
+        }
+        QRectF rect(x, y, w, h);
+        double rr = r;
+        if (se.position == QLatin1String("outside")) {
+            rect.adjust(-sw / 2.0, -sw / 2.0, sw / 2.0, sw / 2.0);
+            rr = r + sw / 2.0;
+        } else if (se.position == QLatin1String("center")) {
+            rect.adjust(0, 0, 0, 0);
+        } else {
+            rect.adjust(sw / 2.0, sw / 2.0, -sw / 2.0, -sw / 2.0);
+            rr = qMax(0.0, r - sw / 2.0);
+        }
+        if (rect.width() <= 0 || rect.height() <= 0)
+            continue;
+        pt.setPen(pen);
+        pt.setBrush(Qt::NoBrush);
+        pt.drawRoundedRect(rect, rr, rr);
+    }
+    return maxSw;
+}
+
 } // namespace
 
 // Live boolean group: combine sampled children (content coords), scale
@@ -812,7 +783,7 @@ void paintBooleanGroup(QPainter &pt, QImage &frame, const QVariantMap &m, double
         paintBackdropBlur(pt, frame, fillBox.x(), fillBox.y(), fillBox.width(), fillBox.height(),
             backgroundBlur.radius * s, backgroundBlur.opacity, combined);
     }
-    Effects::paintCombinedPath(&pt, combined, fillBox, st, shadows, glows, layerBlur, s, &sharedBlurCache());
+    Effects::paintCombinedPath(&pt, combined, fillBox, st, shadows, glows, layerBlur, s);
     if (grain.enabled && grain.amount > 0.001) {
         Effects::paintGrainPath(&pt, combined, st.maxStrokeWidth() * s, fillBox, grain, uid, frameNo, s);
     }
@@ -1034,7 +1005,7 @@ void paintLeaves(QPainter &pt, QImage &frame, const QList<QVariantMap> &work, co
         if (uid >= 0)
             workByUid[uid] = m;
     }
-    const QMap<int, QList<int>> maskMap = maskMapForWork(scene, work);
+    const QMap<int, QList<int>> maskMap = maskMapForWork(scene);
     QMap<int, QImage> maskCache;
     QImage layer;
     for (int li = work.size() - 1; li >= 0; --li) {

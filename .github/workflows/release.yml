@@ -115,8 +115,6 @@ jobs:
         run: cmake --build --preset ci
       - name: Bundle Qt frameworks
         run: macdeployqt build/ci/src/totm.app -qmldir=src/qml -dmg
-      - name: Bundle Qt frameworks
-        run: macdeployqt build/ci/src/totm.app -qmldir=src/qml -dmg
       - name: Rename DMG
         run: mv build/ci/src/*.dmg totm-arm64.dmg
       - name: Upload DMG

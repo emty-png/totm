@@ -2474,8 +2474,7 @@ bool isMaskMap(const QVariantMap &m) {
     return m.value(QStringLiteral("isMask"), false).toBool();
 }
 
-QMap<int, QList<int>> maskMapForWork(const QVariantMap &scene, const QList<QVariantMap> &work) {
-    Q_UNUSED(work);
+QMap<int, QList<int>> maskMapForWork(const QVariantMap &scene) {
     // Parent chain from the scene hierarchy (uid -> parentUid/index).
     QMap<int, QVariantMap> nodeByUid;
     QMap<int, int> parentByUid;

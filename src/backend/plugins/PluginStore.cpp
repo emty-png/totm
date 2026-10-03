@@ -1,5 +1,6 @@
 #include "PluginStore.h"
 
+#include "AppPaths.h"
 #include "SettingsStore.h"
 
 #include <QCoreApplication>
@@ -1105,11 +1106,7 @@ bool PluginStore::clearExportSuggestion(const QString &id) {
 
 QString PluginStore::blobDir(const QString &kind) const {
     // Mirrors LibraryStore's images/audio layout without coupling to it.
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
+    const QString dir = AppPaths::totmBaseDir();
     return dir + (kind == QStringLiteral("image") ? QStringLiteral("/images") : QStringLiteral("/audio"));
 }
 

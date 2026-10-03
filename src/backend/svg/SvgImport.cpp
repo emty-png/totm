@@ -989,11 +989,20 @@ void deleteDom(DomNode *n)
 {
     if (!n)
         return;
-    for (const DomNode::Chunk &c : n->content) {
-        if (!c.isText)
-            deleteDom(c.node);
+    // Iterative teardown: a malicious <g> chain can nest thousands deep,
+    // which would overflow the stack as recursion.
+    QList<DomNode *> stack;
+    stack.append(n);
+    while (!stack.isEmpty()) {
+        DomNode *cur = stack.takeLast();
+        for (const DomNode::Chunk &c : cur->content) {
+            if (!c.isText && c.node)
+                stack.append(c.node);
+        }
+        // Detach children before delete so we never double-visit.
+        cur->content.clear();
+        delete cur;
     }
-    delete n;
 }
 
 // Local attribute by name, namespace-agnostic (finds xlink:href too).
@@ -1010,11 +1019,21 @@ QString attrLocal(const QXmlStreamAttributes &a, const char *key)
 
 DomNode *buildDom(QXmlStreamReader &xml, QHash<QString, DomNode *> &ids)
 {
+    // DoS caps: element count bounds heap, nesting depth bounds the
+    // explicit stack (and later walkNode recursion). 10MB files can still
+    // nest <g> thousands deep when minified.
+    constexpr int kMaxSvgElements = 20000;
+    constexpr int kMaxSvgDepth = 256;
     DomNode *root = nullptr;
     QList<DomNode *> stack;
+    int elements = 0;
     while (!xml.atEnd() && !xml.hasError()) {
         const QXmlStreamReader::TokenType tok = xml.readNext();
         if (tok == QXmlStreamReader::StartElement) {
+            if (++elements > kMaxSvgElements || stack.size() >= kMaxSvgDepth) {
+                xml.raiseError(QStringLiteral("SVG element limit exceeded"));
+                break;
+            }
             DomNode *n = new DomNode();
             n->tag = xml.name().toString().toLower();
             n->attrs = xml.attributes();
@@ -1627,9 +1646,15 @@ QList<double> numList(const QString &s, int need)
 
 void walkNode(DomNode *node, const QTransform &ctm, const Style &style, bool inDefs,
     const QHash<QString, DomNode *> &ids, const QHash<QString, Gradient> &grads, QSet<QString> &activeUses,
-    int useDepth, QList<Shape> &shapes, bool viaUse = false)
+    int useDepth, QList<Shape> &shapes, bool viaUse = false, int nodeDepth = 0)
 {
     if (!node)
+        return;
+    // Depth + shape caps: <g> chains under 10MB can still recurse
+    // thousands deep; <use> fan-out can explode shape counts.
+    constexpr int kMaxWalkDepth = 64;
+    constexpr int kMaxWalkShapes = 20000;
+    if (nodeDepth > kMaxWalkDepth || shapes.size() > kMaxWalkShapes)
         return;
     const QString &tag = node->tag;
     Style st = childStyle(style, elementStyle(node->attrs));
@@ -1674,7 +1699,7 @@ void walkNode(DomNode *node, const QTransform &ctm, const Style &style, bool inD
         // Referenced symbols render their children (a direct walk would
         // hit the silent-container rule below).
         const bool renderRoot = target->tag == QLatin1String("symbol");
-        walkNode(target, uc, st, false, ids, grads, activeUses, useDepth + 1, shapes, renderRoot);
+        walkNode(target, uc, st, false, ids, grads, activeUses, useDepth + 1, shapes, renderRoot, nodeDepth + 1);
         activeUses.remove(href);
         return;
     }
@@ -1710,7 +1735,7 @@ void walkNode(DomNode *node, const QTransform &ctm, const Style &style, bool inD
     }
     for (const DomNode::Chunk &c : node->content) {
         if (!c.isText)
-            walkNode(c.node, local, st, inDefs, ids, grads, activeUses, useDepth, shapes);
+            walkNode(c.node, local, st, inDefs, ids, grads, activeUses, useDepth, shapes, false, nodeDepth + 1);
     }
 }
 

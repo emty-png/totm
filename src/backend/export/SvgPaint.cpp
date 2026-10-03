@@ -1,6 +1,7 @@
 #include "SvgPaint.h"
 
 #include "AnimSampler.h"
+#include "AppPaths.h"
 #include "EffectPainter.h"
 #include "EffectSpec.h"
 #include "ShapePath.h"
@@ -432,12 +433,7 @@ QString imageMime(const QString &name) {
 }
 
 QString exportImagesDir() {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    return dir + QStringLiteral("/images");
+    return AppPaths::totmBaseDir() + QStringLiteral("/images");
 }
 
 QByteArray loadImageBytes(const QString &name) {
@@ -566,8 +562,7 @@ QString mergeNodes(const QStringList &inputs, const QString &result) {
 // Pad the leaf filter region needs (0 when the leaf carries nothing
 // renderable). Mirrors buildLeafFilter's effect set so the viewBox and
 // the region can never disagree.
-double filterPadFor(const QVariantMap &m, const QString &shapeType, double sw) {
-    Q_UNUSED(shapeType);
+double filterPadFor(const QVariantMap &m) {
     const QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
     const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
     const Effects::Blur layerBlur = Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap());
@@ -577,7 +572,6 @@ double filterPadFor(const QVariantMap &m, const QString &shapeType, double sw) {
     if (shadows.isEmpty() && glows.isEmpty() && !(layerBlur.enabled && layerBlur.radius > 0.01)
         && !(grain.enabled && grain.amount > 0.001))
         return qMax(0.0, Effects::strokesPad(st.strokes));
-    Q_UNUSED(sw);
     return qMax(double(Effects::effectPad(shadows, glows, layerBlur, st.strokes)), maxSw / 2.0 + 1.0);
 }
 
@@ -586,7 +580,7 @@ double filterPadFor(const QVariantMap &m, const QString &shapeType, double sw) {
 // shared effect pad over the leaf box in bbox fractions, so halos and
 // blurs never clip; stroke and grain need no extra room (grain is
 // confined, SourceAlpha already straddles the stroke).
-QString buildLeafFilter(const QVariantMap &m, const QString &shapeType, double sw, double w, double h, int uid,
+QString buildLeafFilter(const QVariantMap &m, double w, double h, int uid,
     const QString &id, QStringList &defs) {
     const QList<Effects::Shadow> shadows = Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList());
     const QList<Effects::Glow> glows = Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList());
@@ -683,7 +677,7 @@ QString buildLeafFilter(const QVariantMap &m, const QString &shapeType, double s
         cur = mg;
     }
 
-    const double pad = filterPadFor(m, shapeType, sw);
+    const double pad = filterPadFor(m);
     if (pad <= 0.0)
         return {};
     QString def = QStringLiteral("<filter id=\"%1\" x=\"%2\" y=\"%3\" width=\"%4\" height=\"%5\">")
@@ -740,7 +734,7 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
         if (uid >= 0)
             workByUid[uid] = m;
     }
-    const QMap<int, QList<int>> maskMap = maskMapForWork(subset, work);
+    const QMap<int, QList<int>> maskMap = maskMapForWork(subset);
     QList<QVariantMap> paint;
     paint.reserve(work.size());
     for (const QVariantMap &m : work) {
@@ -771,7 +765,7 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
             continue;
         bounds = bounds.united(box);
         const QString shapeType = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
-        maxPad = qMax(maxPad, filterPadFor(m, shapeType, 0.0));
+        maxPad = qMax(maxPad, filterPadFor(m));
     }
     bounds.adjust(-maxPad, -maxPad, maxPad, maxPad);
     if (bounds.isEmpty() || bounds.width() < 0.01 || bounds.height() < 0.01)
@@ -815,9 +809,8 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
         if (shapeType == QLatin1String("text") && str(m, "textContent").isEmpty())
             continue;
         const int uid = m.value(QStringLiteral("uid"), -1).toInt();
-        const Effects::Style stFx = Effects::Style::fromMap(m);
         const QString fxCand = QStringLiteral("svgfl%1").arg(fxSeq);
-        const QString fxId = buildLeafFilter(m, shapeType, stFx.maxStrokeWidth(), w, h, uid, fxCand, defs);
+        const QString fxId = buildLeafFilter(m, w, h, uid, fxCand, defs);
         if (!fxId.isEmpty())
             ++fxSeq;
 
@@ -1204,10 +1197,10 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                     continue;
                 layers.append(textBody(QStringLiteral("%1 stroke=\"none\"").arg(fillAttr), QStringLiteral("box"), fillAttr));
             }
-            if (layers.isEmpty() && !stText.fills.isEmpty()) {
-                // All fills disabled: keep one transparent layer so empty
-                // text still skips like before (no naked unfilled text).
-            } else if (layers.isEmpty() && stText.fills.isEmpty()) {
+            // All fills disabled: keep layers empty so text skips like
+            // before (no naked unfilled text). No fills at all: fall back
+            // to the neutral fill so legacy text stays visible.
+            if (layers.isEmpty() && stText.fills.isEmpty()) {
                 QColor fc(QStringLiteral("#d9d9d9"));
                 layers.append(textBody(QStringLiteral("%1 stroke=\"none\"").arg(solidFillAttrOpacity(fc, true, 1.0)), QStringLiteral("box"), QString()));
             }

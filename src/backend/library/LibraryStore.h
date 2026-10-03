@@ -328,6 +328,11 @@ private:
     // Held for the process lifetime; warns on contention, last-writer-wins.
     QLockFile m_lock;
     bool m_loaded = false;
+    // True when this instance owns the library lock. Orphan sweeps only
+    // run when locked: without it a second instance could delete blobs
+    // that the first instance holds only in memory (unsaved scenes,
+    // clipboard/undo refs).
+    bool m_hasLock = false;
     // Waveform peaks for timeline lanes (memoized dense decode).
     AudioPeaks m_peaks;
     // Container probes for stored videos (memoized per path + mtime +

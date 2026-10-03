@@ -272,8 +272,7 @@ QPainterPath outlinePath(const QString &kind, const QRectF &box, const PathOpts 
 // with kind "boolean" so closed-path stroke positioning applies.
 // fillBox spans the brushes (usually path.boundingRect()).
 void paintCombinedPath(QPainter *pt, const QPainterPath &path, const QRectF &fillBox, const Style &st,
-    const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur, double scale,
-    QCache<QByteArray, QImage> *maskCache = nullptr);
+    const QList<Shadow> &shadows, const QList<Glow> &glows, const Blur &layerBlur, double scale);
 // Grain confined to clip (stroke unioned in when it sticks out),
 // composited over dotBox's top-left. No-op when disabled.
 void paintGrainPath(QPainter *pt, const QPainterPath &clip, double strokeWidth, const QRectF &dotBox,

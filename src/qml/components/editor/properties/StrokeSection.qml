@@ -10,7 +10,7 @@ import Totm
 // with mixed flags (see EffectShadowCard); edits apply where the
 // index exists, adds apply to every leaf. On text the stroke is a
 // real vector outline of the glyphs (width/position/dash/gradient
-// all apply); images paint stacked borders. Shapes only.
+// all apply); images and videos paint stacked borders. Shapes only.
 PanelSection {
     id: section
 
@@ -36,7 +36,7 @@ PanelSection {
     }
 
     title: qsTr("Stroke")
-    visible: section.snapshot.sel.length > 0 && (!section.snapshot.hasGroup || section.snapshot.singleGroupTop() !== null) && !section.snapshot.allOfType("image") && !section.snapshot.allOfType("video")
+    visible: section.snapshot.sel.length > 0 && (!section.snapshot.hasGroup || section.snapshot.singleGroupTop() !== null) && !section.snapshot.allOfType("image")
     enabled: !section.snapshot.allLocked
     compact: section.strokeCount === 0
     showAdd: true

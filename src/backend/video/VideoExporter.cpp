@@ -1,6 +1,7 @@
 #include "VideoExporter.h"
 
 #include "AnimSampler.h"
+#include "AppPaths.h"
 #include "EffectPainter.h"
 #include "FramePaint.h"
 
@@ -27,25 +28,26 @@ namespace {
 // export and canvas preview share one sampling path.
 using namespace Anims;
 
+// Render cap: 1800s at 120fps would be 216k frames (multi-TB temp at 4K,
+// hours of encode). 108k covers 30min at 60fps / 15min at 120fps.
+constexpr int kMaxTotalFrames = 108000;
+
 // Fixed landscape masters per quality. Scene aspect is letterboxed on
 // sceneColor to keep output predictable across scene sizes.
-bool resolveQuality(const QString &quality, int &w, int &h, QString &label) {
+bool resolveQuality(const QString &quality, int &w, int &h) {
     const QString q = quality.trimmed().toLower();
     if (q == QLatin1String("sd") || q == QLatin1String("480p")) {
         w = 854;
         h = 480;
-        label = QStringLiteral("SD · 480p");
         return true;
     }
     if (q == QLatin1String("4k") || q == QLatin1String("uhd") || q == QLatin1String("2160p")) {
         w = 3840;
         h = 2160;
-        label = QStringLiteral("4K · 2160p");
         return true;
     }
     w = 1920;
     h = 1080;
-    label = QStringLiteral("HD · 1080p");
     return q == QLatin1String("hd") || q == QLatin1String("1080p") || q == QLatin1String("720p");
 }
 
@@ -74,11 +76,7 @@ QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
     QList<AudioInput> out;
     const QVariantMap audio = scene.value(QStringLiteral("audio")).toMap();
     const QVariantList clips = audio.value(QStringLiteral("clips")).toList();
-    QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (base.isEmpty())
-        base = QDir::homePath() + QStringLiteral("/.totm");
-    if (!base.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        base += QStringLiteral("/totm");
+    const QString base = AppPaths::totmBaseDir();
     const QString dir = base + QStringLiteral("/audio");
     const QString vdir = base + QStringLiteral("/videos");
     for (const QVariant &cv : clips) {
@@ -94,11 +92,7 @@ QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
             if (!QFile::exists(name))
                 continue;
             const QString suf = QFileInfo(name).suffix().toLower();
-            static const QStringList directOk = {QStringLiteral("mp3"), QStringLiteral("wav"),
-                QStringLiteral("ogg"), QStringLiteral("flac"), QStringLiteral("mp4"),
-                QStringLiteral("webm"), QStringLiteral("mov"), QStringLiteral("m4v"),
-                QStringLiteral("mkv")};
-            if (!directOk.contains(suf))
+            if (!AppPaths::audioExtensions().contains(suf) && !AppPaths::videoExtensions().contains(suf))
                 continue;
             path = name;
         } else {
@@ -169,23 +163,20 @@ QString audioFilter(const QList<AudioInput> &inputs) {
 namespace {
 // Maps performance choice to x264 preset + CRF. Unknown values fall back
 // to normal. Thread capping is independent; see run().
-void resolvePerformance(const QString &performance, QString &preset, int &crf, QString &label) {
+void resolvePerformance(const QString &performance, QString &preset, int &crf) {
     const QString p = performance.trimmed().toLower();
     if (p == QLatin1String("slow")) {
         preset = QStringLiteral("medium");
         crf = 16;
-        label = QStringLiteral("Slow");
         return;
     }
     if (p == QLatin1String("fast")) {
         preset = QStringLiteral("superfast");
         crf = 20;
-        label = QStringLiteral("Fast");
         return;
     }
     preset = QStringLiteral("veryfast");
     crf = 18;
-    label = QStringLiteral("Normal");
 }
 // Maps performance choice to VP9 speed + quality. VP9 CRF runs 0..63
 // (lower is better); cpu-used 1..4 trades encode time for compression.
@@ -240,7 +231,7 @@ QString ffmpegMissingMessage() {
 class VideoExporter::RenderThread : public QThread {
     Q_OBJECT
 public:
-    RenderThread(QVariantMap scene, int outW, int outH, int fps, QString preset, int crf, QString effort,
+    RenderThread(QVariantMap scene, int outW, int outH, int fps, QString preset, int crf,
         QString tempPath, QString format, int vp9Cpu, int vp9Crf, QObject *parent = nullptr)
         : QThread(parent)
         , m_scene(std::move(scene))
@@ -249,7 +240,6 @@ public:
         , m_fps(fps)
         , m_preset(std::move(preset))
         , m_crf(crf)
-        , m_effort(std::move(effort))
         , m_tempPath(std::move(tempPath))
         , m_format(std::move(format))
         , m_vp9Cpu(vp9Cpu)
@@ -271,6 +261,10 @@ protected:
         const QVariantMap anim = m_scene.value(QStringLiteral("anim")).toMap();
         const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 1800.0);
         const int total = qMax(1, qRound(duration * m_fps));
+        if (total > kMaxTotalFrames) {
+            emit renderError(tr("Too long to export (frame cap exceeded). Shorten the timeline or lower fps."));
+            return;
+        }
 
         // Ancestor visibility + masks resolve inside
         // FramePaint::paintLeaves per frame (collects leaves itself).
@@ -514,7 +508,6 @@ protected:
     int m_outW = 1920, m_outH = 1080, m_fps = 30;
     QString m_preset = QStringLiteral("veryfast");
     int m_crf = 18;
-    QString m_effort = QStringLiteral("Normal");
     QString m_tempPath;
     QString m_format = QStringLiteral("mp4");
     int m_vp9Cpu = 2;
@@ -542,14 +535,13 @@ VideoExporter::VideoExporter(QObject *parent)
 }
 
 VideoExporter::~VideoExporter() {
-    // Bounded shutdown: the worker polls cancel every frame and during
-    // pipe/finish waits, so it normally joins fast. Terminate is a last
-    // resort; ffmpeg then exits once the pipe breaks.
-    if (m_thread && m_thread->isRunning()) {
+    // Bounded cooperative shutdown only: the worker polls cancel every
+    // frame and during pipe/finish waits, so it normally joins fast.
+    // Never terminate(): killing mid-QPainter corrupts the heap.
+    // The thread deletes itself via deleteLater on finished.
+    if (!m_thread.isNull() && m_thread->isRunning()) {
         m_thread->requestCancel();
-        if (!m_thread->wait(8000))
-            m_thread->terminate();
-        m_thread->wait(2000);
+        m_thread->wait(8000);
     }
 }
 
@@ -575,7 +567,7 @@ QString VideoExporter::ffmpegPath() {
 
 bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality, int fps,
     const QString &performance, const QString &designName, const QString &format) {
-    if (m_rendering) {
+    if (m_rendering || (!m_thread.isNull() && m_thread->isRunning())) {
         setLastError(tr("Already rendering. Wait or cancel first."));
         return false;
     }
@@ -584,9 +576,7 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
         return false;
     }
     int outW = 1920, outH = 1080;
-    QString resolvedLabel;
-    resolveQuality(quality, outW, outH, resolvedLabel);
-    Q_UNUSED(resolvedLabel); // Dimensions drive the render; the title uses shortQ below.
+    resolveQuality(quality, outW, outH);
     // Frame rates: 30/60 plus 120 for high-refresh footage. GIF stays
     // capped at 60 (120fps GIFs would be absurd); the popup guards the
     // picker, this coerces anything else so corrupt callers stay safe.
@@ -597,13 +587,16 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
         fps = 60;
     QString preset;
     int crf = 18;
-    QString perfLabel;
-    resolvePerformance(performance, preset, crf, perfLabel);
+    resolvePerformance(performance, preset, crf);
     int vp9Cpu = 2, vp9Crf = 31;
     resolveWebmEffort(performance, vp9Cpu, vp9Crf);
     const QVariantMap anim = scene.value(QStringLiteral("anim")).toMap();
     const double duration = qBound(0.5, anim.value(QStringLiteral("duration"), 4.0).toDouble(), 1800.0);
     const int total = qMax(1, qRound(duration * fps));
+    if (total > kMaxTotalFrames) {
+        setLastError(tr("Too long to export. Shorten the timeline or lower fps."));
+        return false;
+    }
 
     if (ffmpegPath().isEmpty()) {
         setLastError(ffmpegMissingMessage());
@@ -633,7 +626,7 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
     emit finishedChanged();
     emit progressChanged();
 
-    auto *thread = new RenderThread(scene, outW, outH, fps, preset, crf, perfLabel, temp, outFormat, vp9Cpu, vp9Crf);
+    auto *thread = new RenderThread(scene, outW, outH, fps, preset, crf, temp, outFormat, vp9Cpu, vp9Crf);
     m_thread = thread;
     connect(thread, &RenderThread::frameProgress, this, [this](int cur, int total) {
         m_currentFrame = cur;
@@ -650,25 +643,17 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
 }
 
 void VideoExporter::cancel() {
-    if (!m_rendering || !m_thread)
+    if (!m_rendering || m_thread.isNull())
         return;
     m_thread->requestCancel();
 }
 
 namespace {
-// Resolved destination with the container suffix appended when missing
-// ("" when no usable path). Shared by the write and the QML overwrite
-// probe so the two can never disagree on the target file.
+// Resolved destination with the container suffix appended when missing.
+// Delegates to AppPaths so export/save probes share one suffix rule.
 QString saveLocalPath(const QUrl &destination, const QString &suffix)
 {
-    QString local = destination.isLocalFile() ? destination.toLocalFile() : destination.toString();
-    if (local.isEmpty()) {
-        return {};
-    }
-    if (!local.endsWith(suffix, Qt::CaseInsensitive)) {
-        local += suffix;
-    }
-    return local;
+    return AppPaths::resolveLocalFileWithSuffix(destination, suffix);
 }
 } // namespace
 
@@ -724,7 +709,9 @@ void VideoExporter::setLastError(const QString &message) {
 }
 
 void VideoExporter::onWorkerFinished(const QString &tempPath, const QString &error, bool wasCancelled) {
-    m_thread = nullptr;
+    // Clear only our tracked thread; QPointer auto-nulls if the
+    // QThread object was already deleted via deleteLater.
+    m_thread.clear();
     m_currentFrame = wasCancelled ? 0 : m_currentFrame;
     setRendering(false);
     if (wasCancelled) {
