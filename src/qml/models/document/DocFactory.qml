@@ -248,39 +248,54 @@ QtObject {
 
     // Deep copy so snapshots never share point objects with live nodes.
     function _copyGradient(src) {
-        // 2-stop linear only in v1: angle + exactly two {color,pos}.
-        // Missing/invalid input falls back to black->white at 90deg so
-        // converts and old scenes always render something sane.
+        // N-stop linear (2..8): angle + sorted [{color,pos}]. Old 2-stop
+        // scenes load untouched; missing pos spaces evenly, over-cap
+        // lists resample by sorted index so coverage survives the cap.
         var d = src ?? {};
         var angle = Number(d.angle);
         if (isNaN(angle))
             angle = 90;
         var raw = d.stops;
-        var cols = [], poss = [];
+        var stops = [];
         if (raw && typeof raw.length === "number") {
-            for (var i = 0; i < raw.length && cols.length < 2; i++) {
+            for (var i = 0; i < raw.length; i++) {
                 var st = raw[i] || {};
-                cols.push(String(st.color ?? "#000000"));
+                var c = String(st.color ?? (stops.length === 0 ? "#000000" : "#ffffff"));
                 var p = Number(st.pos);
-                poss.push(isNaN(p) ? (cols.length === 1 ? 0 : 1) : Math.min(1, Math.max(0, p)));
+                var hasPos = st.pos !== undefined && !isNaN(p);
+                stops.push({
+                    color: c,
+                    pos: hasPos ? Math.min(1, Math.max(0, p)) : -1
+                });
             }
         }
-        while (cols.length < 2) {
-            cols.push(cols.length === 0 ? "#000000" : "#ffffff");
-            poss.push(cols.length === 1 ? 0 : 1);
+        // Even spacing for missing positions.
+        var n = stops.length;
+        for (var j = 0; j < n; j++) {
+            if (stops[j].pos < -0.5)
+                stops[j].pos = n <= 1 ? j : j / (n - 1);
+        }
+        while (stops.length < 2) {
+            stops.push({
+                color: stops.length === 0 ? "#000000" : "#ffffff",
+                pos: stops.length === 0 ? 0 : 1
+            });
+        }
+        stops.sort(function (a, b) {
+            return a.pos - b.pos;
+        });
+        // Resample when over cap (hand-edited scenes): pick 8 evenly by
+        // sorted index so endpoints and coverage survive.
+        if (stops.length > 8) {
+            var sampled = [];
+            var total = stops.length;
+            for (var k = 0; k < 8; k++)
+                sampled.push(stops[Math.round(k * (total - 1) / 7)]);
+            stops = sampled;
         }
         return {
             angle: angle,
-            stops: [
-                {
-                    color: cols[0],
-                    pos: poss[0]
-                },
-                {
-                    color: cols[1],
-                    pos: poss[1]
-                }
-            ]
+            stops: stops
         };
     }
 

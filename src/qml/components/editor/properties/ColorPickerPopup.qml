@@ -235,17 +235,35 @@ Popup {
         var raw = d.stops;
         var out = [];
         if (raw && typeof raw.length === "number") {
-            for (var i = 0; i < raw.length && out.length < 2; i++)
+            for (var i = 0; i < raw.length; i++) {
+                var s = raw[i] || {};
+                var p = Number(s.pos);
                 out.push({
-                    color: String((raw[i] || {}).color ?? "#000000"),
-                    pos: out.length === 0 ? 0 : 1
+                    color: String(s.color ?? (out.length === 0 ? "#000000" : "#ffffff")),
+                    pos: (s.pos !== undefined && !isNaN(p)) ? Math.min(1, Math.max(0, p)) : -1
                 });
+            }
+        }
+        var n = out.length;
+        for (var j = 0; j < n; j++) {
+            if (out[j].pos < -0.5)
+                out[j].pos = n <= 1 ? j : j / (n - 1);
         }
         while (out.length < 2)
             out.push({
                 color: out.length === 0 ? "#000000" : "#ffffff",
                 pos: out.length === 0 ? 0 : 1
             });
+        out.sort(function (a, b) {
+            return a.pos - b.pos;
+        });
+        if (out.length > 8) {
+            var sampled = [];
+            var total = out.length;
+            for (var k = 0; k < 8; k++)
+                sampled.push(out[Math.round(k * (total - 1) / 7)]);
+            out = sampled;
+        }
         return {
             angle: Number(d.angle) || 0,
             stops: out

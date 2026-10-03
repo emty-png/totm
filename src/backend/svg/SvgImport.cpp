@@ -19,9 +19,9 @@
 namespace SvgImport {
 namespace {
 
-// Gradient paint for linearGradient/radialGradient defs. Only linear
-// maps onto the app's 2-stop bbox model (angle + stops at pos 0/1);
-// radial resolves too but callers fall back to its first stop as solid.
+// Gradient paint for linearGradient/radialGradient defs. Linear maps
+// onto the app's N-stop bbox model (angle + 2..8 stops); radial
+// resolves too but callers fall back to its first stop as solid.
 struct GradStop {
     double offset = 0.0;
     QColor color = QColor(QStringLiteral("#000000"));
@@ -1147,6 +1147,32 @@ QColor sampleStops(const QList<GradStop> &stops, double t)
     return stops.last().color;
 }
 
+// App-model stops for one resolved linear gradient (2..8 entries).
+// Short lists keep author positions; long lists resample evenly so
+// coverage survives the 8-stop cap.
+QVariantList appStopsFor(const Gradient &g)
+{
+    QVariantList out;
+    if (g.stops.size() <= 8) {
+        for (const GradStop &s : g.stops) {
+            QVariantMap m;
+            m[QStringLiteral("color")] = s.color.name(QColor::HexArgb);
+            m[QStringLiteral("pos")] = qBound(0.0, s.offset, 1.0);
+            out.append(m);
+        }
+    } else {
+        for (int i = 0; i < 8; ++i) {
+            const double t = double(i) / 7.0;
+            const QColor c = sampleStops(g.stops, t);
+            QVariantMap m;
+            m[QStringLiteral("color")] = c.name(QColor::HexArgb);
+            m[QStringLiteral("pos")] = t;
+            out.append(m);
+        }
+    }
+    return out;
+}
+
 // Resolve one gradient (href chains included, cycle-capped). Child
 // vector/stops override the parent; type mismatch with the href
 // target invalidates. gradientTransform maps the endpoints in
@@ -1827,8 +1853,8 @@ QVariantMap importFile(const QString &localPath, double maxSize)
         entry[QStringLiteral("strokeJoin")] = sh.strokeJoin;
         // Stacked form for the new model (legacy keys kept above for
         // older readers): single fill entry plus single center stroke.
-        // Linear-gradient paints land as linear entries (2 stops at pos
-        // 0/1, bbox-relative angle); radial degrades to the first stop
+        // Linear-gradient paints land as linear entries (2..8 stops,
+        // bbox-relative angle); radial degrades to the first stop
         // as solid inside appendShape, so it never reaches this branch.
         QVariantMap fillEntry;
         fillEntry[QStringLiteral("enabled")] = true;
@@ -1840,18 +1866,7 @@ QVariantMap importFile(const QString &localPath, double maxSize)
                 fillEntry[QStringLiteral("type")] = QStringLiteral("linear");
                 QVariantMap grad;
                 grad[QStringLiteral("angle")] = round2(ang);
-                QVariantList stops;
-                const QColor c0 = sampleStops(sh.fillGrad.stops, 0.0);
-                const QColor c1 = sampleStops(sh.fillGrad.stops, 1.0);
-                stops.append(QVariantMap{
-                    {QStringLiteral("color"), c0.name(QColor::HexArgb)},
-                    {QStringLiteral("pos"), 0.0},
-                });
-                stops.append(QVariantMap{
-                    {QStringLiteral("color"), c1.name(QColor::HexArgb)},
-                    {QStringLiteral("pos"), 1.0},
-                });
-                grad[QStringLiteral("stops")] = stops;
+                grad[QStringLiteral("stops")] = appStopsFor(sh.fillGrad);
                 fillEntry[QStringLiteral("gradient")] = grad;
             } else {
                 fillEntry[QStringLiteral("type")] = QStringLiteral("solid");
@@ -1874,18 +1889,7 @@ QVariantMap importFile(const QString &localPath, double maxSize)
                 strokeEntry[QStringLiteral("type")] = QStringLiteral("linear");
                 QVariantMap grad;
                 grad[QStringLiteral("angle")] = round2(ang);
-                QVariantList stops;
-                const QColor c0 = sampleStops(sh.strokeGrad.stops, 0.0);
-                const QColor c1 = sampleStops(sh.strokeGrad.stops, 1.0);
-                stops.append(QVariantMap{
-                    {QStringLiteral("color"), c0.name(QColor::HexArgb)},
-                    {QStringLiteral("pos"), 0.0},
-                });
-                stops.append(QVariantMap{
-                    {QStringLiteral("color"), c1.name(QColor::HexArgb)},
-                    {QStringLiteral("pos"), 1.0},
-                });
-                grad[QStringLiteral("stops")] = stops;
+                grad[QStringLiteral("stops")] = appStopsFor(sh.strokeGrad);
                 strokeEntry[QStringLiteral("gradient")] = grad;
             } else {
                 strokeEntry[QStringLiteral("type")] = QStringLiteral("solid");

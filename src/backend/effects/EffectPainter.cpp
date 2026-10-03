@@ -505,8 +505,8 @@ QBrush paintBrush(const QRectF &box, const QString &type, const QVariantMap &gra
         gradientEndpoints(box, spec.angle, &p0, &p1);
         QLinearGradient g(p0, p1);
         g.setCoordinateMode(QGradient::LogicalMode);
-        g.setColorAt(spec.stops[0].pos, spec.stops[0].color);
-        g.setColorAt(spec.stops[1].pos, spec.stops[1].color);
+        for (const GradientStop &s : spec.stops)
+            g.setColorAt(qBound(0.0, s.pos, 1.0), s.color);
         return QBrush(g);
     }
     return QBrush(solid);
@@ -527,10 +527,8 @@ QBrush fillBrushFor(const QRectF &box, const FillEntry &f)
         gradientEndpoints(box, spec.angle, &p0, &p1);
         QLinearGradient g(p0, p1);
         g.setCoordinateMode(QGradient::LogicalMode);
-        QColor c0 = withEntryOpacity(spec.stops[0].color, f.opacity);
-        QColor c1 = withEntryOpacity(spec.stops[1].color, f.opacity);
-        g.setColorAt(spec.stops[0].pos, c0);
-        g.setColorAt(spec.stops[1].pos, c1);
+        for (const GradientStop &s : spec.stops)
+            g.setColorAt(qBound(0.0, s.pos, 1.0), withEntryOpacity(s.color, f.opacity));
         return QBrush(g);
     }
     return QBrush(withEntryOpacity(f.color, f.opacity));
@@ -544,10 +542,8 @@ QBrush strokeBrushFor(const QRectF &box, const StrokeEntry &s)
         gradientEndpoints(box, spec.angle, &p0, &p1);
         QLinearGradient g(p0, p1);
         g.setCoordinateMode(QGradient::LogicalMode);
-        QColor c0 = withEntryOpacity(spec.stops[0].color, s.opacity);
-        QColor c1 = withEntryOpacity(spec.stops[1].color, s.opacity);
-        g.setColorAt(spec.stops[0].pos, c0);
-        g.setColorAt(spec.stops[1].pos, c1);
+        for (const GradientStop &st : spec.stops)
+            g.setColorAt(qBound(0.0, st.pos, 1.0), withEntryOpacity(st.color, s.opacity));
         return QBrush(g);
     }
     return QBrush(withEntryOpacity(s.color, s.opacity));

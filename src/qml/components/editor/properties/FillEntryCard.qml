@@ -118,7 +118,10 @@ RowLayout {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
         visible: card.isLinear
-        text: qsTr("Gradient")
+        text: {
+            var stops = (card.current.value.gradient ?? {}).stops ?? [];
+            return stops.length > 2 ? qsTr("Gradient · %1").arg(stops.length) : qsTr("Gradient");
+        }
         font.pixelSize: 11
         color: AppTheme.muted
         elide: Text.ElideRight

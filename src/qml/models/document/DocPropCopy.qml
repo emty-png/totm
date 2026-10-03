@@ -83,6 +83,57 @@ QtObject {
         return propCopy.targetLeaves().length > 0;
     }
 
+    function snapStops(raw) {
+        var list = raw ?? [];
+        var total = list.length >= 2 ? list.length : 2;
+        var out = [];
+        for (var i = 0; i < total; i++) {
+            var s = list[i] ?? {};
+            var fallback = i === 0 ? "#000000" : "#ffffff";
+            var p = Number(s.pos);
+            var hasPos = s.pos !== undefined && !isNaN(p);
+            out.push({
+                color: String(s.color ?? fallback),
+                pos: hasPos ? Math.min(1, Math.max(0, p)) : (total <= 1 ? i : i / (total - 1))
+            });
+        }
+        out.sort(function (a, b) {
+            return a.pos - b.pos;
+        });
+        if (out.length > 8) {
+            var sampled = [];
+            var n = out.length;
+            for (var k = 0; k < 8; k++)
+                sampled.push(out[Math.round(k * (n - 1) / 7)]);
+            out = sampled;
+        }
+        return out;
+    }
+
+    // Clipboard gradient map accepting new {angle,stops[]} and legacy
+    // {angle,c1,c2} payloads (old copies paste without loss).
+    function stopsMapFor(g) {
+        var d = g ?? {};
+        if (d.stops && typeof d.stops.length === "number")
+            return {
+                angle: Number(d.angle) || 0,
+                stops: d.stops
+            };
+        return {
+            angle: Number(d.angle) || 0,
+            stops: [
+                {
+                    color: String(d.c1 ?? "#000000"),
+                    pos: 0
+                },
+                {
+                    color: String(d.c2 ?? "#ffffff"),
+                    pos: 1
+                }
+            ]
+        };
+    }
+
     function snapValues(n) {
         var f = propCopy.doc.factory;
         var fills = [], strokes = [], shadows = [], glows = [];
@@ -90,14 +141,12 @@ QtObject {
         for (var i = 0; i < src.length; i++) {
             var fe = src[i] ?? {};
             var fg = fe.gradient ?? {};
-            var fs = fg.stops ?? [];
             fills.push({
                 color: String(fe.color ?? "#d9d9d9"),
                 opacity: propCopy._op(fe.opacity),
                 gradient: {
                     angle: Number(fg.angle) || 0,
-                    c1: String((fs[0] ?? {}).color ?? "#000000"),
-                    c2: String((fs[1] ?? {}).color ?? "#ffffff")
+                    stops: propCopy.snapStops(fg.stops)
                 }
             });
         }
@@ -105,7 +154,6 @@ QtObject {
         for (var j = 0; j < st.length; j++) {
             var se = st[j] ?? {};
             var sg = se.gradient ?? {};
-            var ss = sg.stops ?? [];
             var dd = (se.dash && typeof se.dash.length === "number") ? se.dash : [];
             strokes.push({
                 color: String(se.color ?? "#000000"),
@@ -115,8 +163,7 @@ QtObject {
                 gap: dd.length > 1 ? Math.max(0, Number(dd[1]) || 0) : 0,
                 gradient: {
                     angle: Number(sg.angle) || 0,
-                    c1: String((ss[0] ?? {}).color ?? "#000000"),
-                    c2: String((ss[1] ?? {}).color ?? "#ffffff")
+                    stops: propCopy.snapStops(sg.stops)
                 }
             });
         }
@@ -357,19 +404,7 @@ QtObject {
         for (var fi = 0; fi < lim; fi++) {
             dst[fi].color = String(v.fills[fi].color);
             dst[fi].opacity = propCopy._op(v.fills[fi].opacity);
-            dst[fi].gradient = f._copyGradient({
-                angle: v.fills[fi].gradient.angle,
-                stops: [
-                    {
-                        color: v.fills[fi].gradient.c1,
-                        pos: 0
-                    },
-                    {
-                        color: v.fills[fi].gradient.c2,
-                        pos: 1
-                    }
-                ]
-            });
+            dst[fi].gradient = f._copyGradient(propCopy.stopsMapFor(v.fills[fi].gradient));
         }
         n.fills = dst;
         var ds = f._copyStrokes(n.strokes, n);
@@ -380,19 +415,7 @@ QtObject {
             ds[si].width = Math.max(0, Number(v.strokes[si].width) || 0);
             var dd = Number(v.strokes[si].dash) || 0, gg = Number(v.strokes[si].gap) || 0;
             ds[si].dash = (dd > 0.001 && gg > 0.001) ? [dd, gg] : [];
-            ds[si].gradient = f._copyGradient({
-                angle: v.strokes[si].gradient.angle,
-                stops: [
-                    {
-                        color: v.strokes[si].gradient.c1,
-                        pos: 0
-                    },
-                    {
-                        color: v.strokes[si].gradient.c2,
-                        pos: 1
-                    }
-                ]
-            });
+            ds[si].gradient = f._copyGradient(propCopy.stopsMapFor(v.strokes[si].gradient));
         }
         n.strokes = ds;
         var dh = f._copyShadows(n.shadows);

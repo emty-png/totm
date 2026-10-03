@@ -18,7 +18,7 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 
 ## Features
 
-* Shapes: rectangle, ellipse, triangle, star, pen paths, text and images — with solid / linear-gradient fill, stroke (solid, dashed, dotted with dash/gap lengths), opacity, radius + independent corners, flip — plus SVG import (including linear gradients) as editable pen vectors via the image tool, file drag-drop anywhere on the window, or clipboard paste (copied files, screenshots)
+* Shapes: rectangle, ellipse, triangle, star, pen paths, text and images — with solid / multi-stop linear-gradient fill (2..8 stops with positions), stroke (solid, dashed, dotted with dash/gap lengths), opacity, radius + independent corners, flip — plus SVG import (including linear gradients) as editable pen vectors via the image tool, file drag-drop anywhere on the window, or clipboard paste (copied files, screenshots)
 * Effects: stackable outer / inner shadows and glows (blur/spread to 500px, offsets to ±2000px), layer + background blur, animated film grain (canvas and video export share one painter, so they match)
 * Home library: workspaces, starring, drag-move between workspaces, cached snapshot card previews, inline rename, story + pricing starter templates with snapshot previews, `.totm` share bundles with OS file association
 * Layers: groups, drill-in, reorder, rename, eye / lock, search filter with auto-expanded groups, context menu (copy / paste / duplicate / group / arrange / delete, hides inapplicable rows), canvas align + distribute, animation clip copy / paste across shapes and designs, layer masks (any shape masks siblings above, stacked bands, nested intersection) with animated wipe / iris reveals

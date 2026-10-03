@@ -136,29 +136,47 @@ QtObject {
 
     // Fresh full entry objects from the frozen base (never aliased):
     // indexed overlays carry complete entry state so different indices
-    // resolve on different keys and coexist.
+    // resolve on different keys and coexist. Gradients keep N stops
+    // (2..8) with author positions so richer fills survive sampling.
+    function gradientFromBase(src) {
+        var grad = (src && src.gradient) ?? {};
+        var raw = grad.stops ?? [];
+        var total = raw.length >= 2 ? raw.length : 2;
+        var stops = [];
+        for (var i = 0; i < total; i++) {
+            var s = raw[i] ?? {};
+            var fallback = i === 0 ? "#000000" : "#ffffff";
+            var p = Number(s.pos);
+            var hasPos = s.pos !== undefined && !isNaN(p);
+            stops.push({
+                color: String(s.color ?? fallback),
+                pos: hasPos ? Math.min(1, Math.max(0, p)) : (total <= 1 ? i : i / (total - 1))
+            });
+        }
+        stops.sort(function (a, b) {
+            return a.pos - b.pos;
+        });
+        if (stops.length > 8) {
+            var sampled = [];
+            var n = stops.length;
+            for (var k = 0; k < 8; k++)
+                sampled.push(stops[Math.round(k * (n - 1) / 7)]);
+            stops = sampled;
+        }
+        return {
+            angle: Number(grad.angle) || 0,
+            stops: stops
+        };
+    }
+
     function fillEntryFromBase(base, i) {
         var list = (base && base.fills) || [];
         var src = i < list.length ? (list[i] ?? {}) : {};
-        var grad = src.gradient ?? {};
-        var stops = grad.stops ?? [];
         return {
             enabled: src.enabled !== false,
             color: String(src.color ?? "#d9d9d9"),
             type: src.type === "linear" ? "linear" : "solid",
-            gradient: {
-                angle: Number(grad.angle) || 0,
-                stops: [
-                    {
-                        color: String((stops[0] ?? {}).color ?? "#000000"),
-                        pos: 0
-                    },
-                    {
-                        color: String((stops[1] ?? {}).color ?? "#ffffff"),
-                        pos: 1
-                    }
-                ]
-            },
+            gradient: sampler.gradientFromBase(src),
             opacity: clampEntryOpacity(src.opacity)
         };
     }
@@ -166,26 +184,12 @@ QtObject {
     function strokeEntryFromBase(base, i) {
         var list = (base && base.strokes) || [];
         var src = i < list.length ? (list[i] ?? {}) : {};
-        var grad = src.gradient ?? {};
-        var stops = grad.stops ?? [];
         var dash = (src.dash && typeof src.dash.length === "number") ? [Math.max(0, Number(src.dash[0]) || 0), Math.max(0, Number(src.dash[1]) || 0)] : [];
         return {
             enabled: src.enabled !== false,
             color: String(src.color ?? "#000000"),
             type: src.type === "linear" ? "linear" : "solid",
-            gradient: {
-                angle: Number(grad.angle) || 0,
-                stops: [
-                    {
-                        color: String((stops[0] ?? {}).color ?? "#000000"),
-                        pos: 0
-                    },
-                    {
-                        color: String((stops[1] ?? {}).color ?? "#ffffff"),
-                        pos: 1
-                    }
-                ]
-            },
+            gradient: sampler.gradientFromBase(src),
             width: Math.max(0, Number(src.width) || 0),
             dash: dash.length === 2 && dash[0] > 0.001 && dash[1] > 0.001 ? dash : [],
             position: (src.position === "inside" || src.position === "outside") ? src.position : "center",
@@ -770,18 +774,18 @@ QtObject {
             var sgOp = sgKv ? (sgKv.opacity !== undefined ? clampEntryOpacity(sgKv.opacity) : undefined) : ((o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined);
             var sgGrad = null;
             if (sgc1 && sgc2) {
+                var sgBaseStops = strokeEntryFromBase(base, sgIdx).gradient.stops;
+                var sgAngle = sgKv && sgKv.angle !== undefined ? (Number(sgKv.angle) || 0) : lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e);
+                var sgStops = [];
+                for (var sgi = 0; sgi < sgBaseStops.length; sgi++) {
+                    sgStops.push({
+                        color: sgi === 0 ? sgc1 : (sgi === 1 ? sgc2 : String(sgBaseStops[sgi].color)),
+                        pos: Number(sgBaseStops[sgi].pos)
+                    });
+                }
                 sgGrad = {
-                    angle: sgKv && sgKv.angle !== undefined ? (Number(sgKv.angle) || 0) : lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e),
-                    stops: [
-                        {
-                            color: sgc1,
-                            pos: 0
-                        },
-                        {
-                            color: sgc2,
-                            pos: 1
-                        }
-                    ]
+                    angle: sgAngle,
+                    stops: sgStops
                 };
             }
             var sgW = undefined, sgD = null, sgP = undefined;
@@ -879,18 +883,18 @@ QtObject {
             var gOp = grKv ? (grKv.opacity !== undefined ? clampEntryOpacity(grKv.opacity) : undefined) : ((o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined);
             var gGrad = null;
             if (gc1 && gc2) {
+                var gBaseStops = fillEntryFromBase(base, gIdx).gradient.stops;
+                var gAngle = grKv && grKv.angle !== undefined ? (Number(grKv.angle) || 0) : lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e);
+                var gStops = [];
+                for (var gi = 0; gi < gBaseStops.length; gi++) {
+                    gStops.push({
+                        color: gi === 0 ? gc1 : (gi === 1 ? gc2 : String(gBaseStops[gi].color)),
+                        pos: Number(gBaseStops[gi].pos)
+                    });
+                }
                 gGrad = {
-                    angle: grKv && grKv.angle !== undefined ? (Number(grKv.angle) || 0) : lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e),
-                    stops: [
-                        {
-                            color: gc1,
-                            pos: 0
-                        },
-                        {
-                            color: gc2,
-                            pos: 1
-                        }
-                    ]
+                    angle: gAngle,
+                    stops: gStops
                 };
             }
             if (gIdx === 0) {
@@ -1406,19 +1410,7 @@ QtObject {
                 if (ov.fillType !== undefined)
                     farr[0].type = ov.fillType === "linear" ? "linear" : "solid";
                 if (ov.fillGradient !== undefined)
-                    farr[0].gradient = {
-                        angle: ov.fillGradient.angle,
-                        stops: [
-                            {
-                                color: String(ov.fillGradient.stops[0].color),
-                                pos: 0
-                            },
-                            {
-                                color: String(ov.fillGradient.stops[1].color),
-                                pos: 1
-                            }
-                        ]
-                    };
+                    farr[0].gradient = doc.factory._copyGradient(ov.fillGradient);
                 if (ov.fillOpacity !== undefined)
                     farr[0].opacity = Math.min(1, Math.max(0, Number(ov.fillOpacity)));
                 n.fills = farr;
@@ -1437,19 +1429,7 @@ QtObject {
                 if (ov.strokeType !== undefined)
                     sarr[0].type = ov.strokeType === "linear" ? "linear" : "solid";
                 if (ov.strokeGradient !== undefined)
-                    sarr[0].gradient = {
-                        angle: ov.strokeGradient.angle,
-                        stops: [
-                            {
-                                color: String(ov.strokeGradient.stops[0].color),
-                                pos: 0
-                            },
-                            {
-                                color: String(ov.strokeGradient.stops[1].color),
-                                pos: 1
-                            }
-                        ]
-                    };
+                    sarr[0].gradient = doc.factory._copyGradient(ov.strokeGradient);
                 if (ov.strokeWidth !== undefined)
                     sarr[0].width = Math.max(0, Number(ov.strokeWidth) || 0);
                 if (ov.strokeOpacity !== undefined)

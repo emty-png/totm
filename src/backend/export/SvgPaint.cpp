@@ -307,7 +307,7 @@ QString buildSvgMask(const QVariantMap &mm, const QRectF &region, QStringList &d
     return QStringLiteral("mask=\"url(#%1)\"").arg(mid);
 }
 
-// Two-stop linear gradient in the shape's local coords (same space as
+// N-stop linear gradient in the shape's local coords (same space as
 // the path data, so the transform applies to both like QPainter's
 // logical-mode brush).
 GradientOut gradientFill(const QVariantMap &gradMap, const QRectF &box, const QString &id, bool isFill) {
@@ -322,9 +322,9 @@ GradientOut gradientFill(const QVariantMap &gradMap, const QRectF &box, const QS
                       .arg(fmtNum(p0.y()))
                       .arg(fmtNum(p1.x()))
                       .arg(fmtNum(p1.y()));
-    for (int i = 0; i < 2; ++i) {
-        const QColor c = spec.stops[i].color;
-        const double off = qBound(0.0, spec.stops[i].pos, 1.0);
+    for (int i = 0; i < spec.stops.size(); ++i) {
+        const QColor c = spec.stops.at(i).color;
+        const double off = qBound(0.0, spec.stops.at(i).pos, 1.0);
         def += QStringLiteral("<stop offset=\"%1\" stop-color=\"%2\" stop-opacity=\"%3\"/>")
                    .arg(fmtNum(off))
                    .arg(colorHex(c.isValid() ? c : (i == 0 ? QColor(Qt::black) : QColor(Qt::white))))
@@ -350,10 +350,11 @@ GradientOut gradientFillOpacity(
     const QVariantMap &gradMap, const QRectF &box, const QString &id, bool isFill, double opacity) {
     GradientOut out;
     Effects::LinearSpec spec = Effects::linearFrom(gradMap);
-    spec.stops[0].color.setAlphaF(
-        qBound(0.0, spec.stops[0].color.alphaF() * qBound(0.0, opacity, 1.0), 1.0));
-    spec.stops[1].color.setAlphaF(
-        qBound(0.0, spec.stops[1].color.alphaF() * qBound(0.0, opacity, 1.0), 1.0));
+    for (int i = 0; i < spec.stops.size(); ++i) {
+        QColor c = spec.stops.at(i).color;
+        c.setAlphaF(qBound(0.0, c.alphaF() * qBound(0.0, opacity, 1.0), 1.0));
+        spec.stops[i].color = c;
+    }
     QPointF p0, p1;
     Effects::gradientEndpoints(box, spec.angle, &p0, &p1);
     QString def = QStringLiteral("<linearGradient id=\"%1\" gradientUnits=\"userSpaceOnUse\" x1=\"%2\" y1=\"%3\" "
@@ -363,9 +364,9 @@ GradientOut gradientFillOpacity(
                       .arg(fmtNum(p0.y()))
                       .arg(fmtNum(p1.x()))
                       .arg(fmtNum(p1.y()));
-    for (int i = 0; i < 2; ++i) {
-        const QColor c = spec.stops[i].color;
-        const double off = qBound(0.0, spec.stops[i].pos, 1.0);
+    for (int i = 0; i < spec.stops.size(); ++i) {
+        const QColor c = spec.stops.at(i).color;
+        const double off = qBound(0.0, spec.stops.at(i).pos, 1.0);
         def += QStringLiteral("<stop offset=\"%1\" stop-color=\"%2\" stop-opacity=\"%3\"/>")
                    .arg(fmtNum(off))
                    .arg(colorHex(c.isValid() ? c : (i == 0 ? QColor(Qt::black) : QColor(Qt::white))))

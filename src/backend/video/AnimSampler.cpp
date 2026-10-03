@@ -414,18 +414,41 @@ double entryOpacityOf(const QVariantMap &m) {
 QVariantMap gradientFrom(const QVariantMap &src) {
     const QVariantMap g = src.value(QStringLiteral("gradient")).toMap();
     const QVariantList stops = g.value(QStringLiteral("stops")).toList();
-    QVariantMap s0 = stops.size() > 0 ? stops.at(0).toMap() : QVariantMap();
-    QVariantMap s1 = stops.size() > 1 ? stops.at(1).toMap() : QVariantMap();
     QVariantMap out;
     out[QStringLiteral("angle")] = g.value(QStringLiteral("angle"), 0.0).toDouble();
     QVariantList sl;
-    QVariantMap a;
-    a[QStringLiteral("color")] = s0.value(QStringLiteral("color"), QStringLiteral("#000000")).toString();
-    a[QStringLiteral("pos")] = 0.0;
-    QVariantMap b;
-    b[QStringLiteral("color")] = s1.value(QStringLiteral("color"), QStringLiteral("#ffffff")).toString();
-    b[QStringLiteral("pos")] = 1.0;
-    sl << a << b;
+    const int rawN = stops.size();
+    const int total = rawN >= 2 ? rawN : 2;
+    for (int i = 0; i < total; ++i) {
+        QVariantMap s = i < rawN ? stops.at(i).toMap() : QVariantMap();
+        QVariantMap o;
+        const QString fallback = i == 0 ? QStringLiteral("#000000") : QStringLiteral("#ffffff");
+        o[QStringLiteral("color")] = s.value(QStringLiteral("color"), fallback).toString();
+        double p = -1.0;
+        if (s.contains(QStringLiteral("pos"))) {
+            bool ok = false;
+            const double v = s.value(QStringLiteral("pos")).toDouble(&ok);
+            if (ok)
+                p = qBound(0.0, v, 1.0);
+        }
+        if (p < -0.5)
+            p = total <= 1 ? double(i) : double(i) / double(total - 1);
+        o[QStringLiteral("pos")] = qBound(0.0, p, 1.0);
+        sl << o;
+    }
+    // Sort by pos so out-of-order scenes still interpolate by position.
+    std::sort(sl.begin(), sl.end(), [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value(QStringLiteral("pos")).toDouble() < b.toMap().value(QStringLiteral("pos")).toDouble();
+    });
+    // Resample when over cap: pick 8 evenly by sorted index so coverage
+    // survives instead of dropping the tail.
+    if (sl.size() > 8) {
+        QVariantList sampled;
+        const int n = sl.size();
+        for (int k = 0; k < 8; ++k)
+            sampled << sl.at(qRound(k * (n - 1) / 7.0));
+        sl = sampled;
+    }
     out[QStringLiteral("stops")] = sl;
     return out;
 }
@@ -1127,14 +1150,24 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
                 ? sgKv.value(QStringLiteral("angle")).toDouble()
                 : num(o, "fromAngle") + (num(o, "toAngle") - num(o, "fromAngle")) * e;
             grad[QStringLiteral("angle")] = ang;
+            const QVariantMap baseEntry = strokeEntryFromBase(base, sgIdx);
+            QVariantList baseStops = baseEntry.value(QStringLiteral("gradient")).toMap().value(QStringLiteral("stops")).toList();
+            if (baseStops.size() < 2)
+                baseStops = QVariantList{ QVariantMap{ { QStringLiteral("color"), QStringLiteral("#000000") }, { QStringLiteral("pos"), 0.0 } },
+                    QVariantMap{ { QStringLiteral("color"), QStringLiteral("#ffffff") }, { QStringLiteral("pos"), 1.0 } } };
             QVariantList stops;
-            QVariantMap s1;
-            s1[QStringLiteral("color")] = c1;
-            s1[QStringLiteral("pos")] = 0.0;
-            QVariantMap s2;
-            s2[QStringLiteral("color")] = c2;
-            s2[QStringLiteral("pos")] = 1.0;
-            stops << s1 << s2;
+            for (int si = 0; si < baseStops.size() && si < 8; ++si) {
+                QVariantMap b = baseStops.at(si).toMap();
+                QVariantMap s;
+                if (si == 0)
+                    s[QStringLiteral("color")] = c1;
+                else if (si == 1)
+                    s[QStringLiteral("color")] = c2;
+                else
+                    s[QStringLiteral("color")] = b.value(QStringLiteral("color"), QStringLiteral("#ffffff")).toString();
+                s[QStringLiteral("pos")] = qBound(0.0, b.value(QStringLiteral("pos"), si == 0 ? 0.0 : 1.0).toDouble(), 1.0);
+                stops << s;
+            }
             grad[QStringLiteral("stops")] = stops;
         }
         bool hasOp3 = false;
@@ -1247,6 +1280,9 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
     } else if (preset == QLatin1String("customGradient")) {
         // Fill gradient from-to: stop colors lerp in sRGB, angle lerps
         // linearly. Mirrors DocAnimSample (which also flips fillType).
+        // N-stop base keeps its positions/count: first two stops lerp
+        // from/to, extras hold base colors so old 2-stop clips never
+        // collapse a richer gradient.
         const int gIdx = entryIndexOf(o, "fillIndex");
         QVariantMap grKv;
         const bool hasGrKeys = genericKeysAt(o, p, grKv);
@@ -1266,14 +1302,24 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
                 ? grKv.value(QStringLiteral("angle")).toDouble()
                 : num(o, "fromAngle") + (num(o, "toAngle") - num(o, "fromAngle")) * e;
             grad[QStringLiteral("angle")] = ang;
+            const QVariantMap baseEntry = fillEntryFromBase(base, gIdx);
+            QVariantList baseStops = baseEntry.value(QStringLiteral("gradient")).toMap().value(QStringLiteral("stops")).toList();
+            if (baseStops.size() < 2)
+                baseStops = QVariantList{ QVariantMap{ { QStringLiteral("color"), QStringLiteral("#000000") }, { QStringLiteral("pos"), 0.0 } },
+                    QVariantMap{ { QStringLiteral("color"), QStringLiteral("#ffffff") }, { QStringLiteral("pos"), 1.0 } } };
             QVariantList stops;
-            QVariantMap s1;
-            s1[QStringLiteral("color")] = c1;
-            s1[QStringLiteral("pos")] = 0.0;
-            QVariantMap s2;
-            s2[QStringLiteral("color")] = c2;
-            s2[QStringLiteral("pos")] = 1.0;
-            stops << s1 << s2;
+            for (int si = 0; si < baseStops.size() && si < 8; ++si) {
+                QVariantMap b = baseStops.at(si).toMap();
+                QVariantMap s;
+                if (si == 0)
+                    s[QStringLiteral("color")] = c1;
+                else if (si == 1)
+                    s[QStringLiteral("color")] = c2;
+                else
+                    s[QStringLiteral("color")] = b.value(QStringLiteral("color"), QStringLiteral("#ffffff")).toString();
+                s[QStringLiteral("pos")] = qBound(0.0, b.value(QStringLiteral("pos"), si == 0 ? 0.0 : 1.0).toDouble(), 1.0);
+                stops << s;
+            }
             grad[QStringLiteral("stops")] = stops;
         }
         bool hasOp = false;

@@ -76,19 +76,7 @@ PanelSection {
         onGradientCommitted: g => {
             if (section.pickerStrokeIndex >= 0)
                 section.patchStrokeAt(section.pickerStrokeIndex, {
-                    gradient: {
-                        angle: Number(g.angle) || 0,
-                        stops: [
-                            {
-                                color: String(g.stops[0].color),
-                                pos: 0
-                            },
-                            {
-                                color: String(g.stops[1].color),
-                                pos: 1
-                            }
-                        ]
-                    },
+                    gradient: section.gradientMapFor(g),
                     type: "linear"
                 });
         }
@@ -469,6 +457,69 @@ PanelSection {
         return i === 0 ? "#000000" : "#ffffff";
     }
 
+    function stopsFor(g) {
+        var raw = (g ?? {}).stops ?? [];
+        var total = raw.length >= 2 ? raw.length : 2;
+        var out = [];
+        for (var i = 0; i < total; i++) {
+            var s = raw[i] ?? {};
+            var p = Number(s.pos);
+            out.push({
+                color: String(s.color ?? (i === 0 ? "#000000" : "#ffffff")),
+                pos: (s.pos !== undefined && !isNaN(p)) ? Math.min(1, Math.max(0, p)) : (total <= 1 ? i : i / (total - 1))
+            });
+        }
+        out.sort(function (a, b) {
+            return a.pos - b.pos;
+        });
+        if (out.length > 8) {
+            var sampled = [];
+            var n = out.length;
+            for (var k = 0; k < 8; k++)
+                sampled.push(out[Math.round(k * (n - 1) / 7)]);
+            out = sampled;
+        }
+        return out;
+    }
+
+    function gradientMapFor(g) {
+        var d = g ?? {};
+        var raw = d.stops ?? [];
+        var out = [];
+        for (var i = 0; i < raw.length; i++) {
+            var s = raw[i] ?? {};
+            var p = Number(s.pos);
+            out.push({
+                color: String(s.color ?? (out.length === 0 ? "#000000" : "#ffffff")),
+                pos: (s.pos !== undefined && !isNaN(p)) ? Math.min(1, Math.max(0, p)) : -1
+            });
+        }
+        var n = out.length;
+        for (var j = 0; j < n; j++) {
+            if (out[j].pos < -0.5)
+                out[j].pos = n <= 1 ? j : j / (n - 1);
+        }
+        while (out.length < 2)
+            out.push({
+                color: out.length === 0 ? "#000000" : "#ffffff",
+                pos: out.length === 0 ? 0 : 1
+            });
+        out.sort(function (a, b) {
+            return a.pos - b.pos;
+        });
+        if (out.length > 8) {
+            var resampled = [];
+            var total = out.length;
+            for (var k = 0; k < 8; k++)
+                resampled.push(out[Math.round(k * (total - 1) / 7)]);
+            out = resampled;
+        }
+        return {
+            angle: Number(d.angle) || 0,
+            stops: out
+        };
+    }
+
     function dashOf(entry) {
         var d = (entry ?? {}).dash;
         var norm = {
@@ -562,16 +613,7 @@ PanelSection {
                 type: (first.type ?? "solid") === "linear" ? "linear" : "solid",
                 gradient: {
                     angle: Number((first.gradient ?? {}).angle) || 0,
-                    stops: [
-                        {
-                            color: section.gradStop(first.gradient, 0),
-                            pos: 0
-                        },
-                        {
-                            color: section.gradStop(first.gradient, 1),
-                            pos: 1
-                        }
-                    ]
+                    stops: section.stopsFor(first.gradient)
                 },
                 width: Math.max(0, Number(first.width) || 0),
                 dash: (first.dash || []).slice(),
@@ -629,16 +671,7 @@ PanelSection {
         section.doc.patchStrokeAtSelected(at, {
             gradient: {
                 angle: Math.min(360, Math.max(0, Number(v) || 0)),
-                stops: [
-                    {
-                        color: section.gradStop(cur, 0),
-                        pos: 0
-                    },
-                    {
-                        color: section.gradStop(cur, 1),
-                        pos: 1
-                    }
-                ]
+                stops: section.stopsFor(cur)
             }
         });
     }

@@ -22,7 +22,7 @@ QtObject {
     property real rotation: 0
     // Stacked paints (index 0 paints topmost):
     // fills: [{enabled, color, type ("solid"|"linear"), gradient {angle,
-    //   stops:[{color,pos}x2]}, opacity 0..1}]. Final fill alpha =
+    //   stops:[{color,pos} x2..8, sorted]}, opacity 0..1}]. Final fill alpha =
     //   color alpha * opacity * leaf opacity. Empty = no fill.
     // strokes: [{enabled, color, type, gradient, width, dash [d,g] in
     //   width units, position ("center"|"inside"|"outside"), opacity}].
