@@ -174,6 +174,7 @@ qt_add_qml_module(totm
         qml/components/editor/properties/ClipCustomGlowOptions.qml
         qml/components/editor/properties/ClipCustomGrainOptions.qml
         qml/components/editor/properties/ClipVideoOptions.qml
+        qml/components/editor/properties/ClipVideoZoomOptions.qml
         qml/components/editor/properties/ClipCustomOtherOptions.qml
         qml/components/editor/properties/ClipEntryDropdown.qml
         qml/components/editor/properties/ClipAlphaWell.qml

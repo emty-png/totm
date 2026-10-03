@@ -303,6 +303,20 @@ ScrollView {
             }
         }
 
+        // Video zoom (content punch-in/out inside the box; box and
+        // strokes stay put, keys hold absolute zoom).
+        PanelSection {
+            width: parent.width
+            title: editor.presetTitle()
+            visible: !!editor.clipData && editor.clipData.preset === "customVideoZoom"
+
+            ClipVideoZoomOptions {
+                Layout.fillWidth: true
+                doc: editor.doc
+                clipId: editor.clipId
+            }
+        }
+
         // Motion path (closed / orient / redraw).
         PanelSection {
             width: parent.width

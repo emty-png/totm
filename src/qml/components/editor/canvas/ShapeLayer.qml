@@ -220,6 +220,9 @@ Item {
             videoLoop: n.videoLoop !== false,
             videoFit: (n.videoFit === "cover" || n.videoFit === "fill") ? n.videoFit : "fit",
             videoTime: (n.videoTime !== undefined && Number(n.videoTime) >= 0) ? Number(n.videoTime) : -1,
+            videoZoom: Math.min(8, Math.max(1, Number(n.videoZoom) || 1)),
+            videoZoomX: Math.min(1, Math.max(0, Number(n.videoZoomX !== undefined ? n.videoZoomX : 0.5))),
+            videoZoomY: Math.min(1, Math.max(0, Number(n.videoZoomY !== undefined ? n.videoZoomY : 0.5))),
             textContent: n.textContent ?? "",
             fontFamily: n.fontFamily || "Inter",
             fontWeight: n.fontWeight || 400,
@@ -413,6 +416,9 @@ Item {
             videoLoop: modelData.videoLoop !== false
             videoFit: (modelData.videoFit === "cover" || modelData.videoFit === "fill") ? modelData.videoFit : "fit"
             videoTime: (modelData.videoTime !== undefined && Number(modelData.videoTime) >= 0) ? Number(modelData.videoTime) : -1
+            videoZoom: Math.min(8, Math.max(1, Number(modelData.videoZoom) || 1))
+            videoZoomX: Math.min(1, Math.max(0, Number(modelData.videoZoomX !== undefined ? modelData.videoZoomX : 0.5)))
+            videoZoomY: Math.min(1, Math.max(0, Number(modelData.videoZoomY !== undefined ? modelData.videoZoomY : 0.5)))
             previewTime: layerRoot.previewTime
             previewPlaying: layerRoot.previewPlaying
             textContent: modelData.textContent !== undefined ? modelData.textContent : ""

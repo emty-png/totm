@@ -306,6 +306,9 @@ QtObject {
             // Transient preview override, never authored: always clear so
             // seeks/wraps never leak a sampled frame into the base.
             n.videoTime = -1;
+            n.videoZoom = 1;
+            n.videoZoomX = 0.5;
+            n.videoZoomY = 0.5;
         }
     }
 }

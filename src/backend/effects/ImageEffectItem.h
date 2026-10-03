@@ -39,6 +39,9 @@ class ImageEffectItem : public QQuickPaintedItem {
     Q_PROPERTY(bool videoLoop READ videoLoop WRITE setVideoLoop NOTIFY shapeChanged)
     Q_PROPERTY(QString videoFit READ videoFit WRITE setVideoFit NOTIFY shapeChanged)
     Q_PROPERTY(double videoTime READ videoTime WRITE setVideoTime NOTIFY shapeChanged)
+    Q_PROPERTY(double videoZoom READ videoZoom WRITE setVideoZoom NOTIFY shapeChanged)
+    Q_PROPERTY(double videoZoomX READ videoZoomX WRITE setVideoZoomX NOTIFY shapeChanged)
+    Q_PROPERTY(double videoZoomY READ videoZoomY WRITE setVideoZoomY NOTIFY shapeChanged)
     Q_PROPERTY(QVariantList shadows READ shadows WRITE setShadows NOTIFY effectChanged)
     Q_PROPERTY(QVariantList glows READ glows WRITE setGlows NOTIFY effectChanged)
     Q_PROPERTY(QVariantMap layerBlur READ layerBlur WRITE setLayerBlur NOTIFY effectChanged)
@@ -75,6 +78,12 @@ public:
     void setVideoFit(const QString &v);
     double videoTime() const;
     void setVideoTime(double v);
+    double videoZoom() const;
+    void setVideoZoom(double v);
+    double videoZoomX() const;
+    void setVideoZoomX(double v);
+    double videoZoomY() const;
+    void setVideoZoomY(double v);
     QVariantList shadows() const;
     void setShadows(const QVariantList &v);
     QVariantList glows() const;
@@ -110,6 +119,9 @@ private:
     bool m_videoLoop = true;
     QString m_videoFit = QStringLiteral("fit");
     double m_videoTime = -1.0;
+    double m_videoZoom = 1.0;
+    double m_videoZoomX = 0.5;
+    double m_videoZoomY = 0.5;
     QVariantList m_shadows;
     QVariantList m_glows;
     QVariantMap m_layerBlur;

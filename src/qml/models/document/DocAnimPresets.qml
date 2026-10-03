@@ -79,7 +79,7 @@ QtObject {
     }
 
     function presetIds() {
-        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "maskWipe", "maskIris", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customStrokeGradient", "customFontSize", "customFontWeight", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customVideoTime", "customPath"];
+        return ["appear", "fade", "slide", "grow", "shrink", "spin", "twist", "movescale", "type", "maskWipe", "maskIris", "customScale", "customRotate", "customMove", "customOpacity", "customColor", "customGradient", "customHide", "customResize", "customCorner", "customStroke", "customStrokeColor", "customStrokeGradient", "customFontSize", "customFontWeight", "customFlip", "customShadow", "customLayerBlur", "customBackgroundBlur", "customGlow", "customGrain", "customVideoTime", "customVideoZoom", "customPath"];
     }
 
     // Stepped presets render as one diamond at t0 with a locked 0.1s
@@ -130,7 +130,7 @@ QtObject {
             return ["visibility"];
         if (presetId === "customFlip")
             return ["flip"];
-        if (presetId === "customVideoTime")
+        if (presetId === "customVideoTime" || presetId === "customVideoZoom")
             return ["video"];
         if (presetId === "customMove")
             return ["position"];
@@ -207,6 +207,7 @@ QtObject {
             "customGlow": qsTr("Glow"),
             "customGrain": qsTr("Grain"),
             "customVideoTime": qsTr("Video time"),
+            "customVideoZoom": qsTr("Video zoom"),
             "customPath": qsTr("Path")
         };
         return names[presetId] !== undefined ? names[presetId] : qsTr("Fade");
@@ -442,6 +443,12 @@ QtObject {
             from: 0,
             to: 2
         },
+        "customVideoZoom": {
+            from: 1,
+            to: 2,
+            focusX: 0.5,
+            focusY: 0.5
+        },
         "customPath": {
             pts: [],
             closed: false,
@@ -588,6 +595,7 @@ QtObject {
             "customGlow": presets._normalizeCustomGlow,
             "customGrain": presets._normalizeCustomGrain,
             "customVideoTime": presets._normalizeCustomVideoTime,
+            "customVideoZoom": presets._normalizeCustomVideoZoom,
             "customPath": presets._normalizeCustomPath
         };
         return table[presetId];
@@ -859,6 +867,11 @@ QtObject {
             // line at sample time so single-field edits never snap.
             put("v", v.v !== undefined ? clampNum(v.v, 0, 0, 3600) : undefined);
             if (o.v === undefined)
+                return null;
+        } else if (presetId === "customVideoZoom") {
+            // Absolute zoom factor; partial keys fall back to from-to.
+            put("s", v.s !== undefined ? clampNum(v.s, 1, 1, 8) : undefined);
+            if (o.s === undefined)
                 return null;
         } else {
             return null;
@@ -1155,6 +1168,16 @@ QtObject {
             to: clampNum(r.to !== undefined ? r.to : 2, 2, 0, 3600)
         };
         return _withKeys("customVideoTime", o, r);
+    }
+
+    function _normalizeCustomVideoZoom(r) {
+        var o = {
+            from: clampNum(r.from !== undefined ? r.from : 1, 1, 1, 8),
+            to: clampNum(r.to !== undefined ? r.to : 2, 2, 1, 8),
+            focusX: clampNum(r.focusX !== undefined ? r.focusX : 0.5, 0.5, 0, 1),
+            focusY: clampNum(r.focusY !== undefined ? r.focusY : 0.5, 0.5, 0, 1)
+        };
+        return _withKeys("customVideoZoom", o, r);
     }
 
     function normalizePathFollow(v) {

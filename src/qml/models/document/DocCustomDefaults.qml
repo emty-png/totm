@@ -15,6 +15,11 @@ QtObject {
                 return defaults._seedVideoTime(d, leaf);
             return presets.defaultsFor(presetId);
         }
+        if (presetId === "customVideoZoom") {
+            if (leaf && leaf.shapeType === "video")
+                return defaults._seedVideoZoom(leaf);
+            return presets.defaultsFor(presetId);
+        }
         var ei = Math.min(32, Math.max(0, Math.round(Number(entryIndex) || 0)));
         var seed = defaults._seedFor(presetId);
         if (seed && leaf)
@@ -62,6 +67,20 @@ QtObject {
         return {
             from: from,
             to: defaults._round2(Math.max(0, to))
+        };
+    }
+
+    // Content zoom starts at the live look (or 1x) and pushes to 2x
+    // at frame center, so the first frame never jumps.
+    function _seedVideoZoom(leaf) {
+        var cur = Math.min(8, Math.max(1, Number(leaf.videoZoom) || 1));
+        if (!(cur >= 1))
+            cur = 1;
+        return {
+            from: defaults._round2(cur),
+            to: defaults._round2(Math.min(8, Math.max(cur, 2))),
+            focusX: 0.5,
+            focusY: 0.5
         };
     }
 

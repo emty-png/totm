@@ -935,6 +935,20 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
                 ? qBound(0.0, vtRaw, vtDur - 0.04)
                 : qMax(0.0, vtRaw);
         }
+    } else if (preset == QLatin1String("customVideoZoom")) {
+        // Content zoom for video leaves (camera-style punch-in): scales
+        // the decoded frame inside the box, box/strokes untouched.
+        // Keys hold {s} absolute zoom, from-to lerps the factor (eased).
+        // Focal focusX/focusY rides 0..1 of the frame. Mirrors DocAnimSample.
+        if (shapeType == QLatin1String("video")) {
+            QVariantMap zKv;
+            const bool hasZKeys = genericKeysAt(o, p, zKv) && zKv.contains(QStringLiteral("s"));
+            const double zRaw = hasZKeys ? zKv.value(QStringLiteral("s")).toDouble()
+                : num(o, "from", 1.0) + (num(o, "to", 1.0) - num(o, "from", 1.0)) * e;
+            out[QStringLiteral("videoZoom")] = qBound(1.0, zRaw, 8.0);
+            out[QStringLiteral("videoZoomX")] = qBound(0.0, num(o, "focusX", 0.5), 1.0);
+            out[QStringLiteral("videoZoomY")] = qBound(0.0, num(o, "focusY", 0.5), 1.0);
+        }
     } else if (preset == QLatin1String("customColor")) {
         const int fIdx = entryIndexOf(o, "fillIndex");
         QVariantMap colKv;
@@ -2032,6 +2046,15 @@ QList<QVariantMap> sampleFrame(const QVariantMap &scene, double t) {
         // only); paintVideo prefers it over offset/rate/loop math.
         if (ov.contains(QStringLiteral("videoTime")) && shapeType == QLatin1String("video"))
             m[QStringLiteral("videoTime")] = qMax(0.0, ov.value(QStringLiteral("videoTime")).toDouble());
+        // Content zoom from Video zoom clips (video leaves only).
+        if (shapeType == QLatin1String("video")) {
+            if (ov.contains(QStringLiteral("videoZoom")))
+                m[QStringLiteral("videoZoom")] = qBound(1.0, ov.value(QStringLiteral("videoZoom")).toDouble(), 8.0);
+            if (ov.contains(QStringLiteral("videoZoomX")))
+                m[QStringLiteral("videoZoomX")] = qBound(0.0, ov.value(QStringLiteral("videoZoomX")).toDouble(), 1.0);
+            if (ov.contains(QStringLiteral("videoZoomY")))
+                m[QStringLiteral("videoZoomY")] = qBound(0.0, ov.value(QStringLiteral("videoZoomY")).toDouble(), 1.0);
+        }
         // Shadow/glow top-entry clips fold onto entry 0 like fill/stroke
         // legacy keys, preserving the rest of the stack. Multi-entry
         // arrays (legacy fallback) replace whole.

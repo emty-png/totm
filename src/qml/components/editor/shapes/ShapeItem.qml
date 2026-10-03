@@ -86,6 +86,11 @@ Item {
     // Transient footage-time override from Video time clips (-1 = off).
     // Written by the sampler during preview, reset on seeks/wraps.
     property real videoTime: -1
+    // Transient content zoom from Video zoom clips (1 = off).
+    // Same transient contract as videoTime.
+    property real videoZoom: 1
+    property real videoZoomX: 0.5
+    property real videoZoomY: 0.5
     // Composition clock for preview sync (from ShapeLayer): paused seeks
     // to the export frame, playing re-anchors past ~5 frames of drift.
     property real previewTime: 0
@@ -924,25 +929,45 @@ Item {
             }
         }
 
-        VideoOutput {
-            id: videoOut
+        // Zoom clip: content zoom overflows the box, so the frame is
+        // scaled inside this square clip (rounded corners still come
+        // from the mask below, matching export's clip-then-mask order).
+        // Clipping only kicks in past 1x so plain playback costs nothing.
+        Item {
+            id: videoZoomClip
             anchors.fill: parent
-            visible: videoRoot.hasFile && videoPlayer.hasVideo
-            fillMode: shape.videoFit === "cover" ? VideoOutput.PreserveAspectCrop : (shape.videoFit === "fill" ? VideoOutput.Stretch : VideoOutput.PreserveAspectFit)
-            // Rounded corners + layer blur mask in place (mirrors the
-            // image branch): a separate masked MultiEffect copy would
-            // double-draw the raw square frame underneath and leak
-            // square corners through the transparent mask.
-            layer.enabled: videoPlayer.hasVideo && (shape.radius > 0 || shape.hasLayerBlur)
-            layer.smooth: true
-            layer.effect: MultiEffect {
-                maskEnabled: shape.radius > 0
-                maskSource: videoMaskRect
-                maskThresholdMin: 0.5
-                maskSpreadAtMin: 1.0
-                blurEnabled: shape.hasLayerBlur
-                blurMax: 64
-                blur: shape.hasLayerBlur ? Math.min(1, Math.max(0, Number((shape.layerBlur ?? {}).radius || 0) / 64)) : 0
+            clip: videoZoomClip.zoom > 1.001
+
+            readonly property real zoom: Math.min(8, Math.max(1, Number(shape.videoZoom) || 1))
+            readonly property real focalX: Math.min(1, Math.max(0, Number(shape.videoZoomX !== undefined ? shape.videoZoomX : 0.5)))
+            readonly property real focalY: Math.min(1, Math.max(0, Number(shape.videoZoomY !== undefined ? shape.videoZoomY : 0.5)))
+
+            VideoOutput {
+                id: videoOut
+                anchors.fill: parent
+                visible: videoRoot.hasFile && videoPlayer.hasVideo
+                fillMode: shape.videoFit === "cover" ? VideoOutput.PreserveAspectCrop : (shape.videoFit === "fill" ? VideoOutput.Stretch : VideoOutput.PreserveAspectFit)
+                // Rounded corners + layer blur mask in place (mirrors the
+                // image branch): a separate masked MultiEffect copy would
+                // double-draw the raw square frame underneath and leak
+                // square corners through the transparent mask.
+                layer.enabled: videoPlayer.hasVideo && (shape.radius > 0 || shape.hasLayerBlur)
+                layer.smooth: true
+                layer.effect: MultiEffect {
+                    maskEnabled: shape.radius > 0
+                    maskSource: videoMaskRect
+                    maskThresholdMin: 0.5
+                    maskSpreadAtMin: 1.0
+                    blurEnabled: shape.hasLayerBlur
+                    blurMax: 64
+                    blur: shape.hasLayerBlur ? Math.min(1, Math.max(0, Number((shape.layerBlur ?? {}).radius || 0) / 64)) : 0
+                }
+                transform: Scale {
+                    origin.x: videoOut.width * videoZoomClip.focalX
+                    origin.y: videoOut.height * videoZoomClip.focalY
+                    xScale: videoZoomClip.zoom
+                    yScale: videoZoomClip.zoom
+                }
             }
         }
 
@@ -1054,6 +1079,9 @@ Item {
         videoLoop: shape.videoLoop !== false
         videoFit: (shape.videoFit === "cover" || shape.videoFit === "fill") ? shape.videoFit : "fit"
         videoTime: (shape.videoTime !== undefined && Number(shape.videoTime) >= 0) ? Number(shape.videoTime) : -1
+        videoZoom: Math.min(8, Math.max(1, Number(shape.videoZoom) || 1))
+        videoZoomX: Math.min(1, Math.max(0, Number(shape.videoZoomX !== undefined ? shape.videoZoomX : 0.5)))
+        videoZoomY: Math.min(1, Math.max(0, Number(shape.videoZoomY !== undefined ? shape.videoZoomY : 0.5)))
         shadows: shape.shadows ?? []
         glows: shape.glows ?? []
         layerBlur: shape.layerBlur ?? ({

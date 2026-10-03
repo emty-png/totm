@@ -390,7 +390,7 @@ ScrollView {
         // dead ends on them: hide those rows when every target is video
         // rather than minting no-op clips. Mixed selections keep them.
         if (gallery.allVideoTargets())
-            return gallery.filterVideoRows(all);
+            return [gallery.videoSection()].concat(gallery.filterVideoRows(all));
         if (gallery.anyVideoTargets())
             return [gallery.videoSection()].concat(all);
         return all;
@@ -427,6 +427,18 @@ ScrollView {
                     variant: "boomerang",
                     name: qsTr("Boomerang"),
                     icon: "redo"
+                },
+                {
+                    id: "customVideoZoom",
+                    variant: "in",
+                    name: qsTr("Zoom in"),
+                    icon: "plus"
+                },
+                {
+                    id: "customVideoZoom",
+                    variant: "out",
+                    name: qsTr("Zoom out"),
+                    icon: "minimize"
                 },
                 {
                     id: "kenburns",
@@ -532,6 +544,10 @@ ScrollView {
             gallery.applyVideoTime(variant);
             return;
         }
+        if (pid === "customVideoZoom" && variant) {
+            gallery.applyVideoZoom(variant);
+            return;
+        }
         gallery.applyCustom(pid);
     }
 
@@ -627,6 +643,45 @@ ScrollView {
         for (var i = 0; i < tops.length; i++)
             uids.push(tops[i].uid);
         var made = d.applyPreset("customVideoTime", uids, t0, clipDur, "in", options, null, gallery.stagger);
+        if (made.length > 0) {
+            d.anim.currentTime = t0;
+            d.anim.play();
+        }
+    }
+
+    // Video zoom template: content punch-in/out on the frame (box stays).
+    // Seeded from the live zoom so the first frame never jumps.
+    function applyVideoZoom(variant) {
+        var d = gallery.doc;
+        if (!d)
+            return;
+        var tops = d.selectedTops();
+        if (tops.length === 0)
+            return;
+        var leaf = gallery.firstVideoLeaf();
+        if (!leaf)
+            return;
+        var t0 = d.anim.currentTime;
+        var cur = Math.min(8, Math.max(1, Number(leaf.videoZoom) || 1));
+        var options = null;
+        if (variant === "out")
+            options = {
+                from: gallery.round2(Math.max(1, cur)),
+                to: 1,
+                focusX: 0.5,
+                focusY: 0.5
+            };
+        else
+            options = {
+                from: gallery.round2(cur),
+                to: gallery.round2(Math.min(8, Math.max(cur, cur > 1 ? cur * 1.5 : 2))),
+                focusX: 0.5,
+                focusY: 0.5
+            };
+        var uids = [];
+        for (var i = 0; i < tops.length; i++)
+            uids.push(tops[i].uid);
+        var made = d.applyPreset("customVideoZoom", uids, t0, 1.6, "in", options, null, gallery.stagger);
         if (made.length > 0) {
             d.anim.currentTime = t0;
             d.anim.play();

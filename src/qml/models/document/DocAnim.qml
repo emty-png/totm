@@ -817,6 +817,13 @@ QtObject {
                 v: Math.min(3600, Math.max(0, anim.round2(vt)))
             };
         }
+        if (preset === "customVideoZoom") {
+            if (!leaf || leaf.shapeType !== "video")
+                return null;
+            return {
+                s: Math.min(8, Math.max(1, anim.round2(Number(leaf.videoZoom) || 1)))
+            };
+        }
         return null;
     }
 

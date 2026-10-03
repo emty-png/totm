@@ -596,6 +596,18 @@ QtObject {
                 var vtDur = Math.max(0, Number(base.videoDuration) || 0);
                 out.videoTime = vtDur > 0.05 ? Math.min(vtDur - 0.04, Math.max(0, vtRaw)) : Math.max(0, vtRaw);
             }
+        } else if (preset === "customVideoZoom") {
+            // Content zoom for video leaves (camera-style punch-in):
+            // scales the frame inside the box, box/strokes untouched.
+            // Keys hold {s} absolute zoom, from-to lerps the factor.
+            // Focal focusX/focusY rides 0..1 of the frame.
+            if (base.shapeType === "video") {
+                var zKeys = genericKeysAt(o, p);
+                var zRaw = zKeys && (zKeys.value || {}).s !== undefined ? Number(zKeys.value.s) : lerp(Number(o.from !== undefined ? o.from : 1) || 0, Number(o.to !== undefined ? o.to : 1) || 0, e);
+                out.videoZoom = Math.min(8, Math.max(1, zRaw || 1));
+                out.videoZoomX = Math.min(1, Math.max(0, Number(o.focusX !== undefined ? o.focusX : 0.5)));
+                out.videoZoomY = Math.min(1, Math.max(0, Number(o.focusY !== undefined ? o.focusY : 0.5)));
+            }
         } else if (preset === "customColor") {
             var fIdx = entryIndexOf(o, "fillIndex");
             var colKeys = genericKeysAt(o, p);
@@ -1387,6 +1399,14 @@ QtObject {
             // restoreBaseValues resets it, snapshots never persist it).
             if (ov.videoTime !== undefined && n.shapeType === "video")
                 n.videoTime = Math.max(0, Number(ov.videoTime) || 0);
+            // Content zoom from Video zoom clips (same transient contract).
+            if (ov.videoZoom !== undefined && n.shapeType === "video") {
+                n.videoZoom = Math.min(8, Math.max(1, Number(ov.videoZoom) || 1));
+                if (ov.videoZoomX !== undefined)
+                    n.videoZoomX = Math.min(1, Math.max(0, Number(ov.videoZoomX)));
+                if (ov.videoZoomY !== undefined)
+                    n.videoZoomY = Math.min(1, Math.max(0, Number(ov.videoZoomY)));
+            }
             if (ov.fontSize !== undefined && n.shapeType === "text")
                 n.fontSize = ov.fontSize;
             if (ov.fontWeight !== undefined && n.shapeType === "text")

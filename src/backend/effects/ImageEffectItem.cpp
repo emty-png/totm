@@ -45,6 +45,9 @@ void ImageEffectItem::paint(QPainter *painter)
     leaf[QStringLiteral("videoFit")] = (m_videoFit == QStringLiteral("cover") || m_videoFit == QStringLiteral("fill")) ? m_videoFit : QStringLiteral("fit");
     if (m_videoTime >= 0.0)
         leaf[QStringLiteral("videoTime")] = qMax(0.0, m_videoTime);
+    leaf[QStringLiteral("videoZoom")] = qBound(1.0, m_videoZoom, 8.0);
+    leaf[QStringLiteral("videoZoomX")] = qBound(0.0, m_videoZoomX, 1.0);
+    leaf[QStringLiteral("videoZoomY")] = qBound(0.0, m_videoZoomY, 1.0);
     leaf[QStringLiteral("shadows")] = m_shadows;
     leaf[QStringLiteral("glows")] = m_glows;
     leaf[QStringLiteral("layerBlur")] = m_layerBlur;
@@ -244,6 +247,51 @@ void ImageEffectItem::setVideoTime(double v)
     if (qFuzzyCompare(m_videoTime + 1.0, nv + 1.0))
         return;
     m_videoTime = nv;
+    emit shapeChanged();
+    update();
+}
+
+double ImageEffectItem::videoZoom() const
+{
+    return m_videoZoom;
+}
+
+void ImageEffectItem::setVideoZoom(double v)
+{
+    const double nv = qBound(1.0, v, 8.0);
+    if (qFuzzyCompare(m_videoZoom, nv))
+        return;
+    m_videoZoom = nv;
+    emit shapeChanged();
+    update();
+}
+
+double ImageEffectItem::videoZoomX() const
+{
+    return m_videoZoomX;
+}
+
+void ImageEffectItem::setVideoZoomX(double v)
+{
+    const double nv = qBound(0.0, v, 1.0);
+    if (qFuzzyCompare(m_videoZoomX, nv))
+        return;
+    m_videoZoomX = nv;
+    emit shapeChanged();
+    update();
+}
+
+double ImageEffectItem::videoZoomY() const
+{
+    return m_videoZoomY;
+}
+
+void ImageEffectItem::setVideoZoomY(double v)
+{
+    const double nv = qBound(0.0, v, 1.0);
+    if (qFuzzyCompare(m_videoZoomY, nv))
+        return;
+    m_videoZoomY = nv;
     emit shapeChanged();
     update();
 }

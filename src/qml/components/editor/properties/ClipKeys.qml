@@ -118,6 +118,8 @@ ColumnLayout {
         }
         if (preset === "grow" || preset === "shrink" || preset === "customScale")
             return qsTr("× %1").arg(section.round2(v.s));
+        if (preset === "customVideoZoom")
+            return qsTr("× %1").arg(section.round2(v.s));
         if (preset === "spin" || preset === "customRotate")
             return qsTr("%1°").arg(section.round2(v.r));
         if (preset === "movescale") {

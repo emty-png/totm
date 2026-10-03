@@ -570,20 +570,40 @@ void paintVideo(QPainter &pt, const QVariantMap &m, double x, double y, double w
     }
     pt.save();
     pt.setClipPath(clip, Qt::IntersectClip);
-    if (fit == QStringLiteral("fit") && img.width() > 0 && img.height() > 0 && w > 0 && h > 0) {
-        const double scale = qMin(w / double(img.width()), h / double(img.height()));
-        const double dw = img.width() * scale;
-        const double dh = img.height() * scale;
-        pt.drawImage(QRectF(x + (w - dw) / 2.0, y + (h - dh) / 2.0, dw, dh), img);
-    } else if (fit == QStringLiteral("cover") && img.width() > 0 && img.height() > 0 && w > 0 && h > 0) {
-        const double scale = qMax(w / double(img.width()), h / double(img.height()));
+    // Content zoom (customVideoZoom clips): crop the decoded frame around
+    // the focal point before fit/cover mapping. zoom 1 = full frame.
+    // Focal rides 0..1 of the frame; the crop clamps inside the raster.
+    QImage srcImg = img;
+    {
+        const double zoom = qBound(1.0, m.value(QStringLiteral("videoZoom"), 1.0).toDouble(), 8.0);
+        if (zoom > 1.001 && img.width() > 0 && img.height() > 0) {
+            const double fx = qBound(0.0, m.value(QStringLiteral("videoZoomX"), 0.5).toDouble(), 1.0);
+            const double fy = qBound(0.0, m.value(QStringLiteral("videoZoomY"), 0.5).toDouble(), 1.0);
+            const double cw = qMax(1.0, img.width() / zoom);
+            const double ch = qMax(1.0, img.height() / zoom);
+            const double cx = fx * img.width();
+            const double cy = fy * img.height();
+            const double sx = qBound(0.0, cx - cw / 2.0, img.width() - cw);
+            const double sy = qBound(0.0, cy - ch / 2.0, img.height() - ch);
+            srcImg = img.copy(qRound(sx), qRound(sy), qRound(cw), qRound(ch));
+            if (srcImg.isNull())
+                srcImg = img;
+        }
+    }
+    if (fit == QStringLiteral("fit") && srcImg.width() > 0 && srcImg.height() > 0 && w > 0 && h > 0) {
+        const double scale = qMin(w / double(srcImg.width()), h / double(srcImg.height()));
+        const double dw = srcImg.width() * scale;
+        const double dh = srcImg.height() * scale;
+        pt.drawImage(QRectF(x + (w - dw) / 2.0, y + (h - dh) / 2.0, dw, dh), srcImg);
+    } else if (fit == QStringLiteral("cover") && srcImg.width() > 0 && srcImg.height() > 0 && w > 0 && h > 0) {
+        const double scale = qMax(w / double(srcImg.width()), h / double(srcImg.height()));
         const double sw = w / scale;
         const double sh = h / scale;
-        const double sx = (img.width() - sw) / 2.0;
-        const double sy = (img.height() - sh) / 2.0;
-        pt.drawImage(QRectF(x, y, w, h), img, QRectF(sx, sy, sw, sh));
+        const double sx = (srcImg.width() - sw) / 2.0;
+        const double sy = (srcImg.height() - sh) / 2.0;
+        pt.drawImage(QRectF(x, y, w, h), srcImg, QRectF(sx, sy, sw, sh));
     } else {
-        pt.drawImage(QRectF(x, y, w, h), img);
+        pt.drawImage(QRectF(x, y, w, h), srcImg);
     }
     pt.restore();
     paintInnerRasterEffects(pt, clip, w, h, r, shadows, glows, s, cache);

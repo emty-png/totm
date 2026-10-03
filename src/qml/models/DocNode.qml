@@ -137,6 +137,12 @@ QtObject {
     // offset/rate/loop math applies). Never snapshotted: snapshotNode
     // whitelists persisted fields, and restoreBaseValues resets it.
     property real videoTime: -1
+    // Transient content-zoom override, written by customVideoZoom clips
+    // during preview (1 = off). Focal rides 0..1 of the frame. Same
+    // transient contract as videoTime: never snapshotted, always reset.
+    property real videoZoom: 1
+    property real videoZoomX: 0.5
+    property real videoZoomY: 0.5
     // Mask role (layer masks): when true on a shape inside a
     // group, it clips siblings above it in the same group and never
     // paints itself. maskFeather softens the edge (content px),
