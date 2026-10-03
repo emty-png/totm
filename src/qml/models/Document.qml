@@ -93,6 +93,9 @@ QtObject {
     property var propCopy: DocPropCopy {
         doc: root
     }
+    property var assets: DocAssets {
+        doc: root
+    }
 
     readonly property bool canUndo: root.history.canUndo
     readonly property bool canRedo: root.history.canRedo
@@ -496,6 +499,16 @@ QtObject {
     }
     function snapshotScene() {
         return clipboard.snapshotScene();
+    }
+    function assetPayload(includeAnims) {
+        return assets.assetPayload(includeAnims);
+    }
+    function suggestedAssetName() {
+        return assets.suggestedName();
+    }
+    function insertAsset(payload, atX, atY) {
+        history.checkpoint();
+        return assets.insertAsset(payload, atX, atY);
     }
     function restoreScene(scene) {
         // Fresh loads clear history; undo/redo restores bypass this

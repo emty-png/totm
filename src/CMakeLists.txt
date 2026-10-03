@@ -114,6 +114,7 @@ qt_add_qml_module(totm
         qml/models/document/DocPathSample.qml
         qml/models/document/DocAnim.qml
         qml/models/document/DocPropCopy.qml
+        qml/models/document/DocAssets.qml
         qml/models/document/DocAudio.qml
         # Canvas + snapping
         qml/components/editor/snap/SnapEngine.qml
@@ -125,6 +126,7 @@ qt_add_qml_module(totm
         qml/components/editor/canvas/ShapeDrawTool.qml
         qml/components/editor/canvas/ImageTool.qml
         qml/components/editor/canvas/VideoTool.qml
+        qml/components/editor/canvas/AssetTool.qml
         qml/components/editor/canvas/TextEditor.qml
         qml/components/editor/canvas/CanvasCamera.qml
         qml/components/editor/canvas/CanvasGuides.qml
@@ -263,6 +265,7 @@ qt_add_qml_module(totm
         # Toolbar
         qml/components/toolbar/CanvasToolbar.qml
         qml/components/toolbar/ToolbarButton.qml
+        qml/components/toolbar/AssetGallery.qml
         # Export (video render)
         qml/components/editor/export/ExportButton.qml
         qml/components/editor/export/ExportQualityPopup.qml

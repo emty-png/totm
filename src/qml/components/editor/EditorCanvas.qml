@@ -36,6 +36,8 @@ Item {
             canvas.imageTool.clearPending();
         if (canvas.videoTool)
             canvas.videoTool.clearPending();
+        if (canvas.assetTool)
+            canvas.assetTool.clearPending();
         canvas.resizePending = null;
         canvas.resizeState = null;
         canvas.showDocument(canvas.doc);
@@ -145,6 +147,10 @@ Item {
         canvas: canvas
         snap: snapEngine
     }
+    property var assetTool: AssetTool {
+        canvas: canvas
+        snap: snapEngine
+    }
 
     // Direct on-canvas path editing (select tool): when a custom Path
     // clip is last-selected, its trajectory loads into pathTool and
@@ -179,7 +185,7 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
-        enabled: ToolState.activeTool !== "shapes" && ToolState.activeTool !== "pen" && ToolState.activeTool !== "path" && ToolState.activeTool !== "image" && ToolState.activeTool !== "video"
+        enabled: ToolState.activeTool !== "shapes" && ToolState.activeTool !== "pen" && ToolState.activeTool !== "path" && ToolState.activeTool !== "image" && ToolState.activeTool !== "video" && ToolState.activeTool !== "asset"
 
         onPressed: event => {
             canvas.commitTextEdit();
@@ -317,6 +323,24 @@ Item {
         }
         onReleased: {
             canvas.videoTool.releaseAt();
+        }
+    }
+
+    // Asset placement: gallery arms a pending asset id, click stamps
+    // the detached copy centered on the cursor.
+    MouseArea {
+        id: assetMouse
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        hoverEnabled: true
+        cursorShape: Qt.CrossCursor
+        enabled: ToolState.activeTool === "asset" && canvas.doc !== null && canvas.assetTool.hasPending()
+
+        onPressed: event => {
+            canvas.assetTool.pressAt(event.x, event.y, event.modifiers);
+        }
+        onReleased: {
+            canvas.assetTool.releaseAt();
         }
     }
 
@@ -688,6 +712,30 @@ Item {
         }
     }
 
+    // Asset placement hint, top-centered while an asset is pending.
+    Rectangle {
+        visible: ToolState.activeTool === "asset" && canvas.assetTool.hasPending()
+        anchors {
+            horizontalCenter: parent.horizontalCenter
+            top: parent.top
+            topMargin: 12
+        }
+        width: assetHintText.implicitWidth + 24
+        height: 32
+        radius: AppTheme.radiusLarge
+        color: AppTheme.surface
+        border.width: 1
+        border.color: AppTheme.border
+
+        Text {
+            id: assetHintText
+            anchors.centerIn: parent
+            text: qsTr("Click to place asset")
+            font.pixelSize: 12
+            color: AppTheme.foreground
+        }
+    }
+
     // Video picker (picker-then-place like images). Links by absolute
     // path so .totm stays small; accept arms a pending placement,
     // cancel without pending falls back to select.
@@ -716,6 +764,8 @@ Item {
                 canvas.imageTool.clearPending();
             if (ToolState.activeTool !== "video" && canvas.videoTool)
                 canvas.videoTool.clearPending();
+            if (ToolState.activeTool !== "asset" && canvas.assetTool)
+                canvas.assetTool.clearPending();
             if (ToolState.activeTool === "image" && canvas.doc && !canvas.imageTool.hasPending())
                 imagePicker.open();
             if (ToolState.activeTool === "video" && canvas.doc && !canvas.videoTool.hasPending())
@@ -764,6 +814,9 @@ Item {
                 event.accepted = true;
             } else if (ToolState.activeTool === "video") {
                 canvas.cancelVideoTool();
+                event.accepted = true;
+            } else if (ToolState.activeTool === "asset") {
+                canvas.cancelAssetTool();
                 event.accepted = true;
             } else if (ToolState.activeTool === "path") {
                 canvas.cancelPathDraw();
@@ -1280,6 +1333,11 @@ Item {
             canvas.videoTool.clearPending();
         ToolState.setActiveTool("select");
     }
+    function cancelAssetTool() {
+        if (canvas.assetTool)
+            canvas.assetTool.clearPending();
+        ToolState.setActiveTool("select");
+    }
     // Video picker accept: copy into videos/ (stored blob name), probe
     // the container (duration, natural size, audio presence in one fast
     // call) and arm click/drag placement at natural size. Unprobed files
@@ -1539,6 +1597,7 @@ Item {
     CanvasToolbar {
         id: toolbar
         doc: canvas.doc
+        canvas: canvas
         anchors {
             horizontalCenter: parent.horizontalCenter
             bottom: parent.bottom

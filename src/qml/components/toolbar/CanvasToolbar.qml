@@ -9,18 +9,20 @@ Rectangle {
     id: toolbar
 
     property var doc: null
+    property var canvas: null
     property var pluginTools: []
 
     function refreshPlugins() {
         toolbar.pluginTools = PluginStore.toolbarTools();
     }
 
-    // Whether the shapes menu is open (used by the canvas outside-click
+    // Whether any menu is open (used by the canvas outside-click
     // catcher below the toolbar).
-    readonly property alias menuOpen: shapesMenu.opened
+    readonly property bool menuOpen: shapesMenu.opened || assetMenu.opened
 
     function closeMenu() {
         shapesMenu.close();
+        assetMenu.close();
     }
 
     // Map the active shape subtype to its toolbar icon.
@@ -48,6 +50,64 @@ Rectangle {
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+    }
+
+    // Assets gallery popup: same width as the toolbar, directly above
+    // it. Parented to the toolbar (not the row) so the geometry is
+    // exact regardless of button position.
+    Popup {
+        id: assetMenu
+        x: 0
+        y: -(implicitHeight + 10)
+        width: toolbar.width
+        implicitHeight: 344
+        padding: 6
+        closePolicy: Popup.CloseOnEscape
+        transformOrigin: Item.Bottom
+
+        enter: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: 120
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                property: "scale"
+                from: 0.97
+                to: 1
+                duration: 120
+                easing.type: Easing.OutCubic
+            }
+        }
+        exit: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 1
+                to: 0
+                duration: 100
+                easing.type: Easing.InCubic
+            }
+        }
+
+        background: Rectangle {
+            radius: AppTheme.radiusLarge
+            color: AppTheme.surface
+            border.width: 1
+            border.color: AppTheme.border
+        }
+
+        contentItem: AssetGallery {
+            doc: toolbar.doc
+            onAssetPicked: assetId => {
+                assetMenu.close();
+                if (toolbar.canvas && toolbar.canvas.assetTool && assetId !== "") {
+                    toolbar.canvas.assetTool.setPending(assetId);
+                    ToolState.setActiveTool("asset");
+                }
+            }
+        }
     }
 
     RowLayout {
@@ -260,6 +320,19 @@ Rectangle {
             iconKind: "film"
             active: ToolState.activeTool === "video"
             onClicked: ToolState.setActiveTool("video")
+        }
+
+        // Assets gallery: saved components. Picking a tile arms the
+        // pending asset tool; the next canvas click stamps the copy.
+        ToolbarButton {
+            iconKind: "apps"
+            active: ToolState.activeTool === "asset"
+            onClicked: {
+                if (assetMenu.opened)
+                    assetMenu.close();
+                else
+                    assetMenu.open();
+            }
         }
 
         // Plugin tools (ui.slots). Each entry loads one plugin QML file

@@ -59,7 +59,7 @@ Item {
     // 2px spacing each, matching MenuItem + the column below.
     // Order mirrors the rows: Undo, Redo, Copy, Duplicate, Paste,
     // Group, Ungroup, Use as Mask, Release Mask, Combine, Release
-    // Boolean, Arrange, Rename, Delete.
+    // Boolean, Arrange, Turn into Asset, Rename, Delete.
     function visibleRowCount() {
         var n = 0;
         if (menu.canUndo)
@@ -81,6 +81,8 @@ Item {
         if (menu.canCombine)
             n++;
         if (menu.canReleaseBoolean)
+            n++;
+        if (menu.hasSelection)
             n++;
         if (menu.hasSelection)
             n++;
@@ -441,6 +443,17 @@ Item {
                             }
                         }
                     }
+                }
+            }
+            MenuItem {
+                label: qsTr("Turn into Asset")
+                visible: menu.hasSelection
+                enabled: menu.hasSelection
+                onClicked: {
+                    var payload = menu.doc.assetPayload(true);
+                    if (payload)
+                        LibraryStore.createAsset(menu.doc.suggestedAssetName(), payload);
+                    menu.closeAll();
                 }
             }
             MenuItem {

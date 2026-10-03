@@ -68,6 +68,16 @@ QVariantMap entryToScene(const QVariantMap &scene) {
     out[QStringLiteral("audio")] = scene.value(QStringLiteral("audio"), QVariantMap());
     return out;
 }
+
+QVariantMap entryToAsset(const QVariantMap &payload) {
+    // Contract: assets carry detached node snapshots plus optional anim
+    // clips targeting those nodes. Extra keys are dropped.
+    QVariantMap out;
+    out[QStringLiteral("version")] = kSchemaVersion;
+    out[QStringLiteral("nodes")] = payload.value(QStringLiteral("nodes"), QVariantList());
+    out[QStringLiteral("clips")] = payload.value(QStringLiteral("clips"), QVariantList());
+    return out;
+}
 } // namespace
 
 LibraryStore *LibraryStore::create(QQmlEngine *engine, QJSEngine *scriptEngine) {
@@ -89,6 +99,10 @@ QVariantList LibraryStore::workspaceList() const {
 
 QVariantList LibraryStore::designList() const {
     return m_designList;
+}
+
+QVariantList LibraryStore::assetList() const {
+    return m_assetList;
 }
 
 QString LibraryStore::defaultWorkspaceId() const {
@@ -495,6 +509,8 @@ QSet<QString> LibraryStore::referencedImages() const {
     QList<QVariantList> stack;
     for (const DesignEntry &entry : m_designEntries)
         stack.append(entry.scene.value(QStringLiteral("nodes")).toList());
+    for (const AssetEntry &entry : m_assetEntries)
+        stack.append(entry.payload.value(QStringLiteral("nodes")).toList());
     while (!stack.isEmpty()) {
         const QVariantList nodes = stack.takeLast();
         for (const QVariant &v : nodes) {
@@ -1148,6 +1164,85 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
     return entry.id;
 }
 
+QString LibraryStore::createAsset(const QString &name, const QVariantMap &payload) {
+    const QVariantList nodes = payload.value(QStringLiteral("nodes")).toList();
+    if (nodes.isEmpty())
+        return {};
+    AssetEntry entry;
+    entry.id = newId();
+    entry.name = trimmedName(name, tr("Untitled asset"));
+    entry.createdAt = nowIso();
+    entry.updatedAt = entry.createdAt;
+    entry.payload = entryToAsset(payload);
+    m_assetEntries.prepend(entry);
+    if (!writeAssetFile(entry.id, entry.payload) || !persist()) {
+        m_assetEntries.removeAt(findAsset(entry.id));
+        return {};
+    }
+    rebuild();
+    clearError();
+    return entry.id;
+}
+
+bool LibraryStore::renameAsset(const QString &id, const QString &name) {
+    const int at = findAsset(id);
+    if (at < 0)
+        return false;
+    const QString next = trimmedName(name, m_assetEntries.at(at).name);
+    if (next == m_assetEntries.at(at).name)
+        return true;
+    m_assetEntries[at].name = next;
+    m_assetEntries[at].updatedAt = nowIso();
+    if (!persist())
+        return false;
+    rebuild();
+    return true;
+}
+
+bool LibraryStore::deleteAsset(const QString &id) {
+    const int at = findAsset(id);
+    if (at < 0)
+        return false;
+    m_assetEntries.removeAt(at);
+    QFile::remove(assetsDir() + QStringLiteral("/") + id + QStringLiteral(".json"));
+    // Drop cached asset thumbnails (stale stamps sweep on render).
+    QString thumbs = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (thumbs.isEmpty())
+        thumbs = QDir::homePath() + QStringLiteral("/.totm");
+    if (!thumbs.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
+        thumbs += QStringLiteral("/totm");
+    thumbs += QStringLiteral("/thumbs");
+    QString safe;
+    const QString stem = QStringLiteral("asset-") + id;
+    safe.reserve(stem.size());
+    for (QChar c : stem) {
+        const uint u = c.unicode();
+        if ((u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || c == u'-' || c == u'_')
+            safe.append(c);
+        else
+            safe.append(u'_');
+    }
+    for (const QString &f : QDir(thumbs).entryList(QDir::Files)) {
+        if (f.startsWith(safe + QStringLiteral("_")) && f.endsWith(QStringLiteral(".png")))
+            QFile::remove(thumbs + QStringLiteral("/") + f);
+    }
+    if (!persist())
+        return false;
+    rebuild();
+    return true;
+}
+
+QVariantMap LibraryStore::loadAsset(const QString &id) const {
+    const int at = findAsset(id);
+    if (at < 0)
+        return {};
+    return m_assetEntries.at(at).payload;
+}
+
+bool LibraryStore::hasAsset(const QString &id) const {
+    return findAsset(id) >= 0;
+}
+
 QSet<QString> LibraryStore::referencedAudio() const {
     QSet<QString> out;
     for (const DesignEntry &entry : m_designEntries) {
@@ -1187,6 +1282,8 @@ QSet<QString> LibraryStore::referencedVideos() const {
                 out.insert(src);
         }
     }
+    for (const AssetEntry &entry : m_assetEntries)
+        stack.append(entry.payload.value(QStringLiteral("nodes")).toList());
     while (!stack.isEmpty()) {
         const QVariantList nodes = stack.takeLast();
         for (const QVariant &v : nodes) {
@@ -1265,6 +1362,7 @@ void LibraryStore::load() {
         }
         m_workspaceEntries.clear();
         m_designEntries.clear();
+        m_assetEntries.clear();
         installFreshDefault();
         sweepOrphanImages();
         sweepOrphanAudio();
@@ -1299,7 +1397,25 @@ void LibraryStore::load() {
             entry.scene = readDesignFile(entry.id);
             m_designEntries.append(entry);
         }
+        m_assetEntries.clear();
+        // Assets are optional: libraries written before assets existed
+        // carry no key and load as empty without migration.
+        if (root.value(QStringLiteral("assets")).isArray()) {
+            for (const QJsonValue &value : root.value(QStringLiteral("assets")).toArray()) {
+                const QJsonObject item = value.toObject();
+                AssetEntry entry;
+                entry.id = item.value(QStringLiteral("id")).toString();
+                entry.name = item.value(QStringLiteral("name")).toString();
+                entry.createdAt = item.value(QStringLiteral("createdAt")).toString();
+                entry.updatedAt = item.value(QStringLiteral("updatedAt")).toString();
+                if (entry.id.isEmpty())
+                    continue;
+                entry.payload = readAssetFile(entry.id);
+                m_assetEntries.append(entry);
+            }
+        }
         sweepOrphanDesignFiles();
+        sweepOrphanAssetFiles();
     }
 
     // Invariants restored on every load: exactly one Default workspace
@@ -1368,10 +1484,21 @@ bool LibraryStore::persist() {
             {QStringLiteral("starred"), entry.starred},
         });
     }
+    QJsonArray assets;
+    // Metadata only: payloads live in assets/<id>.json.
+    for (const AssetEntry &entry : m_assetEntries) {
+        assets.append(QJsonObject{
+            {QStringLiteral("id"), entry.id},
+            {QStringLiteral("name"), entry.name},
+            {QStringLiteral("createdAt"), entry.createdAt},
+            {QStringLiteral("updatedAt"), entry.updatedAt},
+        });
+    }
     const QJsonDocument doc(QJsonObject{
         {QStringLiteral("version"), kSchemaVersion},
         {QStringLiteral("workspaces"), workspaces},
         {QStringLiteral("designs"), designs},
+        {QStringLiteral("assets"), assets},
     });
     QSaveFile file(libraryPath());
     if (!file.open(QIODevice::WriteOnly)) {
@@ -1415,8 +1542,19 @@ void LibraryStore::rebuild() {    QHash<QString, int> counts;
             {QStringLiteral("scene"), entry.scene},
         });
     }
+    QVariantList assets;
+    for (const AssetEntry &entry : m_assetEntries) {
+        assets.append(QVariantMap{
+            {QStringLiteral("assetId"), entry.id},
+            {QStringLiteral("name"), entry.name},
+            {QStringLiteral("createdAt"), entry.createdAt},
+            {QStringLiteral("updatedAt"), entry.updatedAt},
+            {QStringLiteral("payload"), entry.payload},
+        });
+    }
     m_workspaceList = workspaces;
     m_designList = designs;
+    m_assetList = assets;
     emit libraryChanged();
 }
 
@@ -1455,6 +1593,122 @@ int LibraryStore::findDesign(const QString &id) const {
             return i;
     }
     return -1;
+}
+
+int LibraryStore::findAsset(const QString &id) const {
+    for (int i = 0; i < m_assetEntries.size(); ++i) {
+        if (m_assetEntries.at(i).id == id)
+            return i;
+    }
+    return -1;
+}
+
+QString LibraryStore::assetsDir() const {
+    return libraryDir() + QStringLiteral("/assets");
+}
+
+bool LibraryStore::writeAssetFile(const QString &id, const QVariantMap &payload) {
+    if (id.isEmpty() || id.contains(QLatin1Char('/')) || id.contains(QLatin1Char('\\'))
+        || id.contains(QStringLiteral("..")))
+        return false;
+    QDir().mkpath(assetsDir());
+    QSaveFile file(assetsDir() + QStringLiteral("/") + id + QStringLiteral(".json"));
+    if (!file.open(QIODevice::WriteOnly)) {
+        setLastError(tr("Could not save asset: %1").arg(file.errorString()));
+        return false;
+    }
+    const QJsonDocument doc(QJsonObject{
+        {QStringLiteral("version"), kSchemaVersion},
+        {QStringLiteral("payload"), QJsonObject::fromVariantMap(entryToAsset(payload))},
+    });
+    file.write(doc.toJson(QJsonDocument::Indented));
+    if (!file.commit()) {
+        setLastError(tr("Could not save asset: %1").arg(file.errorString()));
+        return false;
+    }
+    return true;
+}
+
+QVariantMap LibraryStore::readAssetFile(const QString &id) {
+    if (id.isEmpty() || id.contains(QLatin1Char('/')) || id.contains(QLatin1Char('\\'))
+        || id.contains(QStringLiteral("..")))
+        return entryToAsset({});
+    const QString path = assetsDir() + QStringLiteral("/") + id + QStringLiteral(".json");
+    QFile file(path);
+    if (!file.exists())
+        return entryToAsset({});
+    if (!file.open(QIODevice::ReadOnly)) {
+        setLastError(tr("Could not read asset; starting it fresh."));
+        return entryToAsset({});
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    const QJsonObject root = doc.object();
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()
+        || !root.value(QStringLiteral("payload")).isObject()) {
+        file.close();
+        const QString backup = assetsDir() + QStringLiteral("/") + id + QStringLiteral(".corrupt.")
+            + QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-hhmmss-zzz"))
+            + QStringLiteral(".json");
+        if (QFile::rename(path, backup))
+            setLastError(tr("An asset was corrupt; archived and started fresh."));
+        else
+            setLastError(tr("An asset was corrupt and could not be archived; started fresh."));
+        return entryToAsset({});
+    }
+    return entryToAsset(root.value(QStringLiteral("payload")).toObject().toVariantMap());
+}
+
+void LibraryStore::sweepOrphanAssetFiles() {
+    QHash<QString, bool> known;
+    for (const AssetEntry &entry : m_assetEntries)
+        known.insert(entry.id, true);
+    const QDir dir(assetsDir());
+    for (const QString &file : dir.entryList({QStringLiteral("*.json")}, QDir::Files)) {
+        if (file.contains(QStringLiteral(".corrupt.")))
+            continue;
+        const QString id = file.left(file.size() - 5);
+        if (!known.contains(id))
+            QFile::remove(dir.filePath(file));
+    }
+}
+
+QSet<QString> LibraryStore::referencedAssetImages() const {
+    QSet<QString> out;
+    QList<QVariantList> stack;
+    for (const AssetEntry &entry : m_assetEntries)
+        stack.append(entry.payload.value(QStringLiteral("nodes")).toList());
+    while (!stack.isEmpty()) {
+        const QVariantList nodes = stack.takeLast();
+        for (const QVariant &v : nodes) {
+            const QVariantMap n = v.toMap();
+            const QString src = n.value(QStringLiteral("imageSource")).toString();
+            if (!src.isEmpty())
+                out.insert(src);
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+                stack.append(n.value(QStringLiteral("children")).toList());
+        }
+    }
+    return out;
+}
+
+QSet<QString> LibraryStore::referencedAssetVideos() const {
+    QSet<QString> out;
+    QList<QVariantList> stack;
+    for (const AssetEntry &entry : m_assetEntries)
+        stack.append(entry.payload.value(QStringLiteral("nodes")).toList());
+    while (!stack.isEmpty()) {
+        const QVariantList nodes = stack.takeLast();
+        for (const QVariant &v : nodes) {
+            const QVariantMap n = v.toMap();
+            const QString src = n.value(QStringLiteral("videoSource")).toString();
+            if (!src.isEmpty() && isSafeVideoName(src))
+                out.insert(src);
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+                stack.append(n.value(QStringLiteral("children")).toList());
+        }
+    }
+    return out;
 }
 
 QString LibraryStore::libraryDir() const {

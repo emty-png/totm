@@ -58,6 +58,18 @@ struct DesignEntry {
     QVariantMap scene;
 };
 
+// Persistent asset (reusable component). Payload is plain data:
+// {nodes: [...snapshots...], clips: [...anim clips...]}. Import
+// creates detached copies with fresh uids/ids, so assets never alias
+// live nodes. Files live in <libraryDir>/assets/<id>.json.
+struct AssetEntry {
+    QString id;
+    QString name;
+    QString createdAt;
+    QString updatedAt;
+    QVariantMap payload;
+};
+
 class LibraryStore : public QObject {
     Q_OBJECT
     QML_ELEMENT
@@ -65,9 +77,11 @@ class LibraryStore : public QObject {
 
     // QML snapshots. workspaceList rows: {workspaceId, name, isDefault,
     // createdAt, designCount}. designList rows: {designId, workspaceId,
-    // name, createdAt, updatedAt, starred, scene}.
+    // name, createdAt, updatedAt, starred, scene}. assetList rows:
+    // {assetId, name, createdAt, updatedAt, payload}.
     Q_PROPERTY(QVariantList workspaceList READ workspaceList NOTIFY libraryChanged)
     Q_PROPERTY(QVariantList designList READ designList NOTIFY libraryChanged)
+    Q_PROPERTY(QVariantList assetList READ assetList NOTIFY libraryChanged)
     Q_PROPERTY(QString defaultWorkspaceId READ defaultWorkspaceId NOTIFY libraryChanged)
     Q_PROPERTY(QString libraryPath READ libraryPath CONSTANT)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
@@ -79,6 +93,7 @@ public:
     Q_INVOKABLE void clearError();
     QVariantList workspaceList() const;
     QVariantList designList() const;
+    QVariantList assetList() const;
     QString defaultWorkspaceId() const;
     QString libraryPath() const;
     QString lastError() const;
@@ -205,6 +220,17 @@ public:
     Q_INVOKABLE bool exportDestinationExists(const QUrl &destination) const;
     Q_INVOKABLE QString importDesign(const QString &workspaceId, const QUrl &source);
 
+    // Persistent assets (reusable components). createAsset stores a
+    // detached payload {nodes, clips} and returns its id ("" on
+    // failure). Payloads are plain snapshot data; import constructs
+    // fresh uids/ids so assets never alias live nodes. Blobs stay
+    // shared by name in the library dirs; sweeps keep asset refs alive.
+    Q_INVOKABLE QString createAsset(const QString &name, const QVariantMap &payload);
+    Q_INVOKABLE bool renameAsset(const QString &id, const QString &name);
+    Q_INVOKABLE bool deleteAsset(const QString &id);
+    Q_INVOKABLE QVariantMap loadAsset(const QString &id) const;
+    Q_INVOKABLE bool hasAsset(const QString &id) const;
+
 signals:
     void libraryChanged();
     void lastErrorChanged();
@@ -222,6 +248,19 @@ private:
     // Linear lookup by id; -1 when absent.
     int findWorkspace(const QString &id) const;
     int findDesign(const QString &id) const;
+    int findAsset(const QString &id) const;
+    // Per-asset payload directory (<libraryDir>/assets). Created on demand.
+    QString assetsDir() const;
+    // Atomic write of one asset's payload file. False + lastError on failure.
+    bool writeAssetFile(const QString &id, const QVariantMap &payload);
+    // Normalized payload for one asset. Missing files yield empty
+    // nodes/clips; corrupt files are archived aside like designs.
+    QVariantMap readAssetFile(const QString &id);
+    // Delete asset files with no matching index entry. Quiet.
+    void sweepOrphanAssetFiles();
+    // Blob names referenced by any in-memory asset payload, groups included.
+    QSet<QString> referencedAssetImages() const;
+    QSet<QString> referencedAssetVideos() const;
     // Owning directory for library.json + lock file. Falls back to
     // ~/.totm when the platform location is unavailable.
     QString libraryDir() const;
@@ -280,8 +319,10 @@ private:
 
     QList<WorkspaceEntry> m_workspaceEntries;
     QList<DesignEntry> m_designEntries;
+    QList<AssetEntry> m_assetEntries;
     QVariantList m_workspaceList;
     QVariantList m_designList;
+    QVariantList m_assetList;
     QString m_defaultWorkspaceId;
     QString m_lastError;
     // Held for the process lifetime; warns on contention, last-writer-wins.
