@@ -106,20 +106,10 @@ Rectangle {
                 Row {
                     Layout.alignment: Qt.AlignVCenter
                     visible: row.entry && !row.entry.error && !!row.entry.official
-                    spacing: 4
 
                     OfficialBadge {
                         anchors.verticalCenter: parent.verticalCenter
                         badgeSize: 14
-                    }
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("Official")
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                        color: AppTheme.selection
-                        elide: Text.ElideRight
                     }
                 }
 

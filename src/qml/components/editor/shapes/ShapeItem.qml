@@ -79,7 +79,7 @@ Item {
     property bool videoMuted: false
     property real videoVolume: 1
     property real playbackRate: 1
-    property bool videoLoop: true
+    property bool videoLoop: false
     property string videoFit: "fit"
     // Timeline start in composition seconds (hidden before it).
     property real videoStart: 0

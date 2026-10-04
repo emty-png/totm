@@ -36,7 +36,7 @@ PanelSection {
     }
 
     title: qsTr("Stroke")
-    visible: section.snapshot.sel.length > 0 && (!section.snapshot.hasGroup || section.snapshot.singleGroupTop() !== null) && !section.snapshot.allOfType("image")
+    visible: section.snapshot.sel.length > 0 && (!section.snapshot.hasGroup || section.snapshot.singleGroupTop() !== null)
     enabled: !section.snapshot.allLocked
     compact: section.strokeCount === 0
     showAdd: true
@@ -126,7 +126,6 @@ PanelSection {
             })
         readonly property bool isLinear: entryMenu.current ? !entryMenu.current.mixedType && entryMenu.value.type === "linear" : false
         readonly property bool isText: section.snapshot.allOfType("text")
-        readonly property bool isImage: section.snapshot.allOfType("image")
         readonly property real dashLen: {
             var dd = section.dashOf(entryMenu.value);
             return dd.dash;
@@ -232,7 +231,6 @@ PanelSection {
                 }
 
                 SegmentedOption {
-                    visible: !entryMenu.isImage
                     label: qsTr("Gradient")
                     active: entryMenu.isLinear
                     onClicked: section.setStrokeTypeAt(entryMenu.entryIndex, "linear")
@@ -270,7 +268,6 @@ PanelSection {
             }
 
             RowLayout {
-                visible: !entryMenu.isImage
                 Layout.fillWidth: true
                 spacing: 8
 
@@ -300,7 +297,6 @@ PanelSection {
             }
 
             Text {
-                visible: !entryMenu.isImage
                 Layout.fillWidth: true
                 text: qsTr("Dash style")
                 font.pixelSize: 11
@@ -308,7 +304,6 @@ PanelSection {
             }
 
             RowLayout {
-                visible: !entryMenu.isImage
                 Layout.fillWidth: true
                 spacing: 8
 
@@ -334,7 +329,7 @@ PanelSection {
             }
 
             RowLayout {
-                visible: !entryMenu.isImage && entryMenu.current && !entryMenu.current.mixedDash && entryMenu.isDashed
+                visible: entryMenu.current && !entryMenu.current.mixedDash && entryMenu.isDashed
                 Layout.fillWidth: true
                 spacing: 8
 

@@ -44,7 +44,7 @@ ColumnLayout {
         }
 
         PanelIconButton {
-            iconKind: "book"
+            iconKind: "info"
             filled: false
             strong: true
             iconSize: 16
@@ -52,7 +52,7 @@ ColumnLayout {
         }
 
         PanelIconButton {
-            iconKind: "sparkle"
+            iconKind: "refresh"
             filled: false
             strong: true
             iconSize: 16

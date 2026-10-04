@@ -114,13 +114,6 @@ ScrollView {
                                 }
                                 spacing: 8
 
-                                AppIcon {
-                                    Layout.preferredWidth: 14
-                                    Layout.preferredHeight: 14
-                                    kind: modelData.icon
-                                    iconColor: AppTheme.foreground
-                                }
-
                                 Text {
                                     Layout.fillWidth: true
                                     text: modelData.name
@@ -166,6 +159,12 @@ ScrollView {
             font.weight: Font.DemiBold
             elide: Text.ElideRight
             color: AppTheme.foreground
+        }
+
+        Item {
+            visible: gallery.hasSelection() && gallery.customCards().length > 0
+            width: parent.width
+            height: 8
         }
 
         Column {

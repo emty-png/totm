@@ -689,7 +689,7 @@ QtObject {
 
     // Video creation: stored blob name (videos/) plus an explicit box.
     // videoDuration is the probed file length (0 = unknown). Rejects
-    // empty sources; everything else defaults (loop on, 1x, full volume,
+    // empty sources; everything else defaults (loop off, 1x, full volume,
     // aspect-fit so resizes never distort). videoName overrides the
     // auto "Video <uid>" label (placement passes the file basename).
     function addVideo(videoSource, x, y, w, h, videoDuration, videoFit, videoName) {
@@ -704,6 +704,7 @@ QtObject {
             h: Math.max(1, Math.round(h)),
             videoSource: String(videoSource),
             videoDuration: Math.max(0, Number(videoDuration) || 0),
+            videoLoop: false,
             videoFit: (videoFit === "cover" || videoFit === "fill") ? videoFit : "fit"
         };
         if (videoName)

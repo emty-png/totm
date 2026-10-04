@@ -375,7 +375,7 @@ Item {
                     verticalCenter: parent.verticalCenter
                     leftMargin: 16
                 }
-                kind: "sparkle"
+                kind: "gradcap"
                 width: 14
                 height: 14
                 iconColor: creditsRow.hovered ? AppTheme.foreground : AppTheme.muted

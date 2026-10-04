@@ -790,36 +790,9 @@ Rectangle {
                 color: AppTheme.foreground
             }
 
-            Rectangle {
+            OfficialBadge {
                 Layout.alignment: Qt.AlignVCenter
-                implicitWidth: officialLabel.implicitWidth + 26
-                implicitHeight: 20
-                radius: 10
-                border.width: 1
-                border.color: AppTheme.selection
-                color: "transparent"
-
-                Row {
-                    id: officialPill
-
-                    anchors.centerIn: parent
-                    spacing: 4
-
-                    OfficialBadge {
-                        anchors.verticalCenter: parent.verticalCenter
-                        badgeSize: 12
-                    }
-
-                    Text {
-                        id: officialLabel
-
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("Official")
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                        color: AppTheme.selection
-                    }
-                }
+                badgeSize: 14
             }
         }
 

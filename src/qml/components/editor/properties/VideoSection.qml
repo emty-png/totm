@@ -191,18 +191,8 @@ PanelSection {
 
             Text {
                 Layout.fillWidth: true
-                text: section.snapshot.commonOf("videoSource").mixed ? qsTr("Mixed") : (section.currentSource() === "" ? qsTr("Missing video") : section.baseName(section.currentSource()))
-                font.pixelSize: 12
-                font.weight: Font.DemiBold
-                color: section.hasFile() ? AppTheme.foreground : AppTheme.closeHover
-                elide: Text.ElideMiddle
-            }
-
-            Text {
-                Layout.fillWidth: true
-                visible: !section.snapshot.commonOf("videoSource").mixed && section.currentSource() !== ""
-                text: section.currentSource()
-                font.pixelSize: 10
+                text: section.snapshot.commonOf("videoSource").mixed ? qsTr("Mixed") : (section.currentSource() === "" ? qsTr("Missing video") : section.currentSource())
+                font.pixelSize: 11
                 color: AppTheme.muted
                 elide: Text.ElideMiddle
             }
@@ -281,6 +271,7 @@ PanelSection {
             }
 
             RowLayout {
+                Layout.topMargin: 6
                 spacing: 8
                 visible: section.hasFile() && section.fileOk
                 SegmentedOption {

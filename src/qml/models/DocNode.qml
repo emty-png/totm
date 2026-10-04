@@ -123,7 +123,7 @@ QtObject {
     property bool videoMuted: false
     property real videoVolume: 1
     property real playbackRate: 1
-    property bool videoLoop: true
+    property bool videoLoop: false
     // Object-fit for the decoded frame inside the shape box: "fit"
     // preserves aspect with transparent letterbox, "cover" crops to fill,
     // "fill" stretches (legacy). Missing normalizes to "fit".

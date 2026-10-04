@@ -325,7 +325,7 @@ Rectangle {
         // Assets gallery: saved components. Picking a tile arms the
         // pending asset tool; the next canvas click stamps the copy.
         ToolbarButton {
-            iconKind: "apps"
+            iconKind: "folder"
             active: ToolState.activeTool === "asset"
             onClicked: {
                 if (assetMenu.opened)
