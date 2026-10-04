@@ -19,6 +19,9 @@ Popup {
     parent: Overlay.overlay
 
     property bool saveMode: false
+    // Folder mode: pick a directory (plugin import). The primary button
+    // confirms the current folder; dir rows keep navigating.
+    property bool folderMode: false
     property var suffixes: []
     property url currentFolder
     property string fileName: ""
@@ -500,7 +503,7 @@ Popup {
 
                     Text {
                         anchors.centerIn: parent
-                        text: picker.saveMode ? qsTr("Save") : qsTr("Open")
+                        text: picker.folderMode ? qsTr("Use this folder") : picker.saveMode ? qsTr("Save") : qsTr("Open")
                         font.pixelSize: 12
                         font.weight: Font.DemiBold
                         color: picker.canAccept() ? AppTheme.background : AppTheme.muted
@@ -514,7 +517,9 @@ Popup {
                         acceptedButtons: Qt.LeftButton
                         cursorShape: picker.canAccept() ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: {
-                            if (picker.saveMode)
+                            if (picker.folderMode)
+                                picker.acceptFolder();
+                            else if (picker.saveMode)
                                 picker.acceptSave();
                             else
                                 picker.acceptOpen();
@@ -560,6 +565,8 @@ Popup {
     }
 
     function canAccept() {
+        if (picker.folderMode)
+            return picker.readable;
         if (picker.saveMode)
             return nameField.text.trim() !== "";
         return picker.pickedUrl.toString() !== "";
@@ -569,6 +576,13 @@ Popup {
         if (picker.pickedUrl.toString() === "")
             return;
         picker.selectedFile = picker.pickedUrl;
+        picker.finish();
+    }
+
+    function acceptFolder() {
+        if (!picker.readable)
+            return;
+        picker.selectedFile = picker.folder;
         picker.finish();
     }
 

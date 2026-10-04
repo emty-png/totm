@@ -13,9 +13,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 
 namespace {
 constexpr int kStateVersion = 1;
@@ -120,6 +122,40 @@ int compareVersions(const QString &a, const QString &b) {
             return av < bv ? -1 : 1;
     }
     return 0;
+}
+
+// Manifest id of a candidate folder ({} when missing or unparsable).
+// Full validation (permissions, files, sandbox) runs in scan().
+QString readPluginManifestId(const QString &dir) {
+    QFile file(dir + QStringLiteral("/manifest.json"));
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+        return {};
+    return doc.object().value(QStringLiteral("id")).toString().trimmed();
+}
+
+// Recursive copy for imports. Skips symlinks (never follow out of the
+// source tree). Overwrites nothing: callers refuse existing targets.
+bool copyPluginDir(const QString &src, const QString &dst) {
+    if (!QDir().mkpath(dst))
+        return false;
+    const QDir s(src);
+    for (const QFileInfo &info :
+        s.entryInfoList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System)) {
+        if (info.isSymLink())
+            continue;
+        const QString target = dst + QLatin1Char('/') + info.fileName();
+        if (info.isDir()) {
+            if (!copyPluginDir(info.absoluteFilePath(), target))
+                return false;
+        } else if (!QFile::copy(info.absoluteFilePath(), target)) {
+            return false;
+        }
+    }
+    return true;
 }
 } // namespace
 
@@ -287,6 +323,103 @@ void PluginStore::scan() {
     if (healed)
         persist();
     rebuild();
+}
+
+bool PluginStore::importFolder(const QUrl &folder) {
+    const QString src = folder.isLocalFile() ? QDir::cleanPath(folder.toLocalFile()) : QString();
+    if (src.isEmpty() || !QDir(src).exists()) {
+        setLastError(tr("Pick a plugin folder first."));
+        return false;
+    }
+    const QString id = readPluginManifestId(src);
+    if (!isValidId(id)) {
+        setLastError(tr("That folder is not a plugin (missing or bad manifest id)."));
+        return false;
+    }
+    QDir().mkpath(pluginsPath());
+    const QString dst = pluginsPath() + QLatin1Char('/') + id;
+    if (QDir(dst).exists()) {
+        setLastError(tr("Plugin \"%1\" is already installed; delete it first.").arg(id));
+        return false;
+    }
+    if (!copyPluginDir(src, dst)) {
+        QDir(dst).removeRecursively();
+        setLastError(tr("Could not copy plugin \"%1\".").arg(id));
+        return false;
+    }
+    scan();
+    // scan() leaves the specific reason (sandbox, missing entry, …)
+    // in lastError and on the row when validation fails.
+    if (findManifest(id) < 0 || !m_states.value(id + QStringLiteral(".error")).toString().isEmpty())
+        return false;
+    return true;
+}
+
+bool PluginStore::importZip(const QUrl &file) {
+    const QString local = file.isLocalFile() ? file.toLocalFile() : QString();
+    if (local.isEmpty() || !QFile::exists(local)
+        || !local.endsWith(QStringLiteral(".zip"), Qt::CaseInsensitive)) {
+        setLastError(tr("Pick a .zip file first."));
+        return false;
+    }
+    const QString unzip = QStandardPaths::findExecutable(QStringLiteral("unzip"));
+    if (unzip.isEmpty()) {
+        setLastError(tr("Install unzip to import .zip plugins (folder import needs nothing)."));
+        return false;
+    }
+    QTemporaryDir tmp;
+    if (!tmp.isValid()) {
+        setLastError(tr("Could not unpack that zip."));
+        return false;
+    }
+    QProcess proc;
+    proc.start(unzip, {QStringLiteral("-q"), QStringLiteral("-o"), local, QStringLiteral("-d"), tmp.path()});
+    if (!proc.waitForFinished(30000) || proc.exitCode() != 0) {
+        setLastError(tr("Could not unpack that zip."));
+        return false;
+    }
+    // Root is the unpacked tree itself, unless it holds exactly one
+    // top-level folder carrying the manifest (the usual release zip).
+    QString root = tmp.path();
+    const QDir t(root);
+    QStringList tops;
+    for (const QFileInfo &info : t.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (!info.isSymLink())
+            tops.append(info.absoluteFilePath());
+    }
+    if (tops.size() == 1 && QFile::exists(tops.first() + QStringLiteral("/manifest.json")))
+        root = tops.first();
+    return importFolder(QUrl::fromLocalFile(root));
+}
+
+bool PluginStore::removePlugin(const QString &id) {
+    if (findManifest(id) < 0) {
+        setLastError(tr("Plugin \"%1\" is not installed.").arg(id));
+        return false;
+    }
+    if (isOfficial(id)) {
+        setLastError(tr("Plugin \"%1\" ships with the app; disable it instead.").arg(id));
+        return false;
+    }
+    QVariantMap state = m_states.value(id).toMap();
+    state[QStringLiteral("enabled")] = false;
+    m_states[id] = state;
+    const QDir dir(pluginsPath() + QLatin1Char('/') + id);
+    if (dir.exists() && !QDir(dir.absolutePath()).removeRecursively()) {
+        setLastError(tr("Could not delete plugin \"%1\".").arg(id));
+        persist();
+        rebuild();
+        return false;
+    }
+    m_states.remove(id);
+    m_states.remove(id + QStringLiteral(".error"));
+    m_storage.remove(id);
+    if (m_pending.value(QStringLiteral("id")).toString() == id)
+        setPending({});
+    if (!persist())
+        return false;
+    rebuild();
+    return true;
 }
 
 bool PluginStore::hasPlugin(const QString &id) const {

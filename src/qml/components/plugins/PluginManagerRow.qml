@@ -3,14 +3,16 @@ import QtQuick.Layouts
 import Totm
 
 // One plugin card in the settings panel: enable checkbox, name/version,
-// description or error, granted count, plus Review. Self-contained for
-// Repeater use; the panel wires togglePolicy/reviewPolicy in onItemAdded.
+// description or error, granted count, plus Review and delete.
+// Self-contained for Repeater use; the panel wires togglePolicy,
+// reviewPolicy and deletePolicy in onItemAdded.
 Rectangle {
     id: row
 
     property var entry: null
     property var togglePolicy: null
     property var reviewPolicy: null
+    property var deletePolicy: null
 
     radius: AppTheme.radiusLarge
     border.width: 1
@@ -132,6 +134,20 @@ Rectangle {
                             if (row.reviewPolicy)
                                 row.reviewPolicy(row.entry ? row.entry.id : "");
                         }
+                    }
+                }
+
+                // Bundled plugins stay: seeding would restore them, so
+                // only third-party rows offer removal.
+                PanelIconButton {
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: row.entry && !row.entry.official
+                    iconKind: "close"
+                    filled: false
+                    iconSize: 12
+                    onClicked: {
+                        if (row.deletePolicy)
+                            row.deletePolicy(row.entry ? row.entry.id : "");
                     }
                 }
             }

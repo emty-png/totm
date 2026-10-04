@@ -19,6 +19,14 @@ ColumnLayout {
         PluginStore.requestPermissions(pluginId);
     }
 
+    property string pendingDeleteId: ""
+
+    function askDelete(pluginId) {
+        var info = PluginStore.plugin(pluginId);
+        pluginPanel.pendingDeleteId = pluginId;
+        deletePopup.ask(qsTr("Delete plugin?"), qsTr("“%1” leaves this device. Its saved settings go with it.").arg(info && info.name ? info.name : pluginId), qsTr("Delete"));
+    }
+
     RowLayout {
         Layout.fillWidth: true
         Layout.leftMargin: 16
@@ -52,12 +60,82 @@ ColumnLayout {
         }
 
         PanelIconButton {
+            id: importBtn
+
+            iconKind: "plus"
+            filled: false
+            strong: true
+            iconSize: 16
+            onClicked: {
+                if (importMenu.opened) {
+                    importMenu.close();
+                    return;
+                }
+                var p = importBtn.mapToItem(Overlay.overlay, 0, 0);
+                importMenu.x = Math.max(8, p.x + importBtn.width - importMenu.width);
+                importMenu.y = p.y + importBtn.height + 4;
+                importMenu.open();
+            }
+        }
+
+        PanelIconButton {
             iconKind: "refresh"
             filled: false
             strong: true
             iconSize: 16
-            onClicked: PluginStore.scan()
+            onClicked: {
+                PluginStore.clearError();
+                PluginStore.scan();
+            }
         }
+
+        Popup {
+            id: importMenu
+
+            parent: Overlay.overlay
+            implicitWidth: 180
+            padding: 6
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            background: Rectangle {
+                radius: AppTheme.radiusLarge
+                color: AppTheme.surface
+                border.width: 1
+                border.color: AppTheme.border
+            }
+
+            contentItem: ColumnLayout {
+                spacing: 2
+
+                MenuItem {
+                    label: qsTr("Import folder…")
+                    onClicked: {
+                        importMenu.close();
+                        PluginStore.clearError();
+                        folderPicker.open();
+                    }
+                }
+                MenuItem {
+                    label: qsTr("Import .zip…")
+                    onClicked: {
+                        importMenu.close();
+                        PluginStore.clearError();
+                        zipPicker.open();
+                    }
+                }
+            }
+        }
+    }
+
+    Text {
+        visible: PluginStore.lastError !== ""
+        Layout.fillWidth: true
+        Layout.leftMargin: 16
+        Layout.rightMargin: 16
+        text: PluginStore.lastError
+        font.pixelSize: 11
+        color: "#e81123"
+        wrapMode: Text.WordWrap
     }
 
     Text {
@@ -95,6 +173,7 @@ ColumnLayout {
                 onItemAdded: (index, item) => {
                     item.togglePolicy = pluginId => pluginPanel.togglePlugin(pluginId);
                     item.reviewPolicy = pluginId => pluginPanel.reviewPlugin(pluginId);
+                    item.deletePolicy = pluginId => pluginPanel.askDelete(pluginId);
                 }
 
                 delegate: PluginManagerRow {
@@ -114,8 +193,33 @@ ColumnLayout {
         visible: PluginStore.pluginList.length === 0
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
-        text: qsTr("Copy a plugin folder into %1, then press Rescan.").arg(PluginStore.pluginsDir())
+        text: qsTr("Import a folder or .zip with +, or copy a folder into %1, then press Rescan.").arg(PluginStore.pluginsDir())
         font.pixelSize: 11
         color: AppTheme.muted
+    }
+
+    FilePicker {
+        id: folderPicker
+
+        folderMode: true
+        suffixes: []
+        onAccepted: PluginStore.importFolder(folderPicker.selectedFile)
+    }
+
+    FilePicker {
+        id: zipPicker
+
+        suffixes: ["zip"]
+        onAccepted: PluginStore.importZip(zipPicker.selectedFile)
+    }
+
+    ConfirmPopup {
+        id: deletePopup
+
+        onConfirmed: {
+            if (pluginPanel.pendingDeleteId !== "")
+                PluginStore.removePlugin(pluginPanel.pendingDeleteId);
+            pluginPanel.pendingDeleteId = "";
+        }
     }
 }

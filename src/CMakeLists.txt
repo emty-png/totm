@@ -138,6 +138,7 @@ qt_add_qml_module(totm
         qml/components/editor/canvas/PathOverlay.qml
         qml/components/editor/canvas/PenEdit.qml
         qml/components/editor/canvas/PenEditOverlay.qml
+        qml/components/editor/canvas/FocalMarker.qml
         qml/components/editor/canvas/ShapeLayer.qml
         qml/components/editor/canvas/CanvasOverlays.qml
         qml/components/editor/canvas/MeasurePill.qml

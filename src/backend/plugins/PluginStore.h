@@ -77,6 +77,17 @@ public:
     Q_INVOKABLE void scan();
     Q_INVOKABLE bool hasPlugin(const QString &id) const;
     Q_INVOKABLE QVariantMap plugin(const QString &id) const;
+    // Import. Copies a folder (or .zip) into the plugins dir under its
+    // manifest id, then scans (full manifest + sandbox validation runs
+    // there; failures surface per-row and via lastError). Existing
+    // installs are refused: delete first. Zip import shells out to the
+    // system unzip like the ffmpeg probes do.
+    Q_INVOKABLE bool importFolder(const QUrl &folder);
+    Q_INVOKABLE bool importZip(const QUrl &file);
+    // Removal. Bundled plugins are refused (seeding would restore them;
+    // disable instead). Drops the folder plus its grants and stored
+    // values, then rebuilds so loaded slots vanish.
+    Q_INVOKABLE bool removePlugin(const QString &id);
     // Folder drop-in location, created on demand. Shown in the manager
     // empty state so users know where to copy plugin folders.
     Q_INVOKABLE QString pluginsDir();

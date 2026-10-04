@@ -544,6 +544,16 @@ Item {
         editActive: ToolState.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc !== null
     }
 
+    // Zoom-clip focal marker: shows and drags the punch-in center for
+    // the single selected customVideoZoom clip. Topmost editor chrome
+    // so the grab always wins over canvas tools.
+    FocalMarker {
+        doc: canvas.doc
+        zoom: canvas.zoom
+        offsetX: canvas.offsetX
+        offsetY: canvas.offsetY
+    }
+
     // Plugin canvas overlays (ui.slots). Plain Items under the chrome so
     // they can annotate the scene; each entry gets doc/zoom/offset when
     // it declares them. The host itself takes no input, so canvas tools
