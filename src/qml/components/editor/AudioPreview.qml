@@ -5,9 +5,10 @@ import Totm
 // Timeline audio preview: a growth-only pool of players conducted by a
 // 100ms poll of the transport clock. Starts, stops and scrub
 // repositions all derive from anim.currentTime, so preview follows
-// seeks and trim cuts without chasing per-frame ticks. A few ms of
-// start drift between overlapping players is accepted in v1 (music
-// beds, not samples).
+// seeks and trim cuts without chasing per-frame ticks. Repair threshold
+// matches video (~150ms, ~5 frames at 30fps) so music and footage stay
+// in sync; a few ms of start drift between overlapping players is
+// accepted in v1 (music beds, not samples).
 // Backend lifecycle rule (learned from a segfault): media pipelines
 // are assigned and reassigned, never torn down mid-session. Players
 // are created once, parked by pausing, and keep their last source, so
@@ -144,7 +145,7 @@ Item {
             var wantMs = (c.offset + (now - c.t0)) * 1000;
             if (p.playbackState !== MediaPlayer.PlayingState)
                 p.play();
-            if (preview.ready(p) && Math.abs(p.position - wantMs) > 350)
+            if (preview.ready(p) && Math.abs(p.position - wantMs) > 150)
                 p.setPosition(Math.max(0, wantMs));
         }
     }

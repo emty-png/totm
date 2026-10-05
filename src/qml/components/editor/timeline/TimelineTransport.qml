@@ -55,6 +55,18 @@ Item {
             }
         }
 
+        // Composition loop: off stops at the end (default), on wraps.
+        // Session-only like record; video footage loop stays per-shape.
+        ToolbarButton {
+            Layout.alignment: Qt.AlignVCenter
+            iconKind: "refresh"
+            active: !!transport.doc && transport.doc.anim.loop === true
+            onClicked: {
+                if (transport.doc)
+                    transport.doc.anim.loop = !(transport.doc.anim.loop === true);
+            }
+        }
+
         NumberField {
             Layout.preferredWidth: 76
             Layout.alignment: Qt.AlignVCenter

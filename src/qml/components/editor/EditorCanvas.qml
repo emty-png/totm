@@ -1675,7 +1675,7 @@ Item {
     ExportQualityPopup {
         id: qualityPopup
 
-        onRenderClicked: (quality, fps, performance, format) => canvas.startExport(quality, fps, performance, format)
+        onRenderClicked: (quality, fps, performance, format, includeVideoSound) => canvas.startExport(quality, fps, performance, format, includeVideoSound)
     }
 
     // Live render progress with Cancel. Stays open on failure to show
@@ -1743,14 +1743,14 @@ Item {
 
     // Snapshot fresh and hand to the backend; the progress modal opens
     // only when the worker actually accepted the job.
-    function startExport(quality, fps, performance, format) {
+    function startExport(quality, fps, performance, format, includeVideoSound) {
         if (!canvas.doc)
             return;
         qualityPopup.close();
         var scene = canvas.doc.snapshotScene();
         if (format === undefined || format === null)
             format = "mp4";
-        VideoExporter.startExport(scene, quality, fps, performance, TabState.titleAt(TabState.currentIndex), format);
+        VideoExporter.startExport(scene, quality, fps, performance, TabState.titleAt(TabState.currentIndex), format, includeVideoSound === true);
         // Opens in both cases: live bar on success, backend error text
         // on rejection (e.g. ffmpeg missing, already rendering).
         progressPopup.open();

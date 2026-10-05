@@ -59,12 +59,14 @@ public:
     // Starts a render. quality: "sd"|"hd"|"4k" (default hd); fps:
     // 30|60|120 (other values coerce to 30, gif caps at 60);
     // performance: "slow"|"normal"|"fast"; format: "mp4"|"webm"|"gif"
-    // (other values coerce to mp4).
+    // (other values coerce to mp4); includeVideoSound mixes native
+    // video leaves in (GIF stays silent).
     // qualityLabel reads "Rendering <design> <quality><fps> <format>".
     // Returns false when already rendering, the scene is empty, or ffmpeg
     // is missing.
     Q_INVOKABLE bool startExport(const QVariantMap &scene, const QString &quality, int fps,
-        const QString &performance, const QString &designName, const QString &format = QStringLiteral("mp4"));
+        const QString &performance, const QString &designName, const QString &format = QStringLiteral("mp4"),
+        bool includeVideoSound = false);
     // Requests cancellation; the worker deletes the partial and emits cancelled().
     Q_INVOKABLE void cancel();
     // Copies the finished temp file to destination (appends the matching

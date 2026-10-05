@@ -30,14 +30,25 @@ Item {
     property var doc: null
 
     property var clipPolicy: null
+    // Joint-drag state shared with the view (audio selections span rows).
+    property var jointPolicy: null
+    property var jointOrig: ({})
+    property real jointDx: 0
+    property bool jointActive: false
 
     // Active drag: press-time snapshot plus applied time. Visuals follow
-    // dragT0 (not the model, which carries no mid-drag notifications).
+    // dragT0/dragDur (not the model, which carries no mid-drag notifications).
     property bool dragging: false
     property int dragId: -1
+    property string dragMode: "move"
     property real dragT0: 0
+    property real dragDur: 0
     property real snapT0: 0
+    property real snapDur: 0
+    property real snapOffset: 0
     property real pressLx: 0
+    property var jointIds: []
+    property var jointSnap: ({})
 
     // Zoom-adaptive waveform over the clip file window
     // [offset, offset + duration]: buckets follow the bar pixel width
@@ -62,11 +73,17 @@ Item {
     }
 
     function barX() {
-        var t = lane.dragging ? lane.dragT0 : (lane.clip ? lane.clip.t0 : 0);
+        if (lane.dragging)
+            return lane.originX + lane.dragT0 * lane.pxPerSec;
+        if (lane.jointActive && lane.clip && lane.jointOrig[lane.clip.id] !== undefined)
+            return lane.originX + (lane.jointOrig[lane.clip.id].t0 + lane.jointDx) * lane.pxPerSec;
+        var t = lane.clip ? lane.clip.t0 : 0;
         return lane.originX + t * lane.pxPerSec;
     }
 
     function barW() {
+        if (lane.dragging && (lane.dragMode === "trim-start" || lane.dragMode === "trim-end"))
+            return Math.max(14, lane.dragDur * lane.pxPerSec);
         var d = lane.clip ? lane.clip.duration : 0;
         return Math.max(14, d * lane.pxPerSec);
     }
@@ -74,9 +91,10 @@ Item {
     // Tape bar for the clip: squared ends and grip caps instead of
     // keyframe diamonds, so audio never reads as animatable. The wave
     // spans edge to edge between the caps. Dragging the bar moves the
-    // whole clip; end overflow is fine (use sites intersect with the
-    // composition end). (Empty lane space falls through to the view
-    // marquee below.)
+    // whole clip; dragging the caps trims (left trim advances the file
+    // offset, right trim keeps it); end overflow is fine (use sites
+    // intersect with the composition end). (Empty lane space falls
+    // through to the view marquee below.)
     Rectangle {
         x: lane.barX()
         y: (parent.height - 18) / 2
@@ -112,7 +130,19 @@ Item {
             hoverEnabled: true
             cursorShape: lane.dragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
             preventStealing: true
-            onPressed: mouse => lane.dragPress(lane.clip ? lane.clip.id : -1, lane.mapFromItem(barMouse, mouse.x, mouse.y).x)
+            onPressed: mouse => {
+                var lx = lane.mapFromItem(barMouse, mouse.x, mouse.y).x;
+                var mode = "move";
+                // Edge zones trim (8px handles); middle moves.
+                if (lane.clip && lane.barW() > 30) {
+                    var bx = lx - lane.barX();
+                    if (bx < 10)
+                        mode = "trim-start";
+                    else if (bx > lane.barW() - 10)
+                        mode = "trim-end";
+                }
+                lane.dragPress(lane.clip ? lane.clip.id : -1, lx, mode);
+            }
             onPositionChanged: mouse => lane.dragMove(lane.mapFromItem(barMouse, mouse.x, mouse.y).x)
             onReleased: lane.dragRelease()
             onClicked: mouse => {
@@ -236,17 +266,40 @@ Item {
         return Math.round(best * 100) / 100;
     }
 
-    function dragPress(clipId, lx) {
+    function dragPress(clipId, lx, mode) {
         var c = lane.findClip();
         if (!c || !lane.doc || c.id !== clipId)
             return;
         // Passive: selecting must not disturb playback.
         lane.doc.beginPassiveTransaction();
         lane.dragId = clipId;
+        lane.dragMode = mode === "trim-start" || mode === "trim-end" ? mode : "move";
         lane.snapT0 = c.t0;
+        lane.snapDur = c.duration;
+        lane.snapOffset = Number(c.offset) || 0;
         lane.dragT0 = c.t0;
+        lane.dragDur = c.duration;
         lane.pressLx = lx;
         lane.dragging = false;
+        // Joint snapshot only for moves: trims stage one clip.
+        var orig = {};
+        var ids = [];
+        if (lane.dragMode === "move" && lane.doc.audio.isSelected(clipId)) {
+            var sel = lane.doc.audio.selectedAudioIds;
+            var all = lane.doc.audio.clips;
+            for (var i = 0; i < all.length; i++) {
+                if (sel.indexOf(all[i].id) >= 0) {
+                    orig[all[i].id] = {
+                        t0: all[i].t0
+                    };
+                    ids.push(all[i].id);
+                }
+            }
+        }
+        lane.jointIds = ids;
+        lane.jointSnap = orig;
+        if (lane.jointPolicy)
+            lane.jointPolicy("begin", orig);
     }
 
     function dragMove(lx) {
@@ -254,25 +307,97 @@ Item {
             return;
         if (!lane.dragging && Math.abs(lx - lane.pressLx) < 4)
             return;
+        if (!lane.dragging)
+            lane.doc.anim.settlePreview();
         lane.dragging = true;
-        var dx = (lx - lane.pressLx) / lane.pxPerSec;
-        lane.dragT0 = Math.max(0, lane.snapTime(lane.snapT0 + dx));
-        lane.doc.nudgeAudioClip(lane.dragId, lane.dragT0);
+        if (lane.dragMode === "trim-start") {
+            // Left trim: end stays fixed, start slides; file offset
+            // advances with the start. Floor 0.05s.
+            var oldEnd = lane.snapT0 + lane.snapDur;
+            var nt0 = lane.snapTime(lane.snapT0 + (lx - lane.pressLx) / lane.pxPerSec);
+            nt0 = Math.min(oldEnd - 0.05, Math.max(0, nt0));
+            nt0 = Math.round(nt0 * 100) / 100;
+            var nd = Math.max(0.05, oldEnd - nt0);
+            var noff = Math.max(0, lane.snapOffset + (nt0 - lane.snapT0));
+            lane.dragT0 = nt0;
+            lane.dragDur = nd;
+            lane.doc.nudgeAudioTrim(lane.dragId, nt0, noff, nd);
+        } else if (lane.dragMode === "trim-end") {
+            // Right trim: start/offset stay, duration slides. Floor 0.05s.
+            var nend = lane.snapTime(lane.snapT0 + lane.snapDur + (lx - lane.pressLx) / lane.pxPerSec);
+            var ndur = Math.max(0.05, nend - lane.snapT0);
+            ndur = Math.round(ndur * 100) / 100;
+            lane.dragT0 = lane.snapT0;
+            lane.dragDur = ndur;
+            lane.doc.nudgeAudioTrim(lane.dragId, lane.snapT0, lane.snapOffset, ndur);
+        } else if (lane.jointIds.length > 1) {
+            // Joint move: dragged clip snaps, everyone rides the delta.
+            // End overflow is fine (use sites intersect the comp end),
+            // so only the zero floor clamps. One undo entry on release.
+            var want = lane.snapTime(lane.snapT0 + (lx - lane.pressLx) / lane.pxPerSec);
+            var dx = lane.clampJointDx(lane.jointIds, want - lane.snapT0);
+            for (var i = 0; i < lane.jointIds.length; i++) {
+                var o = lane.jointSnap[lane.jointIds[i]];
+                lane.doc.nudgeAudioClip(lane.jointIds[i], o.t0 + dx);
+            }
+            lane.dragT0 = lane.snapT0 + dx;
+            lane.dragDur = lane.snapDur;
+            if (lane.jointPolicy)
+                lane.jointPolicy("move", dx);
+        } else {
+            var sd = (lx - lane.pressLx) / lane.pxPerSec;
+            lane.dragT0 = Math.max(0, lane.snapTime(lane.snapT0 + sd));
+            lane.dragDur = lane.snapDur;
+            lane.doc.nudgeAudioClip(lane.dragId, lane.dragT0);
+        }
+        if (!lane.doc.anim.playing)
+            lane.doc.seekPlayhead(lane.doc.anim.currentTime);
+    }
+
+    // Widest delta keeping every joint clip at >= 0 (end overflow is
+    // fine for audio: use sites intersect with the composition end).
+    function clampJointDx(ids, dx) {
+        var lo = -Infinity;
+        for (var i = 0; i < ids.length; i++) {
+            var o = lane.jointSnap[ids[i]];
+            lo = Math.max(lo, 0 - o.t0);
+        }
+        return Math.max(lo, dx);
     }
 
     function dragRelease() {
         var d = lane.doc;
         var id = lane.dragId;
+        var mode = lane.dragMode;
         var moved = lane.dragging;
         var t0 = lane.dragT0;
+        var dur = lane.dragDur;
+        var joint = lane.jointIds.length > 1 ? lane.jointIds.slice() : [];
         lane.dragging = false;
         lane.dragId = -1;
+        lane.dragMode = "move";
+        lane.jointIds = [];
+        lane.jointSnap = {};
+        if (lane.jointPolicy)
+            lane.jointPolicy("end", 0);
         if (!d)
             return;
         if (moved) {
-            // Value already sits final via nudges: one touch stages the
+            // Values already sit final via nudges: one touch stages the
             // single undo entry that end() commits.
-            d.nudgeAudioClip(id, t0);
+            if (joint.length > 1 && mode === "move") {
+                for (var i = 0; i < joint.length; i++) {
+                    var o = d.audioClip(joint[i]);
+                    if (o)
+                        d.nudgeAudioClip(joint[i], o.t0);
+                }
+            } else if (mode === "trim-start" || mode === "trim-end") {
+                var c = d.audioClip(id);
+                if (c)
+                    d.nudgeAudioTrim(id, t0, c.offset, dur);
+            } else {
+                d.nudgeAudioClip(id, t0);
+            }
             d.touch();
         }
         d.endTransaction();

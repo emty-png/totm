@@ -307,6 +307,9 @@ QtObject {
     function nudgeAudioClip(id, t0) {
         return audio.nudge(id, t0);
     }
+    function nudgeAudioTrim(id, t0, offset, duration) {
+        return audio.nudgeTrim(id, t0, offset, duration);
+    }
     // Silent in-place timeline-start nudge for video lane drags: no
     // checkpoint, no touch; release touches once for the single entry.
     // Mirrors audio.nudge (clamped to the composition start). Refreshes
@@ -329,6 +332,24 @@ QtObject {
     }
     function deleteSelectedAudio() {
         return audio.deleteSelected();
+    }
+    function duplicateAudioClips(ids) {
+        return audio.duplicateClips(ids);
+    }
+    function duplicateSelectedAudio() {
+        return audio.duplicateSelected();
+    }
+    function copyAudioClips(ids) {
+        return audio.copyClips(ids);
+    }
+    function copySelectedAudio() {
+        return audio.copySelectedClips();
+    }
+    function pasteAudioClips(templates, baseTime) {
+        return audio.pasteClips(templates, baseTime);
+    }
+    function splitAudioClip(id, t) {
+        return audio.splitClip(id, t);
     }
     function selectAudioClip(id, additive) {
         audio.selectClip(id, additive);

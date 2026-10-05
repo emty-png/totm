@@ -15,9 +15,13 @@ Popup {
     property int fps: 30
     property string performance: "normal"
     property string format: "mp4"
+    // Opt-in native video sound: off keeps the historical timeline-only
+    // mix (detach to edit sound separately); on mixes audible video
+    // leaves with timeline clips. GIF stays silent either way.
+    property bool includeVideoSound: false
     property var suggestion: ({})
 
-    signal renderClicked(string quality, int fps, string performance, string format)
+    signal renderClicked(string quality, int fps, string performance, string format, bool includeVideoSound)
 
     // First enabled export.hook suggestion wins; refreshed whenever the
     // popup opens or grants change.
@@ -218,6 +222,43 @@ Popup {
             }
         }
 
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Sound")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Include video sound")
+                active: qualityPopup.includeVideoSound
+                enabled: qualityPopup.format !== "gif"
+                onClicked: qualityPopup.includeVideoSound = !qualityPopup.includeVideoSound
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: qualityPopup.format === "gif"
+            text: qsTr("GIF exports are silent.")
+            font.pixelSize: 11
+            color: AppTheme.muted
+            wrapMode: Text.WordWrap
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: qualityPopup.format !== "gif" && qualityPopup.includeVideoSound
+            text: qsTr("Mixes audible video clips with timeline audio. Animated hide and Video time clips use legacy timing.")
+            font.pixelSize: 11
+            color: AppTheme.muted
+            wrapMode: Text.WordWrap
+        }
+
         // Plugin suggestion (export.hook): one-tap apply, never automatic.
         RowLayout {
             Layout.fillWidth: true
@@ -331,7 +372,7 @@ Popup {
                         SettingsStore.defaultFps = qualityPopup.fps;
                         SettingsStore.defaultPerformance = qualityPopup.performance;
                         SettingsStore.defaultFormat = qualityPopup.format;
-                        qualityPopup.renderClicked(qualityPopup.quality, qualityPopup.fps, qualityPopup.performance, qualityPopup.format);
+                        qualityPopup.renderClicked(qualityPopup.quality, qualityPopup.fps, qualityPopup.performance, qualityPopup.format, qualityPopup.includeVideoSound && qualityPopup.format !== "gif");
                     }
                 }
             }

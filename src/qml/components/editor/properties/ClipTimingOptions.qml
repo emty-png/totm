@@ -2,9 +2,11 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Clip timing: duration plus the easing row that opens the graph editor
-// through graphPolicy. Commits flow through DocAnim (undoable); scrubs
-// coalesce through doc transactions.
+// Clip timing: start + duration plus the easing row that opens the
+// graph editor through graphPolicy. Commits flow through DocAnim
+// (undoable); scrubs coalesce through doc transactions. Start moves
+// the clip (duration preserved); left-trim drags on the timeline for
+// trimming (keys stay proportional).
 ColumnLayout {
     id: section
 
@@ -24,6 +26,26 @@ ColumnLayout {
     }
 
     spacing: 8
+
+    Text {
+        visible: !section.isInstantHide()
+        text: qsTr("Start")
+        font.pixelSize: 11
+        color: AppTheme.muted
+    }
+
+    NumberField {
+        visible: !section.isInstantHide()
+        Layout.fillWidth: true
+        suffix: qsTr("s")
+        scrubStep: 0.1
+        minimum: 0
+        maximum: 1800
+        value: section.clip ? section.clip.t0 : 0
+        onCommitted: v => section.retimeStart(v)
+        onScrubStarted: section.beginScrub()
+        onScrubFinished: section.endScrub()
+    }
 
     // Stepped clips are instants with a locked duration: no Duration row.
     // Instant hide/show (customHide with fade off) likewise needs
@@ -119,6 +141,11 @@ ColumnLayout {
     function retime(v) {
         if (section.doc && section.clip)
             section.doc.retimeClip(section.clipId, section.clip.t0, v);
+    }
+
+    function retimeStart(v) {
+        if (section.doc && section.clip)
+            section.doc.retimeClip(section.clipId, v, section.clip.duration);
     }
 
     function beginScrub() {

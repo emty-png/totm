@@ -22,6 +22,11 @@ Item {
     property var jointOrig: ({})
     property real jointDx: 0
     property bool clipDragging: false
+    // Audio joint-drag state (separate namespace: anim and audio ids
+    // share one sequence, so one dict would collide).
+    property var audioJointOrig: ({})
+    property real audioJointDx: 0
+    property bool audioDragging: false
     // Video-drag session shared across video lane delegates. State
     // lives here, not in the delegate, so Repeater rebuilds mid-drag
     // (live-node writes notify and recompute the rows) rebind instead
@@ -29,11 +34,11 @@ Item {
     property var videoDrag: null
     property bool marqueeDragged: false
     readonly property real originX: 8
-    // Wide enough for the transport row (play/stop/record plus the
+    // Wide enough for the transport row (play/stop/record/loop plus the
     // duration field) so nothing pushes into the tracks divider.
-    // 12+12 margins + 3×ToolbarButton + 76px duration field + 3×8px
-    // spacing ≈ 220px + slack for record toggle.
-    readonly property real gutterWidth: 236
+    // 12+12 margins + 4×ToolbarButton + 76px duration field + 4×8px
+    // spacing ≈ 276px.
+    readonly property real gutterWidth: 276
     // Headroom for the panel resize strip; divider and playhead bleed
     // through to the top edge.
     readonly property real topPad: 6
@@ -604,6 +609,7 @@ Item {
                     model: timeline.audioRows
                     onItemAdded: (index, item) => {
                         item.clipPolicy = (id, additive) => timeline.onAudioClip(id, additive);
+                        item.jointPolicy = (op, payload) => timeline.setAudioJoint(op, payload);
                     }
 
                     TimelineAudioLane {
@@ -613,6 +619,9 @@ Item {
                         pxPerSec: timeline.pxPerSec
                         originX: timeline.originX
                         selected: modelData.selected
+                        jointOrig: timeline.audioJointOrig
+                        jointDx: timeline.audioJointDx
+                        jointActive: timeline.audioDragging
                         doc: timeline.doc
                     }
                 }
@@ -843,6 +852,20 @@ Item {
             timeline.jointOrig = {};
             timeline.jointDx = 0;
             timeline.clipDragging = false;
+        }
+    }
+
+    // Audio joint-drag publisher (separate namespace, same protocol).
+    function setAudioJoint(op, payload) {
+        if (op === "begin") {
+            timeline.audioJointOrig = payload || {};
+        } else if (op === "move") {
+            timeline.audioJointDx = Number(payload) || 0;
+            timeline.audioDragging = true;
+        } else if (op === "end") {
+            timeline.audioJointOrig = {};
+            timeline.audioJointDx = 0;
+            timeline.audioDragging = false;
         }
     }
 

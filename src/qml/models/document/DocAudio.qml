@@ -86,6 +86,26 @@ QtObject {
         return true;
     }
 
+    // Silent in-place trim for lane trim drags: t0/offset/duration move
+    // together (left trim advances offset, right trim keeps it). No
+    // checkpoint, no touch; release touches once. Floor 0.05s.
+    function nudgeTrim(id, t0, offset, duration) {
+        var c = audio.clipById(id);
+        if (!c)
+            return false;
+        var nt0 = Math.max(0, Number(t0) || 0);
+        var noff = Math.max(0, Number(offset) || 0);
+        var nd = Math.max(0.05, Number(duration) || 0);
+        if (isNaN(nt0) || isNaN(noff) || isNaN(nd))
+            return false;
+        if (c.t0 === nt0 && Number(c.offset || 0) === noff && c.duration === nd)
+            return false;
+        c.t0 = nt0;
+        c.offset = noff;
+        c.duration = nd;
+        return true;
+    }
+
     function deleteClips(ids) {
         var gone = {};
         for (var i = 0; i < (ids || []).length; i++)
@@ -112,6 +132,179 @@ QtObject {
 
     function deleteSelected() {
         return audio.deleteClips(audio.selectedAudioIds);
+    }
+
+    // Duplicates clips at the playhead, keeping relative offsets
+    // (earliest lands on the playhead). Mirrors DocAnim.duplicateClips:
+    // one undo entry, new ids selected.
+    function duplicateClips(ids) {
+        var asked = {};
+        var list = ids || [];
+        for (var i = 0; i < list.length; i++)
+            asked[list[i]] = true;
+        var src = [];
+        for (var j = 0; j < audio.clips.length; j++) {
+            if (asked[audio.clips[j].id])
+                src.push(audio.clips[j]);
+        }
+        if (src.length === 0)
+            return [];
+        var earliest = src[0].t0;
+        for (var k = 1; k < src.length; k++) {
+            if (src[k].t0 < earliest)
+                earliest = src[k].t0;
+        }
+        var comp = Math.max(0.5, doc.anim.duration);
+        var base = Math.min(doc.anim.currentTime, Math.max(0, comp - 0.05));
+        doc.history.checkpoint();
+        var out = audio.clips.slice();
+        var made = [];
+        for (var m = 0; m < src.length; m++) {
+            var s = src[m];
+            var nt0 = Math.min(Math.max(0, s.t0 - earliest + base), Math.max(0, comp - 0.05));
+            if (nt0 >= comp)
+                continue;
+            var copy = {
+                id: audio.nextAudioId++,
+                source: String(s.source),
+                t0: nt0,
+                offset: Math.max(0, Number(s.offset) || 0),
+                duration: Math.min(Math.max(0.05, Number(s.duration) || 0), Math.max(0.05, comp - nt0)),
+                volume: s.volume === undefined ? 1 : s.volume,
+                fadeIn: s.fadeIn === undefined ? 0 : s.fadeIn,
+                fadeOut: s.fadeOut === undefined ? 0 : s.fadeOut,
+                muted: s.muted === true
+            };
+            out.push(copy);
+            made.push(copy.id);
+        }
+        audio.clips = out;
+        audio.selectedAudioIds = made.slice();
+        doc.touch();
+        return made;
+    }
+
+    function duplicateSelected() {
+        return audio.duplicateClips(audio.selectedAudioIds);
+    }
+
+    // Clip copy/paste templates: plain data without ids, so they survive
+    // across documents (TabState.audioClipboard holds them app-wide).
+    // dt preserves relative offsets (earliest = 0); paste re-anchors
+    // earliest at the playhead.
+    function copyClips(ids) {
+        var asked = {};
+        var list = ids || [];
+        for (var i = 0; i < list.length; i++)
+            asked[list[i]] = true;
+        var src = [];
+        for (var j = 0; j < audio.clips.length; j++) {
+            if (asked[audio.clips[j].id])
+                src.push(audio.clips[j]);
+        }
+        if (src.length === 0)
+            return [];
+        src.sort((a, b) => (a.t0 - b.t0) || (a.id - b.id));
+        var earliest = src[0].t0;
+        var out = [];
+        for (var k = 0; k < src.length; k++) {
+            var s = src[k];
+            out.push({
+                source: String(s.source),
+                duration: Math.max(0.05, Number(s.duration) || 0),
+                offset: Math.max(0, Number(s.offset) || 0),
+                dt: Math.max(0, s.t0 - earliest),
+                volume: s.volume === undefined ? 1 : s.volume,
+                fadeIn: s.fadeIn === undefined ? 0 : s.fadeIn,
+                fadeOut: s.fadeOut === undefined ? 0 : s.fadeOut,
+                muted: s.muted === true
+            });
+        }
+        return out;
+    }
+
+    function copySelectedClips() {
+        return audio.copyClips(audio.selectedAudioIds);
+    }
+
+    // Pastes templates at baseTime (default: playhead), earliest at base.
+    // One undo entry; new ids selected. Clips past the end are skipped.
+    function pasteClips(templates, baseTime) {
+        var tmpl = templates || [];
+        if (tmpl.length === 0)
+            return [];
+        var comp = Math.max(0.5, doc.anim.duration);
+        var base = baseTime !== undefined ? Number(baseTime) : doc.anim.currentTime;
+        if (isNaN(base))
+            base = doc.anim.currentTime;
+        base = Math.min(Math.max(0, base), Math.max(0, comp - 0.05));
+        var ordered = tmpl.slice().sort((a, b) => (Number(a.dt) || 0) - (Number(b.dt) || 0));
+        doc.history.checkpoint();
+        var out = audio.clips.slice();
+        var made = [];
+        for (var m = 0; m < ordered.length; m++) {
+            var s = ordered[m] || {};
+            if (!s.source)
+                continue;
+            var nt0 = Math.max(0, (Number(s.dt) || 0) + base);
+            if (nt0 >= comp)
+                continue;
+            var clip = {
+                id: audio.nextAudioId++,
+                source: String(s.source),
+                t0: nt0,
+                offset: Math.max(0, Number(s.offset) || 0),
+                duration: Math.min(Math.max(0.05, Number(s.duration) || 0), Math.max(0.05, comp - nt0)),
+                volume: s.volume === undefined ? 1 : Math.min(1, Math.max(0, Number(s.volume) || 0)),
+                fadeIn: Math.max(0, Number(s.fadeIn) || 0),
+                fadeOut: Math.max(0, Number(s.fadeOut) || 0),
+                muted: s.muted === true
+            };
+            out.push(clip);
+            made.push(clip.id);
+        }
+        audio.clips = out;
+        audio.selectedAudioIds = made.slice();
+        doc.touch();
+        return made;
+    }
+
+    // Splits one clip at composition time t: left keeps [t0, t),
+    // right keeps [t, end) with offset advanced. One undo entry.
+    // Returns [leftId, rightId] or [] when t is not interior.
+    // Both halves floor at 0.05s, so nubs shorter than 0.1s refuse.
+    function splitClip(id, t) {
+        var at = -1;
+        for (var i = 0; i < audio.clips.length; i++) {
+            if (audio.clips[i].id === id) {
+                at = i;
+                break;
+            }
+        }
+        if (at < 0)
+            return [];
+        var c = audio.clips[at];
+        var tt = Number(t);
+        if (isNaN(tt) || tt - c.t0 < 0.05 || (c.t0 + c.duration) - tt < 0.05)
+            return [];
+        var leftDur = Math.max(0.05, tt - c.t0);
+        var rightDur = Math.max(0.05, (c.t0 + c.duration) - tt);
+        var rightOffset = Math.max(0, (Number(c.offset) || 0) + (tt - c.t0));
+        doc.history.checkpoint();
+        var list = audio.clips.slice();
+        var left = Object.assign({}, c);
+        left.duration = leftDur;
+        var right = Object.assign({}, c);
+        right.id = audio.nextAudioId++;
+        right.t0 = tt;
+        right.offset = rightOffset;
+        right.duration = rightDur;
+        list[at] = left;
+        list.splice(at + 1, 0, right);
+        audio.clips = list;
+        audio.selectedAudioIds = [left.id, right.id];
+        doc.touch();
+        return [left.id, right.id];
     }
 
     function selectClip(id, additive) {

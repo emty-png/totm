@@ -163,6 +163,44 @@ ScrollView {
                     onClicked: replacePicker.open()
                 }
             }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                SegmentedOption {
+                    label: qsTr("Duplicate")
+                    onClicked: {
+                        if (panel.doc)
+                            panel.doc.duplicateSelectedAudio();
+                    }
+                }
+                SegmentedOption {
+                    label: qsTr("Copy")
+                    onClicked: {
+                        if (panel.doc)
+                            TabState.audioClipboard = panel.doc.copySelectedAudio();
+                    }
+                }
+                SegmentedOption {
+                    label: qsTr("Paste")
+                    enabled: TabState.audioClipboard.length > 0
+                    onClicked: {
+                        if (panel.doc)
+                            panel.doc.pasteAudioClips(TabState.audioClipboard);
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                SegmentedOption {
+                    label: qsTr("Split at playhead")
+                    onClicked: panel.splitAtPlayhead()
+                }
+            }
         }
 
         PanelSection {
@@ -333,5 +371,16 @@ ScrollView {
         if (!name)
             return;
         panel.doc.replaceAudioSource(name, secs);
+    }
+
+    // Splits every selected clip at the playhead (interior splits only;
+    // one undo entry per clip via DocAudio.splitClip).
+    function splitAtPlayhead() {
+        if (!panel.doc)
+            return;
+        var t = Number(panel.doc.anim.currentTime) || 0;
+        var ids = panel.doc.audio.selectedAudioIds.slice();
+        for (var i = 0; i < ids.length; i++)
+            panel.doc.splitAudioClip(ids[i], t);
     }
 }

@@ -40,6 +40,7 @@ QtObject {
     property alias playing: transportState.playing
     property alias currentTime: transportState.currentTime
     property alias playBase: transportState.playBase
+    property alias loop: transportState.loop
 
     property var presets: DocAnimPresets {
         doc: anim.doc

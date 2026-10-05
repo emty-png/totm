@@ -56,6 +56,9 @@ bool resolveQuality(const QString &quality, int &w, int &h) {
 // Audible audio slice for one timeline clip: source file plus the
 // trimmed read window and its composition delay, all in seconds.
 // Volume is linear 0..1 (muted forces 0); fades ride seconds.
+// rate is the footage playback rate (1 for timeline clips); take is
+// composition seconds while the file read is take*rate. loopFile
+// requests -stream_loop for looping footage.
 struct AudioInput {
     QString path;
     double seek = 0.0;
@@ -65,14 +68,134 @@ struct AudioInput {
     double fadeIn = 0.0;
     double fadeOut = 0.0;
     bool muted = false;
+    double rate = 1.0;
+    bool loopFile = false;
 };
+
+// Fast fail-open probe: true when ffmpeg sees an audio stream.
+// Missing/undecodable files return false so the filter graph never
+// references a stream that does not exist ([i:a] would fail the render).
+bool fileHasAudioTrack(const QString &path, const QString &ffmpeg) {
+    if (path.isEmpty() || ffmpeg.isEmpty())
+        return false;
+    QProcess proc;
+    proc.start(ffmpeg, {QStringLiteral("-hide_banner"), QStringLiteral("-i"), path});
+    if (!proc.waitForFinished(8000))
+        return false;
+    const QString err = QString::fromLocal8Bit(proc.readAllStandardError());
+    return err.contains(QStringLiteral("Audio:"));
+}
+
+QString resolveBlobPath(const QString &name, const QString &audioDir, const QString &videoDir, bool preferVideo) {
+    if (name.isEmpty())
+        return {};
+    if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))) {
+        if (!QFile::exists(name))
+            return {};
+        const QString suf = QFileInfo(name).suffix().toLower();
+        if (!AppPaths::audioExtensions().contains(suf) && !AppPaths::videoExtensions().contains(suf))
+            return {};
+        return name;
+    }
+    if (name.contains(QStringLiteral("..")))
+        return {};
+    const QString first = (preferVideo ? videoDir : audioDir) + QStringLiteral("/") + name;
+    if (QFile::exists(first))
+        return first;
+    const QString second = (preferVideo ? audioDir : videoDir) + QStringLiteral("/") + name;
+    if (QFile::exists(second))
+        return second;
+    return {};
+}
+
+// Native video sound (opt-in via the export checkbox): one slice per
+// visible, unmuted video leaf. Window math mirrors ShapeItem.wantTime
+// (start/offset/rate, loop modulo). Animated hide is ignored in v1
+// (static visible only); Video time clips are ignored (legacy math).
+void collectVideoSound(const QVariantMap &scene, double duration, QList<AudioInput> &out, const QString &ffmpeg,
+    const QString &audioDir, const QString &videoDir) {
+    QList<QVariantList> nodeStack;
+    QList<bool> visStack;
+    nodeStack.append(scene.value(QStringLiteral("nodes")).toList());
+    visStack.append(true);
+    while (!nodeStack.isEmpty()) {
+        const QVariantList nodes = nodeStack.takeLast();
+        const bool parentVisible = visStack.takeLast();
+        for (const QVariant &nv : nodes) {
+            const QVariantMap n = nv.toMap();
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group")) {
+                const bool vis = n.value(QStringLiteral("visible"), true).toBool();
+                nodeStack.append(n.value(QStringLiteral("children")).toList());
+                visStack.append(parentVisible && vis);
+                continue;
+            }
+            const QString t = n.value(QStringLiteral("type")).toString();
+            const QString st = n.value(QStringLiteral("shapeType")).toString();
+            if (t != QLatin1String("video") && st != QLatin1String("video"))
+                continue;
+            if (!parentVisible || n.value(QStringLiteral("visible"), true).toBool() == false)
+                continue;
+            if (n.value(QStringLiteral("isMask"), false).toBool())
+                continue;
+            if (n.value(QStringLiteral("videoMuted"), false).toBool())
+                continue;
+            const QString src = n.value(QStringLiteral("videoSource")).toString();
+            if (src.isEmpty())
+                continue;
+            const QString path = resolveBlobPath(src, audioDir, videoDir, true);
+            if (path.isEmpty())
+                continue;
+            if (!fileHasAudioTrack(path, ffmpeg))
+                continue;
+            const double startComp = qMax(0.0, n.value(QStringLiteral("videoStart"), 0.0).toDouble());
+            if (startComp >= duration)
+                continue;
+            double rate = n.value(QStringLiteral("playbackRate"), 1.0).toDouble();
+            if (!(rate > 0.0))
+                rate = 1.0;
+            rate = qBound(0.25, rate, 4.0);
+            const double seekFile = qMax(0.0, n.value(QStringLiteral("videoOffset"), 0.0).toDouble());
+            const double fileDur = qMax(0.0, n.value(QStringLiteral("videoDuration"), 0.0).toDouble());
+            const bool loop = n.value(QStringLiteral("videoLoop"), true).toBool() && fileDur > 0.05;
+            double takeComp = duration - startComp;
+            if (fileDur > 0.05) {
+                if (seekFile >= fileDur)
+                    continue;
+                if (!loop) {
+                    const double maxComp = (fileDur - seekFile) / rate;
+                    if (maxComp <= 0.02)
+                        continue;
+                    takeComp = qMin(takeComp, maxComp);
+                }
+            } else {
+                // Unknown length free-runs like preview (no loop math).
+            }
+            if (takeComp <= 0.02)
+                continue;
+            AudioInput in;
+            in.path = path;
+            in.seek = seekFile;
+            in.take = takeComp;
+            in.delay = startComp;
+            in.volume = qBound(0.0, n.value(QStringLiteral("videoVolume"), 1.0).toDouble(), 1.0);
+            in.fadeIn = 0.0;
+            in.fadeOut = 0.0;
+            in.muted = false;
+            in.rate = rate;
+            in.loopFile = loop;
+            out.append(in);
+        }
+    }
+}
 
 // Timeline audio resolved against the render duration (same trim rule
 // as the canvas preview: intersect with [0, duration]). Missing blobs
 // are skipped so one lost file never fails the whole render.
 // Detached video sound shares the stored video blob in videos/ (legacy
 // absolute paths still feed ffmpeg directly, which extracts their track).
-QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
+// When includeVideoSound is set, native video leaves mix in too (see
+// collectVideoSound); GIF callers pass false (silent by design).
+QList<AudioInput> collectAudio(const QVariantMap &scene, double duration, bool includeVideoSound, const QString &ffmpeg) {
     QList<AudioInput> out;
     const QVariantMap audio = scene.value(QStringLiteral("audio")).toMap();
     const QVariantList clips = audio.value(QStringLiteral("clips")).toList();
@@ -84,28 +207,12 @@ QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
         const QString name = c.value(QStringLiteral("source")).toString();
         if (name.isEmpty())
             continue;
-        QString path;
         // Legacy absolute paths (detached sound from old designs) feed
         // directly; ffmpeg reads their audio track. Blob names resolve
         // under audio/, then videos/ for detached video sound.
-        if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))) {
-            if (!QFile::exists(name))
-                continue;
-            const QString suf = QFileInfo(name).suffix().toLower();
-            if (!AppPaths::audioExtensions().contains(suf) && !AppPaths::videoExtensions().contains(suf))
-                continue;
-            path = name;
-        } else {
-            if (name.contains(QStringLiteral("..")))
-                continue;
-            path = dir + QStringLiteral("/") + name;
-            if (!QFile::exists(path)) {
-                const QString vpath = vdir + QStringLiteral("/") + name;
-                if (!QFile::exists(vpath))
-                    continue;
-                path = vpath;
-            }
-        }
+        const QString path = resolveBlobPath(name, dir, vdir, false);
+        if (path.isEmpty())
+            continue;
         const double start = qMax(0.0, c.value(QStringLiteral("t0"), 0.0).toDouble());
         const double offset = qMax(0.0, c.value(QStringLiteral("offset"), 0.0).toDouble());
         const double end = qMin(c.value(QStringLiteral("t0"), 0.0).toDouble() + qMax(0.0, c.value(QStringLiteral("duration"), 0.0).toDouble()), duration);
@@ -120,15 +227,38 @@ QList<AudioInput> collectAudio(const QVariantMap &scene, double duration) {
         in.volume = in.muted ? 0.0 : qBound(0.0, c.value(QStringLiteral("volume"), 1.0).toDouble(), 1.0);
         in.fadeIn = qMax(0.0, c.value(QStringLiteral("fadeIn"), 0.0).toDouble());
         in.fadeOut = qMax(0.0, c.value(QStringLiteral("fadeOut"), 0.0).toDouble());
+        in.rate = 1.0;
+        in.loopFile = false;
         out.append(in);
     }
+    if (includeVideoSound)
+        collectVideoSound(scene, duration, out, ffmpeg, dir, vdir);
     return out;
 }
 
-// Filter graph shaping each input (volume, fades) then delaying it to
-// its timeline start and mixing down to one stereo track. Fades run
-// before the delay so their times stay clip-relative (0..take); both
-// are fit inside the take. normalize=0 keeps bed levels intact;
+// atempo chain for one playback rate (0.25..4): single filter covers
+// 0.5..2, wider rates chain (4 = 2*2, 0.25 = 0.5*0.5). Empty when ~1.
+QString atempoChain(double rate) {
+    if (rate > 0.999 && rate < 1.001)
+        return {};
+    double r = qBound(0.25, rate, 4.0);
+    QStringList parts;
+    while (r > 2.0) {
+        parts.append(QStringLiteral("atempo=2.000"));
+        r /= 2.0;
+    }
+    while (r < 0.5) {
+        parts.append(QStringLiteral("atempo=0.500"));
+        r /= 0.5;
+    }
+    parts.append(QStringLiteral("atempo=%1").arg(QString::number(r, 'f', 3)));
+    return parts.join(QStringLiteral(","));
+}
+
+// Filter graph shaping each input (tempo, volume, fades) then delaying
+// it to its timeline start and mixing down to one stereo track. Fades
+// run before the delay so their times stay clip-relative (0..take);
+// both are fit inside the take. normalize=0 keeps bed levels intact;
 // overlapping clips can clip instead of ducking (no per-clip volume
 // in v1, so there is nothing to preserve headroom for).
 QString audioFilter(const QList<AudioInput> &inputs) {
@@ -137,6 +267,9 @@ QString audioFilter(const QList<AudioInput> &inputs) {
         const AudioInput &in = inputs.at(i);
         const int ms = qMax(0, qRound(in.delay * 1000.0));
         QString chain = QStringLiteral("[%1:a]aresample=44100,aformat=channel_layouts=stereo").arg(i + 1);
+        const QString tempo = atempoChain(in.rate);
+        if (!tempo.isEmpty())
+            chain += QStringLiteral(",") + tempo;
         if (in.volume < 0.999)
             chain += QStringLiteral(",volume=%1").arg(QString::number(in.volume, 'f', 3));
         const double fi = qMin(qMax(0.0, in.fadeIn), qMax(0.001, in.take));
@@ -232,7 +365,7 @@ class VideoExporter::RenderThread : public QThread {
     Q_OBJECT
 public:
     RenderThread(QVariantMap scene, int outW, int outH, int fps, QString preset, int crf,
-        QString tempPath, QString format, int vp9Cpu, int vp9Crf, QObject *parent = nullptr)
+        QString tempPath, QString format, int vp9Cpu, int vp9Crf, bool includeVideoSound, QObject *parent = nullptr)
         : QThread(parent)
         , m_scene(std::move(scene))
         , m_outW(outW)
@@ -243,7 +376,8 @@ public:
         , m_tempPath(std::move(tempPath))
         , m_format(std::move(format))
         , m_vp9Cpu(vp9Cpu)
-        , m_vp9Crf(vp9Crf) {}
+        , m_vp9Crf(vp9Crf)
+        , m_includeVideoSound(includeVideoSound) {}
 
     void requestCancel() { m_cancelled.storeRelaxed(1); }
 
@@ -281,18 +415,24 @@ protected:
         // Timeline audio rides as extra inputs, each trimmed to its
         // audible window and delayed to its start, then mixed down.
         // GIF is silent by design (no audio inputs at all); no clips
-        // keeps the historical video-only path untouched.
+        // keeps the historical video-only path untouched. Native video
+        // sound mixes in only when the export checkbox opts in.
         const bool isGif = m_format == QStringLiteral("gif");
         const bool isWebm = m_format == QStringLiteral("webm");
-        const QList<AudioInput> audio = isGif ? QList<AudioInput>() : collectAudio(m_scene, duration);
+        const QList<AudioInput> audio = isGif ? QList<AudioInput>() : collectAudio(m_scene, duration, m_includeVideoSound, ffmpeg);
         QProcess proc;
         QStringList encArgs = {QStringLiteral("-y"), QStringLiteral("-f"), QStringLiteral("rawvideo"),
             QStringLiteral("-pix_fmt"), QStringLiteral("rgba"), QStringLiteral("-s"),
             QStringLiteral("%1x%2").arg(m_outW).arg(m_outH), QStringLiteral("-r"), QString::number(m_fps),
             QStringLiteral("-i"), QStringLiteral("-")};
         for (const AudioInput &in : audio) {
+            // File read is take*rate (tempo shrinks it back to take in
+            // the filter); looping footage infinite-loops the input.
+            const double fileTake = in.take * qBound(0.25, in.rate, 4.0);
+            if (in.loopFile)
+                encArgs += {QStringLiteral("-stream_loop"), QStringLiteral("-1")};
             encArgs += {QStringLiteral("-ss"), QString::number(in.seek, 'f', 3), QStringLiteral("-t"),
-                QString::number(in.take, 'f', 3), QStringLiteral("-i"), in.path};
+                QString::number(fileTake, 'f', 3), QStringLiteral("-i"), in.path};
         }
         if (isGif) {
             // Single-pass palette: split the stream, build a 256-color
@@ -512,6 +652,7 @@ protected:
     QString m_format = QStringLiteral("mp4");
     int m_vp9Cpu = 2;
     int m_vp9Crf = 31;
+    bool m_includeVideoSound = false;
     QAtomicInteger<int> m_cancelled{0};
 };
 
@@ -566,7 +707,7 @@ QString VideoExporter::ffmpegPath() {
 }
 
 bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality, int fps,
-    const QString &performance, const QString &designName, const QString &format) {
+    const QString &performance, const QString &designName, const QString &format, bool includeVideoSound) {
     if (m_rendering || (!m_thread.isNull() && m_thread->isRunning())) {
         setLastError(tr("Already rendering. Wait or cancel first."));
         return false;
@@ -626,7 +767,7 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
     emit finishedChanged();
     emit progressChanged();
 
-    auto *thread = new RenderThread(scene, outW, outH, fps, preset, crf, temp, outFormat, vp9Cpu, vp9Crf);
+    auto *thread = new RenderThread(scene, outW, outH, fps, preset, crf, temp, outFormat, vp9Cpu, vp9Crf, includeVideoSound && outFormat != QStringLiteral("gif"));
     m_thread = thread;
     connect(thread, &RenderThread::frameProgress, this, [this](int cur, int total) {
         m_currentFrame = cur;

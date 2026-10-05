@@ -52,6 +52,10 @@ Item {
         return TabState.animClipboard.length > 0 && !!d && d.selectedTops().length > 0;
     }
 
+    function canPasteAudio() {
+        return TabState.audioClipboard.length > 0 && !!shortcuts.doc();
+    }
+
     function canPaste() {
         return shortcuts.canPasteShapes() || shortcuts.canPasteClips();
     }
@@ -61,10 +65,12 @@ Item {
         if (!d)
             return;
         // Copy whatever is selected: clips go to the animation clipboard
-        // (cross-shape/design templates), shapes to the shape clipboard.
-        // Both can fill on one press when both selections exist.
+        // (cross-shape/design templates), audio to the audio clipboard,
+        // shapes to the shape clipboard. All can fill on one press.
         if (shortcuts.hasClips())
             TabState.animClipboard = d.copySelectedClips();
+        if (shortcuts.hasAudioSel())
+            TabState.audioClipboard = d.copySelectedAudio();
         if (shortcuts.hasShapes())
             TabState.clipboard = d.copySelected();
     }
@@ -74,14 +80,25 @@ Item {
         if (!d)
             return;
         // Animate mode pastes clips onto the selected tops (earliest at
-        // the playhead); design mode (or no clip targets) pastes shapes.
+        // the playhead) and audio at the playhead (both when both
+        // clipboards hold templates); design mode (or no clip targets)
+        // pastes shapes.
+        var pasted = false;
         if (shortcuts.panel && shortcuts.panel.mode === "animate" && shortcuts.canPasteClips()) {
             var tops = d.selectedTops();
             var uids = [];
             for (var i = 0; i < tops.length; i++)
                 uids.push(tops[i].uid);
             d.pasteClips(TabState.animClipboard, uids);
-        } else if (shortcuts.canPasteShapes()) {
+            pasted = true;
+        }
+        if (shortcuts.panel && shortcuts.panel.mode === "animate" && shortcuts.canPasteAudio()) {
+            d.pasteAudioClips(TabState.audioClipboard);
+            pasted = true;
+        }
+        if (pasted)
+            return;
+        if (shortcuts.canPasteShapes()) {
             d.insertCopies(TabState.clipboard);
         } else if (shortcuts.dropHandler && shortcuts.dropHandler.pasteFromSystem()) {
             // System clipboard fallback (copied files or raw pixels land
@@ -93,11 +110,18 @@ Item {
         var d = shortcuts.doc();
         if (!d)
             return;
-        // Animate mode with a clip selection duplicates clips at the
-        // playhead; otherwise duplicate the selected shapes.
-        if (shortcuts.panel && shortcuts.panel.mode === "animate" && shortcuts.hasClips())
+        // Animate mode duplicates clips and/or audio at the playhead
+        // (both when both selections exist); otherwise duplicates shapes.
+        var done = false;
+        if (shortcuts.panel && shortcuts.panel.mode === "animate" && shortcuts.hasClips()) {
             d.duplicateClips(d.anim.selectedClipIds);
-        else if (shortcuts.hasShapes())
+            done = true;
+        }
+        if (shortcuts.panel && shortcuts.panel.mode === "animate" && shortcuts.hasAudioSel()) {
+            d.duplicateSelectedAudio();
+            done = true;
+        }
+        if (!done && shortcuts.hasShapes())
             d.duplicateSelected();
     }
 
@@ -160,7 +184,7 @@ Item {
 
     Shortcut {
         sequences: [ShortcutState.editCopy]
-        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && (shortcuts.hasShapes() || shortcuts.hasClips())
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && (shortcuts.hasShapes() || shortcuts.hasClips() || shortcuts.hasAudioSel())
         onActivated: {
             if (shortcuts.guarded())
                 return;
@@ -183,7 +207,7 @@ Item {
 
     Shortcut {
         sequences: [ShortcutState.editDuplicate]
-        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && (shortcuts.hasShapes() || shortcuts.hasClips())
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && (shortcuts.hasShapes() || shortcuts.hasClips() || shortcuts.hasAudioSel())
         onActivated: {
             if (shortcuts.guarded())
                 return;
@@ -627,6 +651,24 @@ Item {
             if (shortcuts.guarded())
                 return;
             shortcuts.doTogglePlay();
+        }
+    }
+
+    // Split selected audio at the playhead (fixed Ctrl+K, not remappable
+    // in v1 to avoid registry churn; audio-only).
+    Shortcut {
+        sequences: ["Ctrl+K"]
+        enabled: !TabState.isHomeSelected && !ShortcutState.capturing && shortcuts.panel.mode === "animate" && shortcuts.hasAudioSel()
+        onActivated: {
+            if (shortcuts.guarded())
+                return;
+            var d = shortcuts.doc();
+            if (!d)
+                return;
+            var t = Number(d.anim.currentTime) || 0;
+            var aids = d.audio.selectedAudioIds.slice();
+            for (var j = 0; j < aids.length; j++)
+                d.splitAudioClip(aids[j], t);
         }
     }
 

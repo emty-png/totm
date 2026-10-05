@@ -24,6 +24,9 @@ QtObject {
     // options/easing, no ids or targets) app-wide so clips paste
     // across shapes and designs. Reassigned wholesale like clipboard.
     property var animClipboard: []
+    // Audio clipboard: DocAudio templates (source/duration/offset/dt/
+    // volume/fades/muted, no ids) app-wide like animClipboard.
+    property var audioClipboard: []
     // Properties clipboard for the panel three-dot menus (design values /
     // style structure / both, animation clip values / shell / both).
     // {scope: "design"|"anim", mode: "values"|"props"|"both", payload}.

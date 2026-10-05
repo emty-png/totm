@@ -131,7 +131,9 @@ Item {
             }
         }
 
-        // Diamond keyframes at both clip ends: start moves, end stretches.
+        // Diamond keyframes at both clip ends: start trims (left-trim,
+        // keys stay proportional), end stretches. Stepped clips keep
+        // start-move (locked duration). Bar drags still move.
         Repeater {
             model: lane.keyEnds()
 
@@ -169,9 +171,9 @@ Item {
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
                     hoverEnabled: true
-                    cursorShape: lane.dragging ? Qt.ClosedHandCursor : modelData.end === "end" ? Qt.SizeHorCursor : Qt.PointingHandCursor
+                    cursorShape: lane.dragging ? Qt.ClosedHandCursor : Qt.SizeHorCursor
                     preventStealing: true
-                    onPressed: mouse => lane.dragPress(modelData.clipId, modelData.end === "end" ? "stretch" : "move", lane.mapFromItem(endMouse, mouse.x, mouse.y).x)
+                    onPressed: mouse => lane.dragPress(modelData.clipId, lane.pressModeFor(modelData), lane.mapFromItem(endMouse, mouse.x, mouse.y).x)
                     onPositionChanged: mouse => lane.dragMove(lane.mapFromItem(endMouse, mouse.x, mouse.y).x)
                     onReleased: lane.dragRelease()
                     onClicked: mouse => {
@@ -394,7 +396,7 @@ Item {
                 return lane.laneX(lane.dragKeyAbs);
             if (lane.dragMode === "move")
                 return lane.laneX(tick.x + lane.dragT0 - lane.snapT0);
-            if (lane.dragMode === "stretch") {
+            if (lane.dragMode === "stretch" || lane.dragMode === "trim-start") {
                 var c = lane.findClip(tick.clipId);
                 var kt = (c && c.options && c.options.keys && c.options.keys[tick.keyIndex]) ? Number(c.options.keys[tick.keyIndex].t) : 0;
                 return lane.laneX(lane.dragT0 + kt * lane.dragDur);
@@ -403,6 +405,17 @@ Item {
         if (lane.jointActive && lane.jointOrig[tick.clipId] !== undefined)
             return lane.laneX(tick.x + lane.jointDx);
         return lane.laneX(tick.x);
+    }
+
+    // Start diamond mode: trim-start for trimmable clips, move for
+    // stepped instants (locked duration).
+    function pressModeFor(end) {
+        if (!end || end.end === "end")
+            return "stretch";
+        var c = lane.findClip(end.clipId);
+        if (c && lane.isStepped(c.preset))
+            return "move";
+        return "trim-start";
     }
 
     function keyClipAt(clipId, keyIndex) {
@@ -573,6 +586,15 @@ Item {
             var end = Math.min(comp, lane.snapTime(lane.snapT0 + lane.snapDur + (lx - lane.pressLx) / lane.pxPerSec));
             lane.dragT0 = lane.snapT0;
             lane.dragDur = Math.min(1800, Math.max(0.1, end - lane.snapT0));
+            lane.doc.nudgeClip(lane.dragClipId, lane.dragT0, lane.dragDur);
+        } else if (lane.dragMode === "trim-start") {
+            // Left-trim: end stays fixed, start slides. Keys stay
+            // proportional (local t preserved). Floor 0.1s.
+            var oldEnd = lane.snapT0 + lane.snapDur;
+            var nt0 = lane.snapTime(lane.snapT0 + (lx - lane.pressLx) / lane.pxPerSec);
+            nt0 = Math.min(oldEnd - 0.1, Math.max(0, nt0));
+            lane.dragT0 = Math.round(nt0 * 100) / 100;
+            lane.dragDur = Math.max(0.1, oldEnd - lane.dragT0);
             lane.doc.nudgeClip(lane.dragClipId, lane.dragT0, lane.dragDur);
         } else if (lane.jointIds.length > 1) {
             // Joint move: dragged clip snaps, everyone rides the delta,

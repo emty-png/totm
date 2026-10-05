@@ -16,6 +16,10 @@ QtObject {
     // undo read through this instead of the live frame.
     property var playBase: null
     property double lastTick: 0
+    // Composition loop switch (session-only like selection). When false
+    // (default) playback stops at the end; when true it wraps. Toggled
+    // from the timeline transport.
+    property bool loop: false
 
     // play() captures once (resume keeps the old base); pause() freezes
     // the frame; stop() restores base and marks dirty so the next
@@ -25,6 +29,15 @@ QtObject {
             return;
         if (!transport.playBase)
             transport.playBase = captureBase();
+        var anim = transport.doc.anim;
+        var d = Math.max(0.5, anim.duration);
+        // Restart from zero when pressing play at the end in play-once
+        // mode; otherwise tick would clamp and instantly pause.
+        if (!transport.loop && transport.currentTime >= d - 0.001) {
+            transport.restoreBaseValues();
+            transport.currentTime = 0;
+            anim.sampler.applySample(transport.doc, anim.sampler.sampleAnim(transport.doc, 0, transport.playBase));
+        }
         transport.lastTick = 0;
         transport.playing = true;
     }
@@ -48,7 +61,9 @@ QtObject {
     // clamped so tab-switch stalls never jump the playhead. Loop wraps
     // restore authored values first (see seek): without it the new
     // loop inherits the old loop's frame (notably a stale hidden flag
-    // that gates every other clip off).
+    // that gates every other clip off). Play-once clamps at the end
+    // and pauses, leaving the end frame on screen (base stays so the
+    // frame reads absolute, like pause).
     function tick() {
         if (!transport.playing)
             return;
@@ -59,14 +74,20 @@ QtObject {
         var anim = transport.doc.anim;
         var d = Math.max(0.5, anim.duration);
         var t = transport.currentTime + dt;
-        var wrapped = false;
         if (t >= d) {
-            t = t % d;
-            wrapped = true;
+            if (transport.loop) {
+                t = t % d;
+                transport.currentTime = t;
+                transport.restoreBaseValues();
+                anim.sampler.applySample(transport.doc, anim.sampler.sampleAnim(transport.doc, t, transport.playBase));
+            } else {
+                transport.currentTime = d;
+                anim.sampler.applySample(transport.doc, anim.sampler.sampleAnim(transport.doc, d, transport.playBase));
+                transport.playing = false;
+            }
+            return;
         }
         transport.currentTime = t;
-        if (wrapped)
-            transport.restoreBaseValues();
         anim.sampler.applySample(transport.doc, anim.sampler.sampleAnim(transport.doc, t, transport.playBase));
     }
 
@@ -87,6 +108,10 @@ QtObject {
         if (hadBase && nt < transport.currentTime)
             transport.restoreBaseValues();
         transport.currentTime = nt;
+        // Scrub-while-playing: re-anchor the wall clock so the next
+        // tick advances from the seek instant instead of jumping.
+        if (transport.playing)
+            transport.lastTick = Date.now();
         anim.sampler.applySample(transport.doc, anim.sampler.sampleAnim(transport.doc, nt, transport.playBase));
     }
 

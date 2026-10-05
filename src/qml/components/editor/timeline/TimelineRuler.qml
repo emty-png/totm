@@ -141,12 +141,12 @@ Item {
                 ruler.doc.seekPlayhead(Math.min(ruler.seconds, Math.max(0, (x - ruler.originX) / ruler.pxPerSec)));
         }
 
-        // Grabbing the ruler stops playback and finishes any open field
-        // editor; the seek below lands the frozen frame where pressed.
+        // Grabbing the ruler finishes any open field editor; the seek
+        // below lands the frame where pressed. Scrub-while-playing:
+        // playback keeps running and audio/video re-anchor from the
+        // new playhead (see DocTransport.seek lastTick reset).
         onPressed: mouse => {
             ruler.forceActiveFocus();
-            if (ruler.doc && ruler.doc.anim.playing)
-                ruler.doc.anim.pause();
             seekMouse.seekAt(mouse.x);
         }
         onPositionChanged: mouse => {
