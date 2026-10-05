@@ -26,7 +26,7 @@
 #include <functional>
 
 namespace {
-constexpr int kSchemaVersion = 2;
+constexpr int kSchemaVersion = 3;
 constexpr int kMaxNameLength = 120;
 // .totm import cap: blobs allow 100MB image/audio + 1GB video; base64
 // inflates ~4/3. 1.5GiB covers a maxed-out design without letting a
@@ -137,6 +137,17 @@ QStringList unavailableFonts(const QStringList &families) {
             missing.append(f);
     }
     return missing;
+}
+
+// Scene schema version carried by entryToScene output (0 when absent
+// or unparseable: legacy files predate the field). Readers accept
+// anything <= kSchemaVersion; foreign files above it are refused at
+// the import gate below, own-library files load best-effort so a
+// downgrade never nukes the library at startup.
+int sceneVersion(const QVariantMap &scene) {
+    bool ok = false;
+    const int v = scene.value(QStringLiteral("version"), 0).toInt(&ok);
+    return ok && v > 0 ? v : 0;
 }
 
 // Resolved .totm destination: delegates to AppPaths so the write and
@@ -1072,8 +1083,18 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
         setLastError(tr("That file is not a totm design."));
         return {};
     }
+    // Forward-compat gate: scenes above our schema may carry fields we
+    // would silently drop or misread, so refuse with an update hint
+    // instead of importing a corrupted-looking design. Own-library
+    // files bypass this (readDesignFile loads best-effort) so a
+    // downgrade never nukes the library at startup.
+    const QVariantMap rawScene = root.value(QStringLiteral("scene")).toObject().toVariantMap();
+    if (sceneVersion(rawScene) > kSchemaVersion) {
+        setLastError(tr("That design was made by a newer totm (scene v%1) — update to open it.").arg(sceneVersion(rawScene)));
+        return {};
+    }
     const QString target = findWorkspace(workspaceId) >= 0 ? workspaceId : m_defaultWorkspaceId;
-    QVariantMap scene = entryToScene(root.value(QStringLiteral("scene")).toObject().toVariantMap());
+    QVariantMap scene = entryToScene(rawScene);
     const QJsonObject blobs = root.value(QStringLiteral("blobs")).toObject();
     const QJsonObject imageBlobs = blobs.value(QStringLiteral("images")).toObject();
     const QJsonObject audioBlobs = blobs.value(QStringLiteral("audio")).toObject();

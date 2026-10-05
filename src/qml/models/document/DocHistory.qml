@@ -3,7 +3,9 @@ import QtQuick
 // Undo/redo for one Document. Snapshot-based: entries hold a full
 // scene (uids preserved) plus selection, so undo restores exact
 // nodes. Discrete edits checkpoint once; drags and scrubs wrap in
-// nested begin/end so each gesture commits a single entry.
+// nested begin/end so each gesture commits a single entry. Depth is
+// capped at 50 entries and 256MB (never below 5 entries), so heavy
+// designs bound memory instead of growing with the session.
 QtObject {
     id: history
     required property var doc
@@ -18,6 +20,14 @@ QtObject {
     property int depth: 0
     property bool applying: false
     property int maxDepth: 50
+    // Memory budget: entries hold full scenes, so a count cap alone can
+    // still pin hundreds of MB on blob-heavy designs. Sizes ride a
+    // parallel array (bytes ≈ JSON length); pushes evict oldest while
+    // over budget, never below minEntries so undo never vanishes.
+    property int maxBytes: 268435456
+    property int minEntries: 5
+    property var undoSizes: []
+    property var redoSizes: []
 
     readonly property bool canUndo: history.undoStack.length > 0
     readonly property bool canRedo: history.redoStack.length > 0
@@ -102,13 +112,32 @@ QtObject {
         history.applying = false;
     }
 
+    function _bytesOf(entry) {
+        try {
+            var s = JSON.stringify(entry ? entry.scene : null);
+            return s ? s.length : 0;
+        } catch (e) {
+            return 1048576;
+        }
+    }
+
     function _pushUndo(entry) {
         var s = history.undoStack.slice();
+        var sizes = history.undoSizes.slice();
         s.push(entry);
-        while (s.length > history.maxDepth)
+        sizes.push(history._bytesOf(entry));
+        var bytes = 0;
+        for (var i = 0; i < sizes.length; i++)
+            bytes += sizes[i];
+        while ((s.length > history.maxDepth || (bytes > history.maxBytes && s.length > history.minEntries)) && s.length > 0) {
+            bytes -= sizes[0];
             s.shift();
+            sizes.shift();
+        }
         history.undoStack = s;
+        history.undoSizes = sizes;
         history.redoStack = [];
+        history.redoSizes = [];
     }
 
     // Unconditional checkpoint before a discrete mutation. Settles any
@@ -166,11 +195,17 @@ QtObject {
             return;
         var cur = capture();
         var s = history.undoStack.slice();
+        var sizes = history.undoSizes.slice();
         var entry = s.pop();
+        sizes.pop();
         history.undoStack = s;
+        history.undoSizes = sizes;
         var r = history.redoStack.slice();
+        var rsizes = history.redoSizes.slice();
         r.push(cur);
+        rsizes.push(history._bytesOf(cur));
         history.redoStack = r;
+        history.redoSizes = rsizes;
         restore(entry);
     }
 
@@ -179,17 +214,25 @@ QtObject {
             return;
         var cur = capture();
         var r = history.redoStack.slice();
+        var rsizes = history.redoSizes.slice();
         var entry = r.pop();
+        rsizes.pop();
         history.redoStack = r;
+        history.redoSizes = rsizes;
         var s = history.undoStack.slice();
+        var sizes = history.undoSizes.slice();
         s.push(cur);
+        sizes.push(history._bytesOf(cur));
         history.undoStack = s;
+        history.undoSizes = sizes;
         restore(entry);
     }
 
     function clear() {
         history.undoStack = [];
         history.redoStack = [];
+        history.undoSizes = [];
+        history.redoSizes = [];
         history.pending = null;
         history.depth = 0;
     }

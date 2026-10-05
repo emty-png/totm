@@ -343,6 +343,92 @@ QString suffixForFormat(const QString &format) {
         return QStringLiteral(".gif");
     return QStringLiteral(".mp4");
 }
+// Cheap audible-content probe (no ffmpeg, no existence checks): any
+// timeline audio clip counts (muted ones still ride the mix at volume
+// 0), plus any unmuted video leaf when native sound is opted in.
+// Over-approximates missing-file cases on purpose: the worker skips
+// those later, and requiring the codec is harmless with full builds.
+bool sceneNeedsAudio(const QVariantMap &scene, bool includeVideoSound) {
+    const QVariantList clips = scene.value(QStringLiteral("audio")).toMap().value(QStringLiteral("clips")).toList();
+    if (!clips.isEmpty())
+        return true;
+    if (!includeVideoSound)
+        return false;
+    QList<QVariantList> stack;
+    stack.append(scene.value(QStringLiteral("nodes")).toList());
+    while (!stack.isEmpty()) {
+        const QVariantList nodes = stack.takeLast();
+        for (const QVariant &nv : nodes) {
+            const QVariantMap n = nv.toMap();
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group")) {
+                stack.append(n.value(QStringLiteral("children")).toList());
+                continue;
+            }
+            const QString t = n.value(QStringLiteral("type")).toString();
+            const QString st = n.value(QStringLiteral("shapeType")).toString();
+            if (t != QLatin1String("video") && st != QLatin1String("video"))
+                continue;
+            if (n.value(QStringLiteral("videoSource")).toString().isEmpty())
+                continue;
+            if (n.value(QStringLiteral("videoMuted"), false).toBool())
+                continue;
+            return true;
+        }
+    }
+    return false;
+}
+// Encoders shipped by the ffmpeg binary (memoized per path; a failed
+// probe fails open and the render surfaces the real error). Parsed
+// from `ffmpeg -encoders` capability lines ("V..... libx264 ...").
+QSet<QString> availableEncoders(const QString &ffmpeg) {
+    static QString cachedPath;
+    static QSet<QString> cached;
+    if (!cachedPath.isEmpty() && cachedPath == ffmpeg)
+        return cached;
+    cachedPath = ffmpeg;
+    cached.clear();
+    QProcess proc;
+    proc.start(ffmpeg, {QStringLiteral("-hide_banner"), QStringLiteral("-encoders")});
+    if (!proc.waitForFinished(8000))
+        return cached;
+    const QString out = QString::fromLocal8Bit(proc.readAllStandardOutput());
+    for (const QString &line : out.split(QLatin1Char('\n'))) {
+        const QString t = line.trimmed();
+        if (t.length() < 8 || (t[0] != QLatin1Char('V') && t[0] != QLatin1Char('A')))
+            continue;
+        const QString name = t.section(QLatin1Char(' '), 1, 1).trimmed();
+        if (!name.isEmpty())
+            cached.insert(name);
+    }
+    return cached;
+}
+// Encoders the render actually needs, so a minimal ffmpeg fails fast
+// at Render time instead of minutes into the pipe. GIF needs none
+// (silent palette path); mp4 rides libx264 + AAC, WebM libvpx-vp9 +
+// Opus, audio codecs only when the mix is non-empty.
+QStringList missingEncoders(const QString &ffmpeg, const QString &format, bool needsAudio) {
+    QStringList want;
+    if (format == QLatin1String("webm")) {
+        want.append(QStringLiteral("libvpx-vp9"));
+        if (needsAudio)
+            want.append(QStringLiteral("libopus"));
+    } else if (format != QLatin1String("gif")) {
+        want.append(QStringLiteral("libx264"));
+        if (needsAudio)
+            want.append(QStringLiteral("aac"));
+    }
+    if (want.isEmpty())
+        return {};
+    const QSet<QString> have = availableEncoders(ffmpeg);
+    if (have.isEmpty())
+        return {}; // Probe failed: fail open, the render reports it.
+    QStringList missing;
+    for (const QString &e : want) {
+        if (!have.contains(e))
+            missing.append(e);
+    }
+    return missing;
+}
 // User-facing install hint per OS when no ffmpeg binary is on PATH.
 QString ffmpegMissingMessage() {
 #if defined(Q_OS_WIN)
@@ -741,6 +827,16 @@ bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality
 
     if (ffmpegPath().isEmpty()) {
         setLastError(ffmpegMissingMessage());
+        return false;
+    }
+    // Codec preflight: a minimal ffmpeg would otherwise fail minutes
+    // into the pipe. GIF needs no audio codecs by design.
+    const bool wantVideoSound = includeVideoSound && outFormat != QStringLiteral("gif");
+    const QStringList missing = missingEncoders(ffmpegPath(), outFormat, sceneNeedsAudio(scene, wantVideoSound));
+    if (!missing.isEmpty()) {
+        setLastError(tr("This ffmpeg cannot encode %1 (missing %2). Use a full ffmpeg build, then export again.")
+                .arg(outFormat.toUpper())
+                .arg(missing.join(QStringLiteral(", "))));
         return false;
     }
     if (!m_tempPath.isEmpty())

@@ -62,8 +62,9 @@ public:
     // (other values coerce to mp4); includeVideoSound mixes native
     // video leaves in (GIF stays silent).
     // qualityLabel reads "Rendering <design> <quality><fps> <format>".
-    // Returns false when already rendering, the scene is empty, or ffmpeg
-    // is missing.
+    // Returns false when already rendering, the scene is empty, ffmpeg
+    // is missing, or ffmpeg lacks the needed encoders (checked up
+    // front so minimal builds fail fast instead of mid-render).
     Q_INVOKABLE bool startExport(const QVariantMap &scene, const QString &quality, int fps,
         const QString &performance, const QString &designName, const QString &format = QStringLiteral("mp4"),
         bool includeVideoSound = false);

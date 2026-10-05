@@ -94,10 +94,14 @@ jobs:
             echo "SMOKE FAIL: exited early with $code"
             exit 1
           fi
+      - name: Checksum AppImage
+        run: sha256sum totm-*.AppImage | tee totm-x86_64.sha256
       - name: Upload AppImage
         uses: softprops/action-gh-release@v2
         with:
-          files: totm-*.AppImage
+          files: |
+            totm-*.AppImage
+            totm-x86_64.sha256
 
   macos-dmg:
     runs-on: macos-15
@@ -113,14 +117,61 @@ jobs:
         run: cmake --preset ci
       - name: Build
         run: cmake --build --preset ci
+      # Unsigned builds still Gatekeep-block on Sequoia; sign + notarize
+      # when secrets exist, ad-hoc sign otherwise so local runs match.
+      # Secret names: APPLE_CERT_P12 (base64), APPLE_CERT_PASSWORD,
+      # APPLE_DEVELOPER_ID (e.g. "Developer ID Application: ..."),
+      # APPLE_ID, APPLE_APP_PASSWORD, APPLE_TEAM_ID.
+      - name: Check signing secrets
+        id: signcheck
+        run: |
+          if [ -n "${{ secrets.APPLE_DEVELOPER_ID }}" ]; then echo "sign=yes" >> "$GITHUB_OUTPUT"; else echo "sign=no" >> "$GITHUB_OUTPUT"; fi
       - name: Bundle Qt frameworks
-        run: macdeployqt build/ci/src/totm.app -qmldir=src/qml -dmg
-      - name: Rename DMG
-        run: mv build/ci/src/*.dmg totm-arm64.dmg
+        run: macdeployqt build/ci/src/totm.app -qmldir=src/qml
+      - name: Import signing certificate
+        if: steps.signcheck.outputs.sign == 'yes'
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          set -e
+          echo "$APPLE_CERT_P12" | base64 --decode > /tmp/totm-sign.p12
+          security create-keychain -p actions build.keychain
+          security set-keychain-settings build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import /tmp/totm-sign.p12 -k build.keychain -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+          rm /tmp/totm-sign.p12
+      - name: Sign app bundle
+        run: |
+          set -e
+          if [ "${{ steps.signcheck.outputs.sign }}" = "yes" ]; then
+            codesign --deep --force --options runtime --entitlements packaging/macos/entitlements.plist --sign "${{ secrets.APPLE_DEVELOPER_ID }}" --keychain build.keychain build/ci/src/totm.app
+          else
+            codesign --deep --force -s - build/ci/src/totm.app
+          fi
+          codesign --verify --deep --strict build/ci/src/totm.app
+      - name: Build DMG
+        run: hdiutil create -volname totm -srcfolder build/ci/src/totm.app -ov -format UDZO totm-arm64.dmg
+      - name: Sign and notarize DMG
+        if: steps.signcheck.outputs.sign == 'yes'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -e
+          codesign --force --sign "${{ secrets.APPLE_DEVELOPER_ID }}" --keychain build.keychain totm-arm64.dmg
+          xcrun notarytool submit totm-arm64.dmg --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple totm-arm64.dmg
+      - name: Checksum DMG
+        run: shasum -a 256 totm-arm64.dmg | tee totm-arm64.sha256
       - name: Upload DMG
         uses: softprops/action-gh-release@v2
         with:
-          files: totm-arm64.dmg
+          files: |
+            totm-arm64.dmg
+            totm-arm64.sha256
 
   windows-installer:
     runs-on: windows-2022
@@ -146,10 +197,20 @@ jobs:
       - name: Build installer
         working-directory: build/ci
         run: cpack -G NSIS
+      # No code-signing certificate yet: SmartScreen will flag the
+      # installer until one exists. The checksum lets users verify the
+      # download in the meantime (sign with signtool once available).
+      - name: Checksum installer
+        shell: pwsh
+        run: |
+          $exe = Get-Item build/ci/totm-*-win64.exe
+          (Get-FileHash $exe -Algorithm SHA256).Hash | Out-File build/ci/totm-win64.sha256
       - name: Upload installer
         uses: softprops/action-gh-release@v2
         with:
-          files: build/ci/totm-*-win64.exe
+          files: |
+            build/ci/totm-*-win64.exe
+            build/ci/totm-win64.sha256
 
   notes:
     needs: [linux-appimage, macos-dmg, windows-installer]
