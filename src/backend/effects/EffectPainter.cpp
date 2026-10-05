@@ -12,6 +12,7 @@
 #include <QIODevice>
 #include <QLinearGradient>
 #include <QPainterPathStroker>
+#include <QRadialGradient>
 #include <QPalette>
 #include <QRawFont>
 #include <QTextBlock>
@@ -55,7 +56,7 @@ FillEntry FillEntry::fromMap(const QVariantMap &m)
     f.enabled = m.value(QStringLiteral("enabled"), true).toBool();
     f.color = colorFrom(m.value(QStringLiteral("color"), m.value(QStringLiteral("fill"))), f.color);
     QString t = m.value(QStringLiteral("type"), m.value(QStringLiteral("fillType"), QStringLiteral("solid"))).toString();
-    f.type = (t == QLatin1String("linear")) ? t : QStringLiteral("solid");
+    f.type = (t == QLatin1String("linear") || t == QLatin1String("radial")) ? t : QStringLiteral("solid");
     f.gradient = m.value(QStringLiteral("gradient"), m.value(QStringLiteral("fillGradient"))).toMap();
     f.opacity = qBound(0.0, m.value(QStringLiteral("opacity"), 1.0).toDouble(), 1.0);
     return f;
@@ -97,7 +98,7 @@ StrokeEntry StrokeEntry::fromMap(const QVariantMap &m)
     s.enabled = m.value(QStringLiteral("enabled"), true).toBool();
     s.color = colorFrom(m.value(QStringLiteral("color"), m.value(QStringLiteral("stroke"))), s.color);
     QString t = m.value(QStringLiteral("type"), m.value(QStringLiteral("strokeType"), QStringLiteral("solid"))).toString();
-    s.type = (t == QLatin1String("linear")) ? t : QStringLiteral("solid");
+    s.type = (t == QLatin1String("linear") || t == QLatin1String("radial")) ? t : QStringLiteral("solid");
     s.gradient = m.value(QStringLiteral("gradient"), m.value(QStringLiteral("strokeGradient"))).toMap();
     s.width = qMax(0.0, m.value(QStringLiteral("width"), m.value(QStringLiteral("strokeWidth"), 0.0)).toDouble());
     s.dash = dashFrom(m.value(QStringLiteral("dash"), m.value(QStringLiteral("strokeDash"))));
@@ -499,6 +500,17 @@ QPainterPath penPath(const QVariantList &subs, double ox, double oy, double s)
 
 QBrush paintBrush(const QRectF &box, const QString &type, const QVariantMap &grad, const QColor &solid)
 {
+    if (type == QLatin1String("radial")) {
+        const RadialSpec spec = radialFrom(grad);
+        QPointF c;
+        double rad = 1.0;
+        radialCenterRadius(box, spec, &c, &rad);
+        QRadialGradient g(c, rad);
+        g.setCoordinateMode(QGradient::LogicalMode);
+        for (const GradientStop &s : spec.stops)
+            g.setColorAt(qBound(0.0, s.pos, 1.0), s.color);
+        return QBrush(g);
+    }
     if (type == QLatin1String("linear")) {
         const LinearSpec spec = linearFrom(grad);
         QPointF p0, p1;
@@ -521,6 +533,17 @@ QColor withEntryOpacity(const QColor &c, double opacity)
 
 QBrush fillBrushFor(const QRectF &box, const FillEntry &f)
 {
+    if (f.type == QLatin1String("radial")) {
+        const RadialSpec spec = radialFrom(f.gradient);
+        QPointF c;
+        double rad = 1.0;
+        radialCenterRadius(box, spec, &c, &rad);
+        QRadialGradient g(c, rad);
+        g.setCoordinateMode(QGradient::LogicalMode);
+        for (const GradientStop &s : spec.stops)
+            g.setColorAt(qBound(0.0, s.pos, 1.0), withEntryOpacity(s.color, f.opacity));
+        return QBrush(g);
+    }
     if (f.type == QLatin1String("linear")) {
         const LinearSpec spec = linearFrom(f.gradient);
         QPointF p0, p1;
@@ -536,6 +559,17 @@ QBrush fillBrushFor(const QRectF &box, const FillEntry &f)
 
 QBrush strokeBrushFor(const QRectF &box, const StrokeEntry &s)
 {
+    if (s.type == QLatin1String("radial")) {
+        const RadialSpec spec = radialFrom(s.gradient);
+        QPointF c;
+        double rad = 1.0;
+        radialCenterRadius(box, spec, &c, &rad);
+        QRadialGradient g(c, rad);
+        g.setCoordinateMode(QGradient::LogicalMode);
+        for (const GradientStop &st : spec.stops)
+            g.setColorAt(qBound(0.0, st.pos, 1.0), withEntryOpacity(st.color, s.opacity));
+        return QBrush(g);
+    }
     if (s.type == QLatin1String("linear")) {
         const LinearSpec spec = linearFrom(s.gradient);
         QPointF p0, p1;

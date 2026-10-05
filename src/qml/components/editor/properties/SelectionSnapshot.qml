@@ -67,6 +67,7 @@ QtObject {
                     flipH: s.flipH,
                     flipV: s.flipV,
                     imageSource: s.imageSource ?? "",
+                    imageFit: (s.imageFit === "cover" || s.imageFit === "fit") ? s.imageFit : "fill",
                     videoSource: s.videoSource ?? "",
                     videoDuration: Math.max(0, Number(s.videoDuration) || 0),
                     videoOffset: Math.max(0, Number(s.videoOffset) || 0),

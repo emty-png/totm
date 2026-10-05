@@ -112,6 +112,9 @@ class SettingsStore : public QObject {
     // playback ticks, single-threaded scene graph (applied at startup,
     // so toggling notes a restart). Off by default; General tab.
     Q_PROPERTY(bool lowSpecMode READ lowSpecMode WRITE setLowSpecMode NOTIFY generalChanged)
+    // Recently used canvas colors (#rrggbb, MRU first, max 10). Pushed
+    // by the color picker on close; QML binds for the recents row.
+    Q_PROPERTY(QStringList recentColors READ recentColors NOTIFY generalChanged)
 
 public:
     static SettingsStore *create(QQmlEngine *engine, QJSEngine *scriptEngine);
@@ -300,6 +303,9 @@ public:
     Q_INVOKABLE void setDefaultFormat(const QString &format);
     Q_INVOKABLE bool lowSpecMode() const;
     Q_INVOKABLE void setLowSpecMode(bool on);
+    Q_INVOKABLE QStringList recentColors() const;
+    Q_INVOKABLE void pushRecentColor(const QString &color);
+    Q_INVOKABLE void clearRecentColors();
     // Applies one canvas preset (16:9, 9:16, 1:1, 4:3) to both defaults
     // in a single change; unknown names are ignored.
     Q_INVOKABLE void applyScenePreset(const QString &name);
@@ -408,4 +414,6 @@ private:
     QString m_defaultPerformance = QStringLiteral("normal");
     QString m_defaultFormat = QStringLiteral("mp4");
     bool m_lowSpecMode = false;
+    // MRU canvas colors, canonical #rrggbb, max 10.
+    QStringList m_recentColors;
 };

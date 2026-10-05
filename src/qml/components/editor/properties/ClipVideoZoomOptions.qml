@@ -88,14 +88,6 @@ ColumnLayout {
         onScrubFinished: section.endScrub()
     }
 
-    Text {
-        Layout.fillWidth: true
-        text: qsTr("1x is the native frame. Equal ends hold the punch-in. Easing shapes the ramp.")
-        font.pixelSize: 11
-        color: AppTheme.muted
-        wrapMode: Text.WordWrap
-    }
-
     function setOption(role, value) {
         if (!section.doc)
             return;

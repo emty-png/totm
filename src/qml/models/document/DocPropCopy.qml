@@ -110,17 +110,23 @@ QtObject {
         return out;
     }
 
-    // Clipboard gradient map accepting new {angle,stops[]} and legacy
-    // {angle,c1,c2} payloads (old copies paste without loss).
+    // Clipboard gradient map accepting new {angle,cx,cy,r,stops[]} and
+    // legacy {angle,c1,c2} payloads (old copies paste without loss).
     function stopsMapFor(g) {
         var d = g ?? {};
         if (d.stops && typeof d.stops.length === "number")
             return {
                 angle: Number(d.angle) || 0,
+                cx: d.cx !== undefined ? Math.min(1, Math.max(0, Number(d.cx) || 0)) : 0.5,
+                cy: d.cy !== undefined ? Math.min(1, Math.max(0, Number(d.cy) || 0)) : 0.5,
+                r: d.r !== undefined ? Math.min(4, Math.max(0.01, Number(d.r) || 0.5)) : 0.5,
                 stops: d.stops
             };
         return {
             angle: Number(d.angle) || 0,
+            cx: 0.5,
+            cy: 0.5,
+            r: 0.5,
             stops: [
                 {
                     color: String(d.c1 ?? "#000000"),
@@ -146,6 +152,9 @@ QtObject {
                 opacity: propCopy._op(fe.opacity),
                 gradient: {
                     angle: Number(fg.angle) || 0,
+                    cx: fg.cx !== undefined ? Math.min(1, Math.max(0, Number(fg.cx) || 0)) : 0.5,
+                    cy: fg.cy !== undefined ? Math.min(1, Math.max(0, Number(fg.cy) || 0)) : 0.5,
+                    r: fg.r !== undefined ? Math.min(4, Math.max(0.01, Number(fg.r) || 0.5)) : 0.5,
                     stops: propCopy.snapStops(fg.stops)
                 }
             });
@@ -163,6 +172,9 @@ QtObject {
                 gap: dd.length > 1 ? Math.max(0, Number(dd[1]) || 0) : 0,
                 gradient: {
                     angle: Number(sg.angle) || 0,
+                    cx: sg.cx !== undefined ? Math.min(1, Math.max(0, Number(sg.cx) || 0)) : 0.5,
+                    cy: sg.cy !== undefined ? Math.min(1, Math.max(0, Number(sg.cy) || 0)) : 0.5,
+                    r: sg.r !== undefined ? Math.min(4, Math.max(0.01, Number(sg.r) || 0.5)) : 0.5,
                     stops: propCopy.snapStops(sg.stops)
                 }
             });
@@ -225,7 +237,8 @@ QtObject {
                 strokeJoin: n.strokeJoin ?? "round"
             } : null,
             image: n.shapeType === "image" ? {
-                imageSource: String(n.imageSource ?? "")
+                imageSource: String(n.imageSource ?? ""),
+                imageFit: (n.imageFit === "cover" || n.imageFit === "fit") ? n.imageFit : "fill"
             } : null,
             video: n.shapeType === "video" ? {
                 videoSource: String(n.videoSource ?? ""),
@@ -266,7 +279,7 @@ QtObject {
         for (var i = 0; i < src.length; i++) {
             var fe = src[i] ?? {};
             fills.push({
-                type: fe.type === "linear" ? "linear" : "solid",
+                type: (fe.type === "linear" || fe.type === "radial") ? fe.type : "solid",
                 enabled: fe.enabled !== false
             });
         }
@@ -274,7 +287,7 @@ QtObject {
         for (var j = 0; j < st.length; j++) {
             var se = st[j] ?? {};
             strokes.push({
-                type: se.type === "linear" ? "linear" : "solid",
+                type: (se.type === "linear" || se.type === "radial") ? se.type : "solid",
                 enabled: se.enabled !== false,
                 position: (se.position === "inside" || se.position === "outside") ? se.position : "center"
             });
@@ -383,8 +396,12 @@ QtObject {
             n.strokeCap = v.pen.strokeCap ?? "round";
             n.strokeJoin = v.pen.strokeJoin ?? "round";
         }
-        if (v.image && n.shapeType === "image" && v.image.imageSource !== "")
-            n.imageSource = String(v.image.imageSource);
+        if (v.image && n.shapeType === "image") {
+            if (v.image.imageSource !== "")
+                n.imageSource = String(v.image.imageSource);
+            if (v.image.imageFit !== undefined)
+                n.imageFit = (v.image.imageFit === "cover" || v.image.imageFit === "fit") ? v.image.imageFit : "fill";
+        }
         if (v.video && n.shapeType === "video") {
             if (v.video.videoSource !== "")
                 n.videoSource = String(v.video.videoSource);
@@ -475,7 +492,7 @@ QtObject {
             dst.push(f.defaultFill());
         dst.length = p.fills.length;
         for (var fi = 0; fi < dst.length; fi++) {
-            dst[fi].type = p.fills[fi].type === "linear" ? "linear" : "solid";
+            dst[fi].type = (p.fills[fi].type === "linear" || p.fills[fi].type === "radial") ? p.fills[fi].type : "solid";
             dst[fi].enabled = p.fills[fi].enabled !== false;
         }
         n.fills = dst;
@@ -484,7 +501,7 @@ QtObject {
             ds.push(f.defaultStroke());
         ds.length = p.strokes.length;
         for (var si = 0; si < ds.length; si++) {
-            ds[si].type = p.strokes[si].type === "linear" ? "linear" : "solid";
+            ds[si].type = (p.strokes[si].type === "linear" || p.strokes[si].type === "radial") ? p.strokes[si].type : "solid";
             ds[si].enabled = p.strokes[si].enabled !== false;
             ds[si].position = p.strokes[si].position;
         }

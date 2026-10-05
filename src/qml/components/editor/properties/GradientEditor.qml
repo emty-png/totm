@@ -2,14 +2,17 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Gradient stop + angle editor for the color picker. Works on the picker's
-// working copy: every gesture emits gradientCommitted with a whole new
-// {angle, stops} map so the caller writes it back wholesale (same undo
-// contract as solid drags). N-stop linear (2..8 stops, sorted by pos).
+// Gradient stop + geometry editor for the color picker. Works on the
+// picker's working copy: every gesture emits gradientCommitted with a
+// whole new {angle, cx, cy, r, stops} map so the caller writes it back
+// wholesale (same undo contract as solid drags). N-stop linear/radial
+// (2..8 stops, sorted by pos); linear shows angle, radial shows
+// center + radius.
 ColumnLayout {
     id: editor
 
     required property var gradient
+    property bool isRadial: false
 
     signal gradientCommitted(var gradient)
     signal scrubStarted
@@ -113,6 +116,7 @@ ColumnLayout {
 
         NumberField {
             Layout.preferredWidth: 84
+            visible: !editor.isRadial
             prefix: qsTr("A")
             suffix: qsTr("°")
             minimum: 0
@@ -120,6 +124,54 @@ ColumnLayout {
             scrubStep: 1
             value: Number(editor.gradient.angle) || 0
             onCommitted: v => editor.applyAngle(v)
+            onScrubStarted: editor.scrubStarted()
+            onScrubFinished: editor.scrubFinished()
+        }
+    }
+
+    RowLayout {
+        visible: editor.isRadial
+        Layout.fillWidth: true
+        spacing: 8
+
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            prefix: qsTr("X")
+            suffix: qsTr("%")
+            minimum: 0
+            maximum: 100
+            scrubStep: 1
+            value: Math.round(Number(editor.gradient.cx ?? 0.5) * 100)
+            onCommitted: v => editor.applyCx(v / 100)
+            onScrubStarted: editor.scrubStarted()
+            onScrubFinished: editor.scrubFinished()
+        }
+
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            prefix: qsTr("Y")
+            suffix: qsTr("%")
+            minimum: 0
+            maximum: 100
+            scrubStep: 1
+            value: Math.round(Number(editor.gradient.cy ?? 0.5) * 100)
+            onCommitted: v => editor.applyCy(v / 100)
+            onScrubStarted: editor.scrubStarted()
+            onScrubFinished: editor.scrubFinished()
+        }
+
+        NumberField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            prefix: qsTr("R")
+            suffix: qsTr("%")
+            minimum: 1
+            maximum: 400
+            scrubStep: 1
+            value: Math.round(Number(editor.gradient.r ?? 0.5) * 100)
+            onCommitted: v => editor.applyR(v / 100)
             onScrubStarted: editor.scrubStarted()
             onScrubFinished: editor.scrubFinished()
         }
@@ -239,17 +291,23 @@ ColumnLayout {
         }
         return {
             angle: Number(editor.gradient.angle) || 0,
+            cx: editor.gradient.cx !== undefined ? Math.min(1, Math.max(0, Number(editor.gradient.cx) || 0)) : 0.5,
+            cy: editor.gradient.cy !== undefined ? Math.min(1, Math.max(0, Number(editor.gradient.cy) || 0)) : 0.5,
+            r: editor.gradient.r !== undefined ? Math.min(4, Math.max(0.01, Number(editor.gradient.r) || 0.5)) : 0.5,
             stops: out
         };
     }
 
-    function sortedGradient(stops, angle) {
+    function sortedGradient(stops, geom) {
         var out = stops.slice();
         out.sort(function (a, b) {
             return a.pos - b.pos;
         });
         return {
-            angle: angle,
+            angle: Number(geom.angle) || 0,
+            cx: geom.cx !== undefined ? Math.min(1, Math.max(0, Number(geom.cx) || 0)) : 0.5,
+            cy: geom.cy !== undefined ? Math.min(1, Math.max(0, Number(geom.cy) || 0)) : 0.5,
+            r: geom.r !== undefined ? Math.min(4, Math.max(0.01, Number(geom.r) || 0.5)) : 0.5,
             stops: out
         };
     }
@@ -294,6 +352,24 @@ ColumnLayout {
         editor.gradientCommitted(g);
     }
 
+    function applyCx(v) {
+        var g = editor.currentGradient();
+        g.cx = Math.min(1, Math.max(0, Number(v) || 0));
+        editor.gradientCommitted(g);
+    }
+
+    function applyCy(v) {
+        var g = editor.currentGradient();
+        g.cy = Math.min(1, Math.max(0, Number(v) || 0));
+        editor.gradientCommitted(g);
+    }
+
+    function applyR(v) {
+        var g = editor.currentGradient();
+        g.r = Math.min(4, Math.max(0.01, Number(v) || 0.5));
+        editor.gradientCommitted(g);
+    }
+
     function commitStop(color) {
         var g = editor.currentGradient();
         var idx = Math.min(editor.stopIndex, g.stops.length - 1);
@@ -310,7 +386,7 @@ ColumnLayout {
         var moved = g.stops[idx];
         var np = Math.min(1, Math.max(0, Number(p) || 0));
         moved.pos = np;
-        var sorted = editor.sortedGradient(g.stops, g.angle);
+        var sorted = editor.sortedGradient(g.stops, g);
         // Follow the moved stop by identity so duplicates sharing a
         // position select the right swatch.
         var at = sorted.stops.indexOf(moved);
@@ -399,7 +475,7 @@ ColumnLayout {
             pos: pos
         };
         g.stops.push(newStop);
-        var sorted = editor.sortedGradient(g.stops, g.angle);
+        var sorted = editor.sortedGradient(g.stops, g);
         // Select the new stop by identity so duplicates never steal it.
         var at = sorted.stops.indexOf(newStop);
         if (at < 0) {
@@ -430,6 +506,9 @@ ColumnLayout {
         editor.seedFrom(nextColor);
         editor.gradientCommitted({
             angle: g.angle,
+            cx: g.cx,
+            cy: g.cy,
+            r: g.r,
             stops: g.stops
         });
     }

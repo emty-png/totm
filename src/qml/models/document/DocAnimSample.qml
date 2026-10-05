@@ -165,6 +165,9 @@ QtObject {
         }
         return {
             angle: Number(grad.angle) || 0,
+            cx: grad.cx !== undefined ? Math.min(1, Math.max(0, Number(grad.cx) || 0)) : 0.5,
+            cy: grad.cy !== undefined ? Math.min(1, Math.max(0, Number(grad.cy) || 0)) : 0.5,
+            r: grad.r !== undefined ? Math.min(4, Math.max(0.01, Number(grad.r) || 0.5)) : 0.5,
             stops: stops
         };
     }
@@ -175,7 +178,7 @@ QtObject {
         return {
             enabled: src.enabled !== false,
             color: String(src.color ?? "#d9d9d9"),
-            type: src.type === "linear" ? "linear" : "solid",
+            type: (src.type === "linear" || src.type === "radial") ? src.type : "solid",
             gradient: sampler.gradientFromBase(src),
             opacity: clampEntryOpacity(src.opacity)
         };
@@ -188,7 +191,7 @@ QtObject {
         return {
             enabled: src.enabled !== false,
             color: String(src.color ?? "#000000"),
-            type: src.type === "linear" ? "linear" : "solid",
+            type: (src.type === "linear" || src.type === "radial") ? src.type : "solid",
             gradient: sampler.gradientFromBase(src),
             width: Math.max(0, Number(src.width) || 0),
             dash: dash.length === 2 && dash[0] > 0.001 && dash[1] > 0.001 ? dash : [],
@@ -785,8 +788,10 @@ QtObject {
             var sgc2 = sgKv && sgKv.c2 !== undefined ? String(sgKv.c2) : lerpColor(o.fromC2, o.toC2, e);
             var sgOp = sgKv ? (sgKv.opacity !== undefined ? clampEntryOpacity(sgKv.opacity) : undefined) : ((o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined);
             var sgGrad = null;
+            var sgBaseEntry = strokeEntryFromBase(base, sgIdx);
+            var sgBaseType = sgBaseEntry.type === "radial" ? "radial" : "linear";
             if (sgc1 && sgc2) {
-                var sgBaseStops = strokeEntryFromBase(base, sgIdx).gradient.stops;
+                var sgBaseStops = sgBaseEntry.gradient.stops;
                 var sgAngle = sgKv && sgKv.angle !== undefined ? (Number(sgKv.angle) || 0) : lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e);
                 var sgStops = [];
                 for (var sgi = 0; sgi < sgBaseStops.length; sgi++) {
@@ -797,6 +802,9 @@ QtObject {
                 }
                 sgGrad = {
                     angle: sgAngle,
+                    cx: sgBaseEntry.gradient.cx,
+                    cy: sgBaseEntry.gradient.cy,
+                    r: sgBaseEntry.gradient.r,
                     stops: sgStops
                 };
             }
@@ -826,7 +834,7 @@ QtObject {
                 sgP = e < 0.5 ? (o.fromPosition === "inside" || o.fromPosition === "outside" ? o.fromPosition : "center") : (o.toPosition === "inside" || o.toPosition === "outside" ? o.toPosition : "center");
             if (sgIdx === 0) {
                 if (sgGrad) {
-                    out.strokeType = "linear";
+                    out.strokeType = sgBaseType;
                     out.strokeGradient = sgGrad;
                 }
                 if (sgOp !== undefined)
@@ -838,9 +846,9 @@ QtObject {
                 if (sgP !== undefined)
                     out.strokePosition = sgP;
             } else {
-                var sge = strokeEntryFromBase(base, sgIdx);
+                var sge = sgBaseEntry;
                 if (sgGrad) {
-                    sge.type = "linear";
+                    sge.type = sgBaseType;
                     sge.gradient = sgGrad;
                 }
                 if (sgOp !== undefined)
@@ -884,9 +892,11 @@ QtObject {
             else
                 out.flipH = p <= 0 ? base.flipH === true : base.flipH !== true;
         } else if (preset === "customGradient") {
-            // Fill gradient from-to: stop colors ease in sRGB, angle
-            // linearly. Ports to AnimSampler; also flips fillType so a
-            // solid base renders the gradient from the first frame.
+            // Fill gradient from-to: stop colors ease in sRGB, geometry
+            // (angle for linear, cx/cy/r for radial) holds the base.
+            // Ports to AnimSampler; also flips fillType so a solid base
+            // renders the gradient from the first frame (radial bases
+            // stay radial).
             var gIdx = entryIndexOf(o, "fillIndex");
             var grKeys = genericKeysAt(o, p);
             var grKv = grKeys ? (grKeys.value || {}) : null;
@@ -894,8 +904,10 @@ QtObject {
             var gc2 = grKv && grKv.c2 !== undefined ? String(grKv.c2) : lerpColor(o.fromC2, o.toC2, e);
             var gOp = grKv ? (grKv.opacity !== undefined ? clampEntryOpacity(grKv.opacity) : undefined) : ((o.fromOpacity !== undefined || o.toOpacity !== undefined) ? lerpOpacity(o.fromOpacity, o.toOpacity, e) : undefined);
             var gGrad = null;
+            var gBaseEntry = fillEntryFromBase(base, gIdx);
+            var gBaseType = gBaseEntry.type === "radial" ? "radial" : "linear";
             if (gc1 && gc2) {
-                var gBaseStops = fillEntryFromBase(base, gIdx).gradient.stops;
+                var gBaseStops = gBaseEntry.gradient.stops;
                 var gAngle = grKv && grKv.angle !== undefined ? (Number(grKv.angle) || 0) : lerp(Number(o.fromAngle) || 0, Number(o.toAngle) || 0, e);
                 var gStops = [];
                 for (var gi = 0; gi < gBaseStops.length; gi++) {
@@ -906,20 +918,23 @@ QtObject {
                 }
                 gGrad = {
                     angle: gAngle,
+                    cx: gBaseEntry.gradient.cx,
+                    cy: gBaseEntry.gradient.cy,
+                    r: gBaseEntry.gradient.r,
                     stops: gStops
                 };
             }
             if (gIdx === 0) {
                 if (gGrad) {
-                    out.fillType = "linear";
+                    out.fillType = gBaseType;
                     out.fillGradient = gGrad;
                 }
                 if (gOp !== undefined)
                     out.fillOpacity = gOp;
             } else {
-                var ge = fillEntryFromBase(base, gIdx);
+                var ge = gBaseEntry;
                 if (gGrad) {
-                    ge.type = "linear";
+                    ge.type = gBaseType;
                     ge.gradient = gGrad;
                 }
                 if (gOp !== undefined)
@@ -1428,7 +1443,7 @@ QtObject {
                 if (ov.fill !== undefined)
                     farr[0].color = String(ov.fill);
                 if (ov.fillType !== undefined)
-                    farr[0].type = ov.fillType === "linear" ? "linear" : "solid";
+                    farr[0].type = (ov.fillType === "linear" || ov.fillType === "radial") ? ov.fillType : "solid";
                 if (ov.fillGradient !== undefined)
                     farr[0].gradient = doc.factory._copyGradient(ov.fillGradient);
                 if (ov.fillOpacity !== undefined)
@@ -1447,7 +1462,7 @@ QtObject {
                 if (ov.stroke !== undefined)
                     sarr[0].color = String(ov.stroke);
                 if (ov.strokeType !== undefined)
-                    sarr[0].type = ov.strokeType === "linear" ? "linear" : "solid";
+                    sarr[0].type = (ov.strokeType === "linear" || ov.strokeType === "radial") ? ov.strokeType : "solid";
                 if (ov.strokeGradient !== undefined)
                     sarr[0].gradient = doc.factory._copyGradient(ov.strokeGradient);
                 if (ov.strokeWidth !== undefined)

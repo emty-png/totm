@@ -416,6 +416,9 @@ QVariantMap gradientFrom(const QVariantMap &src) {
     const QVariantList stops = g.value(QStringLiteral("stops")).toList();
     QVariantMap out;
     out[QStringLiteral("angle")] = g.value(QStringLiteral("angle"), 0.0).toDouble();
+    out[QStringLiteral("cx")] = qBound(0.0, g.value(QStringLiteral("cx"), 0.5).toDouble(), 1.0);
+    out[QStringLiteral("cy")] = qBound(0.0, g.value(QStringLiteral("cy"), 0.5).toDouble(), 1.0);
+    out[QStringLiteral("r")] = qBound(0.01, g.value(QStringLiteral("r"), 0.5).toDouble(), 4.0);
     QVariantList sl;
     const int rawN = stops.size();
     const int total = rawN >= 2 ? rawN : 2;
@@ -461,7 +464,7 @@ QVariantMap fillEntryFromBase(const QVariantMap &base, int i) {
     out[QStringLiteral("enabled")] = src.value(QStringLiteral("enabled"), true).toBool();
     out[QStringLiteral("color")] = src.value(QStringLiteral("color"), QStringLiteral("#d9d9d9")).toString();
     const QString t = src.value(QStringLiteral("type"), QStringLiteral("solid")).toString();
-    out[QStringLiteral("type")] = t == QLatin1String("linear") ? t : QString(QStringLiteral("solid"));
+    out[QStringLiteral("type")] = (t == QLatin1String("linear") || t == QLatin1String("radial")) ? t : QString(QStringLiteral("solid"));
     out[QStringLiteral("gradient")] = gradientFrom(src);
     out[QStringLiteral("opacity")] = entryOpacityOf(src);
     return out;
@@ -474,7 +477,7 @@ QVariantMap strokeEntryFromBase(const QVariantMap &base, int i) {
     out[QStringLiteral("enabled")] = src.value(QStringLiteral("enabled"), true).toBool();
     out[QStringLiteral("color")] = src.value(QStringLiteral("color"), QStringLiteral("#000000")).toString();
     const QString t = src.value(QStringLiteral("type"), QStringLiteral("solid")).toString();
-    out[QStringLiteral("type")] = t == QLatin1String("linear") ? t : QString(QStringLiteral("solid"));
+    out[QStringLiteral("type")] = (t == QLatin1String("linear") || t == QLatin1String("radial")) ? t : QString(QStringLiteral("solid"));
     out[QStringLiteral("gradient")] = gradientFrom(src);
     out[QStringLiteral("width")] = qMax(0.0, src.value(QStringLiteral("width"), 0.0).toDouble());
     const QVariantList dash = src.value(QStringLiteral("dash")).toList();
@@ -1158,6 +1161,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
                 str(o, "toC2", QStringLiteral("#ffffff")), e);
         bool hasGrad = false;
         QVariantMap grad;
+        QString baseGradType = QStringLiteral("linear");
         if (!c1.isEmpty() && !c2.isEmpty()) {
             hasGrad = true;
             const double ang = hasSgKeys && sgKv.contains(QStringLiteral("angle"))
@@ -1165,7 +1169,13 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
                 : num(o, "fromAngle") + (num(o, "toAngle") - num(o, "fromAngle")) * e;
             grad[QStringLiteral("angle")] = ang;
             const QVariantMap baseEntry = strokeEntryFromBase(base, sgIdx);
-            QVariantList baseStops = baseEntry.value(QStringLiteral("gradient")).toMap().value(QStringLiteral("stops")).toList();
+            if (baseEntry.value(QStringLiteral("type")).toString() == QLatin1String("radial"))
+                baseGradType = QStringLiteral("radial");
+            const QVariantMap baseGrad = baseEntry.value(QStringLiteral("gradient")).toMap();
+            grad[QStringLiteral("cx")] = qBound(0.0, baseGrad.value(QStringLiteral("cx"), 0.5).toDouble(), 1.0);
+            grad[QStringLiteral("cy")] = qBound(0.0, baseGrad.value(QStringLiteral("cy"), 0.5).toDouble(), 1.0);
+            grad[QStringLiteral("r")] = qBound(0.01, baseGrad.value(QStringLiteral("r"), 0.5).toDouble(), 4.0);
+            QVariantList baseStops = baseGrad.value(QStringLiteral("stops")).toList();
             if (baseStops.size() < 2)
                 baseStops = QVariantList{ QVariantMap{ { QStringLiteral("color"), QStringLiteral("#000000") }, { QStringLiteral("pos"), 0.0 } },
                     QVariantMap{ { QStringLiteral("color"), QStringLiteral("#ffffff") }, { QStringLiteral("pos"), 1.0 } } };
@@ -1233,7 +1243,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         if (sgIdx == 0) {
             if (hasGrad) {
                 out[QStringLiteral("strokeGradient")] = grad;
-                out[QStringLiteral("strokeType")] = QStringLiteral("linear");
+                out[QStringLiteral("strokeType")] = baseGradType;
             }
             if (hasOp3)
                 out[QStringLiteral("strokeOpacity")] = so3;
@@ -1247,7 +1257,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             QVariantMap sge = strokeEntryFromBase(base, sgIdx);
             if (hasGrad) {
                 sge[QStringLiteral("gradient")] = grad;
-                sge[QStringLiteral("type")] = QStringLiteral("linear");
+                sge[QStringLiteral("type")] = baseGradType;
             }
             if (hasOp3)
                 sge[QStringLiteral("opacity")] = so3;
@@ -1310,6 +1320,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
                 str(o, "toC2", QStringLiteral("#ffffff")), e);
         bool hasGrad = false;
         QVariantMap grad;
+        QString baseGradType = QStringLiteral("linear");
         if (!c1.isEmpty() && !c2.isEmpty()) {
             hasGrad = true;
             const double ang = hasGrKeys && grKv.contains(QStringLiteral("angle"))
@@ -1317,7 +1328,13 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
                 : num(o, "fromAngle") + (num(o, "toAngle") - num(o, "fromAngle")) * e;
             grad[QStringLiteral("angle")] = ang;
             const QVariantMap baseEntry = fillEntryFromBase(base, gIdx);
-            QVariantList baseStops = baseEntry.value(QStringLiteral("gradient")).toMap().value(QStringLiteral("stops")).toList();
+            if (baseEntry.value(QStringLiteral("type")).toString() == QLatin1String("radial"))
+                baseGradType = QStringLiteral("radial");
+            const QVariantMap baseGrad = baseEntry.value(QStringLiteral("gradient")).toMap();
+            grad[QStringLiteral("cx")] = qBound(0.0, baseGrad.value(QStringLiteral("cx"), 0.5).toDouble(), 1.0);
+            grad[QStringLiteral("cy")] = qBound(0.0, baseGrad.value(QStringLiteral("cy"), 0.5).toDouble(), 1.0);
+            grad[QStringLiteral("r")] = qBound(0.01, baseGrad.value(QStringLiteral("r"), 0.5).toDouble(), 4.0);
+            QVariantList baseStops = baseGrad.value(QStringLiteral("stops")).toList();
             if (baseStops.size() < 2)
                 baseStops = QVariantList{ QVariantMap{ { QStringLiteral("color"), QStringLiteral("#000000") }, { QStringLiteral("pos"), 0.0 } },
                     QVariantMap{ { QStringLiteral("color"), QStringLiteral("#ffffff") }, { QStringLiteral("pos"), 1.0 } } };
@@ -1347,7 +1364,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
         if (gIdx == 0) {
             if (hasGrad) {
                 out[QStringLiteral("fillGradient")] = grad;
-                out[QStringLiteral("fillType")] = QStringLiteral("linear");
+                out[QStringLiteral("fillType")] = baseGradType;
             }
             if (hasOp)
                 out[QStringLiteral("fillOpacity")] = fo;
@@ -1355,7 +1372,7 @@ QVariantMap presetOverlay(const QString &preset, const QString &mode, const QVar
             QVariantMap ge = fillEntryFromBase(base, gIdx);
             if (hasGrad) {
                 ge[QStringLiteral("gradient")] = grad;
-                ge[QStringLiteral("type")] = QStringLiteral("linear");
+                ge[QStringLiteral("type")] = baseGradType;
             }
             if (hasOp)
                 ge[QStringLiteral("opacity")] = fo;

@@ -37,6 +37,7 @@ void ImageEffectItem::paint(QPainter *painter)
     leaf[QStringLiteral("radius")] = m_radius;
     leaf[QStringLiteral("imageSource")] = m_imageSource;
     leaf[QStringLiteral("image")] = m_imageSource;
+    leaf[QStringLiteral("imageFit")] = (m_imageFit == QStringLiteral("cover") || m_imageFit == QStringLiteral("fit")) ? m_imageFit : QStringLiteral("fill");
     leaf[QStringLiteral("videoSource")] = m_videoSource;
     leaf[QStringLiteral("videoDuration")] = m_videoDuration;
     leaf[QStringLiteral("videoOffset")] = m_videoOffset;
@@ -54,6 +55,8 @@ void ImageEffectItem::paint(QPainter *painter)
     leaf[QStringLiteral("backgroundBlur")] = QVariantMap({{QStringLiteral("enabled"), false}});
     leaf[QStringLiteral("grain")] = m_grain;
     leaf[QStringLiteral("strokes")] = m_strokes;
+    leaf[QStringLiteral("strokeCap")] = m_strokeCap;
+    leaf[QStringLiteral("strokeJoin")] = m_strokeJoin;
     leaf[QStringLiteral("fills")] = QVariantList();
     leaf[QStringLiteral("uid")] = m_uid;
     leaf[QStringLiteral("opacity")] = 1.0;
@@ -141,6 +144,21 @@ void ImageEffectItem::setImageSource(const QString &v)
     if (m_imageSource == v)
         return;
     m_imageSource = v;
+    emit shapeChanged();
+    update();
+}
+
+QString ImageEffectItem::imageFit() const
+{
+    return m_imageFit;
+}
+
+void ImageEffectItem::setImageFit(const QString &v)
+{
+    QString nv = (v == QStringLiteral("cover") || v == QStringLiteral("fit")) ? v : QStringLiteral("fill");
+    if (m_imageFit == nv)
+        return;
+    m_imageFit = nv;
     emit shapeChanged();
     update();
 }
@@ -367,6 +385,36 @@ void ImageEffectItem::setStrokes(const QVariantList &v)
     m_strokes = v;
     emit effectChanged();
     updatePad();
+    update();
+}
+
+QString ImageEffectItem::strokeCap() const
+{
+    return m_strokeCap;
+}
+
+void ImageEffectItem::setStrokeCap(const QString &v)
+{
+    QString nv = (v == QStringLiteral("square") || v == QStringLiteral("flat")) ? v : QStringLiteral("round");
+    if (m_strokeCap == nv)
+        return;
+    m_strokeCap = nv;
+    emit shapeChanged();
+    update();
+}
+
+QString ImageEffectItem::strokeJoin() const
+{
+    return m_strokeJoin;
+}
+
+void ImageEffectItem::setStrokeJoin(const QString &v)
+{
+    QString nv = (v == QStringLiteral("bevel") || v == QStringLiteral("miter")) ? v : QStringLiteral("round");
+    if (m_strokeJoin == nv)
+        return;
+    m_strokeJoin = nv;
+    emit shapeChanged();
     update();
 }
 

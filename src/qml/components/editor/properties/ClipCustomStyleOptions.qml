@@ -44,7 +44,8 @@ ColumnLayout {
         if (!t)
             return false;
         var stack = section.preset === "customStrokeColor" ? (t.strokes || []) : (t.fills || []);
-        return stack.length > 0 && stack[0] && stack[0].type === "linear";
+        var ty = stack.length > 0 && stack[0] ? String(stack[0].type ?? "solid") : "solid";
+        return ty === "linear" || ty === "radial";
     }
     readonly property bool showGradientHint: (section.preset === "customColor" || section.preset === "customStrokeColor") && section.targetTopIsLinear
     // Set when the automatic swap to the gradient sibling fails (the

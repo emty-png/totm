@@ -218,6 +218,8 @@ QtObject {
             value = value === true;
         if (role === "videoFit")
             value = (value === "cover" || value === "fill") ? value : "fit";
+        if (role === "imageFit")
+            value = (value === "cover" || value === "fit") ? value : "fill";
         if (role === "points") {
             value = Math.min(12, Math.max(3, Math.round(value)));
             n[role] = value;
@@ -265,6 +267,8 @@ QtObject {
                 value = value === true;
             if (role === "videoFit")
                 value = (value === "cover" || value === "fill") ? value : "fit";
+            if (role === "imageFit")
+                value = (value === "cover" || value === "fit") ? value : "fill";
             if (role === "points") {
                 var pv = Math.min(12, Math.max(3, Math.round(value)));
                 leaves[j][role] = pv;
@@ -477,7 +481,7 @@ QtObject {
         if (p.color !== undefined)
             cur.color = String(p.color);
         if (p.type !== undefined)
-            cur.type = p.type === "linear" ? "linear" : "solid";
+            cur.type = (p.type === "linear" || p.type === "radial") ? p.type : "solid";
         if (p.gradient !== undefined)
             cur.gradient = doc.factory._copyGradient(p.gradient);
         if (p.opacity !== undefined)
@@ -501,7 +505,7 @@ QtObject {
         if (p.color !== undefined)
             cur.color = String(p.color);
         if (p.type !== undefined)
-            cur.type = p.type === "linear" ? "linear" : "solid";
+            cur.type = (p.type === "linear" || p.type === "radial") ? p.type : "solid";
         if (p.gradient !== undefined)
             cur.gradient = doc.factory._copyGradient(p.gradient);
         if (p.width !== undefined)
@@ -533,7 +537,7 @@ QtObject {
             if (p.color !== undefined)
                 cur.color = String(p.color);
             if (p.type !== undefined)
-                cur.type = p.type === "linear" ? "linear" : "solid";
+                cur.type = (p.type === "linear" || p.type === "radial") ? p.type : "solid";
             if (p.gradient !== undefined)
                 cur.gradient = doc.factory._copyGradient(p.gradient);
             if (p.opacity !== undefined)
@@ -558,7 +562,7 @@ QtObject {
             if (p.color !== undefined)
                 cur.color = String(p.color);
             if (p.type !== undefined)
-                cur.type = p.type === "linear" ? "linear" : "solid";
+                cur.type = (p.type === "linear" || p.type === "radial") ? p.type : "solid";
             if (p.gradient !== undefined)
                 cur.gradient = doc.factory._copyGradient(p.gradient);
             if (p.width !== undefined)

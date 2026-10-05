@@ -56,11 +56,109 @@ PanelSection {
         }
     }
 
+    // Caps only shape open path ends and dash ends (pixel-verified:
+    // closed solid paths render identically under every cap), so the
+    // cap row shows only with a pen or a dashed stroke in the
+    // selection. Text keeps its join row in Typography and ellipses
+    // have no corners, so join hides for those.
+    readonly property bool hasPenInSelection: {
+        var leaves = section.snapshot.selLeaves;
+        for (var i = 0; i < leaves.length; i++) {
+            if (leaves[i].type === "pen")
+                return true;
+        }
+        return false;
+    }
+    readonly property bool hasDashInSelection: {
+        var leaves = section.snapshot.selLeaves;
+        for (var i = 0; i < leaves.length; i++) {
+            var strokes = leaves[i].strokes || [];
+            for (var j = 0; j < strokes.length; j++) {
+                var s = strokes[j] || {};
+                if (s.enabled === false)
+                    continue;
+                var d = s.dash;
+                if (d && typeof d.length === "number" && d.length >= 2 && Number(d[0]) > 0 && Number(d[1]) > 0)
+                    return true;
+            }
+        }
+        return false;
+    }
+    readonly property bool showCapRow: section.hasPenInSelection || section.hasDashInSelection
+    readonly property bool showJoinRow: !section.snapshot.allOfType("text") && !section.snapshot.allOfType("ellipse")
+
+    ColumnLayout {
+        visible: section.strokeCount > 0 && !section.snapshot.allOfType("pen") && (section.showCapRow || section.showJoinRow)
+        Layout.fillWidth: true
+        spacing: 4
+
+        Text {
+            visible: section.showCapRow
+            text: qsTr("Line cap")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            visible: section.showCapRow
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Round")
+                active: !section.snapshot.commonOf("strokeCap").mixed && (section.snapshot.commonOf("strokeCap").value ?? "round") === "round"
+                onClicked: section.snapshot.setAll("strokeCap", "round")
+            }
+
+            SegmentedOption {
+                label: qsTr("Square")
+                active: !section.snapshot.commonOf("strokeCap").mixed && section.snapshot.commonOf("strokeCap").value === "square"
+                onClicked: section.snapshot.setAll("strokeCap", "square")
+            }
+
+            SegmentedOption {
+                label: qsTr("Flat")
+                active: !section.snapshot.commonOf("strokeCap").mixed && section.snapshot.commonOf("strokeCap").value === "flat"
+                onClicked: section.snapshot.setAll("strokeCap", "flat")
+            }
+        }
+
+        Text {
+            visible: section.showJoinRow
+            text: qsTr("Line join")
+            font.pixelSize: 11
+            color: AppTheme.muted
+        }
+
+        RowLayout {
+            visible: section.showJoinRow
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Round")
+                active: !section.snapshot.commonOf("strokeJoin").mixed && (section.snapshot.commonOf("strokeJoin").value ?? "round") === "round"
+                onClicked: section.snapshot.setAll("strokeJoin", "round")
+            }
+
+            SegmentedOption {
+                label: qsTr("Bevel")
+                active: !section.snapshot.commonOf("strokeJoin").mixed && section.snapshot.commonOf("strokeJoin").value === "bevel"
+                onClicked: section.snapshot.setAll("strokeJoin", "bevel")
+            }
+
+            SegmentedOption {
+                label: qsTr("Miter")
+                active: !section.snapshot.commonOf("strokeJoin").mixed && section.snapshot.commonOf("strokeJoin").value === "miter"
+                onClicked: section.snapshot.setAll("strokeJoin", "miter")
+            }
+        }
+    }
+
     // Picker flow: swatch seeds the popup, drags stream through one
     // scrub transaction, typed hex commits discretely on its own.
-    // Solid picks land as solid (converting linear entries back);
-    // gradient picks land as linear. Text strokes are real vector
-    // outlines now, so gradients apply like vectors (images excluded).
+    // Solid picks land as solid; gradient picks land as linear or
+    // radial per the picker's Linear/Radial switch. Text strokes are
+    // real vector outlines now, so gradients apply like vectors
+    // (images excluded).
     ColorPickerPopup {
         id: picker
 
@@ -77,7 +175,7 @@ PanelSection {
             if (section.pickerStrokeIndex >= 0)
                 section.patchStrokeAt(section.pickerStrokeIndex, {
                     gradient: section.gradientMapFor(g),
-                    type: "linear"
+                    type: picker.gradientIsRadial ? "radial" : "linear"
                 });
         }
         onScrubFinished: section.snapshot.endScrub()
@@ -90,8 +188,8 @@ PanelSection {
 
     function openStrokeGradientPickerAt(at, anchor, ax, ay) {
         section.pickerStrokeIndex = at;
-        var cur = section.collectStrokeAt(at).value.gradient ?? {};
-        picker.openForGradient(cur, anchor, ax, ay);
+        var cur = section.collectStrokeAt(at);
+        picker.openForGradient(cur.value.gradient ?? {}, anchor, ax, ay, !cur.mixedType && cur.value.type === "radial");
     }
 
     // Advanced per-entry settings live in a popup behind the row's
@@ -117,7 +215,10 @@ PanelSection {
                 color: "#000000",
                 type: "solid",
                 gradient: {
-                    angle: 90
+                    angle: 90,
+                    cx: 0.5,
+                    cy: 0.5,
+                    r: 0.5
                 },
                 width: 1,
                 dash: [],
@@ -125,6 +226,8 @@ PanelSection {
                 opacity: 1
             })
         readonly property bool isLinear: entryMenu.current ? !entryMenu.current.mixedType && entryMenu.value.type === "linear" : false
+        readonly property bool isRadial: entryMenu.current ? !entryMenu.current.mixedType && entryMenu.value.type === "radial" : false
+        readonly property bool isGradient: entryMenu.isLinear || entryMenu.isRadial
         readonly property bool isText: section.snapshot.allOfType("text")
         readonly property real dashLen: {
             var dd = section.dashOf(entryMenu.value);
@@ -226,14 +329,20 @@ PanelSection {
 
                 SegmentedOption {
                     label: qsTr("Solid")
-                    active: entryMenu.current ? !entryMenu.current.mixedType && entryMenu.value.type !== "linear" : false
+                    active: entryMenu.current ? !entryMenu.current.mixedType && entryMenu.value.type !== "linear" && entryMenu.value.type !== "radial" : false
                     onClicked: section.setStrokeTypeAt(entryMenu.entryIndex, "solid")
                 }
 
                 SegmentedOption {
-                    label: qsTr("Gradient")
+                    label: qsTr("Linear")
                     active: entryMenu.isLinear
                     onClicked: section.setStrokeTypeAt(entryMenu.entryIndex, "linear")
+                }
+
+                SegmentedOption {
+                    label: qsTr("Radial")
+                    active: entryMenu.isRadial
+                    onClicked: section.setStrokeTypeAt(entryMenu.entryIndex, "radial")
                 }
             }
 
@@ -250,6 +359,54 @@ PanelSection {
                 onCommitted: v => section.setStrokeAngleAt(entryMenu.entryIndex, v)
                 onScrubStarted: section.snapshot.beginScrub()
                 onScrubFinished: section.snapshot.endScrub()
+            }
+
+            RowLayout {
+                visible: entryMenu.isRadial
+                Layout.fillWidth: true
+                spacing: 8
+
+                NumberField {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    prefix: qsTr("X")
+                    suffix: qsTr("%")
+                    minimum: 0
+                    maximum: 100
+                    scrubStep: 1
+                    value: Math.round(Number(entryMenu.value.gradient.cx ?? 0.5) * 100)
+                    onCommitted: v => section.setStrokeRadialAt(entryMenu.entryIndex, v / 100, Number(entryMenu.value.gradient.cy ?? 0.5), Number(entryMenu.value.gradient.r ?? 0.5))
+                    onScrubStarted: section.snapshot.beginScrub()
+                    onScrubFinished: section.snapshot.endScrub()
+                }
+
+                NumberField {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    prefix: qsTr("Y")
+                    suffix: qsTr("%")
+                    minimum: 0
+                    maximum: 100
+                    scrubStep: 1
+                    value: Math.round(Number(entryMenu.value.gradient.cy ?? 0.5) * 100)
+                    onCommitted: v => section.setStrokeRadialAt(entryMenu.entryIndex, Number(entryMenu.value.gradient.cx ?? 0.5), v / 100, Number(entryMenu.value.gradient.r ?? 0.5))
+                    onScrubStarted: section.snapshot.beginScrub()
+                    onScrubFinished: section.snapshot.endScrub()
+                }
+
+                NumberField {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    prefix: qsTr("R")
+                    suffix: qsTr("%")
+                    minimum: 1
+                    maximum: 400
+                    scrubStep: 1
+                    value: Math.round(Number(entryMenu.value.gradient.r ?? 0.5) * 100)
+                    onCommitted: v => section.setStrokeRadialAt(entryMenu.entryIndex, Number(entryMenu.value.gradient.cx ?? 0.5), Number(entryMenu.value.gradient.cy ?? 0.5), v / 100)
+                    onScrubStarted: section.snapshot.beginScrub()
+                    onScrubFinished: section.snapshot.endScrub()
+                }
             }
 
             NumberField {
@@ -511,6 +668,9 @@ PanelSection {
         }
         return {
             angle: Number(d.angle) || 0,
+            cx: d.cx !== undefined ? Math.min(1, Math.max(0, Number(d.cx) || 0)) : 0.5,
+            cy: d.cy !== undefined ? Math.min(1, Math.max(0, Number(d.cy) || 0)) : 0.5,
+            r: d.r !== undefined ? Math.min(4, Math.max(0.01, Number(d.r) || 0.5)) : 0.5,
             stops: out
         };
     }
@@ -605,9 +765,12 @@ PanelSection {
             value: {
                 enabled: first.enabled !== false,
                 color: String(first.color ?? "#000000"),
-                type: (first.type ?? "solid") === "linear" ? "linear" : "solid",
+                type: (first.type ?? "solid") === "linear" || (first.type ?? "solid") === "radial" ? first.type : "solid",
                 gradient: {
                     angle: Number((first.gradient ?? {}).angle) || 0,
+                    cx: (first.gradient ?? {}).cx !== undefined ? Math.min(1, Math.max(0, Number(first.gradient.cx) || 0)) : 0.5,
+                    cy: (first.gradient ?? {}).cy !== undefined ? Math.min(1, Math.max(0, Number(first.gradient.cy) || 0)) : 0.5,
+                    r: (first.gradient ?? {}).r !== undefined ? Math.min(4, Math.max(0.01, Number(first.gradient.r) || 0.5)) : 0.5,
                     stops: section.stopsFor(first.gradient)
                 },
                 width: Math.max(0, Number(first.width) || 0),
@@ -655,7 +818,7 @@ PanelSection {
     function setStrokeTypeAt(at, type) {
         if (section.doc)
             section.doc.patchStrokeAtSelected(at, {
-                type: type === "linear" ? "linear" : "solid"
+                type: type === "linear" ? "linear" : (type === "radial" ? "radial" : "solid")
             });
     }
 
@@ -666,6 +829,24 @@ PanelSection {
         section.doc.patchStrokeAtSelected(at, {
             gradient: {
                 angle: Math.min(360, Math.max(0, Number(v) || 0)),
+                cx: cur.cx !== undefined ? Math.min(1, Math.max(0, Number(cur.cx) || 0)) : 0.5,
+                cy: cur.cy !== undefined ? Math.min(1, Math.max(0, Number(cur.cy) || 0)) : 0.5,
+                r: cur.r !== undefined ? Math.min(4, Math.max(0.01, Number(cur.r) || 0.5)) : 0.5,
+                stops: section.stopsFor(cur)
+            }
+        });
+    }
+
+    function setStrokeRadialAt(at, cx, cy, r) {
+        if (!section.doc)
+            return;
+        var cur = section.collectStrokeAt(at).value.gradient ?? {};
+        section.doc.patchStrokeAtSelected(at, {
+            gradient: {
+                angle: Number(cur.angle) || 0,
+                cx: Math.min(1, Math.max(0, Number(cx) || 0)),
+                cy: Math.min(1, Math.max(0, Number(cy) || 0)),
+                r: Math.min(4, Math.max(0.01, Number(r) || 0.5)),
                 stops: section.stopsFor(cur)
             }
         });

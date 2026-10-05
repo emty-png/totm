@@ -24,9 +24,14 @@ Popup {
     // Gradient mode for fill/stroke gradients (Solid |
     // Gradient tabs on top). Callers that support it pass allowGradient
     // and open via openForGradient; the working copy lives here so tab
-    // switches never lose the draft.
+    // switches never lose the draft. gradientIsRadial tracks whether the
+    // open entry is linear or radial (geometry preserved across flips).
     property bool allowGradient: false
     property string editMode: "solid"
+    property bool gradientIsRadial: false
+    // Set on any committed edit; onClosed pushes recents only then so
+    // inspect-and-close without touching anything leaves MRU untouched.
+    property bool recentDirty: false
     property var gradient: ({
             "angle": 90,
             "stops": [
@@ -163,34 +168,109 @@ Popup {
             visible: picker.editMode === "gradient"
             width: parent.width
             gradient: picker.gradient
+            isRadial: picker.gradientIsRadial
             onGradientCommitted: g => picker.applyGradient(g)
             onScrubStarted: picker.scrubStarted()
             onScrubFinished: picker.scrubFinished()
+        }
+
+        RowLayout {
+            visible: picker.editMode === "gradient"
+            width: parent.width
+            spacing: 8
+
+            SegmentedOption {
+                label: qsTr("Linear")
+                active: !picker.gradientIsRadial
+                onClicked: {
+                    picker.gradientIsRadial = false;
+                    picker.applyGradient(picker.gradient);
+                }
+            }
+
+            SegmentedOption {
+                label: qsTr("Radial")
+                active: picker.gradientIsRadial
+                onClicked: {
+                    picker.gradientIsRadial = true;
+                    picker.applyGradient(picker.gradient);
+                }
+            }
+        }
+
+        Column {
+            width: parent.width
+            spacing: 6
+            visible: SettingsStore.recentColors.length > 0
+
+            Text {
+                text: qsTr("Recent")
+                font.pixelSize: 11
+                color: AppTheme.muted
+            }
+
+            Flow {
+                width: parent.width
+                spacing: 6
+
+                Repeater {
+                    model: SettingsStore.recentColors
+
+                    Rectangle {
+                        required property int index
+                        property string swatchColor: SettingsStore.recentColors[index] ?? "#000000"
+
+                        width: 24
+                        height: 24
+                        radius: AppTheme.radiusSmall
+                        color: swatchColor
+                        border.width: 1
+                        border.color: AppTheme.fieldBorder
+
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: picker.applyRecent(parent.swatchColor)
+                        }
+                    }
+                }
+            }
         }
     }
 
     // Press-outside mid-drag cancels the pad/slider gesture without a
     // release: settle the transaction here so history depth never leaks
     // (an unbalanced begin would swallow every later undo entry).
+    // The final color lands in recents only when something was committed,
+    // so matching across shapes never needs hand-copied hex but
+    // inspect-and-close stays clean.
     onClosed: {
         if (picker.scrubbing)
             picker.endDrag();
         gradEditor.endDrag();
+        if (picker.recentDirty)
+            picker.pushCurrentToRecents();
+        picker.recentDirty = false;
     }
 
     // Swatch entry: seed h/s/v from the variant. Greys carry no hue,
     // so they keep the current one instead of jumping the square red.
     function openFor(c, anchor, ax, ay) {
         picker.editMode = "solid";
+        picker.recentDirty = false;
         picker.seedFrom(c);
         picker.placeNear(anchor, ax, ay);
         picker.open();
     }
 
     // Gradient entry: works on a private copy so closing without touching
-    // anything commits nothing, like the solid path.
-    function openForGradient(g, anchor, ax, ay) {
+    // anything commits nothing, like the solid path. isRadial selects
+    // the linear vs radial geometry controls.
+    function openForGradient(g, anchor, ax, ay, isRadial) {
         picker.editMode = "gradient";
+        picker.recentDirty = false;
+        picker.gradientIsRadial = isRadial === true;
         picker.gradient = picker.copyGradient(g);
         picker.placeNear(anchor, ax, ay);
         picker.open();
@@ -199,13 +279,18 @@ Popup {
     // Solid -> Gradient convert from the tab: first stop keeps the live
     // color, second contrasts against it. Gradient -> Solid just flips
     // the tab; the pad keeps its state and commits route as solid.
+    // New gradients start linear; the Linear/Radial row flips after.
     function toGradient() {
         if (picker.editMode === "gradient")
             return;
+        picker.gradientIsRadial = false;
         var live = picker.toHex(picker.liveColor);
         var other = picker.isDarkColor(live) ? "#ffffff" : "#000000";
         picker.gradient = {
             angle: 90,
+            cx: 0.5,
+            cy: 0.5,
+            r: 0.5,
             stops: [
                 {
                     color: live,
@@ -266,11 +351,15 @@ Popup {
         }
         return {
             angle: Number(d.angle) || 0,
+            cx: d.cx !== undefined ? Math.min(1, Math.max(0, Number(d.cx) || 0)) : 0.5,
+            cy: d.cy !== undefined ? Math.min(1, Math.max(0, Number(d.cy) || 0)) : 0.5,
+            r: d.r !== undefined ? Math.min(4, Math.max(0.01, Number(d.r) || 0.5)) : 0.5,
             stops: out
         };
     }
 
     function applyGradient(g) {
+        picker.recentDirty = true;
         picker.gradient = g;
         picker.gradientCommitted(g);
     }
@@ -364,6 +453,7 @@ Popup {
             picker.beginDrag();
         picker.sat = s;
         picker.val = v;
+        picker.recentDirty = true;
         picker.committed(picker.liveColor);
     }
 
@@ -371,6 +461,7 @@ Popup {
         if (first)
             picker.beginDrag();
         picker.hue = h;
+        picker.recentDirty = true;
         picker.committed(picker.liveColor);
     }
 
@@ -378,6 +469,23 @@ Popup {
     // own checkpoint), never a scrub: no begin/end around it.
     function applyHex(c) {
         picker.seedFrom(c);
+        picker.recentDirty = true;
         picker.committed(picker.liveColor);
+    }
+
+    // Recent-colors: click applies (solid mode) or recolors the active
+    // gradient stop; close pushes the final color so it survives.
+    function applyRecent(c) {
+        if (picker.editMode === "gradient")
+            gradEditor.applyHex(String(c));
+        else
+            picker.applyHex(String(c));
+    }
+
+    function pushCurrentToRecents() {
+        if (picker.editMode === "gradient")
+            SettingsStore.pushRecentColor(gradEditor.stopColor(gradEditor.stopIndex));
+        else
+            SettingsStore.pushRecentColor(picker.toHex(picker.liveColor));
     }
 }

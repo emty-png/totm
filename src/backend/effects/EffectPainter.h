@@ -23,7 +23,7 @@
 namespace Effects {
 
 // Fill/stroke paint: stacked entries (index 0 topmost).
-// Each fill is solid or N-stop linear with its own opacity (final
+// Each fill is solid or N-stop linear/radial with its own opacity (final
 // alpha = color alpha * opacity); each stroke adds width, dash pair,
 // position (center/inside/outside) and opacity. penFill toggles the
 // path fill (pen line-art); strokeCap/strokeJoin stay per-shape.

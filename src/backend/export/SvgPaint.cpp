@@ -308,35 +308,11 @@ QString buildSvgMask(const QVariantMap &mm, const QRectF &region, QStringList &d
     return QStringLiteral("mask=\"url(#%1)\"").arg(mid);
 }
 
-// N-stop linear gradient in the shape's local coords (same space as
-// the path data, so the transform applies to both like QPainter's
-// logical-mode brush).
-GradientOut gradientFill(const QVariantMap &gradMap, const QRectF &box, const QString &id, bool isFill) {
-    GradientOut out;
-    const Effects::LinearSpec spec = Effects::linearFrom(gradMap);
-    QPointF p0, p1;
-    Effects::gradientEndpoints(box, spec.angle, &p0, &p1);
-    QString def = QStringLiteral("<linearGradient id=\"%1\" gradientUnits=\"userSpaceOnUse\" x1=\"%2\" y1=\"%3\" "
-                                 "x2=\"%4\" y2=\"%5\">")
-                      .arg(id)
-                      .arg(fmtNum(p0.x()))
-                      .arg(fmtNum(p0.y()))
-                      .arg(fmtNum(p1.x()))
-                      .arg(fmtNum(p1.y()));
-    for (int i = 0; i < spec.stops.size(); ++i) {
-        const QColor c = spec.stops.at(i).color;
-        const double off = qBound(0.0, spec.stops.at(i).pos, 1.0);
-        def += QStringLiteral("<stop offset=\"%1\" stop-color=\"%2\" stop-opacity=\"%3\"/>")
-                   .arg(fmtNum(off))
-                   .arg(colorHex(c.isValid() ? c : (i == 0 ? QColor(Qt::black) : QColor(Qt::white))))
-                   .arg(fmtNum(colorAlpha01(c)));
-    }
-    def += QStringLiteral("</linearGradient>");
-    out.def = def;
-    out.attr = QStringLiteral("%1=\"url(#%2)\"").arg(isFill ? QStringLiteral("fill") : QStringLiteral("stroke")).arg(id);
-    return out;
-}
-
+// N-stop gradient with per-entry opacity folded into stop alphas (same
+// space as the path data, so the transform applies to both like
+// QPainter's logical-mode brush). Linear spans the bbox projection;
+// radial is circular (center + radius in userSpace px, same as the CPU
+// painter).
 QString solidFillAttr(const QColor &c, bool isFill) {
     const char *key = isFill ? "fill" : "stroke";
     if (!c.isValid() || c.alpha() == 0)
@@ -348,8 +324,37 @@ QString solidFillAttr(const QColor &c, bool isFill) {
 }
 
 GradientOut gradientFillOpacity(
-    const QVariantMap &gradMap, const QRectF &box, const QString &id, bool isFill, double opacity) {
+    const QString &type, const QVariantMap &gradMap, const QRectF &box, const QString &id, bool isFill, double opacity) {
     GradientOut out;
+    if (type == QLatin1String("radial")) {
+        Effects::RadialSpec spec = Effects::radialFrom(gradMap);
+        for (int i = 0; i < spec.stops.size(); ++i) {
+            QColor c = spec.stops.at(i).color;
+            c.setAlphaF(qBound(0.0, c.alphaF() * qBound(0.0, opacity, 1.0), 1.0));
+            spec.stops[i].color = c;
+        }
+        QPointF c;
+        double rad = 1.0;
+        Effects::radialCenterRadius(box, spec, &c, &rad);
+        QString def = QStringLiteral("<radialGradient id=\"%1\" gradientUnits=\"userSpaceOnUse\" cx=\"%2\" cy=\"%3\" "
+                                     "r=\"%4\">")
+                          .arg(id)
+                          .arg(fmtNum(c.x()))
+                          .arg(fmtNum(c.y()))
+                          .arg(fmtNum(rad));
+        for (int i = 0; i < spec.stops.size(); ++i) {
+            const QColor sc = spec.stops.at(i).color;
+            const double off = qBound(0.0, spec.stops.at(i).pos, 1.0);
+            def += QStringLiteral("<stop offset=\"%1\" stop-color=\"%2\" stop-opacity=\"%3\"/>")
+                       .arg(fmtNum(off))
+                       .arg(colorHex(sc.isValid() ? sc : (i == 0 ? QColor(Qt::black) : QColor(Qt::white))))
+                       .arg(fmtNum(colorAlpha01(sc)));
+        }
+        def += QStringLiteral("</radialGradient>");
+        out.def = def;
+        out.attr = QStringLiteral("%1=\"url(#%2)\"").arg(isFill ? QStringLiteral("fill") : QStringLiteral("stroke")).arg(id);
+        return out;
+    }
     Effects::LinearSpec spec = Effects::linearFrom(gradMap);
     for (int i = 0; i < spec.stops.size(); ++i) {
         QColor c = spec.stops.at(i).color;
@@ -1069,8 +1074,8 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                 // run colors paint solid); bottom-first like PNG.
                 const QList<Effects::RunGlyphs> runPaths = Effects::textRunPaths(to, 1.0, box);
                 auto boxFillAttr = [&](const Effects::FillEntry &f) {
-                    if (f.type == QLatin1String("linear")) {
-                        GradientOut g = gradientFillOpacity(f.gradient, box,
+                    if (f.type == QLatin1String("linear") || f.type == QLatin1String("radial")) {
+                        GradientOut g = gradientFillOpacity(f.type, f.gradient, box,
                             QStringLiteral("svgft%1").arg(gradSeq++), true, f.opacity);
                         defs.append(g.def);
                         return g.attr;
@@ -1116,8 +1121,8 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                     const bool side = se.position == QLatin1String("inside") || se.position == QLatin1String("outside");
                     const double sw = side ? se.width * 2.0 : se.width;
                     QString strokeAttr = QStringLiteral("stroke=\"none\"");
-                    if (se.type == QLatin1String("linear")) {
-                        GradientOut g = gradientFillOpacity(se.gradient, box,
+                    if (se.type == QLatin1String("linear") || se.type == QLatin1String("radial")) {
+                        GradientOut g = gradientFillOpacity(se.type, se.gradient, box,
                             QStringLiteral("svgst%1").arg(gradSeq++), false, se.opacity);
                         defs.append(g.def);
                         strokeAttr = QStringLiteral("%1 stroke-width=\"%2\" stroke-linecap=\"%3\" stroke-linejoin=\"%4\"%5")
@@ -1182,8 +1187,8 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                 if (!f.enabled)
                     continue;
                 QString fillAttr;
-                if (f.type == QLatin1String("linear")) {
-                    GradientOut g = gradientFillOpacity(f.gradient, box,
+                if (f.type == QLatin1String("linear") || f.type == QLatin1String("radial")) {
+                    GradientOut g = gradientFillOpacity(f.type, f.gradient, box,
                         QStringLiteral("svgft%1").arg(gradSeq++), true, f.opacity);
                     defs.append(g.def);
                     fillAttr = g.attr;
@@ -1256,13 +1261,21 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                                      .arg(mime)
                                      .arg(QString::fromLatin1(bytes.toBase64()));
             // Note: href (SVG2) over xlink:href for modern viewers.
+            // imageFit maps to preserveAspectRatio (fit=meet, cover=slice, fill=none).
+            QString ifit = m.value(QStringLiteral("imageFit")).toString();
+            QString par = QStringLiteral("none");
+            if (ifit == QStringLiteral("fit"))
+                par = QStringLiteral("xMidYMid meet");
+            else if (ifit == QStringLiteral("cover"))
+                par = QStringLiteral("xMidYMid slice");
             body.append(gOpen + maskPre
-                + QStringLiteral("<image x=\"%1\" y=\"%2\" width=\"%3\" height=\"%4\" preserveAspectRatio=\"none\"%5 "
-                                 "href=\"%6\"/>")
+                + QStringLiteral("<image x=\"%1\" y=\"%2\" width=\"%3\" height=\"%4\" preserveAspectRatio=\"%5\"%6 "
+                                 "href=\"%7\"/>")
                       .arg(fmtNum(x))
                       .arg(fmtNum(y))
                       .arg(fmtNum(w))
                       .arg(fmtNum(h))
+                      .arg(par)
                       .arg(clipAttr)
                       .arg(href)
                 + maskPost + QStringLiteral("</g>"));
@@ -1308,8 +1321,8 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                 if (!f.enabled)
                     continue;
                 QString fillAttr = QStringLiteral("fill=\"none\"");
-                if (f.type == QLatin1String("linear")) {
-                    GradientOut g = gradientFillOpacity(f.gradient, gradBox,
+                if (f.type == QLatin1String("linear") || f.type == QLatin1String("radial")) {
+                    GradientOut g = gradientFillOpacity(f.type, f.gradient, gradBox,
                         QStringLiteral("svgfg%1").arg(gradSeq++), true, f.opacity);
                     defs.append(g.def);
                     fillAttr = g.attr;
@@ -1330,8 +1343,8 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
                 continue;
             const double sw = se.width;
             QString strokeAttr = QStringLiteral("stroke=\"none\"");
-            if (se.type == QLatin1String("linear")) {
-                GradientOut g = gradientFillOpacity(se.gradient, gradBox,
+            if (se.type == QLatin1String("linear") || se.type == QLatin1String("radial")) {
+                GradientOut g = gradientFillOpacity(se.type, se.gradient, gradBox,
                     QStringLiteral("svgsg%1").arg(gradSeq++), false, se.opacity);
                 defs.append(g.def);
                 strokeAttr = QStringLiteral("%1 stroke-width=\"%2\" stroke-linecap=\"%3\" stroke-linejoin=\"%4\"%5")

@@ -3,8 +3,9 @@ import QtQuick
 import QtQuick.Layouts
 import Totm
 
-// Image source section: thumbnail plus Replace. Visible only when every
-// selected leaf is an image; mixed selections keep shared sections only.
+// Image source section: thumbnail plus Replace plus object-fit.
+// Visible only when every selected leaf is an image; mixed selections
+// keep shared sections only.
 PanelSection {
     id: section
 
@@ -18,6 +19,14 @@ PanelSection {
         if (section.snapshot.sel.length === 0)
             return "";
         return section.snapshot.sel[0].imageSource ?? "";
+    }
+
+    function fitValue() {
+        var c = section.snapshot.commonOf("imageFit");
+        if (c.mixed)
+            return "";
+        var v = String(c.value ?? "fill");
+        return (v === "cover" || v === "fit") ? v : "fill";
     }
 
     RowLayout {
@@ -68,6 +77,27 @@ PanelSection {
                 label: qsTr("Replace")
                 onClicked: replacePicker.open()
             }
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 8
+
+        SegmentedOption {
+            label: qsTr("Fit")
+            active: section.fitValue() === "fit"
+            onClicked: section.snapshot.setAll("imageFit", "fit")
+        }
+        SegmentedOption {
+            label: qsTr("Cover")
+            active: section.fitValue() === "cover"
+            onClicked: section.snapshot.setAll("imageFit", "cover")
+        }
+        SegmentedOption {
+            label: qsTr("Stretch")
+            active: section.fitValue() === "fill"
+            onClicked: section.snapshot.setAll("imageFit", "fill")
         }
     }
 

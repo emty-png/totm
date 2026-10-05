@@ -32,6 +32,7 @@ class ImageEffectItem : public QQuickPaintedItem {
     Q_PROPERTY(double boxH READ boxH WRITE setBoxH NOTIFY shapeChanged)
     Q_PROPERTY(double radius READ radius WRITE setRadius NOTIFY shapeChanged)
     Q_PROPERTY(QString imageSource READ imageSource WRITE setImageSource NOTIFY shapeChanged)
+    Q_PROPERTY(QString imageFit READ imageFit WRITE setImageFit NOTIFY shapeChanged)
     Q_PROPERTY(QString videoSource READ videoSource WRITE setVideoSource NOTIFY shapeChanged)
     Q_PROPERTY(double videoDuration READ videoDuration WRITE setVideoDuration NOTIFY shapeChanged)
     Q_PROPERTY(double videoOffset READ videoOffset WRITE setVideoOffset NOTIFY shapeChanged)
@@ -47,6 +48,8 @@ class ImageEffectItem : public QQuickPaintedItem {
     Q_PROPERTY(QVariantMap layerBlur READ layerBlur WRITE setLayerBlur NOTIFY effectChanged)
     Q_PROPERTY(QVariantMap grain READ grain WRITE setGrain NOTIFY effectChanged)
     Q_PROPERTY(QVariantList strokes READ strokes WRITE setStrokes NOTIFY effectChanged)
+    Q_PROPERTY(QString strokeCap READ strokeCap WRITE setStrokeCap NOTIFY shapeChanged)
+    Q_PROPERTY(QString strokeJoin READ strokeJoin WRITE setStrokeJoin NOTIFY shapeChanged)
     Q_PROPERTY(int uid READ uid WRITE setUid NOTIFY effectChanged)
     Q_PROPERTY(int frameNo READ frameNo WRITE setFrameNo NOTIFY effectChanged)
     Q_PROPERTY(double pad READ pad NOTIFY padChanged)
@@ -64,6 +67,8 @@ public:
     void setRadius(double v);
     QString imageSource() const;
     void setImageSource(const QString &v);
+    QString imageFit() const;
+    void setImageFit(const QString &v);
     QString videoSource() const;
     void setVideoSource(const QString &v);
     double videoDuration() const;
@@ -94,6 +99,10 @@ public:
     void setGrain(const QVariantMap &v);
     QVariantList strokes() const;
     void setStrokes(const QVariantList &v);
+    QString strokeCap() const;
+    void setStrokeCap(const QString &v);
+    QString strokeJoin() const;
+    void setStrokeJoin(const QString &v);
     int uid() const;
     void setUid(int v);
     int frameNo() const;
@@ -112,6 +121,7 @@ private:
     double m_boxH = 10.0;
     double m_radius = 0.0;
     QString m_imageSource;
+    QString m_imageFit = QStringLiteral("fill");
     QString m_videoSource;
     double m_videoDuration = 0.0;
     double m_videoOffset = 0.0;
@@ -127,6 +137,8 @@ private:
     QVariantMap m_layerBlur;
     QVariantMap m_grain;
     QVariantList m_strokes;
+    QString m_strokeCap = QStringLiteral("round");
+    QString m_strokeJoin = QStringLiteral("round");
     int m_uid = -1;
     int m_frameNo = 0;
     double m_pad = 0.0;

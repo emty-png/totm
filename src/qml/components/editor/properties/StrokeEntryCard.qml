@@ -50,6 +50,8 @@ RowLayout {
             mixedAngle: true
         })
     readonly property bool isLinear: !card.current.mixedType && card.current.value.type === "linear"
+    readonly property bool isRadial: !card.current.mixedType && card.current.value.type === "radial"
+    readonly property bool isGradient: card.isLinear || card.isRadial
 
     spacing: 8
 
@@ -72,7 +74,7 @@ RowLayout {
         radius: AppTheme.radiusSmall
         border.width: 1
         border.color: AppTheme.border
-        color: card.isLinear ? "transparent" : card.current.value.color
+        color: card.isGradient ? "transparent" : card.current.value.color
 
         Rectangle {
             anchors.fill: parent
@@ -91,13 +93,23 @@ RowLayout {
             }
         }
 
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 4
+            visible: card.isRadial
+            radius: width / 2
+            color: card.section ? card.section.gradStop(card.current.value.gradient, 0) : "#000000"
+            border.width: 1
+            border.color: card.section ? card.section.gradStop(card.current.value.gradient, 1) : "#ffffff"
+        }
+
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.PointingHandCursor
             onClicked: mouse => {
                 if (card.section) {
-                    if (card.isLinear)
+                    if (card.isGradient)
                         card.section.openStrokeGradientPickerAt(card.entryIndex, swatch, mouse.x, mouse.y);
                     else
                         card.section.openStrokePickerAt(card.entryIndex, String(card.current.value.color), swatch, mouse.x, mouse.y);

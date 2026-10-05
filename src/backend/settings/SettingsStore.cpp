@@ -69,6 +69,8 @@ constexpr char kGenFpsKey[] = "general/fps";
 constexpr char kGenPerformanceKey[] = "general/performance";
 constexpr char kGenFormatKey[] = "general/format";
 constexpr char kGenLowSpecKey[] = "general/lowSpec";
+constexpr char kGenRecentColorsKey[] = "general/recentColors";
+constexpr int kRecentColorsMax = 10;
 
 constexpr int kSceneMin = 16;
 constexpr int kSceneMax = 7680;
@@ -1391,6 +1393,19 @@ void SettingsStore::loadGeneral() {
     const QString format = settings.value(QString::fromLatin1(kGenFormatKey), QStringLiteral("mp4")).toString().trimmed().toLower();
     m_defaultFormat = isKnownFormat(format) ? format : QStringLiteral("mp4");
     m_lowSpecMode = settings.value(QString::fromLatin1(kGenLowSpecKey), false).toBool();
+    m_recentColors.clear();
+    const QStringList stored = settings.value(QString::fromLatin1(kGenRecentColorsKey), QStringList()).toStringList();
+    for (const QString &raw : stored) {
+        const auto canon = canonicalAppearanceColor(raw);
+        if (!canon.has_value() || canon->isEmpty())
+            continue;
+        // Keep opaque #rrggbb only (picker recents); skip duplicates.
+        if (canon->length() != 7 || m_recentColors.contains(*canon))
+            continue;
+        m_recentColors.append(*canon);
+        if (m_recentColors.size() >= kRecentColorsMax)
+            break;
+    }
 }
 
 void SettingsStore::persistGeneral() {
@@ -1404,6 +1419,7 @@ void SettingsStore::persistGeneral() {
     settings.setValue(QString::fromLatin1(kGenPerformanceKey), m_defaultPerformance);
     settings.setValue(QString::fromLatin1(kGenFormatKey), m_defaultFormat);
     settings.setValue(QString::fromLatin1(kGenLowSpecKey), m_lowSpecMode);
+    settings.setValue(QString::fromLatin1(kGenRecentColorsKey), m_recentColors);
     settings.sync();
 }
 
@@ -1521,6 +1537,30 @@ void SettingsStore::setLowSpecMode(bool on) {
     if (m_lowSpecMode == on)
         return;
     m_lowSpecMode = on;
+    persistGeneral();
+    emit generalChanged();
+}
+
+QStringList SettingsStore::recentColors() const {
+    return m_recentColors;
+}
+
+void SettingsStore::pushRecentColor(const QString &color) {
+    const auto canon = canonicalAppearanceColor(color);
+    if (!canon.has_value() || canon->isEmpty() || canon->length() != 7)
+        return;
+    m_recentColors.removeAll(*canon);
+    m_recentColors.prepend(*canon);
+    while (m_recentColors.size() > kRecentColorsMax)
+        m_recentColors.removeLast();
+    persistGeneral();
+    emit generalChanged();
+}
+
+void SettingsStore::clearRecentColors() {
+    if (m_recentColors.isEmpty())
+        return;
+    m_recentColors.clear();
     persistGeneral();
     emit generalChanged();
 }

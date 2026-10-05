@@ -41,6 +41,7 @@ QtObject {
             flipH: s.flipH ?? false,
             flipV: s.flipV ?? false,
             imageSource: s.imageSource ?? "",
+            imageFit: (s.imageFit === "cover" || s.imageFit === "fit") ? s.imageFit : "fill",
             videoSource: s.videoSource ?? "",
             videoDuration: Math.max(0, Number(s.videoDuration) || 0),
             videoOffset: Math.max(0, Number(s.videoOffset) || 0),
@@ -127,7 +128,7 @@ QtObject {
     function _copyFillEntry(src) {
         var d = src ?? {};
         var t = String(d.type ?? d.fillType ?? "solid");
-        if (t !== "linear")
+        if (t !== "linear" && t !== "radial")
             t = "solid";
         var op = d.opacity !== undefined ? Number(d.opacity) : 1;
         if (isNaN(op))
@@ -168,7 +169,7 @@ QtObject {
     function _copyStrokeEntry(src) {
         var d = src ?? {};
         var t = String(d.type ?? d.strokeType ?? "solid");
-        if (t !== "linear")
+        if (t !== "linear" && t !== "radial")
             t = "solid";
         var pos = String(d.position ?? "center");
         if (pos !== "inside" && pos !== "outside")
@@ -248,13 +249,25 @@ QtObject {
 
     // Deep copy so snapshots never share point objects with live nodes.
     function _copyGradient(src) {
-        // N-stop linear (2..8): angle + sorted [{color,pos}]. Old 2-stop
-        // scenes load untouched; missing pos spaces evenly, over-cap
-        // lists resample by sorted index so coverage survives the cap.
+        // N-stop gradients (2..8): linear carries angle, radial carries
+        // cx/cy/r (center 0..1, radius fraction of half the bbox
+        // diagonal); both fields ride along so type switches never lose
+        // geometry. Old 2-stop scenes load untouched; missing pos spaces
+        // evenly, over-cap lists resample by sorted index so coverage
+        // survives the cap.
         var d = src ?? {};
         var angle = Number(d.angle);
         if (isNaN(angle))
             angle = 90;
+        var cx = Number(d.cx);
+        if (isNaN(cx))
+            cx = 0.5;
+        var cy = Number(d.cy);
+        if (isNaN(cy))
+            cy = 0.5;
+        var rr = Number(d.r);
+        if (isNaN(rr))
+            rr = 0.5;
         var raw = d.stops;
         var stops = [];
         if (raw && typeof raw.length === "number") {
@@ -295,6 +308,9 @@ QtObject {
         }
         return {
             angle: angle,
+            cx: Math.min(1, Math.max(0, cx)),
+            cy: Math.min(1, Math.max(0, cy)),
+            r: Math.min(4, Math.max(0.01, rr)),
             stops: stops
         };
     }
@@ -667,7 +683,8 @@ QtObject {
 
     // Image creation: stored blob name plus an explicit box (click stamps
     // natural size, drag stretches to the box). Rejects empty sources.
-    function addImage(imageSource, x, y, w, h) {
+    // imageFit defaults to fill (legacy stretch); pass fit/cover to keep aspect.
+    function addImage(imageSource, x, y, w, h, imageFit) {
         if (!imageSource)
             return -1;
         var container = doc._activeContainerUid();
@@ -677,7 +694,8 @@ QtObject {
             y: Math.round(y),
             w: Math.max(1, Math.round(w)),
             h: Math.max(1, Math.round(h)),
-            imageSource: String(imageSource)
+            imageSource: String(imageSource),
+            imageFit: (imageFit === "cover" || imageFit === "fit") ? imageFit : "fill"
         });
         var list = doc._childrenOf(container).slice();
         list.unshift(n);

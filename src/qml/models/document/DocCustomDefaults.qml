@@ -408,19 +408,19 @@ QtObject {
 
     // Top stack entry paint type for gallery routing: color rows
     // auto-upgrade to their gradient sibling when the target's top
-    // entry is linear, so a gradient stroke never lands in a solid
-    // hex editor. Missing entries read as solid.
+    // entry is linear or radial, so a gradient stroke never lands in a
+    // solid hex editor. Missing entries read as solid.
     function topFillType(d, tops) {
         var first = tops.length > 0 ? tops[0] : null;
         var leaf = first && first.kind === "group" ? first : (first ? firstLeaf(d, first) : null);
         var f0 = (leaf && leaf.fills && leaf.fills.length > 0 ? leaf.fills[0] : {}) ?? {};
-        return f0.type === "linear" ? "linear" : "solid";
+        return (f0.type === "linear" || f0.type === "radial") ? f0.type : "solid";
     }
 
     function topStrokeType(d, tops) {
         var first = tops.length > 0 ? tops[0] : null;
         var leaf = first && first.kind === "group" ? first : (first ? firstLeaf(d, first) : null);
         var s0 = (leaf && leaf.strokes && leaf.strokes.length > 0 ? leaf.strokes[0] : {}) ?? {};
-        return s0.type === "linear" ? "linear" : "solid";
+        return (s0.type === "linear" || s0.type === "radial") ? s0.type : "solid";
     }
 }

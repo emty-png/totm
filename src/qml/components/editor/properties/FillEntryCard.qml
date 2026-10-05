@@ -43,6 +43,8 @@ RowLayout {
             mixedAngle: true
         })
     readonly property bool isLinear: !card.current.mixedType && card.current.value.type === "linear"
+    readonly property bool isRadial: !card.current.mixedType && card.current.value.type === "radial"
+    readonly property bool isGradient: card.isLinear || card.isRadial
 
     spacing: 8
 
@@ -65,7 +67,7 @@ RowLayout {
         radius: AppTheme.radiusSmall
         border.width: 1
         border.color: AppTheme.border
-        color: card.isLinear ? "transparent" : card.current.value.color
+        color: card.isGradient ? "transparent" : card.current.value.color
 
         Rectangle {
             anchors.fill: parent
@@ -84,13 +86,23 @@ RowLayout {
             }
         }
 
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 4
+            visible: card.isRadial
+            radius: width / 2
+            color: card.section ? card.section.gradStop(card.current.value.gradient, 0) : "#000000"
+            border.width: 1
+            border.color: card.section ? card.section.gradStop(card.current.value.gradient, 1) : "#ffffff"
+        }
+
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.PointingHandCursor
             onClicked: mouse => {
                 if (card.section) {
-                    if (card.isLinear)
+                    if (card.isGradient)
                         card.section.openFillGradientPickerAt(card.entryIndex, swatch, mouse.x, mouse.y);
                     else
                         card.section.openFillPickerAt(card.entryIndex, String(card.current.value.color), swatch, mouse.x, mouse.y);
@@ -102,7 +114,7 @@ RowLayout {
     HexField {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        visible: !card.isLinear
+        visible: !card.isGradient
         value: String(card.current.value.color)
         mixed: card.current.mixedColor
         onCommitted: c => {
@@ -117,10 +129,11 @@ RowLayout {
     Text {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        visible: card.isLinear
+        visible: card.isGradient
         text: {
             var stops = (card.current.value.gradient ?? {}).stops ?? [];
-            return stops.length > 2 ? qsTr("Gradient · %1").arg(stops.length) : qsTr("Gradient");
+            var kind = card.isRadial ? qsTr("Radial") : qsTr("Gradient");
+            return stops.length > 2 ? "%1 · %2".arg(kind).arg(stops.length) : kind;
         }
         font.pixelSize: 11
         color: AppTheme.muted

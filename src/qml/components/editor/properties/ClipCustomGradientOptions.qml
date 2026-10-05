@@ -19,6 +19,25 @@ ColumnLayout {
     readonly property var clip: section.doc ? section.doc.animClip(section.clipId) : null
     readonly property var opts: section.clip ? section.clip.options || {} : ({})
     readonly property string entryKind: section.gradientKind === "stroke" ? "strokes" : "fills"
+    // Targeted stack entry paint type (reactive to doc edits): radial
+    // entries hold their geometry from the base, so the angle fields
+    // below hide for them.
+    readonly property bool targetIsRadial: {
+        if (section.doc)
+            section.doc.rev;
+        if (!section.doc || !section.clip)
+            return false;
+        var n = section.doc.findNode(section.clip.targetUid);
+        if (!n || n.kind !== "shape")
+            return false;
+        var stack = section.entryKind === "strokes" ? (n.strokes || []) : (n.fills || []);
+        var idx = 0;
+        var key = section.entryKind === "strokes" ? "strokeIndex" : "fillIndex";
+        if (section.opts[key] !== undefined)
+            idx = Math.min(32, Math.max(0, Math.round(Number(section.opts[key])) || 0));
+        var e = idx < stack.length ? (stack[idx] ?? {}) : {};
+        return String(e.type ?? "solid") === "radial";
+    }
 
     spacing: 8
 
@@ -90,6 +109,7 @@ ColumnLayout {
     }
 
     NumberField {
+        visible: !section.targetIsRadial
         Layout.fillWidth: true
         prefix: qsTr("A")
         suffix: qsTr("°")
@@ -163,6 +183,7 @@ ColumnLayout {
     }
 
     NumberField {
+        visible: !section.targetIsRadial
         Layout.fillWidth: true
         prefix: qsTr("A")
         suffix: qsTr("°")

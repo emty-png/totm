@@ -210,6 +210,7 @@ Item {
             flipH: n.flipH === true,
             flipV: n.flipV === true,
             imageSource: n.imageSource ?? "",
+            imageFit: (n.imageFit === "cover" || n.imageFit === "fit") ? n.imageFit : "fill",
             videoSource: n.videoSource ?? "",
             videoDuration: Math.max(0, Number(n.videoDuration) || 0),
             videoOffset: Math.max(0, Number(n.videoOffset) || 0),
@@ -406,6 +407,7 @@ Item {
             flipV: modelData.flipV
             paintDepth: modelData.zOrder
             imageSource: modelData.imageSource ?? ""
+            imageFit: (modelData.imageFit === "cover" || modelData.imageFit === "fit") ? modelData.imageFit : "fill"
             videoSource: modelData.videoSource ?? ""
             videoDuration: Math.max(0, Number(modelData.videoDuration) || 0)
             videoOffset: Math.max(0, Number(modelData.videoOffset) || 0)
@@ -652,8 +654,8 @@ Item {
 
             x: (boundRect ? boundRect.x : 0) - pad
             y: (boundRect ? boundRect.y : 0) - pad
-            width: Math.max(1, (boundRect ? boundRect.width : 1) + pad * 2)
-            height: Math.max(1, (boundRect ? boundRect.height : 1) + pad * 2)
+            width: Math.max(1, (boundRect ? boundRect.w : 1) + pad * 2)
+            height: Math.max(1, (boundRect ? boundRect.h : 1) + pad * 2)
             z: layerRoot.framePaintZ(groupUid)
             visible: {
                 if (layerRoot.doc)
@@ -662,8 +664,8 @@ Item {
             }
             opacity: groupNode ? (groupNode.opacity ?? 1) : 1
             shapeType: "rectangle"
-            boxW: boundRect ? boundRect.width : 1
-            boxH: boundRect ? boundRect.height : 1
+            boxW: boundRect ? boundRect.w : 1
+            boxH: boundRect ? boundRect.h : 1
             radius: groupNode ? (groupNode.radius ?? 0) : 0
             independentCorners: groupNode ? groupNode.independentCorners === true : false
             cornerRadii: groupNode ? (groupNode.cornerRadii || []) : []

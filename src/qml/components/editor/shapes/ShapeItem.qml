@@ -26,7 +26,7 @@ Item {
     // Stacked paints, index 0 topmost (see ShapeLayer for role binding).
     property var fills: []
     property var strokes: []
-    // Pen-only switches; defaults match the old hardcoded round paint.
+    // Line ends/bends for all shapes; defaults match the old hardcoded round paint.
     property bool penFill: true
     property string strokeCap: "round"
     property string strokeJoin: "round"
@@ -70,6 +70,8 @@ Item {
     property var textFx: null
     // Stored blob name under LibraryStore images/.
     property string imageSource: ""
+    // Object-fit for the raster inside the box (fit/cover/fill).
+    property string imageFit: "fill"
     // Stored blob name under LibraryStore videos/ (legacy absolute paths
     // still resolve). Empty means missing; preview shows a placeholder,
     // export paints a dark tile.
@@ -128,10 +130,9 @@ Item {
     // Vector path builders (pure geometry, mirrored by export).
     readonly property var geometry: ShapeGeometry {}
 
-    // Pen caps/joins; other shapes keep round, unknown falls back to round.
+    // Line caps/joins from the stored spellings (all shapes);
+    // unknown falls back to round (matches backend).
     function capFor() {
-        if (shape.shapeType !== "pen")
-            return ShapePath.RoundCap;
         if (shape.strokeCap === "square")
             return ShapePath.SquareCap;
         if (shape.strokeCap === "flat")
@@ -140,8 +141,6 @@ Item {
     }
 
     function joinFor() {
-        if (shape.shapeType !== "pen")
-            return ShapePath.RoundJoin;
         if (shape.strokeJoin === "bevel")
             return ShapePath.BevelJoin;
         if (shape.strokeJoin === "miter")
@@ -167,6 +166,10 @@ Item {
     }
     readonly property bool hasLinearFill: shape.enabledFills.some(f => (f.type || "solid") === "linear")
     readonly property bool hasLinearStroke: shape.enabledStrokes.some(s => (s.type || "solid") === "linear")
+    readonly property bool hasRadialFill: shape.enabledFills.some(f => (f.type || "solid") === "radial")
+    readonly property bool hasRadialStroke: shape.enabledStrokes.some(s => (s.type || "solid") === "radial")
+    readonly property bool hasGradientFill: shape.hasLinearFill || shape.hasRadialFill
+    readonly property bool hasGradientStroke: shape.hasLinearStroke || shape.hasRadialStroke
     // Sub-1 entry opacity folds through the CPU painter exactly.
     readonly property bool hasFillOpacity: shape.enabledFills.some(f => Number(f.opacity ?? 1) < 0.999)
     readonly property bool hasStrokeOpacity: shape.enabledStrokes.some(s => Number(s.opacity ?? 1) < 0.999)
@@ -195,17 +198,23 @@ Item {
     }
     // Non-center strokes need the CPU clipper (native borders straddle/sit inside).
     readonly property bool hasNonCenterStroke: shape.enabledStrokes.some(s => (s.position || "center") !== "center")
+    // Non-round joins need the CPU stroker (stock borders stay round).
+    // Caps only shape open ends and dash ends (closed solid paths paint
+    // identically under every cap), so caps gate on dash or pen.
+    readonly property bool hasNonRoundJoin: (shape.strokeJoin ?? "round") !== "round"
+    readonly property bool hasNonRoundCap: (shape.strokeCap ?? "round") !== "round" && (shape.hasStrokeDash || shape.shapeType === "pen")
+    readonly property bool hasNonRoundEnds: shape.hasNonRoundJoin || shape.hasNonRoundCap
     // Native Rectangle borders paint inside: fast branch holds for solid
     // inside strokes (or none), everything else rides the CPU painter.
-    readonly property bool rectFastStroke: shape.enabledStrokes.length === 0 || (shape.enabledStrokes.length === 1 && (shape.firstStroke.type || "solid") !== "linear" && (shape.firstStroke.position || "center") === "inside" && !shape.hasStrokeDash)
-    readonly property bool useEffectPaint: shape.isVectorPaint && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 1 || shape.hasLinearStroke || shape.hasStrokeOpacity || shape.hasStrokeDash || shape.hasNonCenterStroke || (shape.shapeType === "rectangle" && !shape.independentCorners && !shape.rectFastStroke && shape.enabledStrokes.length > 0) || shape.hasShadow || shape.hasLayerBlur || shape.hasGlow)
+    readonly property bool rectFastStroke: shape.enabledStrokes.length === 0 || (shape.enabledStrokes.length === 1 && (shape.firstStroke.type || "solid") === "solid" && (shape.firstStroke.position || "center") === "inside" && !shape.hasStrokeDash && !shape.hasNonRoundEnds)
+    readonly property bool useEffectPaint: shape.isVectorPaint && (shape.enabledFills.length > 1 || shape.hasGradientFill || shape.hasFillOpacity || shape.enabledStrokes.length > 1 || shape.hasGradientStroke || shape.hasStrokeOpacity || shape.hasStrokeDash || shape.hasNonCenterStroke || shape.hasNonRoundEnds || (shape.shapeType === "rectangle" && !shape.independentCorners && !shape.rectFastStroke && shape.enabledStrokes.length > 0) || shape.hasShadow || shape.hasLayerBlur || shape.hasGlow)
     // Effected text/images ride the shared CPU painter (matches export);
     // plain variants stay on the fast GPU branches. Any text stroke,
     // rich run or karaoke/sweep reveal rides the CPU vector path.
     readonly property bool hasTextRuns: shape.shapeType === "text" && !!(shape.textRuns && shape.textRuns.length)
-    readonly property bool useTextEffectPaint: shape.shapeType === "text" && (shape.enabledFills.length > 1 || shape.hasLinearFill || shape.hasFillOpacity || shape.enabledStrokes.length > 0 || shape.hasLinearStroke || shape.hasStrokeOpacity || shape.hasStrokeDash || shape.hasNonCenterStroke || shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasTextRuns || !!(shape.textFx && shape.textFx.fx === true))
-    readonly property bool useImageEffectPaint: shape.shapeType === "image" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasStrokeDash)
-    readonly property bool useVideoEffectPaint: shape.shapeType === "video" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasStrokeDash)
+    readonly property bool useTextEffectPaint: shape.shapeType === "text" && (shape.enabledFills.length > 1 || shape.hasGradientFill || shape.hasFillOpacity || shape.enabledStrokes.length > 0 || shape.hasGradientStroke || shape.hasStrokeOpacity || shape.hasStrokeDash || shape.hasNonCenterStroke || shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasTextRuns || !!(shape.textFx && shape.textFx.fx === true))
+    readonly property bool useImageEffectPaint: shape.shapeType === "image" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasStrokeDash || shape.hasNonRoundEnds)
+    readonly property bool useVideoEffectPaint: shape.shapeType === "video" && (shape.hasShadow || shape.hasGlow || shape.hasLayerBlur || shape.hasStrokeDash || shape.hasNonRoundEnds)
 
     x: shape.sx
     y: shape.sy
@@ -624,7 +633,7 @@ Item {
 
             anchors.fill: parent
             source: shape.imageSource ? LibraryStore.imageUrl(shape.imageSource) : ""
-            fillMode: Image.Stretch
+            fillMode: shape.imageFit === "cover" ? Image.PreserveAspectCrop : (shape.imageFit === "fit" ? Image.PreserveAspectFit : Image.Stretch)
             asynchronous: true
             cache: true
             smooth: true
@@ -649,7 +658,7 @@ Item {
             anchors.fill: parent
             visible: imageObj.status === Image.Ready && shape.hasLayerBlur
             source: imageObj.source
-            fillMode: Image.Stretch
+            fillMode: shape.imageFit === "cover" ? Image.PreserveAspectCrop : (shape.imageFit === "fit" ? Image.PreserveAspectFit : Image.Stretch)
             asynchronous: true
             cache: true
             smooth: true
@@ -818,6 +827,7 @@ Item {
         boxH: shape.sh
         radius: shape.radius
         imageSource: shape.imageSource
+        imageFit: shape.imageFit ?? "fill"
         shadows: shape.shadows ?? []
         glows: shape.glows ?? []
         layerBlur: shape.layerBlur ?? ({
@@ -831,6 +841,8 @@ Item {
                 "size": 2
             })
         strokes: shape.strokes ?? []
+        strokeCap: shape.strokeCap || "round"
+        strokeJoin: shape.strokeJoin || "round"
         uid: shape.uid
         frameNo: shape.grainFrame
         transform: Scale {
@@ -1095,6 +1107,8 @@ Item {
                 "size": 2
             })
         strokes: shape.strokes ?? []
+        strokeCap: shape.strokeCap || "round"
+        strokeJoin: shape.strokeJoin || "round"
         uid: shape.uid
         frameNo: shape.grainFrame
         transform: Scale {

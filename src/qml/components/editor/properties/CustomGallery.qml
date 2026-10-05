@@ -33,16 +33,6 @@ ScrollView {
             height: 12
         }
 
-        Text {
-            visible: !gallery.hasSelection()
-            width: parent.width - 32
-            x: 16
-            text: qsTr("Select a shape on the canvas to add a custom animation.")
-            font.pixelSize: 12
-            wrapMode: Text.WordWrap
-            color: AppTheme.muted
-        }
-
         RowLayout {
             visible: gallery.hasMultiSelection()
             width: parent.width - 24
@@ -730,12 +720,12 @@ ScrollView {
         for (var i = 0; i < tops.length; i++)
             uids.push(tops[i].uid);
         // Route solid rows to their gradient sibling when the target's
-        // top entry is linear: a gradient fill/stroke would otherwise
+        // top entry is a gradient: a gradient fill/stroke would otherwise
         // land in a solid hex editor whose output stays invisible.
         var pid = presetId;
-        if (pid === "customColor" && gallery.defaults.topFillType(d, tops) === "linear")
+        if (pid === "customColor" && gallery.defaults.topFillType(d, tops) !== "solid")
             pid = "customGradient";
-        else if (pid === "customStrokeColor" && gallery.defaults.topStrokeType(d, tops) === "linear")
+        else if (pid === "customStrokeColor" && gallery.defaults.topStrokeType(d, tops) !== "solid")
             pid = "customStrokeGradient";
         var options = gallery.defaults.seededOptions(d.anim.presets, d, tops, pid);
         var t0 = d.anim.currentTime;

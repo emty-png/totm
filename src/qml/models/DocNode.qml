@@ -21,7 +21,9 @@ QtObject {
     property real h: 10
     property real rotation: 0
     // Stacked paints (index 0 paints topmost):
-    // fills: [{enabled, color, type ("solid"|"linear"), gradient {angle,
+    // fills: [{enabled, color, type ("solid"|"linear"|"radial"),
+    //   gradient {angle (linear), cx/cy/r (radial, center 0..1 + radius
+    //   fraction of half the bbox diagonal),
     //   stops:[{color,pos} x2..8, sorted]}, opacity 0..1}]. Final fill alpha =
     //   color alpha * opacity * leaf opacity. Empty = no fill.
     // strokes: [{enabled, color, type, gradient, width, dash [d,g] in
@@ -31,10 +33,8 @@ QtObject {
     property var fills: []
     property var strokes: []
     property real opacity: 1
-    // Pen-only paint switches. penFill toggles the path fill (open
-    // strokes usually want line-art only); strokeCap/strokeJoin pick the
-    // line ends and bends ("round" default matches the old hardcoded
-    // paint, so other shapes render identically).
+    // Line ends/bends for all shapes ("round" default matches the old
+    // hardcoded paint, so other shapes render identically).
     property bool penFill: true
     property string strokeCap: "round"
     property string strokeJoin: "round"
@@ -112,6 +112,10 @@ QtObject {
     // shapeType === "image"). Empty means missing; canvas shows a
     // placeholder and export paints a neutral box.
     property string imageSource: ""
+    // Object-fit for the raster inside the shape box: "fit" preserves
+    // aspect with transparency, "cover" crops to fill, "fill" stretches
+    // (legacy). Missing normalizes to "fill" to preserve old scenes.
+    property string imageFit: "fill"
     // Video blob name under LibraryStore videos/ (meaningful when
     // shapeType === "video"). Legacy absolute paths still resolve while
     // the file exists. Empty means missing; canvas shows a placeholder

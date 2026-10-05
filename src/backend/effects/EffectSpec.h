@@ -16,6 +16,9 @@
 // Angle degrees: 0 = left->right, 90 = top->bottom, clockwise in y-down
 // coords. Endpoints span the bbox projection so opposite edges land on
 // pos 0/1 exactly. v2 is N-stop linear (2..8 stops, sorted by pos).
+// Radial is circular: center (cx, cy) in 0..1 of the box, radius r as a
+// fraction of half the bbox diagonal (1.0 reaches the corners from the
+// center). Stops share the same 2..8 normalized convention.
 namespace Effects {
 
 inline QColor colorFrom(const QVariant &v, const QColor &fallback)
@@ -38,17 +41,22 @@ struct LinearSpec {
     bool valid = false;
 };
 
-// Normalized N-stop spec (2..8 stops, sorted by pos). Missing/invalid
-// input falls back to black->white at 90deg so converts and old scenes
+struct RadialSpec {
+    double cx = 0.5;
+    double cy = 0.5;
+    double r = 0.5;
+    QVector<GradientStop> stops = { { QColor(QStringLiteral("#000000")), 0.0 },
+        { QColor(QStringLiteral("#ffffff")), 1.0 } };
+    bool valid = false;
+};
+
+// Shared N-stop normalization (2..8 stops, sorted by pos). Missing/
+// invalid input falls back to black->white so converts and old scenes
 // always paint. Extra stops past 8 resample by index (endpoints kept)
 // so coverage survives the cap; single-stop input pads to two.
-inline LinearSpec linearFrom(const QVariantMap &grad)
+inline QVector<GradientStop> normalizeStops(const QVariant &rawStops)
 {
-    LinearSpec out;
-    bool ok = false;
-    const double a = grad.value(QStringLiteral("angle")).toDouble(&ok);
-    out.angle = ok ? a : 90.0;
-    const QVariantList raw = grad.value(QStringLiteral("stops")).toList();
+    const QVariantList raw = rawStops.toList();
     QVector<GradientStop> parsed;
     parsed.reserve(qMin(raw.size(), 64) > 0 ? qMin(raw.size(), 64) : 2);
     for (int i = 0; i < raw.size(); ++i) {
@@ -92,9 +100,53 @@ inline LinearSpec linearFrom(const QVariantMap &grad)
     // Clamp after sort so endpoints land exactly on 0/1 when close.
     for (auto &s : parsed)
         s.pos = qBound(0.0, s.pos, 1.0);
-    out.stops = parsed;
+    return parsed;
+}
+
+// Normalized N-stop spec (2..8 stops, sorted by pos). Missing/invalid
+// input falls back to black->white at 90deg so converts and old scenes
+// always paint. Extra stops past 8 resample by index (endpoints kept)
+// so coverage survives the cap; single-stop input pads to two.
+inline LinearSpec linearFrom(const QVariantMap &grad)
+{
+    LinearSpec out;
+    bool ok = false;
+    const double a = grad.value(QStringLiteral("angle")).toDouble(&ok);
+    out.angle = ok ? a : 90.0;
+    out.stops = normalizeStops(grad.value(QStringLiteral("stops")));
     out.valid = true;
     return out;
+}
+
+// Normalized radial spec (center 0..1, radius fraction of half the bbox
+// diagonal). Same stop conventions as linear; missing geometry falls
+// back to centered r=0.5 so old/partial maps always paint.
+inline RadialSpec radialFrom(const QVariantMap &grad)
+{
+    RadialSpec out;
+    bool okx = false, oky = false, okr = false;
+    const double cx = grad.value(QStringLiteral("cx")).toDouble(&okx);
+    const double cy = grad.value(QStringLiteral("cy")).toDouble(&oky);
+    const double r = grad.value(QStringLiteral("r")).toDouble(&okr);
+    out.cx = okx ? qBound(0.0, cx, 1.0) : 0.5;
+    out.cy = oky ? qBound(0.0, cy, 1.0) : 0.5;
+    out.r = okr ? qBound(0.01, r, 4.0) : 0.5;
+    out.stops = normalizeStops(grad.value(QStringLiteral("stops")));
+    out.valid = true;
+    return out;
+}
+
+// Circular radial geometry in paint coords: center from (cx, cy), radius
+// as r * half the bbox diagonal (r=1 reaches the corners from center).
+inline void radialCenterRadius(const QRectF &box, const RadialSpec &spec, QPointF *center, double *radius)
+{
+    const double hx = box.width() / 2.0;
+    const double hy = box.height() / 2.0;
+    const double halfDiag = qHypot(hx, hy);
+    if (center)
+        *center = QPointF(box.x() + spec.cx * box.width(), box.y() + spec.cy * box.height());
+    if (radius)
+        *radius = qMax(0.01, spec.r * halfDiag);
 }
 
 inline void gradientEndpoints(const QRectF &box, double angle, QPointF *p0, QPointF *p1)

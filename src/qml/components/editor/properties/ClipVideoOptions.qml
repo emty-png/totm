@@ -53,14 +53,6 @@ ColumnLayout {
         onScrubFinished: section.endScrub()
     }
 
-    Text {
-        Layout.fillWidth: true
-        text: qsTr("Equal ends freeze the frame. Easing shapes the ramp: Ease out decelerates into the end frame.")
-        font.pixelSize: 11
-        color: AppTheme.muted
-        wrapMode: Text.WordWrap
-    }
-
     function setOption(role, value) {
         if (!section.doc)
             return;

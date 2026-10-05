@@ -55,13 +55,14 @@ PanelSection {
 
     // Picker flow: swatch seeds the popup, drags stream through one
     // scrub transaction, typed hex commits discretely on its own.
-    // Solid picks land as solid (converting linear entries back);
-    // gradient picks land as linear. Gradient tabs only for vector
-    // shapes (text glyphs stay solid).
+    // Solid picks land as solid (converting gradient entries back);
+    // gradient picks land as linear or radial per the picker's
+    // Linear/Radial switch. Gradient tabs for vectors + text
+    // (images/video excluded: no box gradient on rasters).
     ColorPickerPopup {
         id: picker
 
-        allowGradient: !section.snapshot.allOfType("text") && !section.snapshot.allOfType("image") && !section.snapshot.allOfType("video")
+        allowGradient: !section.snapshot.allOfType("image") && !section.snapshot.allOfType("video")
         onScrubStarted: section.snapshot.beginScrub()
         onCommitted: c => {
             if (section.pickerFillIndex >= 0)
@@ -74,7 +75,7 @@ PanelSection {
             if (section.pickerFillIndex >= 0)
                 section.patchFillAt(section.pickerFillIndex, {
                     gradient: section.gradientMapFor(g),
-                    type: "linear"
+                    type: picker.gradientIsRadial ? "radial" : "linear"
                 });
         }
         onScrubFinished: section.snapshot.endScrub()
@@ -232,8 +233,8 @@ PanelSection {
 
     function openFillGradientPickerAt(at, anchor, ax, ay) {
         section.pickerFillIndex = at;
-        var cur = section.collectFillAt(at).value.gradient ?? {};
-        picker.openForGradient(cur, anchor, ax, ay);
+        var cur = section.collectFillAt(at);
+        picker.openForGradient(cur.value.gradient ?? {}, anchor, ax, ay, !cur.mixedType && cur.value.type === "radial");
     }
 
     // Advanced per-entry settings live in a popup behind the row's
@@ -310,6 +311,9 @@ PanelSection {
         }
         return {
             angle: Number(d.angle) || 0,
+            cx: d.cx !== undefined ? Math.min(1, Math.max(0, Number(d.cx) || 0)) : 0.5,
+            cy: d.cy !== undefined ? Math.min(1, Math.max(0, Number(d.cy) || 0)) : 0.5,
+            r: d.r !== undefined ? Math.min(4, Math.max(0.01, Number(d.r) || 0.5)) : 0.5,
             stops: out
         };
     }
@@ -375,9 +379,12 @@ PanelSection {
             value: {
                 enabled: first.enabled !== false,
                 color: String(first.color ?? "#d9d9d9"),
-                type: (first.type ?? "solid") === "linear" ? "linear" : "solid",
+                type: (first.type ?? "solid") === "linear" || (first.type ?? "solid") === "radial" ? first.type : "solid",
                 gradient: {
                     angle: Number((first.gradient ?? {}).angle) || 0,
+                    cx: (first.gradient ?? {}).cx !== undefined ? Math.min(1, Math.max(0, Number(first.gradient.cx) || 0)) : 0.5,
+                    cy: (first.gradient ?? {}).cy !== undefined ? Math.min(1, Math.max(0, Number(first.gradient.cy) || 0)) : 0.5,
+                    r: (first.gradient ?? {}).r !== undefined ? Math.min(4, Math.max(0.01, Number(first.gradient.r) || 0.5)) : 0.5,
                     stops: section.stopsFor(first.gradient)
                 },
                 opacity: Math.min(1, Math.max(0, Number(first.opacity ?? 1)))

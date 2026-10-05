@@ -101,16 +101,6 @@ ScrollView {
             }
         }
 
-        Text {
-            visible: !gallery.hasSelection()
-            width: parent.width - 32
-            x: 16
-            text: gallery.textMode ? qsTr("Select text on the canvas to apply a preset.") : qsTr("Select a shape on the canvas to apply a preset.")
-            font.pixelSize: 12
-            wrapMode: Text.WordWrap
-            color: AppTheme.muted
-        }
-
         // Cascade offset for multi-selections. Hidden for single
         // selections where it would do nothing.
         RowLayout {

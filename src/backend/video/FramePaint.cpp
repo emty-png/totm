@@ -36,9 +36,10 @@ void paintInnerRasterEffects(QPainter &pt, const QPainterPath &clip, double w, d
     const QList<Effects::Shadow> &shadows, const QList<Effects::Glow> &glows, double s,
     QCache<QByteArray, QImage> *cache);
 double paintRoundedStrokes(QPainter &pt, double x, double y, double w, double h, double r,
-    const QList<Effects::StrokeEntry> &strokes, double s);
+    const QList<Effects::StrokeEntry> &strokes, double s, const QString &cap = QString(),
+    const QString &join = QString());
 
-// Image via stored blob (mirrors ShapeItem stretch). Missing blobs
+// Image via stored blob (fit/cover/fill per imageFit). Missing blobs
 // paint a neutral box so broken imports never vanish silently.
 QString exportImagesDir() {
     return AppPaths::totmBaseDir() + QStringLiteral("/images");
@@ -511,10 +512,28 @@ void paintImage(QPainter &pt, const QVariantMap &m, double x, double y, double w
     }
     pt.save();
     pt.setClipPath(clip, Qt::IntersectClip);
-    pt.drawImage(QRectF(x, y, w, h), img);
+    QString ifit = m.value(QStringLiteral("imageFit")).toString();
+    if (ifit != QStringLiteral("cover") && ifit != QStringLiteral("fit"))
+        ifit = QStringLiteral("fill");
+    if (ifit == QStringLiteral("fit") && img.width() > 0 && img.height() > 0 && w > 0 && h > 0) {
+        const double scale = qMin(w / double(img.width()), h / double(img.height()));
+        const double dw = img.width() * scale;
+        const double dh = img.height() * scale;
+        pt.drawImage(QRectF(x + (w - dw) / 2.0, y + (h - dh) / 2.0, dw, dh), img);
+    } else if (ifit == QStringLiteral("cover") && img.width() > 0 && img.height() > 0 && w > 0 && h > 0) {
+        const double scale = qMax(w / double(img.width()), h / double(img.height()));
+        const double sw = w / scale;
+        const double sh = h / scale;
+        const double sx = (img.width() - sw) / 2.0;
+        const double sy = (img.height() - sh) / 2.0;
+        pt.drawImage(QRectF(x, y, w, h), img, QRectF(sx, sy, sw, sh));
+    } else {
+        pt.drawImage(QRectF(x, y, w, h), img);
+    }
     pt.restore();
     paintInnerRasterEffects(pt, clip, w, h, r, shadows, glows, s, cache);
-    const double maxSw = paintRoundedStrokes(pt, x, y, w, h, r, strokes, s);
+    const double maxSw = paintRoundedStrokes(pt, x, y, w, h, r, strokes, s,
+        m.value(QStringLiteral("strokeCap")).toString(), m.value(QStringLiteral("strokeJoin")).toString());
     // Grain over pixels and stroke (preview tiles the same way).
     if (grain.enabled && grain.amount > 0.001)
         Effects::paintGrainPath(&pt, clip, maxSw, QRectF(x, y, w, h), grain, uid, frameNo, s);
@@ -607,7 +626,8 @@ void paintVideo(QPainter &pt, const QVariantMap &m, double x, double y, double w
     }
     pt.restore();
     paintInnerRasterEffects(pt, clip, w, h, r, shadows, glows, s, cache);
-    const double maxSw = paintRoundedStrokes(pt, x, y, w, h, r, strokes, s);
+    const double maxSw = paintRoundedStrokes(pt, x, y, w, h, r, strokes, s,
+        m.value(QStringLiteral("strokeCap")).toString(), m.value(QStringLiteral("strokeJoin")).toString());
     if (grain.enabled && grain.amount > 0.001)
         Effects::paintGrainPath(&pt, clip, maxSw, QRectF(x, y, w, h), grain, uid, frameNo, s);
 }
@@ -727,9 +747,19 @@ void paintInnerRasterEffects(QPainter &pt, const QPainterPath &clip, double w, d
 // Stacked rect strokes, bottom-first so index 0 paints topmost.
 // Returns the max stroke width for the grain union.
 double paintRoundedStrokes(QPainter &pt, double x, double y, double w, double h, double r,
-    const QList<Effects::StrokeEntry> &strokes, double s)
+    const QList<Effects::StrokeEntry> &strokes, double s, const QString &cap, const QString &join)
 {
     double maxSw = 0.0;
+    Qt::PenCapStyle capStyle = Qt::RoundCap;
+    if (cap == QLatin1String("square"))
+        capStyle = Qt::SquareCap;
+    else if (cap == QLatin1String("flat"))
+        capStyle = Qt::FlatCap;
+    Qt::PenJoinStyle joinStyle = Qt::RoundJoin;
+    if (join == QLatin1String("bevel"))
+        joinStyle = Qt::BevelJoin;
+    else if (join == QLatin1String("miter"))
+        joinStyle = Qt::MiterJoin;
     for (int i = strokes.size() - 1; i >= 0; --i) {
         const Effects::StrokeEntry &se = strokes.at(i);
         if (!se.enabled || se.width <= 0.01)
@@ -738,7 +768,7 @@ double paintRoundedStrokes(QPainter &pt, double x, double y, double w, double h,
         maxSw = qMax(maxSw, sw);
         QColor sc = se.color;
         sc.setAlphaF(qBound(0.0, sc.alphaF() * se.opacity, 1.0));
-        QPen pen(sc, sw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        QPen pen(sc, sw, Qt::SolidLine, capStyle, joinStyle);
         if (!se.dash.isEmpty()) {
             pen.setStyle(Qt::CustomDashLine);
             pen.setDashPattern(se.dash);

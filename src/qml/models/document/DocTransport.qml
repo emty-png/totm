@@ -151,7 +151,9 @@ QtObject {
                 videoVolume: Math.min(1, Math.max(0, n.videoVolume !== undefined ? Number(n.videoVolume) : 1)),
                 playbackRate: Math.min(4, Math.max(0.25, Number(n.playbackRate) || 1)),
                 videoLoop: n.videoLoop !== false,
-                videoFit: (n.videoFit === "cover" || n.videoFit === "fill") ? n.videoFit : "fit"
+                videoFit: (n.videoFit === "cover" || n.videoFit === "fill") ? n.videoFit : "fit",
+                imageSource: n.imageSource ?? "",
+                imageFit: (n.imageFit === "cover" || n.imageFit === "fit") ? n.imageFit : "fill"
             };
             if (n.shapeType === "pen")
                 entry.pathData = doc.factory._copyPath(n.pathData);
@@ -303,6 +305,10 @@ QtObject {
                 n.videoLoop = b.videoLoop !== false;
             if (b.videoFit !== undefined)
                 n.videoFit = (b.videoFit === "cover" || b.videoFit === "fill") ? b.videoFit : "fit";
+            if (b.imageSource !== undefined)
+                n.imageSource = String(b.imageSource ?? "");
+            if (b.imageFit !== undefined)
+                n.imageFit = (b.imageFit === "cover" || b.imageFit === "fit") ? b.imageFit : "fill";
             // Transient preview override, never authored: always clear so
             // seeks/wraps never leak a sampled frame into the base.
             n.videoTime = -1;
