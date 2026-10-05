@@ -39,6 +39,9 @@
 //   to library.corrupt.<timestamp>.json and replaced with a fresh Default
 //   workspace, so startup never blocks on bad disk state. Errors surface
 //   via lastError/lastErrorChanged; mutators return false/{} on failure.
+//   Non-blocking warnings (missing share blobs, skipped intake files,
+//   unembedded fonts) ride lastWarning/lastWarningChanged so successes
+//   can still report degraded results; clearError resets both channels.
 // Binding model: workspaceList/designList are plain-list snapshots rebuilt
 //   wholesale per change and exposed via libraryChanged for Repeater use.
 struct WorkspaceEntry {
@@ -85,12 +88,20 @@ class LibraryStore : public QObject {
     Q_PROPERTY(QString defaultWorkspaceId READ defaultWorkspaceId NOTIFY libraryChanged)
     Q_PROPERTY(QString libraryPath READ libraryPath CONSTANT)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    // Non-blocking warning from the last operation ("" when clean).
+    // Set on success paths that degraded (missing share blobs,
+    // skipped intake files, unembedded fonts); failures use lastError.
+    Q_PROPERTY(QString lastWarning READ lastWarning NOTIFY lastWarningChanged)
 
 public:
     static LibraryStore *create(QQmlEngine *engine, QJSEngine *scriptEngine);
     explicit LibraryStore(QObject *parent = nullptr);
 
     Q_INVOKABLE void clearError();
+    // Flags dropped intake files (unsupported types), appending to any
+    // backend error already set so specific failures are never hidden.
+    Q_INVOKABLE void flagUnsupportedFiles(int count, const QString &detail);
+    QString lastWarning() const;
     QVariantList workspaceList() const;
     QVariantList designList() const;
     QVariantList assetList() const;
@@ -234,6 +245,7 @@ public:
 signals:
     void libraryChanged();
     void lastErrorChanged();
+    void lastWarningChanged();
 
 private:
     // load: read-once at construction; self-heals and rebuilds.
@@ -325,6 +337,8 @@ private:
     QVariantList m_assetList;
     QString m_defaultWorkspaceId;
     QString m_lastError;
+    QString m_lastWarning;
+    void setLastWarning(const QString &message);
     // Held for the process lifetime; warns on contention, last-writer-wins.
     QLockFile m_lock;
     bool m_loaded = false;

@@ -34,7 +34,8 @@ PanelSection {
         // Component stills are meaningless for decoded frames: PNG
         // would freeze an arbitrary poster and SVG has no raster
         // branch, so the section hides when every target is video.
-        // Mixed selections keep it.
+        // Mixed selections keep it; SVG drops video leaves with a
+        // warning while PNG posters them at the playhead.
         if (!section.doc)
             return false;
         section.doc.rev;
@@ -63,6 +64,10 @@ PanelSection {
     property var scales: [1]
     property string notice: ""
     property bool noticeError: false
+    // Non-blocking warning from the last successful export (SVG-excluded
+    // videos, unembedded fonts). Shown muted alongside the silent
+    // success; failures keep the red error path.
+    property string warning: ""
     property var plan: ({})
     property url pendingSaveUrl: ""
 
@@ -115,6 +120,7 @@ PanelSection {
     function startExport() {
         section.notice = "";
         section.noticeError = false;
+        section.warning = "";
         if (!section.doc || section.doc.selectedTops().length === 0) {
             section.notice = qsTr("Select components to export.");
             section.noticeError = true;
@@ -145,6 +151,7 @@ PanelSection {
         if (ok) {
             section.notice = section.plan.zip ? qsTr("Exported %1 (%2 files)").arg(section.fileLabel(dest)).arg(section.plan.fileCount) : qsTr("Exported %1").arg(section.fileLabel(dest));
             section.noticeError = false;
+            section.warning = ComponentExporter.lastWarning;
         } else {
             section.notice = ComponentExporter.lastError !== "" ? ComponentExporter.lastError : qsTr("Export failed.");
             section.noticeError = true;
@@ -282,6 +289,8 @@ PanelSection {
 
     // Error-only notice: successes stay silent, failures still surface
     // (without this, a failed export would vanish without a trace).
+    // Warnings (SVG-excluded videos, unembedded fonts) show muted on
+    // success so honest output never looks clean-silent.
     Text {
         Layout.fillWidth: true
         visible: section.noticeError && section.notice !== ""
@@ -289,6 +298,15 @@ PanelSection {
         font.pixelSize: 11
         wrapMode: Text.WordWrap
         color: "#e81123"
+    }
+
+    Text {
+        Layout.fillWidth: true
+        visible: !section.noticeError && section.warning !== ""
+        text: section.warning
+        font.pixelSize: 11
+        wrapMode: Text.WordWrap
+        color: AppTheme.muted
     }
 
     FilePicker {

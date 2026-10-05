@@ -284,8 +284,9 @@ RowLayout {
     }
 
     // .totm share: export writes name + scene + blobs via the store
-    // (errors surface in the global bar); import remaps blobs under
-    // fresh names and selects the new card.
+    // (errors surface in the global bar, degraded successes warn
+    // through shareWarnPopup); import remaps blobs under fresh names
+    // and selects the new card.
     function homeExportDesign(designId) {
         if (!designId)
             return;
@@ -299,11 +300,16 @@ RowLayout {
     }
 
     // Overwrite path: existing destinations confirm through the shared
-    // popup before exportDesign runs with overwrite set.
+    // popup before exportDesign runs with overwrite set. Degraded
+    // successes (missing blobs, unembedded fonts) report through an
+    // info-only popup so shares never look clean-silent.
     function commitExport(dest, overwrite) {
-        if (homeView.exportDesignId !== "")
-            LibraryStore.exportDesign(homeView.exportDesignId, dest, overwrite);
+        if (homeView.exportDesignId === "")
+            return;
+        var ok = LibraryStore.exportDesign(homeView.exportDesignId, dest, overwrite);
         homeView.exportDesignId = "";
+        if (ok && LibraryStore.lastWarning !== "")
+            homeView.shareWarnPopup.ask(qsTr("Shared with warnings"), LibraryStore.lastWarning, qsTr("OK"));
     }
 
     function fileName(url) {
@@ -907,6 +913,8 @@ RowLayout {
             if (id) {
                 homeView.refreshFiltered();
                 homeView.selection.selectOnly(id);
+                if (LibraryStore.lastWarning !== "")
+                    homeView.shareWarnPopup.ask(qsTr("Imported with placeholders"), LibraryStore.lastWarning, qsTr("OK"));
             }
         }
     }
@@ -1054,6 +1062,13 @@ RowLayout {
             else
                 homeView.commitExport(dest, false);
         }
+    }
+
+    // Info-only notice for degraded .totm round-trips (missing blobs,
+    // unembedded fonts): no action on confirm, Cancel hidden.
+    ConfirmPopup {
+        id: shareWarnPopup
+        showCancel: false
     }
 
     // Starred-delete guard: only batches containing a starred design

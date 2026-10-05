@@ -10,9 +10,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QPainterPath>
 #include <QPointF>
 #include <QRectF>
+#include <QSet>
 #include <QStandardPaths>
 #include <QtMath>
 
@@ -701,7 +703,7 @@ QString buildLeafFilter(const QVariantMap &m, double w, double h, int uid,
 
 } // namespace
 
-QString renderNodes(const QVariantList &topNodes, QString *error) {
+QString renderNodes(const QVariantList &topNodes, QString *error, int *skippedVideo) {
     auto fail = [&](const QString &message) {
         if (error)
             *error = message;
@@ -745,6 +747,15 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
     for (const QVariantMap &m : work) {
         if (isMaskMap(m))
             continue;
+        // Video has no vector branch (no decoded frames in standalone
+        // SVG): skip and count so callers warn instead of emitting a
+        // bogus flat rect from the generic path below.
+        const QString skipType = str(m, "type", str(m, "shapeType", QStringLiteral("rectangle")));
+        if (skipType == QLatin1String("video")) {
+            if (skippedVideo)
+                ++(*skippedVideo);
+            continue;
+        }
         const int uid = m.value(QStringLiteral("uid"), -1).toInt();
         const int srcIdx = leafIndex.value(uid, -1);
         const bool ancVis = srcIdx >= 0 ? leaves.at(srcIdx).ancestorsVisible : true;
@@ -1397,6 +1408,45 @@ QString renderNodes(const QVariantList &topNodes, QString *error) {
         svg += el + QLatin1Char('\n');
     svg += QStringLiteral("</svg>\n");
     return svg;
+}
+
+QStringList unavailableFonts(const QVariantList &topNodes) {
+    QSet<QString> fams;
+    QList<QVariantList> stack;
+    stack.append(topNodes);
+    while (!stack.isEmpty()) {
+        const QVariantList nodes = stack.takeLast();
+        for (const QVariant &v : nodes) {
+            const QVariantMap n = v.toMap();
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group")) {
+                stack.append(n.value(QStringLiteral("children")).toList());
+                continue;
+            }
+            const QString t = n.value(QStringLiteral("type")).toString();
+            const QString st = n.value(QStringLiteral("shapeType")).toString();
+            if (t != QLatin1String("text") && st != QLatin1String("text"))
+                continue;
+            const QString f = n.value(QStringLiteral("fontFamily"), QStringLiteral("Inter")).toString().trimmed();
+            if (!f.isEmpty())
+                fams.insert(f);
+        }
+    }
+    const QStringList installed = QFontDatabase::families();
+    QStringList missing;
+    for (const QString &f : fams) {
+        bool ok = false;
+        for (const QString &have : installed) {
+            if (have.compare(f, Qt::CaseInsensitive) == 0) {
+                ok = true;
+                break;
+            }
+        }
+        // Dedupe case-insensitively ("Foo" + "foo" warn once).
+        if (!ok && !missing.contains(f, Qt::CaseInsensitive))
+            missing.append(f);
+    }
+    missing.sort(Qt::CaseInsensitive);
+    return missing;
 }
 
 } // namespace SvgPaint

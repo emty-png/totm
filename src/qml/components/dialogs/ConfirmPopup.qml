@@ -6,13 +6,15 @@ import Totm
 // Generic destructive-action confirm: title plus message with Cancel
 // and a foreground confirm action, in the export/template modal
 // language. Callers set the copy through ask() (which opens) and run
-// the action on confirmed; dismissals do nothing.
+// the action on confirmed; dismissals do nothing. showCancel hides
+// the Cancel button for info-only notices (confirm reads e.g. "OK").
 Popup {
     id: confirm
 
     property string title: ""
     property string message: ""
     property string confirmLabel: ""
+    property bool showCancel: true
 
     signal confirmed
 
@@ -94,6 +96,7 @@ Popup {
                 border.width: 1
                 border.color: AppTheme.fieldBorder
                 color: cancelMouse.containsMouse || cancelMouse.pressed ? AppTheme.hover : AppTheme.surface
+                visible: confirm.showCancel
 
                 Behavior on color {
                     ColorAnimation {

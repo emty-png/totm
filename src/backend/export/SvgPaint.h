@@ -23,7 +23,11 @@ namespace SvgPaint {
 // Renders top-level node snapshots (groups included) to a standalone
 // SVG document (UTF-8 text). Top-level visibility is forced on like
 // the PNG path; nested visibility stays authored. Null string +
-// *error on empty input or nothing visible.
-QString renderNodes(const QVariantList &topNodes, QString *error = nullptr);
+// *error on empty input or nothing visible. Video leaves are skipped
+// (SVG is vector-only, no decoded-frame branch): *skippedVideo counts
+// them so callers can warn instead of exporting bogus vectors.
+// unavailableFonts lists text-leaf families missing on this device.
+QString renderNodes(const QVariantList &topNodes, QString *error = nullptr, int *skippedVideo = nullptr);
+QStringList unavailableFonts(const QVariantList &topNodes);
 
 } // namespace SvgPaint

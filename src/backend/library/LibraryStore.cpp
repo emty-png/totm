@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QMimeData>
@@ -85,6 +86,57 @@ QSet<QString> collectNodeStringRefs(QList<QVariantList> stack, const QString &ke
         }
     }
     return out;
+}
+
+// Font families used by text leaves (groups recursed, sorted). Runs
+// carry no family (per-run bold/italic/color only), so the leaf
+// fontFamily value is the whole story.
+QStringList collectFontFamilies(const QVariantList &roots) {
+    QSet<QString> out;
+    QList<QVariantList> stack;
+    stack.append(roots);
+    while (!stack.isEmpty()) {
+        const QVariantList nodes = stack.takeLast();
+        for (const QVariant &v : nodes) {
+            const QVariantMap n = v.toMap();
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group")) {
+                stack.append(n.value(QStringLiteral("children")).toList());
+                continue;
+            }
+            const QString t = n.value(QStringLiteral("type")).toString();
+            const QString st = n.value(QStringLiteral("shapeType")).toString();
+            if (t != QLatin1String("text") && st != QLatin1String("text"))
+                continue;
+            const QString f = n.value(QStringLiteral("fontFamily"), QStringLiteral("Inter")).toString().trimmed();
+            if (!f.isEmpty())
+                out.insert(f);
+        }
+    }
+    QStringList sorted = out.values();
+    sorted.sort(Qt::CaseInsensitive);
+    return sorted;
+}
+
+// Families unavailable on this device (case-insensitive). Bundled
+// Inter resolves once main.cpp registers it; user fonts resolve once
+// SettingsStore loads them — so a hit here means the receiving
+// device (or viewer) likely substitutes too.
+QStringList unavailableFonts(const QStringList &families) {
+    const QStringList installed = QFontDatabase::families();
+    QStringList missing;
+    for (const QString &f : families) {
+        bool ok = false;
+        for (const QString &have : installed) {
+            if (have.compare(f, Qt::CaseInsensitive) == 0) {
+                ok = true;
+                break;
+            }
+        }
+        // Dedupe case-insensitively ("Foo" + "foo" warn once).
+        if (!ok && !missing.contains(f, Qt::CaseInsensitive))
+            missing.append(f);
+    }
+    return missing;
 }
 
 // Resolved .totm destination: delegates to AppPaths so the write and
@@ -396,8 +448,10 @@ QString LibraryStore::importImage(const QUrl &source) {
         return {};
     }
     QString suffix = info.suffix().toLower();
-    if (!AppPaths::imageExtensions().contains(suffix))
-        suffix = QStringLiteral("png");
+    if (!AppPaths::imageExtensions().contains(suffix)) {
+        setLastError(tr("That image type is not supported (png, jpg, jpeg, webp, gif, svg)."));
+        return {};
+    }
     QDir().mkpath(imagesDir());
     const QString name = newId() + QStringLiteral(".") + suffix;
     const QString dest = imagesDir() + QStringLiteral("/") + name;
@@ -847,37 +901,57 @@ bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool
         audios.insert(src);
         // Detached video sound rides on the video blob: pack it with the
         // videos so the clip survives the round-trip even when no video
-        // node references the file anymore.
+        // node references the file anymore. Suffix-gated (the name
+        // guards are loose dotted names): audio-suffixed clips stay
+        // audio-owned for counting.
+        const QString asuf = src.section(QLatin1Char('.'), -1).toLower();
         if (!src.contains(QLatin1Char('/')) && !src.contains(QLatin1Char('\\'))
-            && isSafeVideoName(src))
+            && AppPaths::videoExtensions().contains(asuf))
             videoRefs.insert(src);
     }
-    // Missing blobs are skipped so one lost file never blocks sharing.
+    // Unpacked blobs are skipped so one lost file never blocks sharing;
+    // per-kind counts ride the warning channel (see below).
+    int skippedImages = 0, skippedAudios = 0, skippedVideos = 0;
     QJsonObject imageBlobs;
     for (const QString &name : images) {
-        if (!isSafeImageName(name))
+        if (!isSafeImageName(name)) {
+            ++skippedImages;
             continue;
+        }
         QFile f(imagesDir() + QStringLiteral("/") + name);
-        if (!f.open(QIODevice::ReadOnly))
+        if (!f.open(QIODevice::ReadOnly)) {
+            ++skippedImages;
             continue;
+        }
         const QByteArray raw = f.readAll();
         if (!raw.isEmpty())
             imageBlobs[name] = QString::fromLatin1(raw.toBase64());
+        else
+            ++skippedImages;
     }
     QJsonObject audioBlobs;
     for (const QString &name : audios) {
-        if (!isSafeAudioName(name))
+        if (!isSafeAudioName(name)) {
+            ++skippedAudios;
             continue;
+        }
         // Video blobs referenced by audio clips live in videos/, not
-        // audio/ — they are packed with the videos below.
-        if (isSafeVideoName(name) && QFile::exists(videosDir() + QStringLiteral("/") + name))
+        // audio/ — they are packed (and counted) with the videos below.
+        // Suffix-gated like the collector above: audio-suffixed names
+        // stay audio-owned here.
+        const QString asuf = name.section(QLatin1Char('.'), -1).toLower();
+        if (AppPaths::videoExtensions().contains(asuf) && !name.contains(QLatin1Char('/')) && !name.contains(QLatin1Char('\\')))
             continue;
         QFile f(audioDir() + QStringLiteral("/") + name);
-        if (!f.open(QIODevice::ReadOnly))
+        if (!f.open(QIODevice::ReadOnly)) {
+            ++skippedAudios;
             continue;
+        }
         const QByteArray raw = f.readAll();
         if (!raw.isEmpty())
             audioBlobs[name] = QString::fromLatin1(raw.toBase64());
+        else
+            ++skippedAudios;
     }
     QJsonObject videoBlobs;
     const QSet<QString> &videoOk = AppPaths::videoExtensions();
@@ -886,27 +960,38 @@ bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool
         QString suffix;
         if (isSafeVideoName(ref)) {
             suffix = ref.section(QLatin1Char('.'), -1).toLower();
-            if (!videoOk.contains(suffix))
+            if (!videoOk.contains(suffix)) {
+                ++skippedVideos;
                 continue;
+            }
             filePath = videosDir() + QStringLiteral("/") + ref;
         } else if (ref.contains(QLatin1Char('/')) || ref.contains(QLatin1Char('\\'))) {
             // Legacy absolute path: pack by content so the import lands
             // as a stored blob.
             suffix = ref.section(QLatin1Char('.'), -1).toLower();
-            if (!videoOk.contains(suffix))
+            if (!videoOk.contains(suffix)) {
+                ++skippedVideos;
                 continue;
-            if (!QFile::exists(ref))
+            }
+            if (!QFile::exists(ref)) {
+                ++skippedVideos;
                 continue;
+            }
             filePath = ref;
         } else {
+            ++skippedVideos;
             continue;
         }
         QFile vf(filePath);
-        if (!vf.open(QIODevice::ReadOnly))
+        if (!vf.open(QIODevice::ReadOnly)) {
+            ++skippedVideos;
             continue;
+        }
         const QByteArray raw = vf.readAll();
         if (!raw.isEmpty())
             videoBlobs[ref] = QString::fromLatin1(raw.toBase64());
+        else
+            ++skippedVideos;
     }
     const QJsonObject root{
         {QStringLiteral("app"), QStringLiteral("totm")},
@@ -930,7 +1015,25 @@ bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool
         setLastError(tr("Could not write that file: %1").arg(out.errorString()));
         return false;
     }
+    // Degraded success still reports: missing blobs show as placeholders
+    // on import, and unembedded fonts substitute on foreign devices.
+    QStringList warnings;
+    if (skippedImages + skippedAudios + skippedVideos > 0) {
+        QStringList parts;
+        if (skippedImages > 0)
+            parts.append(tr("%n image(s)", "", skippedImages));
+        if (skippedAudios > 0)
+            parts.append(tr("%n audio file(s)", "", skippedAudios));
+        if (skippedVideos > 0)
+            parts.append(tr("%n video(s)", "", skippedVideos));
+        warnings.append(tr("Shared without %1 — missing on this device. Placeholders show on import.").arg(parts.join(QStringLiteral(", "))));
+    }
+    const QStringList missingFonts = unavailableFonts(collectFontFamilies(scene.value(QStringLiteral("nodes")).toList()));
+    if (!missingFonts.isEmpty())
+        warnings.append(tr("Fonts not embedded (%1) — install them on the receiving device or text may substitute.").arg(missingFonts.join(QStringLiteral(", "))));
     clearError();
+    if (!warnings.isEmpty())
+        setLastWarning(warnings.join(QStringLiteral(" ")));
     return true;
 }
 
@@ -981,7 +1084,9 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
     // Remap helper: store each referenced blob under a fresh uuid name so
     // imports never collide with library files. Missing/invalid blobs
     // keep their refs (canvas shows the neutral placeholder, export
-    // skips them) instead of failing the whole import.
+    // skips them) instead of failing the whole import; per-kind miss
+    // counts ride the warning channel (see below).
+    int missingImages = 0, missingAudios = 0, missingVideos = 0;
     QHash<QString, QString> imageMap;
     {
         QSet<QString> refs;
@@ -1001,18 +1106,24 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
         QDir().mkpath(imagesDir());
         for (const QString &ref : refs) {
             const QString b64 = imageBlobs.value(ref).toString();
-            if (b64.isEmpty())
+            if (b64.isEmpty()) {
+                ++missingImages;
                 continue;
+            }
             const QByteArray raw = QByteArray::fromBase64(b64.toLatin1());
-            if (raw.isEmpty() || raw.size() > 100 * 1024 * 1024)
+            if (raw.isEmpty() || raw.size() > 100 * 1024 * 1024) {
+                ++missingImages;
                 continue;
+            }
             QString suffix = ref.section(QLatin1Char('.'), -1).toLower();
             if (!imageOk.contains(suffix))
                 suffix = QStringLiteral("png");
             const QString fresh = newId() + QStringLiteral(".") + suffix;
             QFile out(imagesDir() + QStringLiteral("/") + fresh);
-            if (!out.open(QIODevice::WriteOnly) || out.write(raw) != raw.size())
+            if (!out.open(QIODevice::WriteOnly) || out.write(raw) != raw.size()) {
+                ++missingImages;
                 continue;
+            }
             imageMap.insert(ref, fresh);
         }
         if (!imageMap.isEmpty()) {
@@ -1052,18 +1163,26 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
                 && videoBlobs.contains(ref))
                 continue;
             const QString b64 = audioBlobs.value(ref).toString();
-            if (b64.isEmpty())
+            if (b64.isEmpty()) {
+                ++missingAudios;
                 continue;
+            }
             const QByteArray raw = QByteArray::fromBase64(b64.toLatin1());
-            if (raw.isEmpty() || raw.size() > 100 * 1024 * 1024)
+            if (raw.isEmpty() || raw.size() > 100 * 1024 * 1024) {
+                ++missingAudios;
                 continue;
+            }
             QString suffix = ref.section(QLatin1Char('.'), -1).toLower();
-            if (!audioOk.contains(suffix))
+            if (!audioOk.contains(suffix)) {
+                ++missingAudios;
                 continue;
+            }
             const QString fresh = newId() + QStringLiteral(".") + suffix;
             QFile out(audioDir() + QStringLiteral("/") + fresh);
-            if (!out.open(QIODevice::WriteOnly) || out.write(raw) != raw.size())
+            if (!out.open(QIODevice::WriteOnly) || out.write(raw) != raw.size()) {
+                ++missingAudios;
                 continue;
+            }
             c[QStringLiteral("source")] = fresh;
             clips[i] = c;
             changed = true;
@@ -1104,18 +1223,26 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
         QDir().mkpath(videosDir());
         for (const QString &ref : refs) {
             const QString b64 = videoBlobs.value(ref).toString();
-            if (b64.isEmpty())
+            if (b64.isEmpty()) {
+                ++missingVideos;
                 continue;
+            }
             const QByteArray raw = QByteArray::fromBase64(b64.toLatin1());
-            if (raw.isEmpty() || raw.size() > 1024LL * 1024 * 1024)
+            if (raw.isEmpty() || raw.size() > 1024LL * 1024 * 1024) {
+                ++missingVideos;
                 continue;
+            }
             QString suffix = ref.section(QLatin1Char('.'), -1).toLower();
-            if (!videoOk.contains(suffix))
+            if (!videoOk.contains(suffix)) {
+                ++missingVideos;
                 continue;
+            }
             const QString fresh = newId() + QStringLiteral(".") + suffix;
             QFile out(videosDir() + QStringLiteral("/") + fresh);
-            if (!out.open(QIODevice::WriteOnly) || out.write(raw) != raw.size())
+            if (!out.open(QIODevice::WriteOnly) || out.write(raw) != raw.size()) {
+                ++missingVideos;
                 continue;
+            }
             videoMap.insert(ref, fresh);
         }
         if (!videoMap.isEmpty()) {
@@ -1165,7 +1292,25 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
         return {};
     }
     rebuild();
+    // Degraded success still reports: unmapped refs render as
+    // placeholders, and fonts missing here substitute on canvas.
+    QStringList warnings;
+    if (missingImages + missingAudios + missingVideos > 0) {
+        QStringList parts;
+        if (missingImages > 0)
+            parts.append(tr("%n image(s)", "", missingImages));
+        if (missingAudios > 0)
+            parts.append(tr("%n audio file(s)", "", missingAudios));
+        if (missingVideos > 0)
+            parts.append(tr("%n video(s)", "", missingVideos));
+        warnings.append(tr("Imported with %1 placeholder(s) — files missing from the bundle (%2).").arg(missingImages + missingAudios + missingVideos).arg(parts.join(QStringLiteral(", "))));
+    }
+    const QStringList missingFonts = unavailableFonts(collectFontFamilies(scene.value(QStringLiteral("nodes")).toList()));
+    if (!missingFonts.isEmpty())
+        warnings.append(tr("Fonts not installed here (%1) — text may substitute.").arg(missingFonts.join(QStringLiteral(", "))));
     clearError();
+    if (!warnings.isEmpty())
+        setLastWarning(warnings.join(QStringLiteral(" ")));
     return entry.id;
 }
 
@@ -1559,6 +1704,29 @@ void LibraryStore::setLastError(const QString &message) {
 
 void LibraryStore::clearError() {
     setLastError(QString());
+    setLastWarning(QString());
+}
+
+QString LibraryStore::lastWarning() const {
+    return m_lastWarning;
+}
+
+void LibraryStore::setLastWarning(const QString &message) {
+    if (m_lastWarning == message)
+        return;
+    m_lastWarning = message;
+    emit lastWarningChanged();
+}
+
+void LibraryStore::flagUnsupportedFiles(int count, const QString &detail) {
+    if (count <= 0)
+        return;
+    const QString names = detail.trimmed().isEmpty() ? tr("unknown") : detail.trimmed();
+    const QString msg = tr("%n file(s) skipped — unsupported type (%1). Supported: png, jpg, webp, gif, svg, mp4, webm, mov, m4v, mkv.", "", count).arg(names);
+    if (!m_lastError.isEmpty())
+        setLastError(m_lastError + QStringLiteral(" ") + msg);
+    else
+        setLastError(msg);
 }
 
 void LibraryStore::installFreshDefault() {

@@ -215,10 +215,25 @@ QString ComponentExporter::lastError() const {
 }
 
 void ComponentExporter::clearError() {
-    if (m_lastError.isEmpty())
+    if (!m_lastError.isEmpty()) {
+        m_lastError.clear();
+        emit lastErrorChanged();
+    }
+    if (!m_lastWarning.isEmpty()) {
+        m_lastWarning.clear();
+        emit lastWarningChanged();
+    }
+}
+
+QString ComponentExporter::lastWarning() const {
+    return m_lastWarning;
+}
+
+void ComponentExporter::setLastWarning(const QString &message) {
+    if (m_lastWarning == message)
         return;
-    m_lastError.clear();
-    emit lastErrorChanged();
+    m_lastWarning = message;
+    emit lastWarningChanged();
 }
 
 void ComponentExporter::setLastError(const QString &message) {
@@ -385,6 +400,7 @@ bool ComponentExporter::exportSelection(const QVariantList &topNodes, const QStr
 
     QList<QPair<QString, QByteArray>> payloads;
     int fileAt = 0;
+    int skippedVideos = 0;
     for (int i = 0; i < topNodes.size(); ++i) {
         const QVariantMap node = topNodes.at(i).toMap();
         if (node.isEmpty()) {
@@ -392,9 +408,11 @@ bool ComponentExporter::exportSelection(const QVariantList &topNodes, const QStr
             return false;
         }
         // SVG is resolution-independent: one file per top, scales ignored.
+        // Video leaves are excluded with a warning (no decoded frames in
+        // standalone SVG); use PNG for a playhead poster instead.
         if (svg) {
             QString error;
-            const QString doc = SvgPaint::renderNodes({node}, &error);
+            const QString doc = SvgPaint::renderNodes({node}, &error, &skippedVideos);
             if (doc.isEmpty()) {
                 setLastError(error.isEmpty() ? tr("Could not render the selection.") : error);
                 return false;
@@ -436,6 +454,19 @@ bool ComponentExporter::exportSelection(const QVariantList &topNodes, const QStr
     if (file.write(out) != out.size() || !file.commit()) {
         setLastError(tr("Could not write “%1”.").arg(QFileInfo(path).fileName()));
         return false;
+    }
+    // SVG-only warnings: excluded videos and unembedded fonts. PNG
+    // posters rasterize decoded frames and installed fonts, so the
+    // output is self-contained and needs no warning.
+    if (svg) {
+        QStringList warnings;
+        if (skippedVideos > 0)
+            warnings.append(tr("%n video(s) excluded — SVG is vector-only; use PNG for a playhead poster.", "", skippedVideos));
+        const QStringList missingFonts = SvgPaint::unavailableFonts(topNodes);
+        if (!missingFonts.isEmpty())
+            warnings.append(tr("Fonts not embedded (%1) — viewers without them substitute text.").arg(missingFonts.join(QStringLiteral(", "))));
+        if (!warnings.isEmpty())
+            setLastWarning(warnings.join(QStringLiteral(" ")));
     }
     return true;
 }

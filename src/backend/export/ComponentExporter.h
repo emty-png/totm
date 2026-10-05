@@ -32,6 +32,9 @@ class ComponentExporter : public QObject {
     QML_SINGLETON
 
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    // Non-blocking warning from the last export ("" when clean):
+    // SVG-excluded videos and unembedded fonts. Failures use lastError.
+    Q_PROPERTY(QString lastWarning READ lastWarning NOTIFY lastWarningChanged)
 
 public:
     static ComponentExporter *create(QQmlEngine *engine, QJSEngine *scriptEngine);
@@ -39,6 +42,7 @@ public:
 
     QString lastError() const;
     Q_INVOKABLE void clearError();
+    QString lastWarning() const;
 
     // Plan for (names x scales): {fileCount, suffix ("png"/"svg"/"zip"),
     // defaultName, files}. PNG names sanitize to layer-safe stems with
@@ -71,6 +75,7 @@ public:
 
 signals:
     void lastErrorChanged();
+    void lastWarningChanged();
 
 private:
     struct Plan {
@@ -82,6 +87,8 @@ private:
     Plan makePlan(const QStringList &names, const QVariantList &scales, const QString &designName,
         const QString &format) const;
     void setLastError(const QString &message);
+    void setLastWarning(const QString &message);
 
     QString m_lastError;
+    QString m_lastWarning;
 };

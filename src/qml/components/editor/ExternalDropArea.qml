@@ -8,7 +8,9 @@ import Totm
 // cascade and commit as one undo entry. SVGs vectorize through the
 // same path as the image-tool picker (image-blob fallback when
 // unconvertible); videos link by path with duration probe; anything
-// else is skipped. Inbound only: app content never reaches the OS.
+// else is skipped with a notice in the global error bar (unsupported
+// types never vanish silently). Inbound only: app content never
+// reaches the OS.
 DropArea {
     id: intake
 
@@ -61,9 +63,14 @@ DropArea {
     }
 
     // One gesture, one undo entry: failures land per file, the rest
-    // still commit. Returns the placed count.
+    // still commit. Returns the placed count. Files outside the media
+    // filter never reach placeFile: they are reported once through
+    // flagUnsupportedFiles (backend failures already set lastError).
     function importUrls(urls, sceneX, sceneY) {
         var files = intake.mediaUrls(urls);
+        var skipped = intake.unsupportedNames(urls, files);
+        if (skipped.length > 0)
+            LibraryStore.flagUnsupportedFiles(skipped.length, skipped.slice(0, 3).join(", "));
         if (files.length === 0 || !intake.doc)
             return 0;
         var placed = 0;
@@ -75,6 +82,25 @@ DropArea {
         }
         d.endTransaction();
         return placed;
+    }
+
+    // Display names of urls dropped by the media filter (unsupported
+    // suffixes and remote links), for the skip notice.
+    function unsupportedNames(urls, kept) {
+        var out = [];
+        var list = urls || [];
+        for (var i = 0; i < list.length; i++) {
+            if (kept.indexOf(list[i]) < 0)
+                out.push(intake.displayName(list[i]));
+        }
+        return out;
+    }
+
+    function displayName(u) {
+        var s = String(u).split("?")[0].replace(/\\/g, "/");
+        var i = s.lastIndexOf("/");
+        var base = i >= 0 ? s.slice(i + 1) : s;
+        return base === "" ? s : base;
     }
 
     // Mirrors the image-tool picker accept: SVGs vectorize at natural
