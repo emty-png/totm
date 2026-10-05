@@ -9,9 +9,8 @@ license=('Apache-2.0')
 depends=('ffmpeg' 'hicolor-icon-theme' 'qt6-base' 'qt6-declarative' 'qt6-multimedia' 'qt6-multimedia-ffmpeg' 'qt6-shadertools' 'qt6-svg')
 makedepends=('cmake' 'git' 'ninja')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/$pkgver.tar.gz")
-# Tag tarball; refresh with `updpkgsums` once the release tarball is published.
-# SKIP is a placeholder until the 0.7.0 checksum is recorded.
-sha256sums=('SKIP')
+# Tag tarball; refreshed per release (checksum recorded after tagging).
+sha256sums=('605d4b49d74391803e17780011f9568d3211dcf5bbede1a31ad34ebf8f951355')
 
 build() {
   cmake -B build -S "$pkgname-$pkgver" -G Ninja \
