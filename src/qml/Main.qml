@@ -330,6 +330,35 @@ ApplicationWindow {
     // requests and imports through LibraryStore. Invisible.
     PluginFilePicker {}
 
+    // First-run welcome tour: dimmed modal card above everything
+    // (including plugin overlays). Opens once on fresh profiles with a
+    // short delay so window restore finishes first.
+    OnboardingOverlay {
+        id: onboardingOverlay
+
+        z: 20
+    }
+
+    Connections {
+        target: SettingsStore
+        function onOnboardingChanged() {
+            if (SettingsStore.shouldShowOnboarding() && !onboardingOverlay.opened)
+                onboardingOverlay.showTour();
+        }
+    }
+
+    Timer {
+        id: onboardingTimer
+
+        interval: 350
+        running: true
+        repeat: false
+        onTriggered: {
+            if (SettingsStore.shouldShowOnboarding())
+                onboardingOverlay.showTour();
+        }
+    }
+
     // Window state: geometry + maximized persist via SettingsStore
     // (native QSettings). Restores once on launch; saves debounced on
     // move/resize/visibility so drags write once, plus synchronously

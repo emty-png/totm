@@ -264,6 +264,9 @@ qt_add_qml_module(totm
         # Dialogs (shared modals)
         qml/components/dialogs/ConfirmPopup.qml
         qml/components/dialogs/FilePicker.qml
+        # Onboarding (first-run welcome tour)
+        qml/components/onboarding/OnboardingOverlay.qml
+        qml/components/onboarding/OnboardingPage.qml
         # Toolbar
         qml/components/toolbar/CanvasToolbar.qml
         qml/components/toolbar/ToolbarButton.qml

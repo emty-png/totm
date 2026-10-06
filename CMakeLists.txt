@@ -17,9 +17,8 @@ install(TARGETS totm
     RUNTIME DESTINATION bin
 )
 
-# Windows installer (NSIS via CPack). Qt DLLs are deployed by
-# packaging/nsis-deploy.cmake via install(SCRIPT), which runs after
-# bin/totm.exe is staged (CPACK_INSTALL_SCRIPT would run before it exists).
+# Windows installer (NSIS via CPack). Qt DLLs are staged by
+# packaging/nsis-deploy.cmake via install(SCRIPT) so it runs after bin/totm.exe.
 if(WIN32)
     set(CPACK_PACKAGE_NAME "totm")
     set(CPACK_PACKAGE_VENDOR "tot")
@@ -29,10 +28,8 @@ if(WIN32)
     set(CPACK_NSIS_PACKAGE_NAME "totm ${PROJECT_VERSION}")
     set(CPACK_NSIS_MUI_ICON "${PROJECT_SOURCE_DIR}/packaging/icons/totm.ico")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-    # .totm file association: ProgId registry keys plus a shell refresh.
-    # The exe already handles argv files and single-instance forwarding,
-    # so double-click lands in the running window. Uninstall removes the
-    # keys only if they still point at totm (never steal a reassignment).
+    # .totm association (exe handles argv + single-instance forwarding).
+    # Uninstall only clears keys still pointing at totm.
     set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
         WriteRegStr HKCR '.totm' '' 'totm.design'
         WriteRegStr HKCR 'totm.design' '' 'totm design'

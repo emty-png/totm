@@ -71,6 +71,9 @@ constexpr char kGenFormatKey[] = "general/format";
 constexpr char kGenLowSpecKey[] = "general/lowSpec";
 constexpr char kGenRecentColorsKey[] = "general/recentColors";
 constexpr int kRecentColorsMax = 10;
+constexpr char kOnboardingCompletedKey[] = "onboarding/completed";
+constexpr char kOnboardingVersionKey[] = "onboarding/version";
+constexpr int kOnboardingCurrentVersion = 1;
 
 constexpr int kSceneMin = 16;
 constexpr int kSceneMax = 7680;
@@ -337,6 +340,7 @@ void SettingsStore::load() {
     loadShortcuts();
     loadAppearance();
     loadGeneral();
+    loadOnboarding();
 }
 
 void SettingsStore::loadShortcuts() {
@@ -1563,6 +1567,45 @@ void SettingsStore::clearRecentColors() {
     m_recentColors.clear();
     persistGeneral();
     emit generalChanged();
+}
+
+void SettingsStore::loadOnboarding() {
+    QSettings settings;
+    m_onboardingCompleted = settings.value(QString::fromLatin1(kOnboardingCompletedKey), false).toBool();
+    m_onboardingVersion = settings.value(QString::fromLatin1(kOnboardingVersionKey), 0).toInt();
+    if (m_onboardingVersion < 0 || m_onboardingVersion > kOnboardingCurrentVersion)
+        m_onboardingVersion = 0;
+    // Version bumps re-show the tour once even when completed before.
+    if (m_onboardingVersion < kOnboardingCurrentVersion)
+        m_onboardingCompleted = false;
+}
+
+void SettingsStore::persistOnboarding() {
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kOnboardingCompletedKey), m_onboardingCompleted);
+    settings.setValue(QString::fromLatin1(kOnboardingVersionKey), m_onboardingVersion);
+    settings.sync();
+}
+
+bool SettingsStore::onboardingCompleted() const {
+    return m_onboardingCompleted;
+}
+
+int SettingsStore::onboardingVersion() const {
+    return m_onboardingVersion;
+}
+
+bool SettingsStore::shouldShowOnboarding() const {
+    return !m_onboardingCompleted || m_onboardingVersion < kOnboardingCurrentVersion;
+}
+
+void SettingsStore::completeOnboarding() {
+    if (m_onboardingCompleted && m_onboardingVersion >= kOnboardingCurrentVersion)
+        return;
+    m_onboardingCompleted = true;
+    m_onboardingVersion = kOnboardingCurrentVersion;
+    persistOnboarding();
+    emit onboardingChanged();
 }
 
 void SettingsStore::applyScenePreset(const QString &name) {

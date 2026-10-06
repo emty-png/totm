@@ -115,6 +115,11 @@ class SettingsStore : public QObject {
     // Recently used canvas colors (#rrggbb, MRU first, max 10). Pushed
     // by the color picker on close; QML binds for the recents row.
     Q_PROPERTY(QStringList recentColors READ recentColors NOTIFY generalChanged)
+    // First-run welcome tour. Completed once the overlay is dismissed
+    // (Skip / Get started / Escape); version lets future tours re-show
+    // once by bumping kOnboardingCurrentVersion below.
+    Q_PROPERTY(bool onboardingCompleted READ onboardingCompleted NOTIFY onboardingChanged)
+    Q_PROPERTY(int onboardingVersion READ onboardingVersion NOTIFY onboardingChanged)
 
 public:
     static SettingsStore *create(QQmlEngine *engine, QJSEngine *scriptEngine);
@@ -306,6 +311,12 @@ public:
     Q_INVOKABLE QStringList recentColors() const;
     Q_INVOKABLE void pushRecentColor(const QString &color);
     Q_INVOKABLE void clearRecentColors();
+    // Welcome tour: true on fresh profiles (or after a version bump).
+    // completeOnboarding pins the current version.
+    Q_INVOKABLE bool shouldShowOnboarding() const;
+    Q_INVOKABLE void completeOnboarding();
+    bool onboardingCompleted() const;
+    int onboardingVersion() const;
     // Applies one canvas preset (16:9, 9:16, 1:1, 4:3) to both defaults
     // in a single change; unknown names are ignored.
     Q_INVOKABLE void applyScenePreset(const QString &name);
@@ -321,6 +332,7 @@ signals:
     void appearanceChanged();
     void generalChanged();
     void fontDownloadChanged();
+    void onboardingChanged();
 
 private:
     static SettingsStore *s_instance;
@@ -332,6 +344,8 @@ private:
     void persistAppearance();
     void loadGeneral();
     void persistGeneral();
+    void loadOnboarding();
+    void persistOnboarding();
     void loadImportedFonts();
     void applyFontFamily();
     void refreshFontMissing();
@@ -416,4 +430,8 @@ private:
     bool m_lowSpecMode = false;
     // MRU canvas colors, canonical #rrggbb, max 10.
     QStringList m_recentColors;
+    // Welcome tour state. m_onboardingVersion stores the last
+    // completed tour version; fresh profiles sit at 0.
+    bool m_onboardingCompleted = false;
+    int m_onboardingVersion = 0;
 };
