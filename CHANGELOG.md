@@ -3,6 +3,12 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.7.1] - 2026-10-06
+
+### Added
+
+* First-run welcome tour — 3-step modal (Welcome, Start something, Design then animate) auto-shown once on fresh profiles after a short delay; Skip, Get started and Escape all pin `onboarding/completed` plus version in `SettingsStore`, and version bumps re-show it once.
+
 ## [0.7.0] - 2026-10-05
 
 ### Added
