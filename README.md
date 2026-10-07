@@ -1,3 +1,11 @@
+![totm — Design in motion](assets/banner.png)
+
+![Linux](https://img.shields.io/badge/Linux-supported-success?style=for-the-badge)
+![Windows](https://img.shields.io/badge/Windows-supported-success?style=for-the-badge)
+![macOS](https://img.shields.io/badge/macOS-supported-success?style=for-the-badge)
+![Qt](https://img.shields.io/badge/Qt-6.8_LTS%2B-blue?style=for-the-badge)
+![License](https://img.shields.io/badge/License-Apache--2.0-green?style=for-the-badge)
+
 # totm
 
 `totm` stands for "That one tool for motion" and is a part of an open-source app series named `tot` which stads for "That one tool".
@@ -9,12 +17,6 @@ I am trying to make apps that are better, smoother, offline and easy for new use
 I was originally making this app in tauri v2 but i crashed out in the middle of making it (i couldn't get it to work properly in front-end and didn't wanna touch rust) and switched to linux (cachy). I know that doesnt explain anything but yesh.
 
 
-
-![Linux](https://img.shields.io/badge/Linux-supported-success)
-![Windows](https://img.shields.io/badge/Windows-supported-success)
-![macOS](https://img.shields.io/badge/macOS-supported-success)
-![Qt](https://img.shields.io/badge/Qt-6.8_LTS%2B-blue)
-![License](https://img.shields.io/badge/License-Apache--2.0-green)
 
 ## Features
 

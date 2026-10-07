@@ -20,6 +20,13 @@ QtObject {
         canvas.altHeld = !!(mods & Qt.AltModifier);
         var target = canvas.doc.resolvePress(uid);
         var multi = !!(mods & (Qt.ShiftModifier | Qt.ControlModifier | Qt.MetaModifier));
+        // A leaf explicitly selected (e.g. via the Layers panel) keeps
+        // its own drag: without this the press re-resolves to the
+        // outermost group and the whole group moves. Only for plain
+        // presses; multi-select keeps the group resolve, and an already
+        // selected group keeps group dragging.
+        if (!multi && target !== uid && canvas.doc.isSelected(uid) && !canvas.doc.isSelected(target))
+            target = uid;
         var sel = canvas.doc.isSelected(target);
         if (multi && sel) {
             canvas.doc.toggleSelect(target);
