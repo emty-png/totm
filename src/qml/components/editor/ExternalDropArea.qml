@@ -141,13 +141,15 @@ DropArea {
             var vsecs = vprobe && vprobe.ok === true ? Math.max(0, Number(vprobe.duration) || 0) : 0;
             var vname = vdisplay || String(vpath).replace(/\\/g, "/").split("/").pop();
             intake.doc.beginTransaction();
-            intake.doc.addVideo(vpath, Math.round(x - vw / 2), Math.round(y - vh / 2), vw, vh, vsecs, "fit", vname);
-            if (vprobe && vprobe.ok === true && vprobe.hasAudio === true && intake.doc.anim) {
+            var videoUid = intake.doc.addVideo(vpath, Math.round(x - vw / 2), Math.round(y - vh / 2), vw, vh, vsecs, "fit", vname);
+            if (videoUid >= 0 && vprobe && vprobe.ok === true && vprobe.hasAudio === true && intake.doc.anim) {
                 var t0 = Number(intake.doc.anim.currentTime) || 0;
                 var dur = vsecs > 0 ? vsecs : Math.max(0.5, Number(intake.doc.anim.duration) - t0);
                 var aid = intake.doc.addAudioClip(vpath, t0, dur);
-                if (aid >= 0)
+                if (aid >= 0) {
                     intake.doc.selectAudioClip(aid, false);
+                    intake.doc.setShapeProp(videoUid, "videoMuted", true);
+                }
             }
             intake.doc.endTransaction();
             return true;

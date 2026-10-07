@@ -8,7 +8,7 @@ import Totm
 // only when every selected leaf is a video; files are copied into
 // videos/ on import so deleting the original never breaks the design,
 // missing blobs show a placeholder on canvas and a dark tile
-// in export. Detach copies the file's sound onto an audio lane.
+// in export. Detach moves playback to an audio lane and mutes the video.
 PanelSection {
     id: section
 
@@ -456,16 +456,17 @@ PanelSection {
 
     // Detach: one audio clip per selected video, starting at the
     // playhead, trimmed to the composition end. The clip points at the
-    // same stored blob so ffmpeg extracts its track; volume/mute copy
-    // over for continuity. Video stays visual-only otherwise.
+    // same stored blob so ffmpeg extracts its track; copy volume/mute
+    // to the lane, then silence the video so it cannot play twice.
     function detachAudio() {
         if (!section.doc || !section.doc.anim)
             return;
         var t0 = Number(section.doc.anim.currentTime) || 0;
-        // One undo entry for clip + carried volume/mute.
+        var leaves = section.snapshot.selLeaves;
+        // One undo entry for clips, carried settings and video mutes.
         section.doc.beginTransaction();
-        for (var i = 0; i < section.snapshot.selLeaves.length; i++) {
-            var s = section.snapshot.selLeaves[i];
+        for (var i = 0; i < leaves.length; i++) {
+            var s = leaves[i];
             var src = String(s.videoSource ?? "");
             if (src === "" || !LibraryStore.hasVideo(src))
                 continue;
@@ -478,6 +479,8 @@ PanelSection {
                 section.doc.setAudioProp("volume", Math.min(1, Math.max(0, Number(s.videoVolume) ?? 1)));
                 if (s.videoMuted === true)
                     section.doc.setAudioProp("muted", true);
+                else
+                    section.doc.setShapeProp(s.uid, "videoMuted", true);
             }
         }
         section.doc.endTransaction();

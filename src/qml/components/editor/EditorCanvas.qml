@@ -1390,13 +1390,15 @@ Item {
             return;
         var vname = displayName ? String(displayName) : String(path).replace(/\\/g, "/").split("/").pop();
         canvas.doc.beginTransaction();
-        canvas.doc.addVideo(path, Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)), secs, "fit", vname);
-        if (sounding === true && canvas.doc.anim) {
+        var videoUid = canvas.doc.addVideo(path, Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)), secs, "fit", vname);
+        if (videoUid >= 0 && sounding === true && canvas.doc.anim) {
             var t0 = Number(canvas.doc.anim.currentTime) || 0;
             var dur = secs > 0 ? secs : Math.max(0.5, Number(canvas.doc.anim.duration) - t0);
             var id = canvas.doc.addAudioClip(path, t0, dur);
-            if (id >= 0)
+            if (id >= 0) {
                 canvas.doc.selectAudioClip(id, false);
+                canvas.doc.setShapeProp(videoUid, "videoMuted", true);
+            }
         }
         canvas.doc.endTransaction();
     }
