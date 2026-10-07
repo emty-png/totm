@@ -336,12 +336,14 @@
       <p>Every notable change, newest first. Format follows Keep a Changelog.</p>
       <nav aria-label="Table of contents">
         <ul class="toc">
-          <li><a href="#v071">1 · 0.7.1</a></li><li><a href="#v070">2 · 0.7.0</a></li><li><a href="#v060">3 · 0.6.0</a></li><li><a href="#v050">4 · 0.5.0</a></li><li><a href="#v040">5 · 0.4.0</a></li><li><a href="#v032">6 · 0.3.2</a></li><li><a href="#v031">7 · 0.3.1</a></li><li><a href="#v030">8 · 0.3.0</a></li><li><a href="#v023">9 · 0.2.3</a></li><li><a href="#v022">10 · 0.2.2</a></li><li><a href="#v021">11 · 0.2.1</a></li><li><a href="#v020">12 · 0.2.0</a></li><li><a href="#v012">13 · 0.1.2</a></li><li><a href="#v011">14 · 0.1.1</a></li><li><a href="#v010">15 · 0.1.0</a></li>
+          <li><a href="#v072">1 · 0.7.2</a></li><li><a href="#v071">2 · 0.7.1</a></li><li><a href="#v070">3 · 0.7.0</a></li><li><a href="#v060">4 · 0.6.0</a></li><li><a href="#v050">5 · 0.5.0</a></li><li><a href="#v040">6 · 0.4.0</a></li><li><a href="#v032">7 · 0.3.2</a></li><li><a href="#v031">8 · 0.3.1</a></li><li><a href="#v030">9 · 0.3.0</a></li><li><a href="#v023">10 · 0.2.3</a></li><li><a href="#v022">11 · 0.2.2</a></li><li><a href="#v021">12 · 0.2.1</a></li><li><a href="#v020">13 · 0.2.0</a></li><li><a href="#v012">14 · 0.1.2</a></li><li><a href="#v011">15 · 0.1.1</a></li><li><a href="#v010">16 · 0.1.0</a></li>
         </ul>
       </nav>
     </header>
 
-    <h2 id="v071">0.7.1 <span class="muted tag">2026-10-06</span></h2><h3>Added</h3>
+    <h2 id="v072">0.7.2 <span class="muted tag">2026-10-07</span></h2><h3>Fixed</h3>
+<div class="card">
+<ul><li>Video/sound detach no longer doubles audio — importing a sounding video or using Detach audio mutes the video layer once its sound lane exists (same undo entry), so preview and export play a single copy.</li><li>Canvas drag of a selected group child moves only that leaf — a plain press on an already-selected nested leaf keeps it as the drag target instead of re-resolving to the outermost group; group click-to-select, multi-select and drill-in are unchanged.</li></ul></div><h2 id="v071">0.7.1 <span class="muted tag">2026-10-06</span></h2><h3>Added</h3>
 <div class="card">
 <ul><li>First-run welcome tour — 3-step modal (Welcome, Start something, Design then animate) auto-shown once on fresh profiles after a short delay; Skip, Get started and Escape all pin <code>onboarding/completed</code> plus version in <code>SettingsStore</code>, and version bumps re-show it once.</li></ul></div><h2 id="v070">0.7.0 <span class="muted tag">2026-10-05</span></h2><h3>Added</h3>
 <div class="card">

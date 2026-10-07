@@ -1,7 +1,7 @@
 # Contributing to totm
 
 Thanks for picking up `totm` (that one tool for motion, part of `tot`).
-This doc reflects how the app is actually built today (v0.7.1): an
+This doc reflects how the app is actually built today (v0.7.2): an
 offline Qt 6.8+ desktop editor where QML owns UI + app logic and a small
 C++ backend owns storage, rendering help, and sandboxing.
 

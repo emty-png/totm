@@ -3,6 +3,13 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.7.2] - 2026-10-07
+
+### Fixed
+
+* Video/sound detach no longer doubles audio — importing a sounding video or using Detach audio mutes the video layer once its sound lane exists (same undo entry), so preview and export play a single copy.
+* Canvas drag of a selected group child moves only that leaf — a plain press on an already-selected nested leaf keeps it as the drag target instead of re-resolving to the outermost group; group click-to-select, multi-select and drill-in are unchanged.
+
 ## [0.7.1] - 2026-10-06
 
 ### Added
