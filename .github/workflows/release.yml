@@ -49,7 +49,7 @@ jobs:
           QTP="$QT_ROOT_DIR/plugins"
           ls "$QTP/platforms" "$QTP/multimedia"
           mkdir -p AppDir/usr/plugins/platforms AppDir/usr/plugins/multimedia AppDir/usr/lib
-          cp "$QTP"/platforms/libqwayland-*.so "$QTP"/platforms/libqoffscreen.so "$QTP"/platforms/libqminimal.so AppDir/usr/plugins/platforms/
+          cp "$QTP"/platforms/libqwayland*.so "$QTP"/platforms/libqoffscreen.so "$QTP"/platforms/libqminimal.so AppDir/usr/plugins/platforms/
           for d in wayland-shell-integration wayland-graphics-integration-client wayland-decoration-client; do
             cp -R "$QTP/$d" AppDir/usr/plugins/
           done
