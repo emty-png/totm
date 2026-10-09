@@ -71,6 +71,18 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
       - name: Configure
         run: cmake --preset ci
+      # TEMP-DEBUG (remove before merge): show exactly which
+      # ShaderTools -I dirs the TU gets, and every header on disk.
+      - name: Dump ShaderTools includes (debug)
+        shell: bash
+        run: |
+          echo "--- ShaderTools include flags in build.ninja:"
+          grep -oE '(-I|/I)[^ ]*ShaderTools[^ ]*' build/ci/build.ninja | sort -u || true
+          echo "--- recursive include/QtShaderTools listing:"
+          ROOT="$(dirname "$(dirname "$(command -v qmake)")")"
+          find "$ROOT/include/QtShaderTools" 2>/dev/null | head -n 40 || true
+          echo "--- ShaderTools libs and qsb tool:"
+          ls "$ROOT/lib/libQt6ShaderTools"* "$ROOT/bin/qsb"* "$ROOT/libexec/qsb"* 2>/dev/null || true
       - name: Build
         run: cmake --build --preset ci
       # macOS .totm association: the bundled plist must parse and carry
