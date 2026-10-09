@@ -385,9 +385,13 @@ bool PluginStore::importZip(const QUrl &file) {
         const QString exe = !ps.isEmpty() ? ps : QStringLiteral("powershell");
         QProcess proc;
         // -LiteralPath avoids wildcard expansion on names with [ ].
+        // Copies: QString::replace is non-const, local/tmp are const-owned.
+        QString safeLocal = local;
+        safeLocal.replace(QLatin1Char('\''), QStringLiteral("''"));
+        QString safeDest = tmp.path();
+        safeDest.replace(QLatin1Char('\''), QStringLiteral("''"));
         const QString script = QStringLiteral("Expand-Archive -LiteralPath '%1' -DestinationPath '%2' -Force")
-                                   .arg(local.replace(QLatin1Char('\''), QStringLiteral("''")),
-                                       tmp.path().replace(QLatin1Char('\''), QStringLiteral("''")));
+                                   .arg(safeLocal, safeDest);
         proc.start(exe,
             {QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"), QStringLiteral("-Command"), script});
         if (proc.waitForFinished(30000) && proc.exitCode() == 0)
