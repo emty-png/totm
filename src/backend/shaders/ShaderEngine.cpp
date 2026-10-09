@@ -6,12 +6,16 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
-#if __has_include(<QShaderBaker>)
+#if __has_include(<QtShaderTools/QShaderBaker>)
+#include <QtShaderTools/QShaderBaker>
+#elif __has_include(<QShaderBaker>)
 #include <QShaderBaker>
-#else
+#elif __has_include(<rhi/qshaderbaker.h>)
 // Distro-packaged Qt without forwarding headers (the versioned
 // include dir is added in src/CMakeLists.txt).
 #include <rhi/qshaderbaker.h>
+#else
+#error "QShaderBaker headers not found: install the QtShaderTools module (distro package qt6-shadertools or official Qt module 'qtshadertools')"
 #endif
 #include <QStandardPaths>
 #include <QUrl>
