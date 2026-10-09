@@ -367,12 +367,18 @@ qt_add_shaders(totm "totm_shader_shaders"
 
 target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia Qt6::Network Qt6::ShaderTools)
 
-# Some distros (Arch) ship QShaderBaker only under a versioned include
-# dir without the QShaderBaker forwarding header; add it when present
-# (official Qt bundles have the header, the glob matches nothing there).
+# QShaderBaker headers live in different places per Qt packaging: flat
+# module dir on some builds, versioned subdirs (API under rhi/ or flat)
+# without forwarding headers on others. Besides the distro co-install
+# paths below, also probe the Qt prefix CMake actually found, so
+# official bundles (aqt, Qt online installer) resolve the versioned
+# spelling when the module subdir is not on the TU include path.
+# Globs that match nothing stay empty and harmless.
+get_filename_component(_qt_prefix "${Qt6_DIR}/../.." ABSOLUTE)
 file(GLOB _qt_shadertools_ver_include
     "/usr/include/qt6/QtShaderTools/*/QtShaderTools"
-    "/usr/include/x86_64-linux-gnu/qt6/QtShaderTools/*/QtShaderTools")
+    "/usr/include/x86_64-linux-gnu/qt6/QtShaderTools/*/QtShaderTools"
+    "${_qt_prefix}/include/QtShaderTools/*/QtShaderTools")
 if(_qt_shadertools_ver_include)
     target_include_directories(totm PRIVATE ${_qt_shadertools_ver_include})
 endif()

@@ -17,7 +17,9 @@ jobs:
         with:
           version: "6.8.3"
           modules: qtmultimedia qtshadertools
-          cache: true
+          # No cache: see ci.yml (a cached tree once missed the module
+          # header payload and poisoned every later run).
+          cache: false
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y ninja-build
       - name: Configure
@@ -112,7 +114,9 @@ jobs:
         with:
           version: "6.8.3"
           modules: qtmultimedia qtshadertools
-          cache: true
+          # No cache: see ci.yml (a cached tree once missed the module
+          # header payload and poisoned every later run).
+          cache: false
       - name: Configure
         run: cmake --preset ci
       - name: Build
@@ -185,7 +189,9 @@ jobs:
           version: "6.8.3"
           arch: win64_msvc2022_64
           modules: qtmultimedia qtshadertools
-          cache: true
+          # No cache: see ci.yml (a cached tree once missed the module
+          # header payload and poisoned every later run).
+          cache: false
       - name: Install NSIS
         run: choco install nsis -y
       # Qt DLLs are deployed into the staging tree by

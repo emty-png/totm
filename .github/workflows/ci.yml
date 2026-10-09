@@ -59,7 +59,10 @@ jobs:
           version: "6.8.3"
           arch: ${{ matrix.qt-arch }}
           modules: qtmultimedia qtshadertools
-          cache: true
+          # No cache: a cached tree once missed the qtshadertools header
+          # payload (configs present, headers absent) and every later run
+          # restored it; fresh installs stay correct regardless.
+          cache: false
       - name: Install Ninja (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ninja-build

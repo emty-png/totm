@@ -11,9 +11,12 @@
 #elif __has_include(<QShaderBaker>)
 #include <QShaderBaker>
 #elif __has_include(<rhi/qshaderbaker.h>)
-// Distro-packaged Qt without forwarding headers (the versioned
-// include dir is added in src/CMakeLists.txt).
+// Distro-packaged and versioned-layout Qt (the matching include dir
+// is added in src/CMakeLists.txt).
 #include <rhi/qshaderbaker.h>
+#elif __has_include(<qshaderbaker.h>)
+// Same versioned layouts, flat variant.
+#include <qshaderbaker.h>
 #else
 #error "QShaderBaker headers not found: install the QtShaderTools module (distro package qt6-shadertools or official Qt module 'qtshadertools')"
 #endif
