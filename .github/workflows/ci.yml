@@ -63,6 +63,14 @@ jobs:
       - name: Install Ninja (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ninja-build
+      # TEMP-DEBUG (remove before merge): list the installed
+      # QtShaderTools headers so we can pick a portable include spelling.
+      - name: List Qt ShaderTools headers (debug)
+        run: |
+          HDR="$(qmake -query QT_INSTALL_HEADERS 2>/dev/null || echo MISSING-QMAKE)"
+          echo "QT_INSTALL_HEADERS=$HDR"
+          ls "$HDR/QtShaderTools" || true
+          find "$HDR/QtShaderTools" -maxdepth 3 -iname '*shaderbaker*' -o -maxdepth 3 -iname '*qshader*' 2>/dev/null || true
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
