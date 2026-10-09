@@ -8,10 +8,6 @@ QtObject {
     function _makeShapeNode(type, snap) {
         var uid = doc.nextNodeUid++;
         var s = snap ?? {};
-        // Every field defaults: creation snapshots carry geometry only,
-        // clipboard snapshots carry the full style set. Legacy single
-        // fill/stroke keys (pre-stack scenes) fold into one-entry
-        // stacks so old snapshots never crash; new code writes stacks.
         var n = doc.nodeFactory.createObject(doc, {
             uid: uid,
             kind: "shape",
@@ -32,6 +28,9 @@ QtObject {
             layerBlur: factory._copyBlur(s.layerBlur, 8, 1),
             backgroundBlur: factory._copyBlur(s.backgroundBlur, 16, 0.7),
             grain: factory._copyGrain(s.grain),
+            shaderId: String(s.shaderId ?? ""),
+            shaderMode: (s.shaderMode === "overlay") ? "overlay" : "fill",
+            shaderParams: factory._copyShaderParams(s.shaderParams),
             opacity: s.opacity ?? 1,
             radius: s.radius ?? 0,
             independentCorners: s.independentCorners === true,
@@ -382,6 +381,19 @@ QtObject {
         };
     }
 
+    function _copyShaderParams(src) {
+        var d = src ?? {};
+        var out = {};
+        for (var k in d) {
+            var v = d[k];
+            if (typeof v === "number" && isFinite(v))
+                out[k] = v;
+            else if (typeof v === "string")
+                out[k] = String(v).slice(0, 64);
+        }
+        return out;
+    }
+
     function defaultShadow(inner) {
         return {
             enabled: true,
@@ -490,6 +502,9 @@ QtObject {
             layerBlur: factory._copyBlur(s.layerBlur, 8, 1),
             backgroundBlur: factory._copyBlur(s.backgroundBlur, 16, 0.7),
             grain: factory._copyGrain(s.grain),
+            shaderId: String(s.shaderId ?? ""),
+            shaderMode: (s.shaderMode === "overlay") ? "overlay" : "fill",
+            shaderParams: factory._copyShaderParams(s.shaderParams),
             opacity: s.opacity ?? 1,
             radius: s.radius ?? 0,
             independentCorners: s.independentCorners === true,

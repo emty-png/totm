@@ -43,6 +43,8 @@ qt_add_qml_module(totm
         backend/effects/ImageEffectItem.cpp
         backend/effects/MaskLeafItem.h
         backend/effects/MaskLeafItem.cpp
+        backend/shaders/ShaderEngine.h
+        backend/shaders/ShaderEngine.cpp
         backend/library/LibraryStore.h
         backend/library/LibraryStore.cpp
         backend/library/AudioPeaks.h
@@ -253,6 +255,9 @@ qt_add_qml_module(totm
         qml/components/editor/shapes/ShapeGeometry.qml
         qml/components/editor/shapes/GrainOverlay.qml
         qml/components/editor/shapes/TextGlyphs.qml
+        qml/components/editor/shaders/ShaderOverlay.qml
+        qml/components/editor/shaders/ShaderSection.qml
+        qml/components/editor/shaders/ShaderPopup.qml
         qml/components/editor/SelectionHandles.qml
         # Layers (view + context)
         qml/components/editor/layers/LayersView.qml
@@ -326,7 +331,57 @@ qt_add_shaders(totm "totm_grain_shaders"
         qml/components/editor/shapes/grain.frag
 )
 
-target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia Qt6::Network)
+# Shader engine presets (same contract as ShaderEngine CPU).
+qt_add_shaders(totm "totm_shader_shaders"
+    PREFIX "/Totm"
+    FILES
+        qml/components/editor/shaders/shader.vert
+        qml/components/editor/shaders/plasma.vert
+        qml/components/editor/shaders/plasma.frag
+        qml/components/editor/shaders/plasma_overlay.frag
+        qml/components/editor/shaders/aurora.vert
+        qml/components/editor/shaders/aurora.frag
+        qml/components/editor/shaders/aurora_overlay.frag
+        qml/components/editor/shaders/clouds.vert
+        qml/components/editor/shaders/clouds.frag
+        qml/components/editor/shaders/clouds_overlay.frag
+        qml/components/editor/shaders/kaleidoscope.vert
+        qml/components/editor/shaders/kaleidoscope.frag
+        qml/components/editor/shaders/kaleidoscope_overlay.frag
+        qml/components/editor/shaders/scanlines.vert
+        qml/components/editor/shaders/scanlines.frag
+        qml/components/editor/shaders/scanlines_overlay.frag
+        qml/components/editor/shaders/fire.vert
+        qml/components/editor/shaders/fire.frag
+        qml/components/editor/shaders/fire_overlay.frag
+        qml/components/editor/shaders/nebula.vert
+        qml/components/editor/shaders/nebula.frag
+        qml/components/editor/shaders/nebula_overlay.frag
+        qml/components/editor/shaders/vortex.vert
+        qml/components/editor/shaders/vortex.frag
+        qml/components/editor/shaders/vortex_overlay.frag
+        qml/components/editor/shaders/matrix.vert
+        qml/components/editor/shaders/matrix.frag
+        qml/components/editor/shaders/matrix_overlay.frag
+)
+
+target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia Qt6::Network Qt6::ShaderTools)
+
+# Some distros (Arch) ship QShaderBaker only under a versioned include
+# dir without the QShaderBaker forwarding header; add it when present
+# (official Qt bundles have the header, the glob matches nothing there).
+file(GLOB _qt_shadertools_ver_include
+    "/usr/include/qt6/QtShaderTools/*/QtShaderTools"
+    "/usr/include/x86_64-linux-gnu/qt6/QtShaderTools/*/QtShaderTools")
+if(_qt_shadertools_ver_include)
+    target_include_directories(totm PRIVATE ${_qt_shadertools_ver_include})
+endif()
+file(GLOB _qt_gui_ver_include
+    "/usr/include/qt6/QtGui/*/QtGui"
+    "/usr/include/x86_64-linux-gnu/qt6/QtGui/*/QtGui")
+if(_qt_gui_ver_include)
+    target_include_directories(totm PRIVATE ${_qt_gui_ver_include})
+endif()
 
 # Backend headers register QML types by basename (see the generated
 # qmltyperegistrations.cpp), so each backend dir must be on the include path.
@@ -343,6 +398,7 @@ target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/plugins
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/crash
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/cursors
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/shaders
 )
 
 # Cross-platform desktop bundle settings.

@@ -110,6 +110,11 @@ QtObject {
         group.penFill = source.penFill !== false;
         group.strokeCap = source.strokeCap ?? "round";
         group.strokeJoin = source.strokeJoin ?? "round";
+        // Preserve shader: boolean groups are shaderable, so combining
+        // shaded shapes keeps the donor look instead of dropping it.
+        group.shaderId = String(source.shaderId ?? "");
+        group.shaderMode = (source.shaderMode === "overlay") ? "overlay" : "fill";
+        group.shaderParams = doc.factory._copyShaderParams(source.shaderParams);
     }
 
     function combineSelected(op) {

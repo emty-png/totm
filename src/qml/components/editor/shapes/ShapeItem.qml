@@ -35,6 +35,9 @@ Item {
     property var backgroundBlur: null
     property var glows: []
     property var grain: null
+    property string shaderId: ""
+    property string shaderMode: "fill"
+    property var shaderParams: ({})
     property var backdropItem: null
     // Animated-grain frame (floor(seconds * 60), shared with export).
     property int grainFrame: 0
@@ -184,6 +187,81 @@ Item {
     readonly property var innerShadows: shape.enabledShadows.filter(s => s.inner === true)
     readonly property bool hasGlow: shape.enabledGlows.length > 0
     readonly property bool hasGrain: shape.grain !== null && shape.grain !== undefined && shape.grain.enabled === true && Number((shape.grain ?? {}).amount || 0) > 0
+    // Shader assignment (vectors + pen only): shaderId is "preset:<id>"
+    // or a custom LibraryStore shader uuid. Resolved preset drives the
+    // overlay; preset assets run their base preset, while "custom"
+    // assets (from scratch / imported GLSL) compile their stored
+    // vertex/fragment via ShaderEngine.compileCustom for live preview
+    // (export falls back to the asset's basePreset, see FramePaint).
+    readonly property string resolvedPreset: {
+        var sid = String(shape.shaderId ?? "");
+        if (sid.startsWith("preset:"))
+            return sid.slice(7);
+        if (sid !== "") {
+            for (var i = 0; i < LibraryStore.shaderList.length; i++) {
+                if (LibraryStore.shaderList[i].shaderId === sid) {
+                    var pay = LibraryStore.shaderList[i].payload ?? {};
+                    if (String(pay.presetId ?? "") === "custom")
+                        return "custom";
+                    return String(pay.basePreset ?? pay.presetId ?? "plasma");
+                }
+            }
+            return "plasma";
+        }
+        return "";
+    }
+    // Stored custom sources for this node ({} unless resolved custom).
+    readonly property var customPayload: {
+        if (shape.resolvedPreset !== "custom")
+            return ({});
+        var sid = String(shape.shaderId ?? "");
+        for (var i = 0; i < LibraryStore.shaderList.length; i++) {
+            if (LibraryStore.shaderList[i].shaderId === sid)
+                return LibraryStore.shaderList[i].payload ?? {};
+        }
+        return ({});
+    }
+    // Compiled .qsb urls for the custom branch (hash-cached, so repeat
+    // nodes and re-opens reuse the files; uncompilable sources yield
+    // ok=false and the overlay keeps the base paint).
+    readonly property var customCompile: {
+        if (shape.resolvedPreset !== "custom")
+            return ({
+                    "ok": false
+                });
+        var v = String(shape.customPayload.vertex ?? "");
+        var f = String(shape.customPayload.fragment ?? "");
+        if (v === "" || f === "")
+            return ({
+                    "ok": false
+                });
+        return ShaderEngine.compileCustom(v, f);
+    }
+    readonly property bool hasShader: shape.resolvedPreset !== "" && shape.isVectorPaint && !shape.paintHidden
+    readonly property string resolvedMode: shape.shaderMode === "overlay" ? "overlay" : "fill"
+    readonly property var resolvedParams: {
+        if (shape.resolvedPreset === "")
+            return ({});
+        var base = ShaderEngine.presetDefaults(shape.resolvedPreset);
+        var sid = String(shape.shaderId ?? "");
+        if (!sid.startsWith("preset:") && sid !== "") {
+            for (var i = 0; i < LibraryStore.shaderList.length; i++) {
+                if (LibraryStore.shaderList[i].shaderId === sid) {
+                    var pay = LibraryStore.shaderList[i].payload ?? {};
+                    base = Object.assign({}, base, pay.uniforms ?? {});
+                    break;
+                }
+            }
+        }
+        var over = shape.shaderParams ?? {};
+        var next = {};
+        for (var k in base)
+            next[k] = base[k];
+        for (var j in over)
+            next[j] = over[j];
+        return ShaderEngine.normParams(shape.resolvedPreset, next);
+    }
+    readonly property double shaderTime: Math.floor(Number(shape.previewTime || 0) * 60) / 60
     // Dashes need the CPU painter (stock borders can't); both entries
     // must be positive, mirroring the backend rule.
     readonly property bool hasStrokeDash: {
@@ -227,198 +305,206 @@ Item {
 
     // Rectangle: native item. Flip mirrors about the center; fast only
     // for solid inside strokes (native borders paint inside).
-    Rectangle {
-        anchors.fill: parent
-        visible: shape.shapeType === "rectangle" && !shape.independentCorners && !shape.useEffectPaint && !shape.paintHidden
-        color: shape.firstFill ? shape.firstFillColor : "transparent"
-        radius: shape.radius
-        border.width: shape.firstStroke && shape.rectFastStroke ? Number(shape.firstStroke.width) || 0 : 0
-        border.color: shape.firstStroke && shape.rectFastStroke && Number(shape.firstStroke.width) > 0 ? shape.firstStrokeColor : "transparent"
-        opacity: shape.shapeOpacity
-        transform: Scale {
-            xScale: shape.flipH ? -1 : 1
-            yScale: shape.flipV ? -1 : 1
-            origin.x: shape.sw / 2
-            origin.y: shape.sh / 2
-        }
-    }
-
-    // Effected vectors via the shared CPU painter. Padded for spread/
-    // blur/offset; the shape paints at (pad,pad).
-    EffectItem {
-        id: effectPaint
-
-        x: -effectPaint.pad
-        y: -effectPaint.pad
-        width: shape.sw + effectPaint.pad * 2
-        height: shape.sh + effectPaint.pad * 2
-        visible: shape.useEffectPaint && !shape.paintHidden
-        opacity: shape.shapeOpacity
-        shapeType: shape.shapeType
-        boxW: shape.sw
-        boxH: shape.sh
-        radius: shape.radius
-        independentCorners: shape.independentCorners
-        cornerRadii: shape.cornerRadii
-        points: shape.points
-        pathData: shape.pathData
-        // Pen paths resolve against the node origin; other kinds ignore
-        // it, so their moves skip the CPU repaint.
-        nodeX: shape.shapeType === "pen" ? shape.sx : 0
-        nodeY: shape.shapeType === "pen" ? shape.sy : 0
-        fills: shape.fills ?? []
-        strokes: shape.strokes ?? []
-        penFill: shape.penFill !== false
-        strokeCap: shape.strokeCap || "round"
-        strokeJoin: shape.strokeJoin || "round"
-        shadows: shape.shadows ?? []
-        glows: shape.glows ?? []
-        layerBlur: shape.layerBlur ?? ({
-                "enabled": false,
-                "radius": 0,
-                "opacity": 1
-            })
-        backgroundBlur: shape.backgroundBlur ?? ({
-                "enabled": false,
-                "radius": 0,
-                "opacity": 0.7
-            })
-        transform: Scale {
-            xScale: shape.flipH ? -1 : 1
-            yScale: shape.flipV ? -1 : 1
-            origin.x: effectPaint.pad + shape.sw / 2
-            origin.y: effectPaint.pad + shape.sh / 2
-        }
-    }
-
-    // Frosted glass: scene-sized rig blurs the siblings behind, clipped
-    // to the bbox (silhouette mask only where corners/curves cut). Needs
-    // translucent fill over content; export repeats it on the CPU.
+    // baseContent groups the vector base paint so shader overlays can
+    // sample the visible render (hidden items yield empty textures).
     Item {
-        id: backdropRoot
+        id: baseContent
 
         anchors.fill: parent
-        z: -1
-        visible: shape.hasBackgroundBlur && shape.backdropItem !== null && !shape.isBackdropCapture && !shape.paintHidden
-        clip: true
-        opacity: 1 // fill above carries opacity, never the backdrop
 
-        readonly property real sceneW: shape.backdropItem && shape.backdropItem.doc ? Number(shape.backdropItem.doc.sceneWidth) || 1920 : 1920
-        readonly property real sceneH: shape.backdropItem && shape.backdropItem.doc ? Number(shape.backdropItem.doc.sceneHeight) || 1080 : 1080
-        readonly property bool plainRect: shape.shapeType === "rectangle" && !shape.independentCorners
-        readonly property bool needsMask: !((backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "video") && !(Number(shape.radius) > 0))
-
-        Item {
-            id: blurRig
-
-            x: -shape.sx
-            y: -shape.sy
-            width: backdropRoot.sceneW
-            height: backdropRoot.sceneH
-
-            MultiEffect {
-                anchors.fill: parent
-                source: shape.backdropItem
-                autoPaddingEnabled: false
-                blurEnabled: true
-                blurMax: 64
-                // Content-space radius: the scaled ancestor already maps
-                // local to screen px (no zoom factor: it would square with
-                // zoom and stall weak GPUs on scene-sized tiles).
-                blur: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).radius || 0) / 64))
-                opacity: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).opacity ?? 0.7)))
-                maskEnabled: backdropRoot.needsMask
-                maskSource: rigMask
-                maskThresholdMin: 0.5
-                maskSpreadAtMin: 1.0
+        Rectangle {
+            anchors.fill: parent
+            visible: shape.shapeType === "rectangle" && !shape.independentCorners && !shape.useEffectPaint && !shape.paintHidden
+            color: shape.firstFill ? shape.firstFillColor : "transparent"
+            radius: shape.radius
+            border.width: shape.firstStroke && shape.rectFastStroke ? Number(shape.firstStroke.width) || 0 : 0
+            border.color: shape.firstStroke && shape.rectFastStroke && Number(shape.firstStroke.width) > 0 ? shape.firstStrokeColor : "transparent"
+            opacity: shape.shapeOpacity
+            transform: Scale {
+                xScale: shape.flipH ? -1 : 1
+                yScale: shape.flipV ? -1 : 1
+                origin.x: shape.sw / 2
+                origin.y: shape.sh / 2
             }
+        }
 
-            // White silhouette as the mask (mirrors fill flip).
+        // Effected vectors via the shared CPU painter. Padded for spread/
+        // blur/offset; the shape paints at (pad,pad).
+        EffectItem {
+            id: effectPaint
+
+            x: -effectPaint.pad
+            y: -effectPaint.pad
+            width: shape.sw + effectPaint.pad * 2
+            height: shape.sh + effectPaint.pad * 2
+            visible: shape.useEffectPaint && !shape.paintHidden
+            opacity: shape.shapeOpacity
+            shapeType: shape.shapeType
+            boxW: shape.sw
+            boxH: shape.sh
+            radius: shape.radius
+            independentCorners: shape.independentCorners
+            cornerRadii: shape.cornerRadii
+            points: shape.points
+            pathData: shape.pathData
+            // Pen paths resolve against the node origin; other kinds ignore
+            // it, so their moves skip the CPU repaint.
+            nodeX: shape.shapeType === "pen" ? shape.sx : 0
+            nodeY: shape.shapeType === "pen" ? shape.sy : 0
+            fills: shape.fills ?? []
+            strokes: shape.strokes ?? []
+            penFill: shape.penFill !== false
+            strokeCap: shape.strokeCap || "round"
+            strokeJoin: shape.strokeJoin || "round"
+            shadows: shape.shadows ?? []
+            glows: shape.glows ?? []
+            layerBlur: shape.layerBlur ?? ({
+                    "enabled": false,
+                    "radius": 0,
+                    "opacity": 1
+                })
+            backgroundBlur: shape.backgroundBlur ?? ({
+                    "enabled": false,
+                    "radius": 0,
+                    "opacity": 0.7
+                })
+            transform: Scale {
+                xScale: shape.flipH ? -1 : 1
+                yScale: shape.flipV ? -1 : 1
+                origin.x: effectPaint.pad + shape.sw / 2
+                origin.y: effectPaint.pad + shape.sh / 2
+            }
+        }
+
+        // Frosted glass: scene-sized rig blurs the siblings behind, clipped
+        // to the bbox (silhouette mask only where corners/curves cut). Needs
+        // translucent fill over content; export repeats it on the CPU.
+        Item {
+            id: backdropRoot
+
+            anchors.fill: parent
+            z: -1
+            visible: shape.hasBackgroundBlur && shape.backdropItem !== null && !shape.isBackdropCapture && !shape.paintHidden
+            clip: true
+            opacity: 1 // fill above carries opacity, never the backdrop
+
+            readonly property real sceneW: shape.backdropItem && shape.backdropItem.doc ? Number(shape.backdropItem.doc.sceneWidth) || 1920 : 1920
+            readonly property real sceneH: shape.backdropItem && shape.backdropItem.doc ? Number(shape.backdropItem.doc.sceneHeight) || 1080 : 1080
+            readonly property bool plainRect: shape.shapeType === "rectangle" && !shape.independentCorners
+            readonly property bool needsMask: !((backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "video") && !(Number(shape.radius) > 0))
+
             Item {
-                id: rigMask
+                id: blurRig
 
-                anchors.fill: parent
-                visible: false
-                layer.enabled: true
-                layer.smooth: true
+                x: -shape.sx
+                y: -shape.sy
+                width: backdropRoot.sceneW
+                height: backdropRoot.sceneH
 
+                MultiEffect {
+                    anchors.fill: parent
+                    source: shape.backdropItem
+                    autoPaddingEnabled: false
+                    blurEnabled: true
+                    blurMax: 64
+                    // Content-space radius: the scaled ancestor already maps
+                    // local to screen px (no zoom factor: it would square with
+                    // zoom and stall weak GPUs on scene-sized tiles).
+                    blur: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).radius || 0) / 64))
+                    opacity: Math.min(1, Math.max(0, Number((shape.backgroundBlur ?? {}).opacity ?? 0.7)))
+                    maskEnabled: backdropRoot.needsMask
+                    maskSource: rigMask
+                    maskThresholdMin: 0.5
+                    maskSpreadAtMin: 1.0
+                }
+
+                // White silhouette as the mask (mirrors fill flip).
                 Item {
-                    x: shape.sx
-                    y: shape.sy
-                    width: Math.max(1, shape.sw)
-                    height: Math.max(1, shape.sh)
+                    id: rigMask
 
-                    transform: Scale {
-                        xScale: shape.flipH ? -1 : 1
-                        yScale: shape.flipV ? -1 : 1
-                        origin.x: shape.sw / 2
-                        origin.y: shape.sh / 2
-                    }
+                    anchors.fill: parent
+                    visible: false
+                    layer.enabled: true
+                    layer.smooth: true
 
-                    Rectangle {
-                        anchors.fill: parent
-                        visible: backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "video"
-                        radius: (shape.shapeType === "image" || shape.shapeType === "video") ? Math.max(0, shape.radius) : Math.min(shape.radius, Math.min(shape.sw, shape.sh) / 2)
-                        color: "white"
-                    }
+                    Item {
+                        x: shape.sx
+                        y: shape.sy
+                        width: Math.max(1, shape.sw)
+                        height: Math.max(1, shape.sh)
 
-                    Shape {
-                        anchors.fill: parent
-                        visible: !(backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "video" || shape.shapeType === "text")
-                        antialiasing: true
-                        ShapePath {
-                            fillColor: "white"
-                            strokeColor: "transparent"
-                            PathSvg {
-                                path: shape.geometry.vectorPath(shape)
+                        transform: Scale {
+                            xScale: shape.flipH ? -1 : 1
+                            yScale: shape.flipV ? -1 : 1
+                            origin.x: shape.sw / 2
+                            origin.y: shape.sh / 2
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "video"
+                            radius: (shape.shapeType === "image" || shape.shapeType === "video") ? Math.max(0, shape.radius) : Math.min(shape.radius, Math.min(shape.sw, shape.sh) / 2)
+                            color: "white"
+                        }
+
+                        Shape {
+                            anchors.fill: parent
+                            visible: !(backdropRoot.plainRect || shape.shapeType === "image" || shape.shapeType === "video" || shape.shapeType === "text")
+                            antialiasing: true
+                            ShapePath {
+                                fillColor: "white"
+                                strokeColor: "transparent"
+                                PathSvg {
+                                    path: shape.geometry.vectorPath(shape)
+                                }
                             }
                         }
-                    }
 
-                    TextGlyphs {
-                        anchors.fill: parent
-                        visible: shape.shapeType === "text"
-                        text: shape.textContent
-                        color: "white"
-                        family: shape.fontFamily
-                        weight: shape.fontWeight
-                        size: shape.fontSize
-                        italic: shape.fontItalic === true
-                        underline: shape.fontUnderline === true
-                        strike: shape.fontStrike === true
-                        caps: shape.fontCaps || "none"
-                        spacingPct: shape.letterSpacing
-                        halign: shape.hAlign
-                        valign: shape.vAlign
-                        wrap: !shape.autoSize
-                        autoLeading: shape.lineHeightAuto
-                        leading: shape.lineHeight
+                        TextGlyphs {
+                            anchors.fill: parent
+                            visible: shape.shapeType === "text"
+                            text: shape.textContent
+                            color: "white"
+                            family: shape.fontFamily
+                            weight: shape.fontWeight
+                            size: shape.fontSize
+                            italic: shape.fontItalic === true
+                            underline: shape.fontUnderline === true
+                            strike: shape.fontStrike === true
+                            caps: shape.fontCaps || "none"
+                            spacingPct: shape.letterSpacing
+                            halign: shape.hAlign
+                            valign: shape.vAlign
+                            wrap: !shape.autoSize
+                            autoLeading: shape.lineHeightAuto
+                            leading: shape.lineHeight
+                        }
                     }
                 }
             }
         }
-    }
 
-    // Stroked/filled vector path (images/videos paint below, never here).
-    Shape {
-        anchors.fill: parent
-        visible: (((shape.shapeType !== "rectangle" && shape.shapeType !== "text" && shape.shapeType !== "image" && shape.shapeType !== "video") || (shape.shapeType === "rectangle" && shape.independentCorners)) && !shape.useEffectPaint) && !shape.paintHidden
-        antialiasing: true
-        opacity: shape.shapeOpacity
-        transform: Scale {
-            xScale: shape.flipH ? -1 : 1
-            yScale: shape.flipV ? -1 : 1
-            origin.x: shape.sw / 2
-            origin.y: shape.sh / 2
-        }
-        ShapePath {
-            fillColor: shape.shapeType === "pen" && shape.penFill !== true ? "transparent" : (shape.firstFill ? shape.firstFillColor : "transparent")
-            strokeColor: shape.firstStroke ? shape.firstStrokeColor : "transparent"
-            strokeWidth: shape.firstStroke ? Number(shape.firstStroke.width) || 0 : 0
-            joinStyle: shape.joinFor()
-            capStyle: shape.capFor()
-            PathSvg {
-                path: shape.geometry.vectorPath(shape)
+        // Stroked/filled vector path (images/videos paint below, never here).
+        Shape {
+            anchors.fill: parent
+            visible: (((shape.shapeType !== "rectangle" && shape.shapeType !== "text" && shape.shapeType !== "image" && shape.shapeType !== "video") || (shape.shapeType === "rectangle" && shape.independentCorners)) && !shape.useEffectPaint) && !shape.paintHidden
+            antialiasing: true
+            opacity: shape.shapeOpacity
+            transform: Scale {
+                xScale: shape.flipH ? -1 : 1
+                yScale: shape.flipV ? -1 : 1
+                origin.x: shape.sw / 2
+                origin.y: shape.sh / 2
+            }
+            ShapePath {
+                fillColor: shape.shapeType === "pen" && shape.penFill !== true ? "transparent" : (shape.firstFill ? shape.firstFillColor : "transparent")
+                strokeColor: shape.firstStroke ? shape.firstStrokeColor : "transparent"
+                strokeWidth: shape.firstStroke ? Number(shape.firstStroke.width) || 0 : 0
+                joinStyle: shape.joinFor()
+                capStyle: shape.capFor()
+                PathSvg {
+                    path: shape.geometry.vectorPath(shape)
+                }
             }
         }
     }
@@ -1138,6 +1224,34 @@ Item {
             origin.x: shape.sw / 2
             origin.y: shape.sh / 2
         }
+    }
+
+    // Shader engine layer over vectors + pen. Single source-sampled
+    // effect for both modes (fill hides the base and shows the
+    // procedural tile masked by base alpha; overlay blends over the
+    // visible base, which already carries shapeOpacity).
+    ShaderOverlay {
+        anchors.fill: parent
+        visible: shape.hasShader
+        opacity: 1
+        baseOpacity: shape.shapeOpacity
+        presetId: shape.resolvedPreset
+        mode: shape.resolvedMode
+        params: shape.resolvedParams
+        timeSec: shape.shaderTime
+        customVertUrl: shape.customCompile.vertUrl ?? ""
+        customFragUrl: shape.customCompile.fragUrl ?? ""
+        customTint: String((shape.resolvedParams ?? {}).tint ?? "#ffffff")
+        customOpacity: Number((shape.resolvedParams ?? {}).opacity ?? 1.0)
+        customSpeed: Number((shape.resolvedParams ?? {}).speed ?? 1.0)
+        maskKind: (shape.shapeType === "rectangle" && !shape.independentCorners) ? "rect" : "path"
+        maskRadius: shape.radius
+        maskPath: shape.geometry.vectorPath(shape)
+        maskStroke: shape.maxStrokeWidth
+        sourceItem: baseContent
+        // No flip transform: the overlay shares baseContent coords, whose
+        // children already mirror, so an extra Scale would unflip fill
+        // output and misalign overlay output.
     }
 
     // Selection outline: constant screen size at any zoom (selection bbox).

@@ -202,6 +202,9 @@ Item {
             layerBlur: d.factory._copyBlur(n.layerBlur, 8, 1),
             backgroundBlur: d.factory._copyBlur(n.backgroundBlur, 16, 0.7),
             grain: d.factory._copyGrain(n.grain),
+            shaderId: String(n.shaderId ?? ""),
+            shaderMode: (n.shaderMode === "overlay") ? "overlay" : "fill",
+            shaderParams: d.factory._copyShaderParams(n.shaderParams),
             radius: n.radius,
             independentCorners: n.independentCorners === true,
             cornerRadii: d.factory._copyRadii(n.cornerRadii),
@@ -393,6 +396,9 @@ Item {
             backgroundBlur: modelData.backgroundBlur
             glows: modelData.glows ?? []
             grain: modelData.grain
+            shaderId: modelData.shaderId ?? ""
+            shaderMode: modelData.shaderMode ?? "fill"
+            shaderParams: modelData.shaderParams ?? ({})
             grainFrame: layerRoot.grainFrame
             backdropItem: layerRoot.backdropItem
             isBackdropCapture: layerRoot.hideBlurShapes
@@ -532,7 +538,9 @@ Item {
     Repeater {
         model: layerRoot.booleanGroups()
 
-        BooleanGroupItem {
+        Item {
+            id: boolWrap
+
             readonly property int groupUid: modelData.uid
             readonly property var groupNode: layerRoot.doc ? layerRoot.doc.findNode(groupUid) : null
             readonly property var kidMaps: layerRoot.booleanChildrenMaps(groupUid)
@@ -543,11 +551,12 @@ Item {
             readonly property bool hasBb: groupNode && groupNode.backgroundBlur && groupNode.backgroundBlur.enabled === true && Number(groupNode.backgroundBlur.radius) > 0
             readonly property real sceneW: layerRoot.doc ? Number(layerRoot.doc.sceneWidth) || 0 : 0
             readonly property real sceneH: layerRoot.doc ? Number(layerRoot.doc.sceneHeight) || 0 : 0
+            readonly property real groupOpacity: groupNode ? (groupNode.opacity ?? 1) : 1
 
-            x: (boundRect ? boundRect.x : 0) - pad
-            y: (boundRect ? boundRect.y : 0) - pad
-            width: Math.max(1, (boundRect ? boundRect.width : 1) + pad * 2)
-            height: Math.max(1, (boundRect ? boundRect.height : 1) + pad * 2)
+            x: (boundRect ? boundRect.x : 0) - boolPaint.pad
+            y: (boundRect ? boundRect.y : 0) - boolPaint.pad
+            width: Math.max(1, (boundRect ? boundRect.width : 1) + boolPaint.pad * 2)
+            height: Math.max(1, (boundRect ? boundRect.height : 1) + boolPaint.pad * 2)
             z: layerRoot.booleanPaintZ(groupUid)
             visible: {
                 if (layerRoot.doc)
@@ -560,84 +569,180 @@ Item {
                     return false;
                 return true;
             }
-            opacity: groupNode ? (groupNode.opacity ?? 1) : 1
-            childMaps: kidMaps
-            boolOp: groupNode ? (groupNode.boolOp || "union") : "union"
-            boundX: boundRect ? boundRect.x : 0
-            boundY: boundRect ? boundRect.y : 0
-            fills: groupNode ? (groupNode.fills ?? []) : []
-            strokes: groupNode ? (groupNode.strokes ?? []) : []
-            shadows: groupNode ? (groupNode.shadows ?? []) : []
-            layerBlur: groupNode ? groupNode.layerBlur : null
-            glows: groupNode ? (groupNode.glows ?? []) : []
-            grain: groupNode ? groupNode.grain : null
-            masks: layerRoot.maskMapsFor(groupUid)
-            targetUid: groupUid
-            grainFrame: layerRoot.grainFrame
 
-            // Frosted glass under the combined silhouette (mirrors the
-            // ShapeItem rig): scene-sized MultiEffect masked by the
-            // combined path so the blur never leaks past its edges.
-            Item {
-                z: -1
+            BooleanGroupItem {
+                id: boolPaint
+
                 anchors.fill: parent
-                visible: hasBb && layerRoot.backdropItem !== null && !layerRoot.hideBlurShapes
-                clip: true
+                opacity: boolWrap.groupOpacity
+                childMaps: boolWrap.kidMaps
+                boolOp: groupNode ? (groupNode.boolOp || "union") : "union"
+                boundX: boundRect ? boundRect.x : 0
+                boundY: boundRect ? boundRect.y : 0
+                fills: groupNode ? (groupNode.fills ?? []) : []
+                strokes: groupNode ? (groupNode.strokes ?? []) : []
+                shadows: groupNode ? (groupNode.shadows ?? []) : []
+                layerBlur: groupNode ? groupNode.layerBlur : null
+                glows: groupNode ? (groupNode.glows ?? []) : []
+                grain: groupNode ? groupNode.grain : null
+                masks: layerRoot.maskMapsFor(groupUid)
+                targetUid: groupUid
+                grainFrame: layerRoot.grainFrame
 
-                Item {
-                    x: -((boundRect ? boundRect.x : 0) - pad)
-                    y: -((boundRect ? boundRect.y : 0) - pad)
-                    width: sceneW
-                    height: sceneH
-
-                    MultiEffect {
-                        anchors.fill: parent
-                        source: layerRoot.backdropItem
-                        autoPaddingEnabled: false
-                        blurEnabled: true
-                        blurMax: 64
-                        blur: Math.min(1, Math.max(0, Number((groupNode.backgroundBlur ?? {}).radius || 0) / 64))
-                        opacity: Math.min(1, Math.max(0, Number((groupNode.backgroundBlur ?? {}).opacity ?? 0.7)))
-                        maskEnabled: true
-                        maskSource: boolRigMask
-                        maskThresholdMin: 0.5
-                        maskSpreadAtMin: 1.0
+                readonly property string shaderSid: groupNode ? String(groupNode.shaderId ?? "") : ""
+                readonly property string shaderPreset: {
+                    var sid = shaderSid;
+                    if (sid.startsWith("preset:"))
+                        return sid.slice(7);
+                    if (sid !== "") {
+                        for (var i = 0; i < LibraryStore.shaderList.length; i++) {
+                            if (LibraryStore.shaderList[i].shaderId === sid) {
+                                var pay = LibraryStore.shaderList[i].payload ?? {};
+                                if (String(pay.presetId ?? "") === "custom")
+                                    return "custom";
+                                return String(pay.basePreset ?? pay.presetId ?? "plasma");
+                            }
+                        }
+                        return "plasma";
                     }
+                    return "";
+                }
+                readonly property var shaderCustomPayload: {
+                    if (shaderPreset !== "custom")
+                        return ({});
+                    var sid = shaderSid;
+                    for (var i = 0; i < LibraryStore.shaderList.length; i++) {
+                        if (LibraryStore.shaderList[i].shaderId === sid)
+                            return LibraryStore.shaderList[i].payload ?? {};
+                    }
+                    return ({});
+                }
+                readonly property var shaderCustomCompile: {
+                    if (shaderPreset !== "custom")
+                        return ({
+                                "ok": false
+                            });
+                    var v = String(shaderCustomPayload.vertex ?? "");
+                    var f = String(shaderCustomPayload.fragment ?? "");
+                    if (v === "" || f === "")
+                        return ({
+                                "ok": false
+                            });
+                    return ShaderEngine.compileCustom(v, f);
+                }
+                readonly property bool hasShader: shaderPreset !== ""
+                readonly property string shaderMode: groupNode && groupNode.shaderMode === "overlay" ? "overlay" : "fill"
+                readonly property var shaderParams: {
+                    if (shaderPreset === "")
+                        return ({});
+                    var base = ShaderEngine.presetDefaults(shaderPreset);
+                    var sid = shaderSid;
+                    if (!sid.startsWith("preset:") && sid !== "") {
+                        for (var i = 0; i < LibraryStore.shaderList.length; i++) {
+                            if (LibraryStore.shaderList[i].shaderId === sid) {
+                                var pay = LibraryStore.shaderList[i].payload ?? {};
+                                base = Object.assign({}, base, pay.uniforms ?? {});
+                                break;
+                            }
+                        }
+                    }
+                    var over = groupNode ? (groupNode.shaderParams ?? {}) : {};
+                    var next = {};
+                    for (var k in base)
+                        next[k] = base[k];
+                    for (var j in over)
+                        next[j] = over[j];
+                    return ShaderEngine.normParams(shaderPreset, next);
+                }
+
+                // Frosted glass under the combined silhouette (mirrors the
+                // ShapeItem rig): scene-sized MultiEffect masked by the
+                // combined path so the blur never leaks past its edges.
+                Item {
+                    z: -1
+                    anchors.fill: parent
+                    visible: hasBb && layerRoot.backdropItem !== null && !layerRoot.hideBlurShapes
+                    clip: true
 
                     Item {
-                        id: boolRigMask
+                        x: -((boundRect ? boundRect.x : 0) - pad)
+                        y: -((boundRect ? boundRect.y : 0) - pad)
+                        width: sceneW
+                        height: sceneH
 
-                        anchors.fill: parent
-                        visible: false
-                        layer.enabled: true
-                        layer.smooth: true
+                        MultiEffect {
+                            anchors.fill: parent
+                            source: layerRoot.backdropItem
+                            autoPaddingEnabled: false
+                            blurEnabled: true
+                            blurMax: 64
+                            blur: Math.min(1, Math.max(0, Number((groupNode.backgroundBlur ?? {}).radius || 0) / 64))
+                            opacity: Math.min(1, Math.max(0, Number((groupNode.backgroundBlur ?? {}).opacity ?? 0.7)))
+                            maskEnabled: true
+                            maskSource: boolRigMask
+                            maskThresholdMin: 0.5
+                            maskSpreadAtMin: 1.0
+                        }
 
                         Item {
-                            x: boundRect ? boundRect.x : 0
-                            y: boundRect ? boundRect.y : 0
-                            width: Math.max(1, boundRect ? boundRect.width : 1)
-                            height: Math.max(1, boundRect ? boundRect.height : 1)
+                            id: boolRigMask
 
-                            Shape {
-                                anchors.fill: parent
-                                antialiasing: true
-                                transform: Translate {
-                                    x: -(boundRect ? boundRect.x : 0)
-                                    y: -(boundRect ? boundRect.y : 0)
-                                }
+                            anchors.fill: parent
+                            visible: false
+                            layer.enabled: true
+                            layer.smooth: true
 
-                                ShapePath {
-                                    fillColor: "white"
-                                    strokeColor: "transparent"
+                            Item {
+                                x: boundRect ? boundRect.x : 0
+                                y: boundRect ? boundRect.y : 0
+                                width: Math.max(1, boundRect ? boundRect.width : 1)
+                                height: Math.max(1, boundRect ? boundRect.height : 1)
 
-                                    PathSvg {
-                                        path: boolGeo.combineSvg(kidMaps, groupNode ? (groupNode.boolOp || "union") : "union")
+                                Shape {
+                                    anchors.fill: parent
+                                    antialiasing: true
+                                    transform: Translate {
+                                        x: -(boundRect ? boundRect.x : 0)
+                                        y: -(boundRect ? boundRect.y : 0)
+                                    }
+
+                                    ShapePath {
+                                        fillColor: "white"
+                                        strokeColor: "transparent"
+
+                                        PathSvg {
+                                            path: boolGeo.combineSvg(kidMaps, groupNode ? (groupNode.boolOp || "union") : "union")
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+            } // close boolPaint before the sibling overlay
+
+            // Shader overlay as a sibling (never a child of the sampled
+            // item: sampling an ancestor of itself is a render cycle).
+            ShaderOverlay {
+                anchors.fill: parent
+                visible: boolPaint.hasShader
+                opacity: 1
+                baseOpacity: boolWrap.groupOpacity
+                presetId: boolPaint.shaderPreset
+                mode: boolPaint.shaderMode
+                params: boolPaint.shaderParams
+                timeSec: Math.floor(Number(layerRoot.previewTime || 0) * 60) / 60
+                customVertUrl: boolPaint.shaderCustomCompile.vertUrl ?? ""
+                customFragUrl: boolPaint.shaderCustomCompile.fragUrl ?? ""
+                customTint: String((boolPaint.shaderParams ?? {}).tint ?? "#ffffff")
+                customOpacity: Number((boolPaint.shaderParams ?? {}).opacity ?? 1.0)
+                customSpeed: Number((boolPaint.shaderParams ?? {}).speed ?? 1.0)
+                maskKind: "path"
+                maskPath: boolGeo.combineSvg(boolWrap.kidMaps, groupNode ? (groupNode.boolOp || "union") : "union")
+                maskOX: (boundRect ? boundRect.x : 0) - boolPaint.pad
+                maskOY: (boundRect ? boundRect.y : 0) - boolPaint.pad
+                maskStroke: 0
+                sourceItem: boolPaint
             }
         }
     }

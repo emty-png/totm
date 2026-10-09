@@ -8,13 +8,13 @@
 
 # totm
 
-`totm` stands for "That one tool for motion" and is a part of an open-source app series named `tot` which stads for "That one tool".
+`totm` stands for "That one tool for motion" and is a part of an open-source app series named `tot` which stands for "That one tool".
 
-`totm` is a cross-platform desktop motion-graphics editor. Draw vector shapes on an canvas, arrange them in layers and groups, snap with guides, tune properties in the design panel, group components to manage large designs and now even animate them with animations.
+`totm` is a cross-platform desktop motion-graphics editor. Draw vector shapes on a canvas, arrange them in layers and groups, snap with guides, tune properties in the design panel, group components to manage large designs and now even animate them with animations.
 
-I am trying to make apps that are better, smoother, offline and easy for new users to work with and just better overall experience. I encorage you to report all issues you find as i can't test it on every single platform solo. I need your help to improve this app. You can also help by recommending features as i am not the most creative person, if you couldn't tell. 
+I am trying to make apps that are better, smoother, offline and easy for new users to work with and just better overall experience. I encourage you to report all issues you find as i can't test it on every single platform solo. I need your help to improve this app. You can also help by recommending features as i am not the most creative person, if you couldn't tell. 
 
-I was originally making this app in tauri v2 but i crashed out in the middle of making it (i couldn't get it to work properly in front-end and didn't wanna touch rust) and switched to linux (cachy). I know that doesnt explain anything but yesh.
+I was originally making this app in tauri v2 but i crashed out in the middle of making it (i couldn't get it to work properly in front-end and didn't wanna touch rust) and switched to linux (arch). I know that doesnt explain anything but yesh.
 
 
 
@@ -52,7 +52,7 @@ Grab the version you want from the [Releases page](https://github.com/emty-png/t
 
 Or build from source. You need CMake 3.21+, Qt 6.8+ with the `Quick`, `Svg`, `Multimedia`, `ShaderTools` and `Network` modules, a C++17 compiler and Ninja. Video export shells out to a system `ffmpeg`, so have it on your `PATH` too (check with `ffmpeg -version`) — the app runs fine without it, export just tells you how to install it.
 
-### Arch / CachyOS (btw i use cachy)
+### Arch
 
 ```sh
 sudo pacman -S --needed base-devel cmake ninja qt6-base qt6-declarative qt6-svg qt6-multimedia qt6-multimedia-ffmpeg qt6-shadertools ffmpeg

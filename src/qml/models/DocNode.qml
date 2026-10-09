@@ -63,6 +63,14 @@ QtObject {
             amount: 0.5,
             size: 2
         })
+    // Procedural shader (preset:<id> or custom asset uuid, "" = none).
+    // shaderMode is "fill" (procedural replaces base inside the
+    // silhouette) or "overlay" (post-process over the stack).
+    // shaderParams holds per-preset uniforms; time animates from the
+    // composition clock so preview and export match exactly.
+    property string shaderId: ""
+    property string shaderMode: "fill"
+    property var shaderParams: ({})
     property real radius: 0
     // Independent corners (rectangle/triangle/star). When true the
     // renderer reads cornerRadii per vertex in paint order; toggling on

@@ -465,6 +465,9 @@ bool ComponentExporter::exportSelection(const QVariantList &topNodes, const QStr
         const QStringList missingFonts = SvgPaint::unavailableFonts(topNodes);
         if (!missingFonts.isEmpty())
             warnings.append(tr("Fonts not embedded (%1) — viewers without them substitute text.").arg(missingFonts.join(QStringLiteral(", "))));
+        const int shaderCount = SvgPaint::countShaders(topNodes);
+        if (shaderCount > 0)
+            warnings.append(tr("%n shader(s) dropped — SVG exports base paint only; use PNG for shader look.", "", shaderCount));
         if (!warnings.isEmpty())
             setLastWarning(warnings.join(QStringLiteral(" ")));
     }

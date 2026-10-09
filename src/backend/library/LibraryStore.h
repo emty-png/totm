@@ -73,6 +73,22 @@ struct AssetEntry {
     QVariantMap payload;
 };
 
+// Persistent shader asset. Payload is plain data:
+// {presetId, vertex, fragment, uniforms, basePreset, sourceKind,
+// originFile}. presetId "custom" marks from-scratch/imported GLSL
+// (vertex/fragment are the live sources, basePreset the CPU-export
+// fallback, sourceKind preset|scratch|import). Custom shaders
+// persist across designs like component assets; files live in
+// <libraryDir>/shaders/<id>.json. Nodes reference shaders by id via
+// shaderId + shaderMode + shaderParams, so designs stay portable.
+struct ShaderEntry {
+    QString id;
+    QString name;
+    QString createdAt;
+    QString updatedAt;
+    QVariantMap payload;
+};
+
 class LibraryStore : public QObject {
     Q_OBJECT
     QML_ELEMENT
@@ -81,10 +97,12 @@ class LibraryStore : public QObject {
     // QML snapshots. workspaceList rows: {workspaceId, name, isDefault,
     // createdAt, designCount}. designList rows: {designId, workspaceId,
     // name, createdAt, updatedAt, starred, scene}. assetList rows:
-    // {assetId, name, createdAt, updatedAt, payload}.
+    // {assetId, name, createdAt, updatedAt, payload}. shaderList rows:
+    // {shaderId, name, createdAt, updatedAt, payload}.
     Q_PROPERTY(QVariantList workspaceList READ workspaceList NOTIFY libraryChanged)
     Q_PROPERTY(QVariantList designList READ designList NOTIFY libraryChanged)
     Q_PROPERTY(QVariantList assetList READ assetList NOTIFY libraryChanged)
+    Q_PROPERTY(QVariantList shaderList READ shaderList NOTIFY libraryChanged)
     Q_PROPERTY(QString defaultWorkspaceId READ defaultWorkspaceId NOTIFY libraryChanged)
     Q_PROPERTY(QString libraryPath READ libraryPath CONSTANT)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
@@ -105,6 +123,7 @@ public:
     QVariantList workspaceList() const;
     QVariantList designList() const;
     QVariantList assetList() const;
+    QVariantList shaderList() const;
     QString defaultWorkspaceId() const;
     QString libraryPath() const;
     QString lastError() const;
@@ -242,6 +261,19 @@ public:
     Q_INVOKABLE QVariantMap loadAsset(const QString &id) const;
     Q_INVOKABLE bool hasAsset(const QString &id) const;
 
+    // Persistent shader assets. Payload: {presetId, vertex, fragment,
+    // uniforms, basePreset, sourceKind, originFile}. Nodes reference
+    // by shaderId; shaderParams override uniforms per node. Files live
+    // in <libraryDir>/shaders/<id>.json. presetId "custom" is live GLSL
+    // (preview compiles via ShaderEngine.compileCustom); basePreset is
+    // its CPU-export fallback ("" keeps the base paint).
+    Q_INVOKABLE QString createShader(const QString &name, const QVariantMap &payload);
+    Q_INVOKABLE bool renameShader(const QString &id, const QString &name);
+    Q_INVOKABLE bool deleteShader(const QString &id);
+    Q_INVOKABLE QVariantMap loadShader(const QString &id) const;
+    Q_INVOKABLE bool hasShader(const QString &id) const;
+    Q_INVOKABLE QVariantMap shader(const QString &id) const;
+
 signals:
     void libraryChanged();
     void lastErrorChanged();
@@ -261,6 +293,7 @@ private:
     int findWorkspace(const QString &id) const;
     int findDesign(const QString &id) const;
     int findAsset(const QString &id) const;
+    int findShader(const QString &id) const;
     // Per-asset payload directory (<libraryDir>/assets). Created on demand.
     QString assetsDir() const;
     // Atomic write of one asset's payload file. False + lastError on failure.
@@ -270,6 +303,11 @@ private:
     QVariantMap readAssetFile(const QString &id);
     // Delete asset files with no matching index entry. Quiet.
     void sweepOrphanAssetFiles();
+    // Per-shader payload directory (<libraryDir>/shaders). Created on demand.
+    QString shadersDir() const;
+    bool writeShaderFile(const QString &id, const QVariantMap &payload);
+    QVariantMap readShaderFile(const QString &id);
+    void sweepOrphanShaderFiles();
     // Blob names referenced by any in-memory asset payload, groups included.
     QSet<QString> referencedAssetImages() const;
     QSet<QString> referencedAssetVideos() const;
@@ -332,9 +370,11 @@ private:
     QList<WorkspaceEntry> m_workspaceEntries;
     QList<DesignEntry> m_designEntries;
     QList<AssetEntry> m_assetEntries;
+    QList<ShaderEntry> m_shaderEntries;
     QVariantList m_workspaceList;
     QVariantList m_designList;
     QVariantList m_assetList;
+    QVariantList m_shaderList;
     QString m_defaultWorkspaceId;
     QString m_lastError;
     QString m_lastWarning;

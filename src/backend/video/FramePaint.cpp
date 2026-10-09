@@ -4,18 +4,24 @@
 #include "AppPaths.h"
 #include "EffectPainter.h"
 #include "ShapePath.h"
+#include "ShaderEngine.h"
 
 #include <QCache>
 #include <QCoreApplication>
 #include <QDataStream>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QImageReader>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QPainterPathStroker>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QSvgRenderer>
 #include <QTransform>
@@ -245,6 +251,185 @@ QCache<QByteArray, QImage> &sharedBlurCache()
     // hits; the cap is a ceiling, not an allocation.
     thread_local QCache<QByteArray, QImage> c(64 * 1024 * 1024);
     return c;
+}
+
+// Shader helpers: resolve node shaderId to a preset + merged params.
+// Presets are "preset:<id>"; custom uuids resolve via the shader file
+// (<libraryDir>/shaders/<id>.json) to their basePreset + uniforms,
+// merged with per-node overrides. Time derives from the 60Hz frame
+// clock so preview and export animate identically.
+// Custom payloads are cached by (id + file mtime): video export calls
+// this per leaf per frame, and re-opening + re-parsing JSON there
+// turned into thousands of file opens per render.
+struct CachedShaderAsset {
+    QString preset;
+    QVariantMap uniforms;
+    qint64 mtimeMs = 0;
+    qint64 sizeBytes = -1;
+    bool valid = false;
+};
+QHash<QString, CachedShaderAsset> &shaderAssetCache() {
+    static QHash<QString, CachedShaderAsset> c;
+    return c;
+}
+QMutex &shaderAssetMutex() {
+    static QMutex m;
+    return m;
+}
+bool resolveShaderAsset(const QString &sid, QString &presetOut, QVariantMap &uniformsOut) {
+    if (sid.startsWith(QLatin1String("preset:"))) {
+        presetOut = sid.mid(7);
+        uniformsOut.clear();
+        return true;
+    }
+    if (sid.isEmpty())
+        return false;
+    static const QRegularExpression safeId(QStringLiteral("^[A-Za-z0-9-]+$"));
+    if (!safeId.match(sid).hasMatch())
+        return false;
+    const QString path = AppPaths::totmBaseDir() + QStringLiteral("/shaders/") + sid + QStringLiteral(".json");
+    const QFileInfo fi(path);
+    const qint64 mtime = fi.lastModified().toMSecsSinceEpoch();
+    const qint64 fsize = fi.exists() ? fi.size() : -1;
+    {
+        QMutexLocker lock(&shaderAssetMutex());
+        auto it = shaderAssetCache().constFind(sid);
+        if (it != shaderAssetCache().constEnd() && it->valid && it->mtimeMs == mtime && it->sizeBytes == fsize) {
+            presetOut = it->preset;
+            uniformsOut = it->uniforms;
+            return true;
+        }
+    }
+    // Miss or stale: read + parse once, then publish. An unreadable or
+    // unparseable file falls back to plasma (empty uniforms): this matches
+    // the QML resolvers (ShapeItem/ShapeLayer fall back to "plasma" for
+    // unknown ids) and the LibraryStore import warning, so preview and
+    // export stay in agreement. The negative result is cached so video
+    // export does not re-open a missing file per leaf per frame.
+    QString preset = QStringLiteral("plasma");
+    QVariantMap uniforms;
+    QFile f(path);
+    if (f.open(QIODevice::ReadOnly)) {
+        const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+        const QJsonObject pay = doc.isObject() ? doc.object().value(QStringLiteral("payload")).toObject() : QJsonObject();
+        const QString base = pay.value(QStringLiteral("basePreset")).toString();
+        const QString pid = pay.value(QStringLiteral("presetId")).toString();
+        if (!base.isEmpty())
+            preset = base;
+        else if (!pid.isEmpty())
+            preset = pid;
+        uniforms = pay.value(QStringLiteral("uniforms")).toObject().toVariantMap();
+    }
+    {
+        QMutexLocker lock(&shaderAssetMutex());
+        CachedShaderAsset e;
+        e.preset = preset;
+        e.uniforms = uniforms;
+        e.mtimeMs = mtime;
+        e.sizeBytes = fsize;
+        e.valid = true;
+        shaderAssetCache().insert(sid, e);
+    }
+    presetOut = preset;
+    uniformsOut = uniforms;
+    return true;
+}
+QString shaderPresetFor(const QVariantMap &m) {
+    const QString sid = m.value(QStringLiteral("shaderId")).toString();
+    if (sid.startsWith(QLatin1String("preset:")))
+        return sid.mid(7);
+    if (sid.isEmpty())
+        return {};
+    QString preset;
+    QVariantMap uniforms;
+    if (!resolveShaderAsset(sid, preset, uniforms))
+        return {};
+    return preset;
+}
+
+QVariantMap shaderParamsFor(const QVariantMap &m, const QString &preset) {
+    QVariantMap base;
+    const QString sid = m.value(QStringLiteral("shaderId")).toString();
+    if (!sid.startsWith(QLatin1String("preset:")) && !sid.isEmpty()) {
+        QString unusedPreset;
+        QVariantMap uniforms;
+        if (resolveShaderAsset(sid, unusedPreset, uniforms))
+            base = uniforms;
+    }
+    const QVariantMap over = m.value(QStringLiteral("shaderParams")).toMap();
+    for (auto it = over.constBegin(); it != over.constEnd(); ++it)
+        base[it.key()] = it.value();
+    QVariantMap normed = Shaders::normParams(preset, base);
+    return normed;
+}
+
+// Params merged with per-node overrides and normalized. All uniforms
+// are uv-relative, so no device-scale adjustment is needed.
+QVariantMap shaderParamsForScaled(const QVariantMap &m, const QString &preset, double scale) {
+    Q_UNUSED(scale);
+    // Single asset lookup (not preset + params separately): halves the
+    // per-leaf-per-frame cache traffic on the video render thread.
+    const QString sid = m.value(QStringLiteral("shaderId")).toString();
+    QVariantMap base;
+    if (!sid.startsWith(QLatin1String("preset:")) && !sid.isEmpty()) {
+        QString unusedPreset;
+        QVariantMap uniforms;
+        if (resolveShaderAsset(sid, unusedPreset, uniforms))
+            base = uniforms;
+    }
+    const QVariantMap over = m.value(QStringLiteral("shaderParams")).toMap();
+    for (auto it = over.constBegin(); it != over.constEnd(); ++it)
+        base[it.key()] = it.value();
+    return Shaders::normParams(preset, base);
+}
+
+bool hasShaderLeaf(const QVariantMap &m) {
+    const QString sid = m.value(QStringLiteral("shaderId")).toString();
+    if (sid.isEmpty())
+        return false;
+    const QString t = m.value(QStringLiteral("type"), m.value(QStringLiteral("shapeType"), QStringLiteral("rectangle"))).toString();
+    return Shaders::isShaderableType(t);
+}
+
+// Leaf bbox in device px for shader uv (0..1 across leaf to match QML).
+// Regular leaves use x/y/w/h; boolean groups use the combined path bbox
+// expanded by the effect pad so uv spans bbox+2*pad like the preview
+// delegate (boolWrap sizes to boundRect + boolPaint.pad*2 and the overlay
+// fills it).
+QRectF shaderLeafRect(const QVariantMap &m, double ox, double oy, double scale) {
+    const double s = scale > 0 ? scale : 1.0;
+    const double w = num(m, "w"), h = num(m, "h");
+    if (w > 0.01 && h > 0.01) {
+        const double x = num(m, "x"), y = num(m, "y");
+        return QRectF(ox + x * s, oy + y * s, w * s, h * s);
+    }
+    const QVariantList kids = m.value(QStringLiteral("children")).toList();
+    if (!kids.isEmpty()) {
+        const QString op = ShapePath::normOp(m.value(QStringLiteral("boolOp"), QStringLiteral("union")).toString());
+        QList<QPainterPath> paths;
+        paths.reserve(kids.size());
+        for (const QVariant &v : kids)
+            paths << ShapePath::nodeToWorldPath(v.toMap());
+        QPainterPath combined = ShapePath::combinePaths(op, paths);
+        if (!combined.isEmpty()) {
+            QRectF box = combined.boundingRect();
+            // Match preview padded UV: BooleanGroupItem pads by effectPad.
+            QVariantMap styleMap;
+            styleMap[QStringLiteral("fills")] = m.value(QStringLiteral("fills")).toList();
+            styleMap[QStringLiteral("strokes")] = m.value(QStringLiteral("strokes")).toList();
+            const Effects::Style st = Effects::Style::fromMap(styleMap);
+            const double pad = Effects::effectPad(Effects::Shadow::listFrom(m.value(QStringLiteral("shadows")).toList()),
+                Effects::Glow::listFrom(m.value(QStringLiteral("glows")).toList()),
+                Effects::Blur::fromMap(m.value(QStringLiteral("layerBlur")).toMap()), st.strokes);
+            if (pad > 0.0)
+                box.adjust(-pad, -pad, pad, pad);
+            if (!qFuzzyCompare(s, 1.0))
+                box = QTransform::fromScale(s, s).map(box).boundingRect();
+            box.translate(ox, oy);
+            return box;
+        }
+    }
+    return QRectF();
 }
 
 // Fingerprint for one image halo/cutter raster. w/h/rad are device px
@@ -1081,6 +1266,22 @@ void paintLeaves(QPainter &pt, QImage &frame, const QList<QVariantMap> &work, co
                 active.append(mid);
             }
             if (active.isEmpty()) {
+                if (hasShaderLeaf(m)) {
+                    if (layer.size() != frame.size() || layer.format() != QImage::Format_ARGB32_Premultiplied)
+                        layer = QImage(frame.size(), QImage::Format_ARGB32_Premultiplied);
+                    layer.fill(Qt::transparent);
+                    {
+                        QPainter lp(&layer);
+                        lp.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+                        paintBooleanGroup(lp, layer, m, ox, oy, scale, frameNo);
+                    }
+                    const QString preset = shaderPresetFor(m);
+                    const QVariantMap params = shaderParamsForScaled(m, preset, scale);
+                    const QString mode = Shaders::normMode(m.value(QStringLiteral("shaderMode")).toString(), preset);
+                    Shaders::applyCpu(layer, preset, params, double(frameNo) / 60.0, mode, shaderLeafRect(m, ox, oy, scale));
+                    pt.drawImage(0, 0, layer);
+                    continue;
+                }
                 paintBooleanGroup(pt, frame, m, ox, oy, scale, frameNo);
                 continue;
             }
@@ -1109,6 +1310,12 @@ void paintLeaves(QPainter &pt, QImage &frame, const QList<QVariantMap> &work, co
                 // Backdrop blur inside masks samples the temp (transparent),
                 // not the frame behind: same documented rule as leaves.
                 paintBooleanGroup(lp, layer, m, ox, oy, scale, frameNo);
+            }
+            if (hasShaderLeaf(m)) {
+                const QString preset = shaderPresetFor(m);
+                const QVariantMap params = shaderParamsForScaled(m, preset, scale);
+                const QString mode = Shaders::normMode(m.value(QStringLiteral("shaderMode")).toString(), preset);
+                Shaders::applyCpu(layer, preset, params, double(frameNo) / 60.0, mode, shaderLeafRect(m, ox, oy, scale));
             }
             {
                 QPainter ap(&layer);
@@ -1145,6 +1352,22 @@ void paintLeaves(QPainter &pt, QImage &frame, const QList<QVariantMap> &work, co
             active.append(mid);
         }
         if (active.isEmpty()) {
+            if (hasShaderLeaf(m)) {
+                if (layer.size() != frame.size() || layer.format() != QImage::Format_ARGB32_Premultiplied)
+                    layer = QImage(frame.size(), QImage::Format_ARGB32_Premultiplied);
+                layer.fill(Qt::transparent);
+                {
+                    QPainter lp(&layer);
+                    lp.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+                    paintLeaf(lp, layer, m, ox, oy, scale, frameNo);
+                }
+                const QString preset = shaderPresetFor(m);
+                const QVariantMap params = shaderParamsForScaled(m, preset, scale);
+                const QString mode = Shaders::normMode(m.value(QStringLiteral("shaderMode")).toString(), preset);
+                Shaders::applyCpu(layer, preset, params, double(frameNo) / 60.0, mode, shaderLeafRect(m, ox, oy, scale));
+                pt.drawImage(0, 0, layer);
+                continue;
+            }
             paintLeaf(pt, frame, m, ox, oy, scale, frameNo);
             continue;
         }
@@ -1173,6 +1396,12 @@ void paintLeaves(QPainter &pt, QImage &frame, const QList<QVariantMap> &work, co
             // Backdrop blur inside masks samples the temp (transparent),
             // not the frame behind: documented v1 limitation, rare combo.
             paintLeaf(lp, layer, m, ox, oy, scale, frameNo);
+        }
+        if (hasShaderLeaf(m)) {
+            const QString preset = shaderPresetFor(m);
+            const QVariantMap params = shaderParamsForScaled(m, preset, scale);
+            const QString mode = Shaders::normMode(m.value(QStringLiteral("shaderMode")).toString(), preset);
+            Shaders::applyCpu(layer, preset, params, double(frameNo) / 60.0, mode, shaderLeafRect(m, ox, oy, scale));
         }
         {
             QPainter ap(&layer);

@@ -17,7 +17,9 @@
 // mixed by opacity, silhouette-confined grain. Mapping is approximate
 // (box radii as sigma/2, turbulence instead of hashed dots).
 // Background blur has no standalone-SVG equivalent (no backdrop to
-// sample), so it is skipped, never failed.
+// sample), so it is skipped, never failed. Shaders have no vector
+// equivalent either: leaves export with base fills only (see
+// countShaders for the caller warning).
 namespace SvgPaint {
 
 // Renders top-level node snapshots (groups included) to a standalone
@@ -27,7 +29,10 @@ namespace SvgPaint {
 // (SVG is vector-only, no decoded-frame branch): *skippedVideo counts
 // them so callers can warn instead of exporting bogus vectors.
 // unavailableFonts lists text-leaf families missing on this device.
+// countShaders counts shaderable leaves carrying a non-empty shaderId so
+// callers can warn that SVG drops shaders (base paint only).
 QString renderNodes(const QVariantList &topNodes, QString *error = nullptr, int *skippedVideo = nullptr);
 QStringList unavailableFonts(const QVariantList &topNodes);
+int countShaders(const QVariantList &topNodes);
 
 } // namespace SvgPaint

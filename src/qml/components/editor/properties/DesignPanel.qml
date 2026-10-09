@@ -157,6 +157,16 @@ ScrollView {
             snapshot: panel.snapshot
         }
 
+        ShaderSection {
+            Layout.fillWidth: true
+            snapshot: panel.snapshot
+            popup: shaderPopup
+        }
+
+        ShaderPopup {
+            id: shaderPopup
+        }
+
         ExportSection {
             Layout.fillWidth: true
             doc: panel.doc

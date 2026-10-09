@@ -24,6 +24,9 @@ QtObject {
                 layerBlur: doc.factory._copyBlur(node.layerBlur, 8, 1),
                 backgroundBlur: doc.factory._copyBlur(node.backgroundBlur, 16, 0.7),
                 grain: doc.factory._copyGrain(node.grain),
+                shaderId: String(node.shaderId ?? ""),
+                shaderMode: (node.shaderMode === "overlay") ? "overlay" : "fill",
+                shaderParams: doc.factory._copyShaderParams(node.shaderParams),
                 opacity: node.opacity ?? 1,
                 radius: node.radius ?? 0,
                 independentCorners: node.independentCorners === true,
@@ -58,6 +61,9 @@ QtObject {
             layerBlur: doc.factory._copyBlur(node.layerBlur, 8, 1),
             backgroundBlur: doc.factory._copyBlur(node.backgroundBlur, 16, 0.7),
             grain: doc.factory._copyGrain(node.grain),
+            shaderId: String(node.shaderId ?? ""),
+            shaderMode: (node.shaderMode === "overlay") ? "overlay" : "fill",
+            shaderParams: doc.factory._copyShaderParams(node.shaderParams),
             opacity: node.opacity,
             radius: node.radius,
             independentCorners: node.independentCorners === true,
@@ -379,6 +385,12 @@ QtObject {
             snap.backgroundBlur = doc.factory._copyBlur(b.backgroundBlur, 16, 0.7);
         if (snap.grain !== undefined && b.grain !== undefined)
             snap.grain = doc.factory._copyGrain(b.grain);
+        if (snap.shaderId !== undefined && b.shaderId !== undefined)
+            snap.shaderId = String(b.shaderId ?? "");
+        if (snap.shaderMode !== undefined && b.shaderMode !== undefined)
+            snap.shaderMode = (b.shaderMode === "overlay") ? "overlay" : "fill";
+        if (snap.shaderParams !== undefined && b.shaderParams !== undefined)
+            snap.shaderParams = doc.factory._copyShaderParams(b.shaderParams);
         if (snap.maskFeather !== undefined && b.maskFeather !== undefined)
             snap.maskFeather = Math.max(0, Number(b.maskFeather) || 0);
         if (snap.maskInverted !== undefined && b.maskInverted !== undefined)

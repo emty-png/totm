@@ -4,6 +4,7 @@
 #include "AppPaths.h"
 #include "EffectPainter.h"
 #include "EffectSpec.h"
+#include "ShaderEngine.h"
 #include "ShapePath.h"
 
 #include <QCoreApplication>
@@ -1447,6 +1448,30 @@ QStringList unavailableFonts(const QVariantList &topNodes) {
     }
     missing.sort(Qt::CaseInsensitive);
     return missing;
+}
+
+int countShaders(const QVariantList &topNodes) {
+    int count = 0;
+    QList<QVariantList> stack;
+    stack.append(topNodes);
+    while (!stack.isEmpty()) {
+        const QVariantList nodes = stack.takeLast();
+        for (const QVariant &v : nodes) {
+            const QVariantMap n = v.toMap();
+            if (!n.value(QStringLiteral("shaderId")).toString().isEmpty()) {
+                // Shaders only apply on shaderable leaves (mirrors
+                // FramePaint::hasShaderLeaf): ids on text/image/video or
+                // plain groups are inert and must not warn.
+                const QString t = n.value(QStringLiteral("type"),
+                    n.value(QStringLiteral("shapeType"), QStringLiteral("rectangle"))).toString();
+                if (Shaders::isShaderableType(t))
+                    ++count;
+            }
+            if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+                stack.append(n.value(QStringLiteral("children")).toList());
+        }
+    }
+    return count;
 }
 
 } // namespace SvgPaint

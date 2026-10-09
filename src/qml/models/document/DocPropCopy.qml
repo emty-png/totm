@@ -266,6 +266,11 @@ QtObject {
                 amount: Math.min(1, Math.max(0, Number(gr.amount) || 0)),
                 size: Math.min(10, Math.max(1, Number(gr.size) || 2))
             },
+            shader: {
+                shaderId: String(n.shaderId ?? ""),
+                shaderMode: (n.shaderMode === "overlay") ? "overlay" : "fill",
+                shaderParams: propCopy.doc.factory._copyShaderParams(n.shaderParams)
+            },
             mask: {
                 feather: Math.max(0, Number(n.maskFeather) || 0),
                 inverted: n.maskInverted === true
@@ -468,6 +473,47 @@ QtObject {
             amount: Math.min(1, Math.max(0, Number(v.grain.amount) || 0)),
             size: Math.min(10, Math.max(1, Number(v.grain.size) || 2))
         };
+        // Shaders ride values paste when the target can carry one
+        // (vectors + pen + live booleans); other types keep their own.
+        var isBoolTarget = n.kind === "group" && n.boolOp !== undefined && n.boolOp !== "none";
+        var targetType = String(n.shapeType ?? (isBoolTarget ? "boolean" : ""));
+        if (isBoolTarget || ShaderEngine.isShaderableType(targetType)) {
+            var shSrc = v.shader ?? {};
+            var shId = String(shSrc.shaderId ?? "");
+            // Resolve the preset contract via the library (mirrors
+            // ShapeItem.resolvedPreset): saved preset variants are uuids
+            // with payload.presetId != "custom" and must normalize
+            // against their base preset, or scale/segments/etc. are
+            // stripped as unknown keys.
+            var shPreset = "";
+            var shKnown = false;
+            if (shId.startsWith("preset:")) {
+                shPreset = shId.slice(7);
+                shKnown = true;
+            } else if (shId !== "") {
+                for (var k = 0; k < LibraryStore.shaderList.length; k++) {
+                    if (LibraryStore.shaderList[k].shaderId === shId) {
+                        var pay = LibraryStore.shaderList[k].payload ?? {};
+                        if (String(pay.presetId ?? "") === "custom")
+                            shPreset = "custom";
+                        else
+                            shPreset = String(pay.basePreset ?? pay.presetId ?? "plasma");
+                        shKnown = true;
+                        break;
+                    }
+                }
+            }
+            n.shaderId = shId;
+            n.shaderMode = (shSrc.shaderMode === "overlay") ? "overlay" : "fill";
+            n.shaderParams = propCopy.doc.factory._copyShaderParams(shSrc.shaderParams);
+            // Normalize only against a resolvable contract. Unknown or
+            // missing assets keep raw params so render-time normParams can
+            // merge them once the asset arrives.
+            try {
+                if (shKnown)
+                    n.shaderParams = ShaderEngine.normParams(shPreset, n.shaderParams);
+            } catch (e) {}
+        }
         n.maskFeather = Math.max(0, Number(v.mask.feather) || 0);
         n.maskInverted = v.mask.inverted === true;
     }

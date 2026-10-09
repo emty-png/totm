@@ -180,6 +180,30 @@ QVariantMap entryToAsset(const QVariantMap &payload) {
     out[QStringLiteral("clips")] = payload.value(QStringLiteral("clips"), QVariantList());
     return out;
 }
+
+QVariantMap entryToShader(const QVariantMap &payload) {
+    // Contract: shader assets carry presetId + vertex/fragment source +
+    // uniform defaults. Extra keys are dropped; missing keys get safe
+    // defaults so older payloads stay readable.
+    // presetId "custom" marks from-scratch/imported GLSL: vertex +
+    // fragment carry the live sources, basePreset is the CPU-export
+    // fallback ("" = keep base paint), sourceKind is
+    // preset|scratch|import, originFile the imported file name (""
+    // otherwise).
+    QVariantMap out;
+    out[QStringLiteral("version")] = kSchemaVersion;
+    out[QStringLiteral("presetId")] = payload.value(QStringLiteral("presetId"), QStringLiteral("plasma")).toString();
+    out[QStringLiteral("vertex")] = payload.value(QStringLiteral("vertex"), QString()).toString();
+    out[QStringLiteral("fragment")] = payload.value(QStringLiteral("fragment"), QString()).toString();
+    out[QStringLiteral("uniforms")] = payload.value(QStringLiteral("uniforms"), QVariantMap());
+    out[QStringLiteral("basePreset")] = payload.value(QStringLiteral("basePreset"),
+        payload.value(QStringLiteral("presetId"), QStringLiteral("plasma"))).toString();
+    const QString kind = payload.value(QStringLiteral("sourceKind")).toString();
+    out[QStringLiteral("sourceKind")]
+        = (kind == QStringLiteral("scratch") || kind == QStringLiteral("import")) ? kind : QStringLiteral("preset");
+    out[QStringLiteral("originFile")] = payload.value(QStringLiteral("originFile"), QString()).toString().left(128);
+    return out;
+}
 } // namespace
 
 LibraryStore *LibraryStore::create(QQmlEngine *engine, QJSEngine *scriptEngine) {
@@ -205,6 +229,10 @@ QVariantList LibraryStore::designList() const {
 
 QVariantList LibraryStore::assetList() const {
     return m_assetList;
+}
+
+QVariantList LibraryStore::shaderList() const {
+    return m_shaderList;
 }
 
 QString LibraryStore::defaultWorkspaceId() const {
@@ -887,6 +915,7 @@ bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool
     // export self-contained and re-import as blobs.
     QSet<QString> images;
     QSet<QString> videoRefs;
+    QSet<QString> shaderRefs;
     QList<QVariantList> stack;
     stack.append(scene.value(QStringLiteral("nodes")).toList());
     while (!stack.isEmpty()) {
@@ -899,6 +928,9 @@ bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool
             const QString vsrc = n.value(QStringLiteral("videoSource")).toString();
             if (!vsrc.isEmpty())
                 videoRefs.insert(vsrc);
+            const QString sid = n.value(QStringLiteral("shaderId")).toString();
+            if (!sid.isEmpty() && !sid.startsWith(QLatin1String("preset:")))
+                shaderRefs.insert(sid);
             if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
                 stack.append(n.value(QStringLiteral("children")).toList());
         }
@@ -1004,6 +1036,22 @@ bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool
         else
             ++skippedVideos;
     }
+    // Custom shader assets referenced by nodes: pack name+payload so the
+    // design stays self-contained. Preset ids need no packing.
+    QJsonObject shaderBlobs;
+    int skippedShaders = 0;
+    for (const QString &sid : shaderRefs) {
+        const int sat = findShader(sid);
+        if (sat < 0) {
+            ++skippedShaders;
+            continue;
+        }
+        const ShaderEntry &se = m_shaderEntries.at(sat);
+        QJsonObject obj;
+        obj[QStringLiteral("name")] = se.name;
+        obj[QStringLiteral("payload")] = QJsonObject::fromVariantMap(se.payload);
+        shaderBlobs[sid] = obj;
+    }
     const QJsonObject root{
         {QStringLiteral("app"), QStringLiteral("totm")},
         {QStringLiteral("kind"), QStringLiteral("totm-design")},
@@ -1014,6 +1062,7 @@ bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool
                                       {QStringLiteral("images"), imageBlobs},
                                       {QStringLiteral("audio"), audioBlobs},
                                       {QStringLiteral("videos"), videoBlobs},
+                                      {QStringLiteral("shaders"), shaderBlobs},
                                   }},
     };
     QSaveFile out(local);
@@ -1039,6 +1088,8 @@ bool LibraryStore::exportDesign(const QString &id, const QUrl &destination, bool
             parts.append(tr("%n video(s)", "", skippedVideos));
         warnings.append(tr("Shared without %1 — missing on this device. Placeholders show on import.").arg(parts.join(QStringLiteral(", "))));
     }
+    if (skippedShaders > 0)
+        warnings.append(tr("%n shader(s) missing on this device — importing nodes fall back to Plasma.", "", skippedShaders));
     const QStringList missingFonts = unavailableFonts(collectFontFamilies(scene.value(QStringLiteral("nodes")).toList()));
     if (!missingFonts.isEmpty())
         warnings.append(tr("Fonts not embedded (%1) — install them on the receiving device or text may substitute.").arg(missingFonts.join(QStringLiteral(", "))));
@@ -1300,6 +1351,69 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
             }
         }
     }
+    int missingShaders = 0;
+    {
+        const QJsonObject shaderBlobs = blobs.value(QStringLiteral("shaders")).toObject();
+        QSet<QString> refs;
+        QList<QVariantList> stack;
+        stack.append(scene.value(QStringLiteral("nodes")).toList());
+        while (!stack.isEmpty()) {
+            const QVariantList nodes = stack.takeLast();
+            for (const QVariant &v : nodes) {
+                const QVariantMap n = v.toMap();
+                const QString sid = n.value(QStringLiteral("shaderId")).toString();
+                if (!sid.isEmpty() && !sid.startsWith(QLatin1String("preset:")))
+                    refs.insert(sid);
+                if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group"))
+                    stack.append(n.value(QStringLiteral("children")).toList());
+            }
+        }
+        QHash<QString, QString> shaderMap;
+        for (const QString &ref : refs) {
+            const QJsonObject obj = shaderBlobs.value(ref).toObject();
+            if (obj.isEmpty() || !obj.value(QStringLiteral("payload")).isObject()) {
+                // Already have it locally (same library re-import)? Keep id.
+                if (findShader(ref) >= 0)
+                    continue;
+                ++missingShaders;
+                continue;
+            }
+            ShaderEntry se;
+            se.id = newId();
+            se.name = trimmedName(obj.value(QStringLiteral("name")).toString(), tr("Imported shader"));
+            se.createdAt = nowIso();
+            se.updatedAt = se.createdAt;
+            se.payload = entryToShader(obj.value(QStringLiteral("payload")).toObject().toVariantMap());
+            m_shaderEntries.prepend(se);
+            if (!writeShaderFile(se.id, se.payload)) {
+                m_shaderEntries.removeAt(findShader(se.id));
+                ++missingShaders;
+                continue;
+            }
+            shaderMap.insert(ref, se.id);
+        }
+        if (!shaderMap.isEmpty()) {
+            std::function<void(QVariantList &)> rewrite = [&](QVariantList &nodes) {
+                for (int i = 0; i < nodes.size(); ++i) {
+                    QVariantMap n = nodes.at(i).toMap();
+                    const QString sid = n.value(QStringLiteral("shaderId")).toString();
+                    if (!sid.isEmpty() && shaderMap.contains(sid))
+                        n[QStringLiteral("shaderId")] = shaderMap.value(sid);
+                    if (n.value(QStringLiteral("kind")).toString() == QLatin1String("group")) {
+                        QVariantList kids = n.value(QStringLiteral("children")).toList();
+                        rewrite(kids);
+                        n[QStringLiteral("children")] = kids;
+                    }
+                    nodes[i] = n;
+                }
+            };
+            QVariantList nodes = scene.value(QStringLiteral("nodes")).toList();
+            rewrite(nodes);
+            scene[QStringLiteral("nodes")] = nodes;
+            persist();
+            rebuild();
+        }
+    }
     DesignEntry entry;
     entry.id = newId();
     entry.workspaceId = target;
@@ -1326,6 +1440,8 @@ QString LibraryStore::importDesign(const QString &workspaceId, const QUrl &sourc
             parts.append(tr("%n video(s)", "", missingVideos));
         warnings.append(tr("Imported with %1 placeholder(s) — files missing from the bundle (%2).").arg(missingImages + missingAudios + missingVideos).arg(parts.join(QStringLiteral(", "))));
     }
+    if (missingShaders > 0)
+        warnings.append(tr("%n shader(s) missing from the bundle — affected nodes fall back to Plasma.", "", missingShaders));
     const QStringList missingFonts = unavailableFonts(collectFontFamilies(scene.value(QStringLiteral("nodes")).toList()));
     if (!missingFonts.isEmpty())
         warnings.append(tr("Fonts not installed here (%1) — text may substitute.").arg(missingFonts.join(QStringLiteral(", "))));
@@ -1393,6 +1509,71 @@ QVariantMap LibraryStore::loadAsset(const QString &id) const {
 
 bool LibraryStore::hasAsset(const QString &id) const {
     return findAsset(id) >= 0;
+}
+
+QString LibraryStore::createShader(const QString &name, const QVariantMap &payload) {
+    ShaderEntry entry;
+    entry.id = newId();
+    entry.name = trimmedName(name, tr("Untitled shader"));
+    entry.createdAt = nowIso();
+    entry.updatedAt = entry.createdAt;
+    entry.payload = entryToShader(payload);
+    m_shaderEntries.prepend(entry);
+    if (!writeShaderFile(entry.id, entry.payload) || !persist()) {
+        m_shaderEntries.removeAt(findShader(entry.id));
+        return {};
+    }
+    rebuild();
+    clearError();
+    return entry.id;
+}
+
+bool LibraryStore::renameShader(const QString &id, const QString &name) {
+    const int at = findShader(id);
+    if (at < 0)
+        return false;
+    const QString next = trimmedName(name, m_shaderEntries.at(at).name);
+    if (next == m_shaderEntries.at(at).name)
+        return true;
+    m_shaderEntries[at].name = next;
+    m_shaderEntries[at].updatedAt = nowIso();
+    if (!persist())
+        return false;
+    rebuild();
+    return true;
+}
+
+bool LibraryStore::deleteShader(const QString &id) {
+    const int at = findShader(id);
+    if (at < 0)
+        return false;
+    m_shaderEntries.removeAt(at);
+    QFile::remove(shadersDir() + QStringLiteral("/") + id + QStringLiteral(".json"));
+    if (!persist())
+        return false;
+    rebuild();
+    return true;
+}
+
+QVariantMap LibraryStore::loadShader(const QString &id) const {
+    const int at = findShader(id);
+    if (at < 0)
+        return {};
+    return m_shaderEntries.at(at).payload;
+}
+
+bool LibraryStore::hasShader(const QString &id) const {
+    return findShader(id) >= 0;
+}
+
+QVariantMap LibraryStore::shader(const QString &id) const {
+    const int at = findShader(id);
+    if (at < 0)
+        return {};
+    const ShaderEntry &entry = m_shaderEntries.at(at);
+    return {{QStringLiteral("id"), entry.id}, {QStringLiteral("name"), entry.name},
+        {QStringLiteral("createdAt"), entry.createdAt}, {QStringLiteral("updatedAt"), entry.updatedAt},
+        {QStringLiteral("payload"), entry.payload}};
 }
 
 QSet<QString> LibraryStore::referencedAudio() const {
@@ -1515,6 +1696,7 @@ void LibraryStore::load() {
         m_workspaceEntries.clear();
         m_designEntries.clear();
         m_assetEntries.clear();
+        m_shaderEntries.clear();
         installFreshDefault();
         if (m_hasLock) {
             sweepOrphanImages();
@@ -1568,9 +1750,26 @@ void LibraryStore::load() {
                 m_assetEntries.append(entry);
             }
         }
+        m_shaderEntries.clear();
+        // Shader assets are optional like component assets.
+        if (root.value(QStringLiteral("shaders")).isArray()) {
+            for (const QJsonValue &value : root.value(QStringLiteral("shaders")).toArray()) {
+                const QJsonObject item = value.toObject();
+                ShaderEntry entry;
+                entry.id = item.value(QStringLiteral("id")).toString();
+                entry.name = item.value(QStringLiteral("name")).toString();
+                entry.createdAt = item.value(QStringLiteral("createdAt")).toString();
+                entry.updatedAt = item.value(QStringLiteral("updatedAt")).toString();
+                if (entry.id.isEmpty())
+                    continue;
+                entry.payload = readShaderFile(entry.id);
+                m_shaderEntries.append(entry);
+            }
+        }
         if (m_hasLock) {
             sweepOrphanDesignFiles();
             sweepOrphanAssetFiles();
+            sweepOrphanShaderFiles();
         }
     }
 
@@ -1652,11 +1851,22 @@ bool LibraryStore::persist() {
             {QStringLiteral("updatedAt"), entry.updatedAt},
         });
     }
+    QJsonArray shaders;
+    // Metadata only: payloads live in shaders/<id>.json.
+    for (const ShaderEntry &entry : m_shaderEntries) {
+        shaders.append(QJsonObject{
+            {QStringLiteral("id"), entry.id},
+            {QStringLiteral("name"), entry.name},
+            {QStringLiteral("createdAt"), entry.createdAt},
+            {QStringLiteral("updatedAt"), entry.updatedAt},
+        });
+    }
     const QJsonDocument doc(QJsonObject{
         {QStringLiteral("version"), kSchemaVersion},
         {QStringLiteral("workspaces"), workspaces},
         {QStringLiteral("designs"), designs},
         {QStringLiteral("assets"), assets},
+        {QStringLiteral("shaders"), shaders},
     });
     QSaveFile file(libraryPath());
     if (!file.open(QIODevice::WriteOnly)) {
@@ -1710,9 +1920,20 @@ void LibraryStore::rebuild() {    QHash<QString, int> counts;
             {QStringLiteral("payload"), entry.payload},
         });
     }
+    QVariantList shaders;
+    for (const ShaderEntry &entry : m_shaderEntries) {
+        shaders.append(QVariantMap{
+            {QStringLiteral("shaderId"), entry.id},
+            {QStringLiteral("name"), entry.name},
+            {QStringLiteral("createdAt"), entry.createdAt},
+            {QStringLiteral("updatedAt"), entry.updatedAt},
+            {QStringLiteral("payload"), entry.payload},
+        });
+    }
     m_workspaceList = workspaces;
     m_designList = designs;
     m_assetList = assets;
+    m_shaderList = shaders;
     emit libraryChanged();
 }
 
@@ -1782,6 +2003,84 @@ int LibraryStore::findAsset(const QString &id) const {
             return i;
     }
     return -1;
+}
+
+int LibraryStore::findShader(const QString &id) const {
+    for (int i = 0; i < m_shaderEntries.size(); ++i) {
+        if (m_shaderEntries.at(i).id == id)
+            return i;
+    }
+    return -1;
+}
+
+QString LibraryStore::shadersDir() const {
+    return libraryDir() + QStringLiteral("/shaders");
+}
+
+bool LibraryStore::writeShaderFile(const QString &id, const QVariantMap &payload) {
+    if (id.isEmpty() || id.contains(QLatin1Char('/')) || id.contains(QLatin1Char('\\'))
+        || id.contains(QStringLiteral("..")))
+        return false;
+    QDir().mkpath(shadersDir());
+    QSaveFile file(shadersDir() + QStringLiteral("/") + id + QStringLiteral(".json"));
+    if (!file.open(QIODevice::WriteOnly)) {
+        setLastError(tr("Could not save shader: %1").arg(file.errorString()));
+        return false;
+    }
+    const QJsonDocument doc(QJsonObject{
+        {QStringLiteral("version"), kSchemaVersion},
+        {QStringLiteral("payload"), QJsonObject::fromVariantMap(entryToShader(payload))},
+    });
+    file.write(doc.toJson(QJsonDocument::Indented));
+    if (!file.commit()) {
+        setLastError(tr("Could not save shader: %1").arg(file.errorString()));
+        return false;
+    }
+    return true;
+}
+
+QVariantMap LibraryStore::readShaderFile(const QString &id) {
+    if (id.isEmpty() || id.contains(QLatin1Char('/')) || id.contains(QLatin1Char('\\'))
+        || id.contains(QStringLiteral("..")))
+        return entryToShader({});
+    const QString path = shadersDir() + QStringLiteral("/") + id + QStringLiteral(".json");
+    QFile file(path);
+    if (!file.exists())
+        return entryToShader({});
+    if (!file.open(QIODevice::ReadOnly)) {
+        setLastError(tr("Could not read shader; starting it fresh."));
+        return entryToShader({});
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    const QJsonObject root = doc.object();
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()
+        || !root.value(QStringLiteral("payload")).isObject()) {
+        file.close();
+        const QString backup = shadersDir() + QStringLiteral("/") + id + QStringLiteral(".corrupt.")
+            + QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-hhmmss-zzz"))
+            + QStringLiteral(".json");
+        if (QFile::rename(path, backup))
+            setLastError(tr("A shader was corrupt; archived and started fresh."));
+        else
+            setLastError(tr("A shader was corrupt and could not be archived; started fresh."));
+        return entryToShader({});
+    }
+    return entryToShader(root.value(QStringLiteral("payload")).toObject().toVariantMap());
+}
+
+void LibraryStore::sweepOrphanShaderFiles() {
+    QHash<QString, bool> known;
+    for (const ShaderEntry &entry : m_shaderEntries)
+        known.insert(entry.id, true);
+    const QDir dir(shadersDir());
+    for (const QString &f : dir.entryList({QStringLiteral("*.json")}, QDir::Files)) {
+        if (f.contains(QStringLiteral(".corrupt.")))
+            continue;
+        const QString id = f.left(f.size() - 5);
+        if (!known.contains(id))
+            QFile::remove(dir.filePath(f));
+    }
 }
 
 QString LibraryStore::assetsDir() const {
