@@ -14,9 +14,11 @@
 // Distro-packaged and versioned-layout Qt (the matching include dir
 // is added in src/CMakeLists.txt).
 #include <rhi/qshaderbaker.h>
+#include <rhi/qshader.h>
 #elif __has_include(<qshaderbaker.h>)
 // Same versioned layouts, flat variant.
 #include <qshaderbaker.h>
+#include <rhi/qshader.h>
 #else
 #error "QShaderBaker headers not found: install the QtShaderTools module (distro package qt6-shadertools or official Qt module 'qtshadertools')"
 #endif

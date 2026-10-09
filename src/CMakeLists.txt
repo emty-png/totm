@@ -365,7 +365,7 @@ qt_add_shaders(totm "totm_shader_shaders"
         qml/components/editor/shaders/matrix_overlay.frag
 )
 
-target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia Qt6::Network Qt6::ShaderTools)
+target_link_libraries(totm PRIVATE Qt6::Quick Qt6::Svg Qt6::Multimedia Qt6::Network Qt6::ShaderTools Qt6::GuiPrivate Qt6::ShaderToolsPrivate)
 
 # QShaderBaker headers live in different places per Qt packaging: flat
 # module dir on some builds, versioned subdirs (API under rhi/ or flat)
