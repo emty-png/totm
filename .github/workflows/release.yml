@@ -15,7 +15,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.3"
+          version: "6.11.*"
           modules: qtmultimedia qtshadertools
           # No cache: see ci.yml (a cached tree once missed the module
           # header payload and poisoned every later run).
@@ -112,7 +112,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.3"
+          version: "6.11.*"
           modules: qtmultimedia qtshadertools
           # No cache: see ci.yml (a cached tree once missed the module
           # header payload and poisoned every later run).
@@ -186,7 +186,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.3"
+          version: "6.11.*"
           arch: win64_msvc2022_64
           modules: qtmultimedia qtshadertools
           # No cache: see ci.yml (a cached tree once missed the module
