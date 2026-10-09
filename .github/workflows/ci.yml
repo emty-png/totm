@@ -54,6 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Qt
+        if: runner.os != 'Windows'
         uses: jurplel/install-qt-action@v4
         with:
           version: "6.11.*"
@@ -63,6 +64,18 @@ jobs:
           # payload (configs present, headers absent) and every later run
           # restored it; fresh installs stay correct regardless.
           cache: false
+      # Windows-only: released aqtinstall 3.3.x cannot parse the changed
+      # 6.11 Windows repo metadata ("Failed to locate XML data"), so use
+      # upstream git until a fixed aqtinstall ships.
+      - name: Install Qt (Windows)
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.11.*"
+          arch: ${{ matrix.qt-arch }}
+          modules: qtmultimedia qtshadertools
+          cache: false
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git
       - name: Install Ninja (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ninja-build

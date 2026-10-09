@@ -192,6 +192,9 @@ jobs:
           # No cache: see ci.yml (a cached tree once missed the module
           # header payload and poisoned every later run).
           cache: false
+          # Released aqtinstall 3.3.x cannot parse the changed 6.11
+          # Windows repo metadata; use upstream git until fixed.
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git
       - name: Install NSIS
         run: choco install nsis -y
       # Qt DLLs are deployed into the staging tree by
