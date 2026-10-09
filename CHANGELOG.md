@@ -3,6 +3,12 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.8.1] - 2026-10-09
+
+### Fixed
+
+* Windows + macOS compatibility — ffmpeg lookup tries `ffmpeg.exe` on Windows and Homebrew prefixes (`/opt/homebrew/bin`, `/usr/local/bin`) on macOS so Finder launches find it; plugin `.zip` import falls back to PowerShell `Expand-Archive` / `tar` when `unzip` is missing; docs install on every OS (bundle `Resources` on macOS) so Credits and the plugin guide open; Windows data lives in Local app data with legacy Roaming fallback; frameless resize covers all edges/corners, mac green light toggles native fullscreen (Option-click maximizes), cursors render per-screen DPR; `file://` URLs, drive-aware picker, HKCU association fallback, unspoofable instance name and `.dfont` fonts.
+
 ## [0.8.0] - 2026-10-09
 
 ### Added
