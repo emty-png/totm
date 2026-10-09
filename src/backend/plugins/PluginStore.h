@@ -80,8 +80,9 @@ public:
     // Import. Copies a folder (or .zip) into the plugins dir under its
     // manifest id, then scans (full manifest + sandbox validation runs
     // there; failures surface per-row and via lastError). Existing
-    // installs are refused: delete first. Zip import shells out to the
-    // system unzip like the ffmpeg probes do.
+    // installs are refused: delete first. Zip import tries system unzip,
+    // then PowerShell Expand-Archive on Windows, then tar, like the
+    // ffmpeg probes do.
     Q_INVOKABLE bool importFolder(const QUrl &folder);
     Q_INVOKABLE bool importZip(const QUrl &file);
     // Removal. Bundled plugins are refused (seeding would restore them;

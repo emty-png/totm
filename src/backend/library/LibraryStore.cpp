@@ -862,7 +862,7 @@ QVariantMap LibraryStore::videoProbe(const QString &ref) const {
         m_videoProbes.insert(key, new QVariantMap(r));
         return r;
     };
-    const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    const QString ffmpeg = AppPaths::findFfmpeg();
     if (ffmpeg.isEmpty())
         return cached(out);
     QProcess proc;

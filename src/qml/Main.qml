@@ -377,7 +377,11 @@ ApplicationWindow {
     }
 
     function saveWindowNow() {
-        SettingsStore.saveWindowGeometry(root.x, root.y, root.width, root.height, root.visibility === Window.Maximized);
+        // Fullscreen shares the maximized save path (preserve the restore
+        // rect; C++ never overwrites it while maximized). Restores as
+        // maximized — fullscreen is re-entered via the green light.
+        var maxed = root.visibility === Window.Maximized || root.visibility === Window.FullScreen;
+        SettingsStore.saveWindowGeometry(root.x, root.y, root.width, root.height, maxed);
     }
 
     onXChanged: saveWindowTimer.restart()

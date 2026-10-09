@@ -449,16 +449,27 @@ if(UNIX AND NOT APPLE)
         FILES "${PROJECT_SOURCE_DIR}/packaging/mime/totm.xml"
         DESTINATION "share/mime/packages"
     )
-    # Maker guide for plug-ins, opened from Settings -> Plugin.
-    # Credits page, opened from the sidebar Credits row above Settings.
-    # Contributors page, linked from the credits page TOC.
+endif()
+
+# Maker guide for plug-ins, opened from Settings -> Plugin.
+# Credits page, opened from the sidebar Credits row above Settings.
+# Contributors page, linked from the credits page TOC.
+# Installed on every OS so openCredits/openGuide work outside dev checkouts:
+# Linux/Windows via share/doc/totm (exeDir/../share/doc/totm probe),
+# macOS via bundle Contents/Resources (exeDir/../Resources probe).
+set(TOTM_DOC_FILES
+    "${PROJECT_SOURCE_DIR}/src/docs/PLUG_IN.html"
+    "${PROJECT_SOURCE_DIR}/src/docs/CREDITS.html"
+    "${PROJECT_SOURCE_DIR}/src/docs/CONTRIBUTORS.html"
+    "${PROJECT_SOURCE_DIR}/src/docs/CHANGELOG.html"
+    "${PROJECT_SOURCE_DIR}/src/fonts/inter/OFL.txt"
+)
+if(APPLE)
+    set_source_files_properties(${TOTM_DOC_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(totm PRIVATE ${TOTM_DOC_FILES})
+else()
     install(
-        FILES
-            "${PROJECT_SOURCE_DIR}/src/docs/PLUG_IN.html"
-            "${PROJECT_SOURCE_DIR}/src/docs/CREDITS.html"
-            "${PROJECT_SOURCE_DIR}/src/docs/CONTRIBUTORS.html"
-            "${PROJECT_SOURCE_DIR}/src/docs/CHANGELOG.html"
-            "${PROJECT_SOURCE_DIR}/src/fonts/inter/OFL.txt"
+        FILES ${TOTM_DOC_FILES}
         DESTINATION "share/doc/totm"
     )
 endif()

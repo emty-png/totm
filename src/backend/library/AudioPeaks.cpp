@@ -1,4 +1,5 @@
 #include "AudioPeaks.h"
+#include "AppPaths.h"
 
 #include <QDataStream>
 #include <QDir>
@@ -133,12 +134,9 @@ bool AudioPeaks::isSafeName(const QString &name) {
 }
 
 QString AudioPeaks::ffmpegPath() {
-#ifdef Q_OS_WIN
-    QString found = QStandardPaths::findExecutable(QStringLiteral("ffmpeg.exe"));
-    if (!found.isEmpty())
-        return found;
-#endif
-    return QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    // Centralized in AppPaths: Windows .exe probe + macOS brew prefixes.
+    // Included via LibraryStore.h chain; include directly for safety.
+    return AppPaths::findFfmpeg();
 }
 
 bool AudioPeaks::loadSidecar(const QString &path, qint64 fileSize, Dense &out) const {

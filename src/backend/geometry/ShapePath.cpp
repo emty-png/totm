@@ -1,5 +1,6 @@
 #include "ShapePath.h"
 
+#include "AppPaths.h"
 #include "EffectPainter.h"
 
 #include <QCache>
@@ -307,12 +308,7 @@ QMutex &traceMutex()
 // <AppData>/totm/images/<name>, traversal-guarded.
 QString booleanImagesDir()
 {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    return dir + QStringLiteral("/images");
+    return AppPaths::totmBaseDir() + QStringLiteral("/images");
 }
 
 QImage loadBooleanImage(const QString &name)

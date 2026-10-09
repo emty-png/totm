@@ -5,7 +5,7 @@ if(NOT WINDEPLOYQT_EXECUTABLE)
     message(FATAL_ERROR "windeployqt not on PATH; cannot stage Qt runtime for the installer")
 endif()
 execute_process(
-    COMMAND "${WINDEPLOYQT_EXECUTABLE}" --release --qmldir "@PROJECT_SOURCE_DIR@/src/qml" "${CMAKE_INSTALL_PREFIX}/bin/totm.exe"
+    COMMAND "${WINDEPLOYQT_EXECUTABLE}" --release --compiler-runtime --qmldir "@PROJECT_SOURCE_DIR@/src/qml" "${CMAKE_INSTALL_PREFIX}/bin/totm.exe"
     RESULT_VARIABLE _windeploy_result
 )
 if(NOT _windeploy_result EQUAL 0)

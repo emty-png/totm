@@ -177,7 +177,7 @@ QImage loadVideoFrame(const QString &ref, double videoTime, int targetW, int tar
         if (QImage *hit = s_vcache.object(key))
             return *hit;
     }
-    QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    QString ffmpeg = AppPaths::findFfmpeg();
     if (ffmpeg.isEmpty())
         return {};
     QProcess proc;

@@ -62,6 +62,20 @@ QVariantList FileBrowser::places() const
             {QStringLiteral("url"), QUrl::fromLocalFile(path)},
         });
     }
+#ifdef Q_OS_WIN
+    // Windows drive picker: C:/, D:/, ... so users are never stuck
+    // inside one drive (parentOf at a drive root returns itself).
+    for (const QFileInfo &drive : QDir::drives()) {
+        const QString path = QDir::cleanPath(drive.absoluteFilePath());
+        if (path.isEmpty())
+            continue;
+        out.append(QVariantMap{
+            {QStringLiteral("id"), QStringLiteral("drive:") + path},
+            {QStringLiteral("name"), path},
+            {QStringLiteral("url"), QUrl::fromLocalFile(path)},
+        });
+    }
+#endif
     return out;
 }
 
@@ -82,9 +96,10 @@ QVariantList FileBrowser::breadcrumbs(const QUrl &folder) const
         }
     }
     for (const QString &crumb : chain) {
-        const QString name = QDir(crumb).isRoot() ? QStringLiteral("/") : QFileInfo(crumb).fileName();
+        // Windows roots are "C:/" (not "/"); show the drive itself.
+        const QString name = QDir(crumb).isRoot() ? QDir::cleanPath(crumb) : QFileInfo(crumb).fileName();
         out.append(QVariantMap{
-            {QStringLiteral("name"), name},
+            {QStringLiteral("name"), name.isEmpty() ? crumb : name},
             {QStringLiteral("url"), QUrl::fromLocalFile(crumb)},
         });
     }
@@ -118,7 +133,10 @@ QVariantList FileBrowser::list(const QUrl &folder, const QStringList &suffixes) 
         if (!isDir && !wanted.isEmpty() && !wanted.contains(suffix)) {
             continue;
         }
-        if (info.fileName().startsWith(QLatin1Char('.'))) {
+        // Dotfiles on Unix, hidden/system on Windows (desktop.ini etc.).
+        // QFileInfo::isHidden covers both (dot-prefix on Unix, attributes
+        // on Windows), so one check serves all platforms.
+        if (info.isHidden()) {
             continue;
         }
         out.append(QVariantMap{
@@ -141,7 +159,9 @@ QUrl FileBrowser::parentOf(const QUrl &folder) const
     }
     QDir dir(path);
     if (dir.isRoot() || !dir.cdUp()) {
-        return QUrl::fromLocalFile(path);
+        // At a filesystem root ("/" or "C:/"): no parent. QML falls back
+        // to the places list, which carries drive roots on Windows.
+        return {};
     }
     return QUrl::fromLocalFile(dir.absolutePath());
 }

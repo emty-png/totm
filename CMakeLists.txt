@@ -29,12 +29,19 @@ if(WIN32)
     set(CPACK_NSIS_MUI_ICON "${PROJECT_SOURCE_DIR}/packaging/icons/totm.ico")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     # .totm association (exe handles argv + single-instance forwarding).
-    # Uninstall only clears keys still pointing at totm.
+    # HKCR for elevated installs plus HKCU fallback for per-user installs
+    # without elevation (modern Windows virtualizes HKCR, but explicit HKCU
+    # guarantees Open-With works everywhere). Uninstall only clears keys
+    # still pointing at totm.
     set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
         WriteRegStr HKCR '.totm' '' 'totm.design'
         WriteRegStr HKCR 'totm.design' '' 'totm design'
         WriteRegStr HKCR 'totm.design\\\\DefaultIcon' '' '$INSTDIR\\\\bin\\\\totm.exe,0'
         WriteRegStr HKCR 'totm.design\\\\shell\\\\open\\\\command' '' '\\\"$INSTDIR\\\\bin\\\\totm.exe\\\" \\\"%1\\\"'
+        WriteRegStr HKCU 'Software\\\\Classes\\\\.totm' '' 'totm.design'
+        WriteRegStr HKCU 'Software\\\\Classes\\\\totm.design' '' 'totm design'
+        WriteRegStr HKCU 'Software\\\\Classes\\\\totm.design\\\\DefaultIcon' '' '$INSTDIR\\\\bin\\\\totm.exe,0'
+        WriteRegStr HKCU 'Software\\\\Classes\\\\totm.design\\\\shell\\\\open\\\\command' '' '\\\"$INSTDIR\\\\bin\\\\totm.exe\\\" \\\"%1\\\"'
         System::Call 'Shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
     ")
     set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
@@ -42,6 +49,10 @@ if(WIN32)
         ReadRegStr $0 HKCR '.totm' ''
         StrCmp $0 'totm.design' 0 +2
             DeleteRegValue HKCR '.totm' ''
+        DeleteRegKey HKCU 'Software\\\\Classes\\\\totm.design'
+        ReadRegStr $0 HKCU 'Software\\\\Classes\\\\.totm' ''
+        StrCmp $0 'totm.design' 0 +2
+            DeleteRegValue HKCU 'Software\\\\Classes\\\\.totm' ''
         System::Call 'Shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
     ")
     configure_file(

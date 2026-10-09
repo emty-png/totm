@@ -1,5 +1,6 @@
 #include "ComponentExporter.h"
 
+#include "AppPaths.h"
 #include "FramePaint.h"
 #include "SvgPaint.h"
 
@@ -21,12 +22,7 @@ namespace {
 // layout in FramePaint so thumbnails sweep with the app data.
 QString thumbsDir()
 {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    return dir + QStringLiteral("/thumbs");
+    return AppPaths::totmBaseDir() + QStringLiteral("/thumbs");
 }
 
 // Filename-safe stem: ids and ISO stamps carry characters the FS

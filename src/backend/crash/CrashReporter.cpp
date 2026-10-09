@@ -1,4 +1,5 @@
 #include "CrashReporter.h"
+#include "AppPaths.h"
 
 #include <QClipboard>
 #include <QCoreApplication>
@@ -172,12 +173,7 @@ void CrashReporter::dismiss()
 
 QString CrashReporter::baseDir() const
 {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    return dir;
+    return AppPaths::totmBaseDir();
 }
 
 QString CrashReporter::logsDir() const

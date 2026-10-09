@@ -61,8 +61,9 @@ private:
     void attach(QWindow *window);
     void detach(QWindow *window);
     void reapply();
-    QCursor cursorFor(int shape);
-    QCursor loadSvg(const QString &resource, int hotX256, int hotY256);
+    qreal dprFor(QWindow *window) const;
+    QCursor cursorFor(int shape, qreal dpr);
+    QCursor loadSvg(const QString &resource, int hotX256, int hotY256, qreal dpr);
 
     static CursorStore *s_instance;
     // Active theme. Defaults to dark so pre-QML windows get Classic until
@@ -70,7 +71,10 @@ private:
     bool m_dark = true;
     // Render size in logical pixels. Follows SettingsStore.cursorSize.
     int m_size = 20;
-    QHash<int, QCursor> m_cache;
+    // Pixmap cache keyed by shape + quantized DPR + size + theme generation:
+    // cleared wholesale on theme/size change (see reapply), so the key only
+    // needs shape + DPR bucket for mixed-DPI multi-monitor correctness.
+    QHash<QString, QCursor> m_cache;
     // Logical standard shape per window (pixmap cursors report BitmapCursor,
     // so the requested shape must be remembered for theme repaints).
     QHash<QWindow *, int> m_shapes;

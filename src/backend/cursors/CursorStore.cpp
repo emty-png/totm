@@ -107,11 +107,24 @@ void CursorStore::reapply()
         if (window->cursor().shape() == Qt::BlankCursor)
             continue;
         const int shape = m_shapes.value(window, static_cast<int>(Qt::ArrowCursor));
-        const QCursor custom = cursorFor(shape);
+        const QCursor custom = cursorFor(shape, dprFor(window));
         if (!custom.pixmap().isNull())
             window->setCursor(custom);
     }
     m_guard = false;
+}
+
+qreal CursorStore::dprFor(QWindow *window) const
+{
+    // Per-window screen DPR so mixed-DPI drags stay crisp. Falls back to
+    // the primary screen (then 1.0) when the window has no screen yet.
+    if (window) {
+        if (QScreen *s = window->screen())
+            return s->devicePixelRatio();
+    }
+    if (QScreen *primary = QGuiApplication::primaryScreen())
+        return primary->devicePixelRatio();
+    return 1.0;
 }
 
 void CursorStore::attach(QWindow *window)
@@ -121,6 +134,20 @@ void CursorStore::attach(QWindow *window)
     m_attached.insert(window);
     window->installEventFilter(this);
     connect(window, &QObject::destroyed, this, [this, window]() { detach(window); });
+    // Mixed-DPI: repaint this window's cursors when it moves screens.
+    connect(window, &QWindow::screenChanged, this, [this, window](QScreen *) {
+        if (!window)
+            return;
+        if (window->cursor().shape() == Qt::BlankCursor)
+            return;
+        const int shape = m_shapes.value(window, static_cast<int>(Qt::ArrowCursor));
+        const QCursor custom = cursorFor(shape, dprFor(window));
+        if (!custom.pixmap().isNull()) {
+            m_guard = true;
+            window->setCursor(custom);
+            m_guard = false;
+        }
+    });
 }
 
 void CursorStore::detach(QWindow *window)
@@ -139,7 +166,7 @@ bool CursorStore::eventFilter(QObject *watched, QEvent *event)
             if (shape == Qt::BitmapCursor || shape == Qt::BlankCursor)
                 return false;
             m_shapes.insert(window, static_cast<int>(shape));
-            const QCursor custom = cursorFor(static_cast<int>(shape));
+            const QCursor custom = cursorFor(static_cast<int>(shape), dprFor(window));
             if (!custom.pixmap().isNull()) {
                 m_guard = true;
                 window->setCursor(custom);
@@ -150,9 +177,13 @@ bool CursorStore::eventFilter(QObject *watched, QEvent *event)
     return false;
 }
 
-QCursor CursorStore::cursorFor(int shape)
+QCursor CursorStore::cursorFor(int shape, qreal dpr)
 {
-    auto cached = m_cache.constFind(shape);
+    if (!(dpr > 0.0))
+        dpr = 1.0;
+    const int bucket = qMax(1, qRound(dpr * 100.0));
+    const QString key = QString::number(shape) + QLatin1Char('@') + QString::number(bucket);
+    auto cached = m_cache.constFind(key);
     if (cached != m_cache.constEnd())
         return cached.value();
     const Entry *entry = entryFor(shape);
@@ -160,22 +191,21 @@ QCursor CursorStore::cursorFor(int shape)
         return QCursor();
     const QString resource = (m_dark ? QStringLiteral(":/cursors/dark/") : QStringLiteral(":/cursors/light/"))
         + QString::fromLatin1(entry->file);
-    const QCursor custom = loadSvg(resource, entry->hotX256, entry->hotY256);
+    const QCursor custom = loadSvg(resource, entry->hotX256, entry->hotY256, dpr);
     if (!custom.pixmap().isNull())
-        m_cache.insert(shape, custom);
+        m_cache.insert(key, custom);
     return custom;
 }
 
-QCursor CursorStore::loadSvg(const QString &resource, int hotX256, int hotY256)
+QCursor CursorStore::loadSvg(const QString &resource, int hotX256, int hotY256, qreal dpr)
 {
     QSvgRenderer renderer(resource);
     if (!renderer.isValid()) {
         qWarning() << "totm: bad cursor svg" << resource;
         return QCursor();
     }
-    qreal dpr = 1.0;
-    if (QGuiApplication::primaryScreen())
-        dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
+    if (!(dpr > 0.0))
+        dpr = 1.0;
     const int px = qMax(1, qRound(m_size * dpr));
     QImage image(px, px, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);

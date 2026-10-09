@@ -1,4 +1,5 @@
 #include "SettingsStore.h"
+#include "AppPaths.h"
 
 #include <algorithm>
 #include <utility>
@@ -240,7 +241,8 @@ bool isSafeFontName(const QString &name) {
         return false;
     const QString lower = name.toLower();
     return lower.endsWith(QStringLiteral(".ttf")) || lower.endsWith(QStringLiteral(".otf"))
-        || lower.endsWith(QStringLiteral(".ttc")) || lower.endsWith(QStringLiteral(".woff"))
+        || lower.endsWith(QStringLiteral(".ttc")) || lower.endsWith(QStringLiteral(".otc"))
+        || lower.endsWith(QStringLiteral(".dfont")) || lower.endsWith(QStringLiteral(".woff"))
         || lower.endsWith(QStringLiteral(".woff2"));
 }
 
@@ -760,12 +762,7 @@ void SettingsStore::refreshFontMissing() {
 }
 
 QString SettingsStore::fontsDir() const {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    return dir + QStringLiteral("/fonts");
+    return AppPaths::totmBaseDir() + QStringLiteral("/fonts");
 }
 
 QVariantList SettingsStore::loadFontCatalog() {

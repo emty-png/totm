@@ -784,12 +784,7 @@ QString VideoExporter::lastError() const { return m_lastError; }
 QString VideoExporter::format() const { return m_format; }
 
 QString VideoExporter::ffmpegPath() {
-#ifdef Q_OS_WIN
-    QString found = QStandardPaths::findExecutable(QStringLiteral("ffmpeg.exe"));
-    if (!found.isEmpty())
-        return found;
-#endif
-    return QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    return AppPaths::findFfmpeg();
 }
 
 bool VideoExporter::startExport(const QVariantMap &scene, const QString &quality, int fps,

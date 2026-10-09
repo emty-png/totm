@@ -37,7 +37,7 @@ I was originally making this app in tauri v2 but i crashed out in the middle of 
 * In-app file picker replacing stock dialogs, with overwrite guards on `.totm` export and video save
 * Animate with presets plus custom from-to properties (scale, rotate, move, opacity, color, hide/show, resize, corner radius, stroke) with per-key easing keyframes on every custom clip, and drawable motion paths with full point editing, easing graphs and a timeline (zoom slider + fit, keyframe ticks with click-seek and drag-retime, multi-clip joint drag).
 * Audio: import MP3 / WAV / OGG / FLAC onto timeline lanes with zoom-adaptive waveforms and live preview, mixed into the export
-* Video layers: import MP4 / WebM / MOV / M4V / MKV as stored library blobs (files are copied into the library, `.totm` bundles pack them) with speed, loop, offset, volume and mute plus auto-detached sound lanes; canvas preview plays through Qt Multimedia's OS backend, so WebM/MKV may not preview on macOS/Windows while ffmpeg export still renders them — replace when a stored file is missing (pre-blob designs still resolve absolute paths while the file exists), and report backend gaps you find
+* Video layers: import MP4 / WebM / MOV / M4V / MKV as stored library blobs (files are copied into the library, `.totm` bundles pack them) with speed, loop, offset, volume and mute plus auto-detached sound lanes; canvas preview plays through Qt Multimedia's OS backend, so WebM/MKV may not preview on macOS/Windows while ffmpeg export still renders them (OGG audio preview is likewise silent on macOS AVFoundation) — replace when a stored file is missing (pre-blob designs still resolve absolute paths while the file exists), and report backend gaps you find
 * Video export: SD / HD / 4K at 30 / 60 / 120fps MP4 / WebM / GIF (GIF caps at 60fps) through system ffmpeg, with progress + cancel
 * Component export: per-selection PNGs at 1x / 2x / 3x plus resolution-independent SVG vectors on transparency from the design panel, multi-file packs as `{Design}.zip`
 * Crash reporter: standalone window with log copy and Report on GitHub (library autosaves, so designs survive)
@@ -48,7 +48,7 @@ Grab the version you want from the [Releases page](https://github.com/emty-png/t
 
 * **Ubuntu / Debian:** `totm-x86_64.AppImage` — `chmod +x` and run. On Ubuntu 24.04+ install FUSE first (`sudo apt install libfuse2t64`). `ffmpeg` is bundled inside, video export works out of the box.
 * **Arch:** build `packaging/arch/PKGBUILD` with `makepkg -si` (deps: `qt6-base qt6-declarative qt6-svg qt6-multimedia qt6-multimedia-ffmpeg qt6-shadertools ffmpeg`).
-* **macOS (apple silicon):** `totm-arm64.dmg` — drag to Applications. It is unsigned, so first launch needs right-click > Open. `ffmpeg` via `brew install ffmpeg` for video export.
+* **macOS (apple silicon):** `totm-arm64.dmg` — drag to Applications. It is unsigned, so first launch needs right-click > Open. `ffmpeg` via `brew install ffmpeg` for video export (the app also probes `/opt/homebrew/bin` and `/usr/local/bin`, so Finder launches find it without PATH tweaks).
 * **Windows:** the `totm-*-win64.exe` installer. `ffmpeg` via `winget install -e --id Gyan.FFmpeg` for video export.
 
 Or build from source. You need CMake 3.21+, Qt 6.8+ with the `Quick`, `Svg`, `Multimedia`, `ShaderTools` and `Network` modules, a C++17 compiler and Ninja. Video export shells out to a system `ffmpeg`, so have it on your `PATH` too (check with `ffmpeg -version`) — the app runs fine without it, export just tells you how to install it.

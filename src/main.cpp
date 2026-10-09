@@ -1,4 +1,5 @@
 #include <QDebug>
+#include <QDir>
 #include <QFileInfo>
 #include <QFont>
 #include <QFontDatabase>
@@ -167,14 +168,21 @@ private:
 
 QString singleInstanceServerName()
 {
-    // Prefer the real uid over the spoofable $USER env so a crafted
-    // environment cannot hijack or collide the socket name.
+    // Per-user socket name without trusting spoofable $USER/$USERNAME env:
+    // hash the home path (stable per account, not env-controlled). Unix
+    // keeps the real uid fast path.
 #ifndef Q_OS_WIN
     const QString user = QString::number(::getuid());
 #else
-    QString user = QString::fromUtf8(qgetenv("USER"));
+    const QString home = QDir::homePath();
+    QString user;
+    if (!home.isEmpty())
+        user = QString::number(qHash(home), 16);
     if (user.isEmpty()) {
+        // Last resort only (home unavailable): env fallback.
         user = QString::fromUtf8(qgetenv("USERNAME"));
+        if (user.isEmpty())
+            user = QString::fromUtf8(qgetenv("USER"));
     }
 #endif
     const QString base = QStringLiteral("totm-single-instance");

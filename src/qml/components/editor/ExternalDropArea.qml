@@ -57,8 +57,19 @@ DropArea {
 
     function asFileUrl(u) {
         var s = String(u);
-        if (s.indexOf("://") < 0)
-            s = "file://" + s;
+        if (s.indexOf("://") < 0) {
+            // Bare local path (clipboard colt, Windows C:\...): normalize to
+            // a proper file:/// url so QUrl.isLocalFile holds on all OSes.
+            // "file://C:/..." (two slashes) parses host "C:" and breaks
+            // LibraryStore imports; "file:///C:/..." is correct.
+            s = s.replace(/\\/g, "/");
+            if (/^[A-Za-z]:\//.test(s))
+                s = "file:///" + s;
+            else if (s.charAt(0) !== "/")
+                s = "file:///" + s;
+            else
+                s = "file://" + s;
+        }
         return s;
     }
 

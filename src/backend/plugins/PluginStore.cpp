@@ -362,20 +362,59 @@ bool PluginStore::importZip(const QUrl &file) {
         setLastError(tr("Pick a .zip file first."));
         return false;
     }
-    const QString unzip = QStandardPaths::findExecutable(QStringLiteral("unzip"));
-    if (unzip.isEmpty()) {
-        setLastError(tr("Install unzip to import .zip plugins (folder import needs nothing)."));
-        return false;
-    }
     QTemporaryDir tmp;
     if (!tmp.isValid()) {
         setLastError(tr("Could not unpack that zip."));
         return false;
     }
-    QProcess proc;
-    proc.start(unzip, {QStringLiteral("-q"), QStringLiteral("-o"), local, QStringLiteral("-d"), tmp.path()});
-    if (!proc.waitForFinished(30000) || proc.exitCode() != 0) {
-        setLastError(tr("Could not unpack that zip."));
+    // Extraction backends in order: system unzip (all OSes, .exe probed
+    // on Windows via AppPaths), PowerShell Expand-Archive (stock Windows
+    // 5.1+, no extra install), tar (Win10+ bsdtar, macOS bsdtar, GNU tar
+    // with zip support). Folder import needs no tool at all.
+    bool extracted = false;
+    const QString unzip = AppPaths::findUnzip();
+    if (!unzip.isEmpty()) {
+        QProcess proc;
+        proc.start(unzip, {QStringLiteral("-q"), QStringLiteral("-o"), local, QStringLiteral("-d"), tmp.path()});
+        if (proc.waitForFinished(30000) && proc.exitCode() == 0)
+            extracted = true;
+    }
+#ifdef Q_OS_WIN
+    if (!extracted) {
+        const QString ps = QStandardPaths::findExecutable(QStringLiteral("powershell.exe"));
+        const QString exe = !ps.isEmpty() ? ps : QStringLiteral("powershell");
+        QProcess proc;
+        // -LiteralPath avoids wildcard expansion on names with [ ].
+        const QString script = QStringLiteral("Expand-Archive -LiteralPath '%1' -DestinationPath '%2' -Force")
+                                   .arg(local.replace(QLatin1Char('\''), QStringLiteral("''")),
+                                       tmp.path().replace(QLatin1Char('\''), QStringLiteral("''")));
+        proc.start(exe,
+            {QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"), QStringLiteral("-Command"), script});
+        if (proc.waitForFinished(30000) && proc.exitCode() == 0)
+            extracted = true;
+    }
+#endif
+    if (!extracted) {
+        // tar handles .zip via bsdtar/libarchive on Windows 10+ and macOS;
+        // some minimal Linux tars lack zip support, so this stays a fallback.
+        QString tar = QStandardPaths::findExecutable(QStringLiteral("tar"));
+#ifdef Q_OS_WIN
+        if (tar.isEmpty())
+            tar = QStandardPaths::findExecutable(QStringLiteral("tar.exe"));
+#endif
+        if (!tar.isEmpty()) {
+            QProcess proc;
+            proc.start(tar, {QStringLiteral("-xf"), local, QStringLiteral("-C"), tmp.path()});
+            if (proc.waitForFinished(30000) && proc.exitCode() == 0)
+                extracted = true;
+        }
+    }
+    if (!extracted) {
+#ifdef Q_OS_WIN
+        setLastError(tr("Could not unpack that zip (no unzip/tar/PowerShell backend worked)."));
+#else
+        setLastError(tr("Could not unpack that zip (install unzip, or import the folder)."));
+#endif
         return false;
     }
     // Root is the unpacked tree itself, unless it holds exactly one
@@ -921,21 +960,11 @@ QString PluginStore::pluginsDir() {
 }
 
 QString PluginStore::pluginsPath() const {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    return dir + QStringLiteral("/plugins");
+    return AppPaths::totmBaseDir() + QStringLiteral("/plugins");
 }
 
 QString PluginStore::statePath() const {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dir.isEmpty())
-        dir = QDir::homePath() + QStringLiteral("/.totm");
-    if (!dir.endsWith(QStringLiteral("/totm"), Qt::CaseInsensitive))
-        dir += QStringLiteral("/totm");
-    return dir + QStringLiteral("/plugins.json");
+    return AppPaths::totmBaseDir() + QStringLiteral("/plugins.json");
 }
 
 bool PluginStore::isValidId(const QString &id) const {
