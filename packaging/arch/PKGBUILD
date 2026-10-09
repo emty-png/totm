@@ -1,6 +1,6 @@
 # Maintainer: tot <https://github.com/emty-png/totm>
 pkgname=totm
-pkgver=0.7.2
+pkgver=0.8.0
 pkgrel=1
 pkgdesc="Cross-platform desktop motion-graphics editor"
 arch=('x86_64')
@@ -10,7 +10,7 @@ depends=('ffmpeg' 'hicolor-icon-theme' 'qt6-base' 'qt6-declarative' 'qt6-multime
 makedepends=('cmake' 'git' 'ninja')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/$pkgver.tar.gz")
 # Tag tarball; refresh with `updpkgsums` once the release tarball is published.
-# SKIP is a placeholder until the 0.7.2 checksum is recorded.
+# SKIP is a placeholder until the 0.8.0 checksum is recorded.
 sha256sums=('SKIP')
 
 build() {

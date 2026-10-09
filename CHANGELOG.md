@@ -3,6 +3,13 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.8.0] - 2026-10-09
+
+### Added
+
+* Procedural shaders for vector shapes — 9 animated presets (plasma, aurora, clouds, kaleidoscope, scanlines, fire, nebula, vortex, matrix) in fill (procedural replaces the base inside the silhouette) or overlay (screen/multiply blend over the stack) modes with per-preset uniforms, picked from a new Shader section with live preview; canvas preview and PNG/video export share the 60Hz composition clock so they animate identically, while SVG exports base paint with a warning.
+* Custom GLSL plus a persistent shader library — write shaders from scratch or import vertex/fragment sources, compiled in-app with hash-cached `.qsb` output, and save any preset tuning as a library asset that designs reference by id; `.totm` bundles pack the referenced shader blobs and remap ids on import, falling back to Plasma with a warning when an asset is missing.
+
 ## [0.7.2] - 2026-10-07
 
 ### Fixed
