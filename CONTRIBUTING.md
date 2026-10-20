@@ -1,7 +1,7 @@
 # Contributing to totm
 
 Thanks for picking up `totm` (that one tool for motion, part of `tot`).
-This doc reflects how the app is actually built today (v0.8.0): an
+This doc reflects how the app is actually built today (v0.8.2): an
 offline Qt 6.8+ desktop editor where QML owns UI + app logic and a small
 C++ backend owns storage, rendering help, and sandboxing.
 
@@ -15,7 +15,8 @@ Cross-platform motion-graphics editor: vector shapes (rectangle, ellipse,
 triangle, star, pen paths, text, images) with gradients / shadows / glows
 / blur / grain, layers + groups + drill-in, smart snapping,
 design panel, presets + custom from-to animation + motion paths + easing
-graphs + timeline with audio lanes, SD/HD/4K MP4/WebM/GIF export through
+graphs + timeline with audio lanes, HTML/CSS/JS developer scripting,
+SD/HD/4K MP4/WebM/GIF export through
 system `ffmpeg`, home library (workspaces, starring, templates, snapshot previews,
 `.totm` share bundles), QML-only plugin system, editable shortcuts,
 dark/light theme with appearance settings, and an in-app file picker.

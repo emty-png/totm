@@ -336,12 +336,20 @@
       <p>Every notable change, newest first. Format follows Keep a Changelog.</p>
       <nav aria-label="Table of contents">
         <ul class="toc">
-          <li><a href="#v080">1 · 0.8.0</a></li><li><a href="#v072">2 · 0.7.2</a></li><li><a href="#v071">3 · 0.7.1</a></li><li><a href="#v070">4 · 0.7.0</a></li><li><a href="#v060">5 · 0.6.0</a></li><li><a href="#v050">6 · 0.5.0</a></li><li><a href="#v040">7 · 0.4.0</a></li><li><a href="#v032">8 · 0.3.2</a></li><li><a href="#v031">9 · 0.3.1</a></li><li><a href="#v030">10 · 0.3.0</a></li><li><a href="#v023">11 · 0.2.3</a></li><li><a href="#v022">12 · 0.2.2</a></li><li><a href="#v021">13 · 0.2.1</a></li><li><a href="#v020">14 · 0.2.0</a></li><li><a href="#v012">15 · 0.1.2</a></li><li><a href="#v011">16 · 0.1.1</a></li><li><a href="#v010">17 · 0.1.0</a></li>
+          <li><a href="#v082">1 · 0.8.2</a></li><li><a href="#v081">2 · 0.8.1</a></li><li><a href="#v080">3 · 0.8.0</a></li><li><a href="#v072">4 · 0.7.2</a></li><li><a href="#v071">5 · 0.7.1</a></li><li><a href="#v070">6 · 0.7.0</a></li><li><a href="#v060">7 · 0.6.0</a></li><li><a href="#v050">8 · 0.5.0</a></li><li><a href="#v040">9 · 0.4.0</a></li><li><a href="#v032">10 · 0.3.2</a></li><li><a href="#v031">11 · 0.3.1</a></li><li><a href="#v030">12 · 0.3.0</a></li><li><a href="#v023">13 · 0.2.3</a></li><li><a href="#v022">14 · 0.2.2</a></li><li><a href="#v021">15 · 0.2.1</a></li><li><a href="#v020">16 · 0.2.0</a></li><li><a href="#v012">17 · 0.1.2</a></li><li><a href="#v011">18 · 0.1.1</a></li><li><a href="#v010">19 · 0.1.0</a></li>
         </ul>
       </nav>
     </header>
 
-    <h2 id="v080">0.8.0 <span class="muted tag">2026-10-09</span></h2><h3>Added</h3>
+    <h2 id="v082">0.8.2 <span class="muted tag">2026-10-20</span></h2><h3>Added</h3>
+<div class="card">
+<ul><li>Built-in developer scripting — the editor’s Dev panel provides HTML, CSS and JavaScript tabs with syntax highlighting and a bundled reference guide. Run scripts create native shapes, groups, media and animation clips in one undo entry; generated content stays linked to its source and exports as normal scene data.</li></ul></div><h3>Changed</h3>
+<div class="card">
+<ul><li>Canvas preview quality and controls — CPU-painted effects, masks, boolean groups and shader captures now render at device scale with bounded, isotropic backing textures, keeping zoomed artwork crisp without unbounded allocations. Canvas zoom steps are more responsive, and selection, toolbar and icon chrome have been refined.</li></ul></div><h3>Fixed</h3>
+<div class="card">
+<ul><li>Editor input and build reliability — inline text editing releases Wayland text input while its surface still has focus, and component export no longer carries a duplicate moc include.</li></ul></div><h2 id="v081">0.8.1 <span class="muted tag">2026-10-09</span></h2><h3>Fixed</h3>
+<div class="card">
+<ul><li>Windows + macOS compatibility — ffmpeg lookup tries <code>ffmpeg.exe</code> on Windows and Homebrew prefixes (<code>/opt/homebrew/bin</code>, <code>/usr/local/bin</code>) on macOS so Finder launches find it; plug-in <code>.zip</code> import falls back to PowerShell <code>Expand-Archive</code> / <code>tar</code> when <code>unzip</code> is missing; docs install on every OS so Credits and the maker guides open; Windows data and file handling, frameless resize, mac fullscreen and per-screen cursor DPR are hardened.</li></ul></div><h2 id="v080">0.8.0 <span class="muted tag">2026-10-09</span></h2><h3>Added</h3>
 <div class="card">
 <ul><li>Procedural shaders for vector shapes — 9 animated presets (plasma, aurora, clouds, kaleidoscope, scanlines, fire, nebula, vortex, matrix) in fill or overlay modes with per-preset uniforms, picked from a new Shader section with live preview; canvas preview and PNG/video export share the 60Hz composition clock so they animate identically, while SVG exports base paint with a warning.</li><li>Custom GLSL plus a persistent shader library — write shaders from scratch or import vertex/fragment sources, compiled in-app with hash-cached <code>.qsb</code> output, and save any preset tuning as a library asset that designs reference by id; <code>.totm</code> bundles pack the referenced shader blobs and remap ids on import, falling back to Plasma with a warning when an asset is missing.</li></ul></div><h2 id="v072">0.7.2 <span class="muted tag">2026-10-07</span></h2><h3>Fixed</h3>
 <div class="card">

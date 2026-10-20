@@ -3,6 +3,20 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.8.2] - 2026-10-20
+
+### Added
+
+* Built-in developer scripting — the editor’s Dev panel provides HTML, CSS and JavaScript tabs with syntax highlighting and a bundled reference guide. Run scripts create native shapes, groups, media and animation clips in one undo entry; generated content stays linked to its source and exports as normal scene data.
+
+### Changed
+
+* Canvas preview quality and controls — CPU-painted effects, masks, boolean groups and shader captures now render at device scale with bounded, isotropic backing textures, keeping zoomed artwork crisp without unbounded allocations. Canvas zoom steps are more responsive, and selection, toolbar and icon chrome have been refined.
+
+### Fixed
+
+* Editor input and build reliability — inline text editing releases Wayland text input while its surface still has focus, and component export no longer carries a duplicate moc include.
+
 ## [0.8.1] - 2026-10-09
 
 ### Fixed
