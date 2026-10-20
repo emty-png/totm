@@ -3,14 +3,15 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Totm
 
-// Floating canvas toolbar: undo/redo, select, shapes (with subtype
-// dropdown), pen, text, image.
+// Floating canvas toolbar: undo/redo, select, shapes and media (with
+// subtype dropdowns), pen, text, and saved assets.
 Rectangle {
     id: toolbar
 
     property var doc: null
     property var canvas: null
     property var pluginTools: []
+    property string lastMediaTool: "image"
 
     function refreshPlugins() {
         toolbar.pluginTools = PluginStore.toolbarTools();
@@ -18,10 +19,11 @@ Rectangle {
 
     // Whether any menu is open (used by the canvas outside-click
     // catcher below the toolbar).
-    readonly property bool menuOpen: shapesMenu.opened || assetMenu.opened
+    readonly property bool menuOpen: shapesMenu.opened || mediaMenu.opened || assetMenu.opened
 
     function closeMenu() {
         shapesMenu.close();
+        mediaMenu.close();
         assetMenu.close();
     }
 
@@ -30,12 +32,26 @@ Rectangle {
         return ToolState.shapeIconFor(ToolState.activeShapeType);
     }
 
+    function mediaIcon() {
+        return toolbar.lastMediaTool === "video" ? "film" : "image";
+    }
+
     Component.onCompleted: toolbar.refreshPlugins()
 
     Connections {
         target: PluginStore
         function onPluginsChanged() {
             toolbar.refreshPlugins();
+        }
+    }
+
+    // Keep the button's remembered choice in sync with image/video
+    // keyboard shortcuts as well as the popup menu.
+    Connections {
+        target: ToolState
+        function onActiveToolChanged() {
+            if (ToolState.activeTool === "image" || ToolState.activeTool === "video")
+                toolbar.lastMediaTool = ToolState.activeTool;
         }
     }
 
@@ -310,16 +326,130 @@ Rectangle {
             onClicked: ToolState.setActiveTool("text")
         }
 
-        ToolbarButton {
-            iconKind: "image"
-            active: ToolState.activeTool === "image"
-            onClicked: ToolState.setActiveTool("image")
-        }
+        // Media button + type dropdown. The primary action repeats the
+        // last image/video choice, while the chevron changes that choice.
+        Item {
+            id: mediaWrap
+            Layout.preferredWidth: 56
+            Layout.preferredHeight: 32
 
-        ToolbarButton {
-            iconKind: "film"
-            active: ToolState.activeTool === "video"
-            onClicked: ToolState.setActiveTool("video")
+            RowLayout {
+                anchors.fill: parent
+                spacing: 2
+
+                ToolbarButton {
+                    iconKind: toolbar.mediaIcon()
+                    active: ToolState.activeTool === "image" || ToolState.activeTool === "video"
+                    onClicked: {
+                        ToolState.setActiveTool(toolbar.lastMediaTool);
+                        mediaMenu.close();
+                    }
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: 18
+                    Layout.fillHeight: true
+                    radius: AppTheme.radiusSmall
+                    color: mediaChevronMouse.containsMouse || mediaChevronMouse.pressed ? AppTheme.hover : mediaMenu.opened ? AppTheme.hover : "transparent"
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        kind: "caret"
+                        scale: 0.65
+                        rotation: mediaMenu.opened ? 180 : 0
+                        transformOrigin: Item.Center
+                        iconColor: AppTheme.muted
+
+                        Behavior on rotation {
+                            NumberAnimation {
+                                duration: 150
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: mediaChevronMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        onClicked: {
+                            if (mediaMenu.opened)
+                                mediaMenu.close();
+                            else
+                                mediaMenu.open();
+                        }
+                    }
+                }
+            }
+
+            Popup {
+                id: mediaMenu
+                x: Math.round((mediaWrap.width - width) / 2)
+                y: -(implicitHeight + 10)
+                implicitWidth: 180
+                padding: 6
+                closePolicy: Popup.CloseOnEscape
+                transformOrigin: Item.Bottom
+
+                enter: Transition {
+                    NumberAnimation {
+                        property: "opacity"
+                        from: 0
+                        to: 1
+                        duration: 120
+                        easing.type: Easing.OutCubic
+                    }
+                    NumberAnimation {
+                        property: "scale"
+                        from: 0.97
+                        to: 1
+                        duration: 120
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                exit: Transition {
+                    NumberAnimation {
+                        property: "opacity"
+                        from: 1
+                        to: 0
+                        duration: 100
+                        easing.type: Easing.InCubic
+                    }
+                }
+
+                background: Rectangle {
+                    radius: AppTheme.radiusLarge
+                    color: AppTheme.surface
+                    border.width: 1
+                    border.color: AppTheme.border
+                }
+
+                contentItem: ColumnLayout {
+                    spacing: 2
+
+                    ToolbarMenuItem {
+                        iconKind: "image"
+                        label: qsTr("Image")
+                        active: toolbar.lastMediaTool === "image"
+                        onClicked: {
+                            toolbar.lastMediaTool = "image";
+                            ToolState.setActiveTool("image");
+                            mediaMenu.close();
+                        }
+                    }
+                    ToolbarMenuItem {
+                        iconKind: "film"
+                        label: qsTr("Video")
+                        active: toolbar.lastMediaTool === "video"
+                        onClicked: {
+                            toolbar.lastMediaTool = "video";
+                            ToolState.setActiveTool("video");
+                            mediaMenu.close();
+                        }
+                    }
+                }
+            }
         }
 
         // Assets gallery: saved components. Picking a tile arms the
@@ -333,6 +463,13 @@ Rectangle {
                 else
                     assetMenu.open();
             }
+        }
+
+        // Dev tools panel, toggled by the toolbar code button.
+        ToolbarButton {
+            iconKind: "code"
+            active: ToolState.devPanelOpen
+            onClicked: ToolState.devPanelOpen = !ToolState.devPanelOpen
         }
 
         // Plugin tools (ui.slots). Each entry loads one plugin QML file

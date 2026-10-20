@@ -171,15 +171,16 @@ Item {
             width: parent.width
             // A selected clip owns the column: both switchers hide and
             // the clip editor (with its back chevron out) takes over.
-            height: rightPanel.editingClip() ? 0 : 48
-            visible: !rightPanel.editingClip()
+            // The dev panel owns it the same way (toolbar button out).
+            height: rightPanel.editingClip() || ToolState.devPanelOpen ? 0 : 48
+            visible: !rightPanel.editingClip() && !ToolState.devPanelOpen
         }
 
         // Design properties for the selection.
         DesignPanel {
             width: parent.width
             height: parent.height - modeSwitcher.height
-            visible: modeSwitcher.mode === "design"
+            visible: modeSwitcher.mode === "design" && !ToolState.devPanelOpen
             doc: TabState.documentFor(TabState.currentIndex)
         }
 
@@ -187,7 +188,7 @@ Item {
         Column {
             width: parent.width
             height: parent.height - modeSwitcher.height
-            visible: modeSwitcher.mode === "animate"
+            visible: modeSwitcher.mode === "animate" && !ToolState.devPanelOpen
             spacing: 0
 
             AnimateModeSwitcher {
@@ -286,6 +287,15 @@ Item {
                 doc: TabState.documentFor(TabState.currentIndex)
                 drawPolicy: () => rightPanel.startPathDraw()
             }
+        }
+
+        // Dev tools panel, toggled by the toolbar code button. Owns
+        // the column like the clip editor while open.
+        DevPanel {
+            width: parent.width
+            height: parent.height - modeSwitcher.height
+            visible: ToolState.devPanelOpen
+            doc: TabState.documentFor(TabState.currentIndex)
         }
     }
 

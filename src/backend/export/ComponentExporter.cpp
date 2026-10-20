@@ -469,5 +469,3 @@ bool ComponentExporter::exportSelection(const QVariantList &topNodes, const QStr
     }
     return true;
 }
-
-#include "ComponentExporter.moc"

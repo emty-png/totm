@@ -247,7 +247,7 @@ Item {
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
         handlesActive: ToolState.activeTool === "select" && canvas.doc !== null && canvas.penEdit.editUid < 0
-        showFrame: canvas.selBox ? (canvas.selBox.count > 1 || canvas.selBox.rotated || canvas.selBox.singleGroup) : false
+        showFrame: canvas.selBox !== null
         pressPolicy: (hid, cx, cy, mods) => canvas.resizePressed(hid, cx, cy, mods)
         movePolicy: (cx, cy, mods) => canvas.resizeMoved(cx, cy, mods)
         releasePolicy: (cx, cy, mods) => canvas.resizeReleased(cx, cy, mods)
@@ -1606,10 +1606,15 @@ Item {
         id: toolbar
         doc: canvas.doc
         canvas: canvas
+        // Keep the centered tools clear of the fixed bottom-right zoom
+        // pill. At the minimum window width the toolbar shifts left; if
+        // extensions make both controls wider than the viewport, it moves
+        // to its own row above the pill instead.
+        readonly property bool stacksAboveZoom: zoomPill.visible && width + zoomPill.width + 36 > canvas.width
+        x: stacksAboveZoom ? Math.round((parent.width - width) / 2) : Math.round(Math.max(12, Math.min((parent.width - width) / 2, zoomPill.visible ? zoomPill.x - width - 12 : parent.width - width - 12)))
         anchors {
-            horizontalCenter: parent.horizontalCenter
             bottom: parent.bottom
-            bottomMargin: 16
+            bottomMargin: stacksAboveZoom ? zoomPill.height + 28 : 16
         }
     }
 
@@ -1617,6 +1622,7 @@ Item {
     // toolbar pill language; wheel zoom stays the fine control.
     // Hiding lives in the Appearance tab (showZoomPill).
     Rectangle {
+        id: zoomPill
         visible: SettingsStore.showZoomPill
         anchors {
             right: parent.right

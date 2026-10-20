@@ -2,10 +2,14 @@
 
 #include "EffectPainter.h"
 
+#include <QTransform>
+#include <QtMath>
+
 EffectItem::EffectItem(QQuickItem *parent)
     : QQuickPaintedItem(parent)
 {
     setAntialiasing(true);
+    setSmooth(true);
     setFillColor(Qt::transparent);
     setRenderTarget(QQuickPaintedItem::Image);
 }
@@ -15,6 +19,23 @@ void EffectItem::paint(QPainter *painter)
     if (!painter || m_boxW <= 0 || m_boxH <= 0)
         return;
     painter->setRenderHint(QPainter::Antialiasing, true);
+    // Device-scale preview (production pixel-perfect): the QML backing is
+    // size*zoom (textureSize, DPR implicit) and Qt pre-scales this painter
+    // logical->backing. Painting in logical coords would bake cached blur
+    // rasters (outerMask/innerCutter/sharp tile/glyphs, keyed at scale 1)
+    // at 1x and stretch them. Paint in device px instead: identity
+    // transform, device box, scale=ds. Vectors rasterize at screen res and
+    // every cached raster bakes at screen res (keys already carry s).
+    // Export callers are untouched (they pass 1x/2x/3x explicitly).
+    qreal ds = 1.0;
+    if (painter->device() && width() > 0.0 && height() > 0.0) {
+        const qreal sx = qreal(painter->device()->width()) / qreal(width());
+        const qreal sy = qreal(painter->device()->height()) / qreal(height());
+        ds = qMin(sx, sy);
+    }
+    if (!(ds > 0.04) || !(ds < 32.0) || !qIsFinite(ds))
+        ds = 1.0;
+    ds = qBound(0.05, ds, 8.0);
     QVariantMap styleMap;
     styleMap[QStringLiteral("fills")] = m_fills;
     styleMap[QStringLiteral("strokes")] = m_strokes;
@@ -35,17 +56,22 @@ void EffectItem::paint(QPainter *painter)
     const QList<Effects::Glow> gl = Effects::Glow::listFrom(m_glows);
     // Effected text paints the glyph stack (same code export calls, so
     // preview matches video); plain text stays on the GPU QML branch.
+    painter->save();
+    painter->setTransform(QTransform());
+    const QRectF dbox(m_pad * ds, m_pad * ds, m_boxW * ds, m_boxH * ds);
     if (m_shapeType == QStringLiteral("text")) {
         const Effects::TextOpts text = Effects::TextOpts::fromMap(m_textStyle);
-        Effects::paintTextLeaf(painter, QRectF(m_pad, m_pad, m_boxW, m_boxH), text, st, sh, gl, lb,
-            1.0, &m_masks);
+        Effects::paintTextLeaf(painter, dbox, text, st, sh, gl, lb,
+            ds, &m_masks);
+        painter->restore();
         return;
     }
     // Stacked: outer shadows -> outer glows -> fill -> inners -> stroke,
     // then layer-blur mixes the whole stack. Blurred rasters memoize in
     // m_masks (same pixels, skipped recompute); export passes null.
-    Effects::paintLeaf(painter, m_shapeType, QRectF(m_pad, m_pad, m_boxW, m_boxH), opts, st, sh, gl, lb,
-        1.0, &m_masks);
+    Effects::paintLeaf(painter, m_shapeType, dbox, opts, st, sh, gl, lb,
+        ds, &m_masks);
+    painter->restore();
 }
 
 void EffectItem::updatePad()

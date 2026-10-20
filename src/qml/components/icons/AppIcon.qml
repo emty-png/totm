@@ -13,41 +13,68 @@ import QtQuick.Shapes
 //     | "shadeOuter" | "shadeInner" | "blur" | "backdrop"
 //     | "sparkle" | "glowInner" | "grain" | "gear" | "book"
 //     | "gradcap" | "info" | "refresh" | "folder"
-//     | "funnel" | "check"
+//     | "funnel" | "check" | "code"
 Item {
     id: icon
-    width: 16
-    height: 16
 
     property string kind: "close"
     property color iconColor: "#9a9a9a"
+    // Rounded icons supplied for the product. Keep the existing Phosphor
+    // drawings as a fallback for concepts the set does not cover yet, but use
+    // these consistently for shared editing, layer, media and effect actions.
+    // SVG data preserves the caller's dynamic iconColor in both themes.
+    readonly property var roundedPaths: ({
+            "close": '<circle cx="24" cy="24" r="18" fill="currentColor" fill-opacity=".12"/><path d="M17 17L31 31M31 17L17 31" stroke-width="3.5"/>',
+            "plus": '<circle cx="24" cy="24" r="18" fill="currentColor" fill-opacity=".12"/><path d="M24 15V33M15 24H33" stroke-width="3.5"/>',
+            "caret": '<circle cx="24" cy="24" r="18" fill="currentColor" fill-opacity=".12"/><path d="M16 21L24 29L32 21" stroke-width="3.5"/>',
+            "check": '<circle cx="24" cy="24" r="18" fill="currentColor" fill-opacity=".12"/><path d="M15.5 25L21.5 31L33 17.5" stroke-width="3.5"/>',
+            "undo": '<path d="M16 14L8 22L16 30"/><path d="M8 22H28a10 10 0 0 1 0 20H20"/>',
+            "redo": '<g transform="translate(48 0) scale(-1 1)"><path d="M16 14L8 22L16 30"/><path d="M8 22H28a10 10 0 0 1 0 20H20"/></g>',
+            "play": '<path d="M16 10L38 24L16 38Z" fill="currentColor" stroke-width="3"/>',
+            "pause": '<rect x="13" y="10" width="8" height="28" rx="3" fill="currentColor"/><rect x="27" y="10" width="8" height="28" rx="3" fill="currentColor"/>',
+            "export": '<path d="M17 22H12a4 4 0 0 0-4 4V36a4 4 0 0 0 4 4H36a4 4 0 0 0 4-4V26a4 4 0 0 0-4-4H31"/><path d="M24 29V8"/><path d="M17 15L24 8L31 15"/>',
+            "refresh": '<path d="M10.8 19.2A14 14 0 0 1 31 11.9"/><path d="M26.1 14.3L32.7 12.9L30.65 6.5"/><g transform="rotate(180 24 24)"><path d="M10.8 19.2A14 14 0 0 1 31 11.9"/><path d="M26.1 14.3L32.7 12.9L30.65 6.5"/></g>',
+            "folder": '<path d="M6 14a4 4 0 0 1 4-4H18L23 16H38a4 4 0 0 1 4 4V34a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4Z" fill="currentColor" fill-opacity=".12"/>',
+            "square": '<rect x="6" y="12" width="36" height="24" rx="6"/>',
+            "circle": '<ellipse cx="24" cy="24" rx="18" ry="13"/>',
+            "triangle": '<path d="M24 8L42 38H6Z" fill="currentColor" fill-opacity=".12"/>',
+            "star": '<path d="M24 6L28.7 17.5L41.1 18.4L31.6 26.5L34.6 38.6L24 32L13.4 38.6L16.4 26.5L6.9 18.4L19.3 17.5Z" fill="currentColor" fill-opacity=".12"/>',
+            "pen": '<path d="M24 6L36 28L31 38H17L12 28Z" fill="currentColor" fill-opacity=".12"/><path d="M24 6V25"/><circle cx="24" cy="27" r="2.5" fill="currentColor" stroke="none"/><path d="M17 42H31"/>',
+            "text": '<rect x="6" y="6" width="36" height="36" rx="12"/><path d="M16 18H32M24 18V32"/>',
+            "image": '<rect x="6" y="6" width="36" height="36" rx="12"/><circle cx="17" cy="17" r="3.5" fill="currentColor"/><path d="M8 35L19 24L27 32L32 27L40 35" stroke-width="2.8"/>',
+            "film": '<rect x="5" y="10" width="38" height="28" rx="10"/><path d="M20 19.5L30 24L20 28.5Z" fill="currentColor" stroke-width="3"/>',
+            "cursor": '<path d="M12 9V35L19 28.5L24.5 39L29.5 36.5L24.5 26.5H34Z" fill="currentColor"/>',
+            "eye": '<path d="M5 24C10 16 16 12 24 12C32 12 38 16 43 24C38 32 32 36 24 36C16 36 10 32 5 24Z"/><circle cx="24" cy="24" r="6.5"/><circle cx="24" cy="24" r="2" fill="currentColor" stroke="none"/>',
+            "eyeOff": '<path d="M5 24C10 16 16 12 24 12C32 12 38 16 43 24C38 32 32 36 24 36C16 36 10 32 5 24Z"/><circle cx="24" cy="24" r="6.5"/><path d="M9 40L39 8" stroke-width="3.5"/>',
+            "lock": '<path d="M16 21V15a8 8 0 0 1 16 0V21"/><rect x="10" y="21" width="28" height="20" rx="7" fill="currentColor" fill-opacity=".12"/><circle cx="24" cy="30" r="2.5" fill="currentColor" stroke="none"/><path d="M24 32.5V35"/>',
+            "unlock": '<path d="M16 21V13a8 8 0 0 1 16 0V15"/><rect x="10" y="21" width="28" height="20" rx="7" fill="currentColor" fill-opacity=".12"/><circle cx="24" cy="30" r="2.5" fill="currentColor" stroke="none"/><path d="M24 32.5V35"/>',
+            "corner": '<path d="M8 40V24a16 16 0 0 1 16-16H40"/><circle cx="24" cy="24" r="2" fill="currentColor" stroke="none"/><path d="M24 24L14.5 14.5" stroke-dasharray="0.1 5"/>',
+            "rotate": '<path d="M10 24A14 14 0 1 1 24 38"/><path d="M27 34L22 38L27 42"/>',
+            "flipH": '<path d="M24 6V42" stroke-dasharray="0.1 5"/><path d="M18 14L6 38H18Z" fill="currentColor" fill-opacity=".12"/><path d="M30 14L42 38H30Z"/>',
+            "flipV": '<g transform="rotate(90 24 24)"><path d="M24 6V42" stroke-dasharray="0.1 5"/><path d="M18 14L6 38H18Z" fill="currentColor" fill-opacity=".12"/><path d="M30 14L42 38H30Z"/></g>',
+            "contrast": '<path d="M24 8A16 16 0 0 0 24 40Z" fill="currentColor"/><circle cx="24" cy="24" r="16"/>',
+            "blur": '<g stroke="none"><rect x="4" y="4" width="40" height="40" rx="15" fill="currentColor" fill-opacity=".07"/><rect x="8" y="8" width="32" height="32" rx="12" fill="currentColor" fill-opacity=".13"/><rect x="12" y="12" width="24" height="24" rx="9" fill="currentColor" fill-opacity=".25"/><rect x="16" y="16" width="16" height="16" rx="6" fill="currentColor" fill-opacity=".5"/><rect x="20" y="20" width="8" height="8" rx="3" fill="currentColor"/></g>',
+            "grain": '<rect x="6" y="6" width="36" height="36" rx="12"/><g fill="currentColor" stroke="none"><circle cx="16" cy="16" r="1.8"/><circle cx="26" cy="13" r="1.4"/><circle cx="33" cy="19" r="1.8"/><circle cx="20" cy="24" r="1.4"/><circle cx="29" cy="27" r="1.8"/><circle cx="14" cy="31" r="1.5"/><circle cx="24" cy="34" r="1.8"/><circle cx="34" cy="34" r="1.3"/><circle cx="37" cy="26" r="1.1"/><circle cx="11" cy="22" r="1.1"/></g>',
+            "code": '<path d="M14 16L8 24L14 32"/><path d="M34 16L40 24L34 32"/><path d="M28 14L20 34"/>'
+        })
+    readonly property bool useRoundedIcon: icon.roundedPaths[icon.kind] !== undefined
 
-    component PhShape: Shape {
-        id: shape
-        required property string svg
-        required property bool active
-        required property double box
-        required property color paint
-        visible: active
+    function roundedSvg(body) {
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" color="' + String(icon.iconColor) + '" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' + body + '</svg>';
+        return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+    }
+
+    width: 16
+    height: 16
+
+    Image {
+        id: roundedIcon
+
         anchors.fill: parent
-        antialiasing: true
-        // Curve rendering holds up better than triangulated geometry
-        // for thin detailed paths (notably the text T) at small sizes.
-        preferredRendererType: Shape.CurveRenderer
-        transform: Scale {
-            xScale: shape.box / 256
-            yScale: shape.box / 256
-            origin.x: 0
-            origin.y: 0
-        }
-
-        ShapePath {
-            fillColor: shape.paint
-            strokeColor: "transparent"
-            PathSvg {
-                path: shape.svg
-            }
-        }
+        visible: icon.useRoundedIcon
+        source: visible ? icon.roundedSvg(icon.roundedPaths[icon.kind]) : ""
+        fillMode: Image.PreserveAspectFit
+        smooth: true
     }
 
     // Minus
@@ -157,18 +184,21 @@ Item {
         paint: icon.iconColor
         svg: "M40,40H120V72H72V120H40Z"
     }
+
     PhShape {
         active: icon.kind === "cornerTR"
         box: icon.width
         paint: icon.iconColor
         svg: "M136,40H216V120H184V72H136Z"
     }
+
     PhShape {
         active: icon.kind === "cornerBR"
         box: icon.width
         paint: icon.iconColor
         svg: "M184,136H216V216H136V184H184Z"
     }
+
     PhShape {
         active: icon.kind === "cornerBL"
         box: icon.width
@@ -501,5 +531,37 @@ Item {
         box: icon.width
         paint: icon.iconColor
         svg: "M216,72H131.31L104,44.69A15.86,15.86,0,0,0,92.69,40H40A16,16,0,0,0,24,56V200.62A15.4,15.4,0,0,0,39.38,216H216.89A15.13,15.13,0,0,0,232,200.89V88A16,16,0,0,0,216,72ZM40,56H92.69l16,16H40ZM216,200H40V88H216Z"
+    }
+
+    component PhShape: Shape {
+        id: shape
+
+        required property string svg
+        required property bool active
+        required property double box
+        required property color paint
+
+        visible: active && !icon.useRoundedIcon
+        anchors.fill: parent
+        antialiasing: true
+        // Curve rendering holds up better than triangulated geometry
+        // for thin detailed paths (notably the text T) at small sizes.
+        preferredRendererType: Shape.CurveRenderer
+
+        ShapePath {
+            fillColor: shape.paint
+            strokeColor: "transparent"
+
+            PathSvg {
+                path: shape.svg
+            }
+        }
+
+        transform: Scale {
+            xScale: shape.box / 256
+            yScale: shape.box / 256
+            origin.x: 0
+            origin.y: 0
+        }
     }
 }

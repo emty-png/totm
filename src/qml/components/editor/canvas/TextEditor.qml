@@ -22,6 +22,10 @@ Item {
     // Document owning the open edit transaction. Tracked separately so
     // tab switches end the gesture on the old doc, never the new one.
     property var editDoc: null
+    // Closing moves focus off the native text input before hiding it.
+    // Wayland's text-input-v3 backend otherwise receives a disable for a
+    // surface after that surface has already lost focus.
+    property bool endingEdit: false
 
     // Render-free measurer for text boxes (creation sizing and edit
     // growth). Bindings re-evaluate on read, so setting font/text then
@@ -97,7 +101,7 @@ Item {
             }
         }
         onActiveFocusChanged: {
-            if (!editor.activeFocus && textEditor.editingUid >= 0)
+            if (!editor.activeFocus && !textEditor.endingEdit && textEditor.editingUid >= 0)
                 textEditor.commitTextEdit();
         }
         Keys.onEscapePressed: event => {
@@ -225,6 +229,11 @@ Item {
     function commitTextEdit() {
         if (textEditor.editingUid < 0)
             return;
+        textEditor.endingEdit = true;
+        // Transfer focus while the TextEdit is still visible. This keeps
+        // the Wayland input surface valid when Qt disables text input.
+        if (editor.activeFocus && textEditor.canvas.visible)
+            textEditor.canvas.forceActiveFocus();
         textEditor.editingUid = -1;
         // editDoc may belong to a closed tab (destroyed): ending there
         // must never throw, the edit is simply already gone.
@@ -234,10 +243,16 @@ Item {
         } catch (e) {}
         textEditor.editDoc = null;
         textEditor.canvas.forceActiveFocus();
+        textEditor.endingEdit = false;
     }
     function cancelTextEdit() {
         if (textEditor.editingUid < 0)
             return;
+        textEditor.endingEdit = true;
+        // See commitTextEdit(): release the native text input before its
+        // QML item is hidden, so Wayland observes a valid focus surface.
+        if (editor.activeFocus && textEditor.canvas.visible)
+            textEditor.canvas.forceActiveFocus();
         var uid = textEditor.editingUid;
         var back = textEditor.editStart;
         var backRuns = textEditor.editStartRuns;
@@ -256,6 +271,7 @@ Item {
         } catch (e) {}
         textEditor.editDoc = null;
         textEditor.canvas.forceActiveFocus();
+        textEditor.endingEdit = false;
     }
     // Measured writeback for auto-size boxes. Joins the ambient gesture
     // when one is open (typing, font edits), else commits a single entry

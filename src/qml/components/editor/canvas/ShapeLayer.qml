@@ -40,6 +40,20 @@ Item {
     readonly property real previewTime: layerRoot.doc && layerRoot.doc.anim ? Number(layerRoot.doc.anim.currentTime || 0) : 0
     readonly property bool previewPlaying: layerRoot.doc && layerRoot.doc.anim ? layerRoot.doc.anim.playing === true : false
 
+    // All CPU-painted delegates reset their painter transform and use one
+    // device scale. Keep the backing isotropic and cap total pixels, not just
+    // each side, so a large masked scene cannot allocate several 8192² images.
+    function previewTextureSize(itemWidth, itemHeight, maxZoom, maxPixels) {
+        var w = Math.max(1, Number(itemWidth) || 1);
+        var h = Math.max(1, Number(itemHeight) || 1);
+        var z = Number(layerRoot.zoom);
+        if (!isFinite(z))
+            z = 1;
+        z = Math.max(0.05, Math.min(maxZoom, z));
+        var s = Math.min(z, 8192 / w, 8192 / h, Math.sqrt(maxPixels / (w * h)));
+        return Qt.size(Math.max(1, Math.floor(w * s)), Math.max(1, Math.floor(h * s)));
+    }
+
     // Plain sampled map for the CPU mask preview (same keys as export
     // snapshots, including kind: ShapePath::isCombinableNode requires
     // kind == "shape", so boolean preview breaks without it). Reads
@@ -574,6 +588,7 @@ Item {
                 id: boolPaint
 
                 anchors.fill: parent
+                textureSize: layerRoot.previewTextureSize(width, height, 8, 16 * 1024 * 1024)
                 opacity: boolWrap.groupOpacity
                 childMaps: boolWrap.kidMaps
                 boolOp: groupNode ? (groupNode.boolOp || "union") : "union"
@@ -727,6 +742,7 @@ Item {
                 anchors.fill: parent
                 visible: boolPaint.hasShader
                 opacity: 1
+                zoom: layerRoot.zoom
                 baseOpacity: boolWrap.groupOpacity
                 presetId: boolPaint.shaderPreset
                 mode: boolPaint.shaderMode
@@ -761,6 +777,7 @@ Item {
             y: (boundRect ? boundRect.y : 0) - pad
             width: Math.max(1, (boundRect ? boundRect.w : 1) + pad * 2)
             height: Math.max(1, (boundRect ? boundRect.h : 1) + pad * 2)
+            textureSize: layerRoot.previewTextureSize(width, height, 8, 16 * 1024 * 1024)
             z: layerRoot.framePaintZ(groupUid)
             visible: {
                 if (layerRoot.doc)
@@ -800,6 +817,9 @@ Item {
             y: 0
             width: layerRoot.doc ? layerRoot.doc.sceneWidth : 0
             height: layerRoot.doc ? layerRoot.doc.sceneHeight : 0
+            // Mask rendering holds two full-size CPU intermediates in addition
+            // to the painted backing, so it shares the 16 MP budget.
+            textureSize: layerRoot.previewTextureSize(width, height, 4, 16 * 1024 * 1024)
             z: modelData.z
             readonly property var leafNode: layerRoot.doc ? layerRoot.doc.findNode(modelData.uid) : null
             visible: {

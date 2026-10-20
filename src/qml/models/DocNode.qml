@@ -182,4 +182,9 @@ QtObject {
 
     // Group children (array of DocNode, top-first). Empty for shapes.
     property var children: []
+    // Script ownership for live-linked dev scripts ("": hand-owned).
+    // Nodes created by a script Run carry the script's id; re-runs
+    // replace nodes with a matching scriptId, paste/duplicate clears
+    // it so copies become hand-owned. Never painted, only reconciled.
+    property string scriptId: ""
 }

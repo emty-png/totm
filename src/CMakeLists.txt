@@ -72,6 +72,8 @@ qt_add_qml_module(totm
         backend/plugins/PluginStore.h
         backend/plugins/PluginStore.cpp
         backend/plugins/PluginNetworkGuard.h
+        backend/script/ScriptRunner.h
+        backend/script/ScriptRunner.cpp
         backend/crash/CrashReporter.h
         backend/crash/CrashReporter.cpp
         backend/crash/CrashHandler.h
@@ -117,6 +119,7 @@ qt_add_qml_module(totm
         qml/models/document/DocAnim.qml
         qml/models/document/DocPropCopy.qml
         qml/models/document/DocAssets.qml
+        qml/models/document/DocScript.qml
         qml/models/document/DocAudio.qml
         # Canvas + snapping
         qml/components/editor/snap/SnapEngine.qml
@@ -246,6 +249,9 @@ qt_add_qml_module(totm
         qml/components/editor/EditorBottomPanel.qml
         qml/components/editor/EditorCanvas.qml
         qml/components/editor/properties/DesignPanel.qml
+        qml/components/editor/properties/DevPanel.qml
+        qml/components/editor/properties/ScriptEditor.qml
+        qml/components/editor/properties/ScriptHighlight.qml
         qml/components/editor/properties/ExportSection.qml
         # Fields
         qml/components/fields/NumberField.qml
@@ -402,6 +408,7 @@ target_include_directories(totm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/svg
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/text
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/plugins
+    ${CMAKE_CURRENT_SOURCE_DIR}/backend/script
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/crash
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/cursors
     ${CMAKE_CURRENT_SOURCE_DIR}/backend/shaders
@@ -459,6 +466,7 @@ endif()
 # macOS via bundle Contents/Resources (exeDir/../Resources probe).
 set(TOTM_DOC_FILES
     "${PROJECT_SOURCE_DIR}/src/docs/PLUG_IN.html"
+    "${PROJECT_SOURCE_DIR}/src/docs/DEV_SCRIPT.html"
     "${PROJECT_SOURCE_DIR}/src/docs/CREDITS.html"
     "${PROJECT_SOURCE_DIR}/src/docs/CONTRIBUTORS.html"
     "${PROJECT_SOURCE_DIR}/src/docs/CHANGELOG.html"

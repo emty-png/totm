@@ -16,6 +16,10 @@ QtObject {
     property int pathTargetUid: -1
     property int pathClipId: -1
 
+    // Dev tools panel in the right sidebar, toggled by the toolbar
+    // code button. Independent of the canvas tool and editor mode.
+    property bool devPanelOpen: false
+
     readonly property bool pathDrawing: toolState.activeTool === "path"
 
     function setActiveTool(tool) {

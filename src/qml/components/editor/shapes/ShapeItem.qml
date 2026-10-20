@@ -108,6 +108,20 @@ Item {
     property bool shapeLocked: false
     property int paintDepth: 0
     property real zoom: 1
+
+    // Keep the backing scale isotropic: CPU paint works in device pixels and
+    // cannot safely compensate for a one-axis texture cap. The 16 MP limit
+    // bounds the paint texture (and any blur intermediates) at extreme zoom.
+    function effectTextureSize(itemWidth, itemHeight) {
+        var w = Math.max(1, Number(itemWidth) || 1);
+        var h = Math.max(1, Number(itemHeight) || 1);
+        var z = Number(shape.zoom);
+        if (!isFinite(z))
+            z = 1;
+        z = Math.max(0.05, Math.min(8, z));
+        var s = Math.min(z, 8192 / w, 8192 / h, Math.sqrt((16 * 1024 * 1024) / (w * h)));
+        return Qt.size(Math.max(1, Math.floor(w * s)), Math.max(1, Math.floor(h * s)));
+    }
     // Masks never paint but stay hit-testable; masked content lands on
     // the CPU MaskLeafItem so preview matches export.
     property bool isMaskShape: false
@@ -337,6 +351,12 @@ Item {
             y: -effectPaint.pad
             width: shape.sw + effectPaint.pad * 2
             height: shape.sh + effectPaint.pad * 2
+            // Pixel-perfect at any canvas zoom: the parent ShapeLayer scales
+            // by `zoom`, so a logical-size backing texture would stretch.
+            // textureSize paints in item coords scaled to backing pixels
+            // (DPR implicit), so size*zoom lands 1:1 on screen. Capped to
+            // bound memory at extreme zoom (smooth filtering handles the rest).
+            textureSize: shape.effectTextureSize(width, height)
             visible: shape.useEffectPaint && !shape.paintHidden
             opacity: shape.shapeOpacity
             shapeType: shape.shapeType
@@ -530,6 +550,7 @@ Item {
             y: -effectText.pad
             width: shape.sw + effectText.pad * 2
             height: shape.sh + effectText.pad * 2
+            textureSize: shape.effectTextureSize(width, height)
             visible: shape.useTextEffectPaint
             opacity: 1
             shapeType: "text"
@@ -907,6 +928,7 @@ Item {
         y: -imageEffectPaint.pad
         width: shape.sw + imageEffectPaint.pad * 2
         height: shape.sh + imageEffectPaint.pad * 2
+        textureSize: shape.effectTextureSize(width, height)
         visible: shape.useImageEffectPaint && !shape.paintHidden
         opacity: shape.shapeOpacity
         boxW: shape.sw
@@ -1165,6 +1187,7 @@ Item {
         y: -videoEffectPaint.pad
         width: shape.sw + videoEffectPaint.pad * 2
         height: shape.sh + videoEffectPaint.pad * 2
+        textureSize: shape.effectTextureSize(width, height)
         visible: shape.useVideoEffectPaint && !shape.paintHidden
         opacity: shape.shapeOpacity
         boxW: shape.sw
@@ -1234,6 +1257,7 @@ Item {
         anchors.fill: parent
         visible: shape.hasShader
         opacity: 1
+        zoom: shape.zoom
         baseOpacity: shape.shapeOpacity
         presetId: shape.resolvedPreset
         mode: shape.resolvedMode
@@ -1252,18 +1276,6 @@ Item {
         // No flip transform: the overlay shares baseContent coords, whose
         // children already mirror, so an extra Scale would unflip fill
         // output and misalign overlay output.
-    }
-
-    // Selection outline: constant screen size at any zoom (selection bbox).
-    Rectangle {
-        visible: shape.selected
-        x: -3 / shape.zoom
-        y: -3 / shape.zoom
-        width: parent.width + 6 / shape.zoom
-        height: parent.height + 6 / shape.zoom
-        color: "transparent"
-        border.width: 1.5 / shape.zoom
-        border.color: AppTheme.selection
     }
 
     MouseArea {

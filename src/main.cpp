@@ -1,5 +1,6 @@
 #include <QDebug>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QFont>
 #include <QFontDatabase>
@@ -7,6 +8,7 @@
 #include <QGuiApplication>
 #include <QHash>
 #include <QIcon>
+#include <QJsonDocument>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QProcess>
@@ -24,6 +26,46 @@
 #include "CrashHandler.h"
 #include "CrashReporter.h"
 #include "PluginNetworkGuard.h"
+#include "ScriptRunner.h"
+
+// Headless dev-script evaluation (see ScriptRunner): evaluates one JS
+// file in an isolated engine and prints the compact-JSON result to
+// stdout, always exiting 0 after printing (a crash — no output — is
+// how the parent detects helper death). pickResults maps pick-call
+// order to stored blob names for replay runs. Runs before any GUI init
+// so hung scripts die with the helper process, never the UI.
+int runScriptEvalFile(const QString &path, const QVariantMap &pickResults)
+{
+    QVariantMap result;
+    QFile staged(path);
+    // Never read an unbounded staging file: ScriptRunner::run already
+    // caps what it stages, so anything bigger is hostile or stale.
+    if (QFileInfo(path).size() > ScriptBridge::kMaxSourceChars) {
+        result[QStringLiteral("ok")] = false;
+        result[QStringLiteral("error")] = QStringLiteral("Script too large");
+        result[QStringLiteral("line")] = 0;
+    } else if (!staged.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        result[QStringLiteral("ok")] = false;
+        result[QStringLiteral("error")] = QStringLiteral("Could not read the staged script");
+        result[QStringLiteral("line")] = 0;
+    } else {
+        result = evaluateScriptSource(QString::fromUtf8(staged.readAll()), pickResults);
+    }
+    QByteArray out = QJsonDocument::fromVariant(result).toJson(QJsonDocument::Compact);
+    // Backstop so the parent never parses unbounded IPC, even if the
+    // per-call caps are ever loosened without updating this path.
+    if (out.size() > ScriptBridge::kMaxOutputBytes) {
+        QVariantMap tooBig;
+        tooBig[QStringLiteral("ok")] = false;
+        tooBig[QStringLiteral("error")] = QStringLiteral("Script output too large");
+        tooBig[QStringLiteral("line")] = 0;
+        out = QJsonDocument::fromVariant(tooBig).toJson(QJsonDocument::Compact);
+    }
+    fwrite(out.constData(), 1, static_cast<size_t>(out.size()), stdout);
+    fputc('\n', stdout);
+    fflush(stdout);
+    return 0;
+}
 
 static CrashReporter *g_crashReporter = nullptr;
 
@@ -226,6 +268,31 @@ int main(int argc, char *argv[])
         const QSettings early(QStringLiteral("tot"), QStringLiteral("totm"));
         if (early.value(QStringLiteral("general/lowSpec"), false).toBool())
             qputenv("QSG_RENDER_LOOP", QByteArrayLiteral("basic"));
+    }
+
+    // Headless script-eval helper (spawned by ScriptRunner per Run).
+    // QCoreApplication only: no display, no single-instance, no crash
+    // UI. Must precede QGuiApplication construction below.
+    {
+        QString staged;
+        QString picksFile;
+        for (int i = 1; i < argc; ++i) {
+            if (qstrcmp(argv[i], "--script-eval") == 0 && i + 1 < argc)
+                staged = QString::fromLocal8Bit(argv[i + 1]);
+            if (qstrcmp(argv[i], "--picks") == 0 && i + 1 < argc)
+                picksFile = QString::fromLocal8Bit(argv[i + 1]);
+        }
+        if (!staged.isEmpty()) {
+            QCoreApplication helper(argc, argv);
+            helper.setApplicationName(QStringLiteral("totm"));
+            QVariantMap pickResults;
+            if (!picksFile.isEmpty() && QFileInfo(picksFile).size() <= 65536) {
+                QFile pf(picksFile);
+                if (pf.open(QIODevice::ReadOnly | QIODevice::Text))
+                    pickResults = QJsonDocument::fromJson(pf.readAll()).toVariant().toMap();
+            }
+            return runScriptEvalFile(staged, pickResults);
+        }
     }
 
     QGuiApplication app(argc, argv);

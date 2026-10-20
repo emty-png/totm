@@ -4,11 +4,14 @@
 #include "FramePaint.h"
 
 #include <QPainter>
+#include <QTransform>
+#include <QtMath>
 
 ImageEffectItem::ImageEffectItem(QQuickItem *parent)
     : QQuickPaintedItem(parent)
 {
     setAntialiasing(true);
+    setSmooth(true);
     setFillColor(Qt::transparent);
     setRenderTarget(QQuickPaintedItem::Image);
 }
@@ -67,10 +70,25 @@ void ImageEffectItem::paint(QPainter *painter)
 
     // Dummy backdrop tile: never sampled (background disabled), but
     // paintLeaf requires a frame reference.
+    // Device-scale preview like EffectItem: FramePaint scales geometry by
+    // `scale` internally, so pass the backing scale with logical maps and
+    // paint under identity (no double-scale from Qt's auto transform).
+    qreal ds = 1.0;
+    if (painter->device() && width() > 0.0 && height() > 0.0) {
+        const qreal sx = qreal(painter->device()->width()) / qreal(width());
+        const qreal sy = qreal(painter->device()->height()) / qreal(height());
+        ds = qMin(sx, sy);
+    }
+    if (!(ds > 0.04) || !(ds < 32.0) || !qIsFinite(ds))
+        ds = 1.0;
+    ds = qBound(0.05, ds, 8.0);
     static QImage s_dummy(1, 1, QImage::Format_ARGB32_Premultiplied);
     s_dummy.fill(Qt::transparent);
     QImage frame = s_dummy;
-    FramePaint::paintLeaf(*painter, frame, leaf, 0.0, 0.0, 1.0, m_frameNo);
+    painter->save();
+    painter->setTransform(QTransform());
+    FramePaint::paintLeaf(*painter, frame, leaf, 0.0, 0.0, ds, m_frameNo);
+    painter->restore();
 }
 
 void ImageEffectItem::updatePad()

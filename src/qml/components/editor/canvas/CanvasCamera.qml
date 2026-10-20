@@ -11,7 +11,10 @@ QtObject {
 
     function zoomAt(mx, my, dy) {
         // Scroll-up zooms in: Qt wheel deltas run positive on scroll-up.
-        var next = canvas.clampZoom(canvas.zoom * Math.exp(dy * 0.0018));
+        // A 120-unit wheel step should make a clearly useful change.  The
+        // old curve only changed scale by ~24%, which made both Ctrl-wheel
+        // and the canvas zoom buttons feel sluggish.
+        var next = canvas.clampZoom(canvas.zoom * Math.exp(dy * 0.0034));
         if (next === canvas.zoom)
             return;
         var ratio = next / canvas.zoom;

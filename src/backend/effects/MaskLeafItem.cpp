@@ -3,12 +3,13 @@
 #include "FramePaint.h"
 
 #include <QPainter>
+#include <QTransform>
+#include <QtMath>
 
 MaskLeafItem::MaskLeafItem(QQuickItem *parent)
     : QQuickPaintedItem(parent) {
     setAntialiasing(true);
     setSmooth(true);
-    setMipmap(true);
     setFillColor(Qt::transparent);
 }
 
@@ -29,7 +30,24 @@ void MaskLeafItem::paint(QPainter *painter) {
     const double h = leaf.value(QStringLiteral("h"), 0.0).toDouble();
     if (!(w > 0 && h > 0))
         return;
-    const QSize size(qMax(1, qRound(width())), qMax(1, qRound(height())));
+    // Device-scale preview like EffectItem: the backing is scene*zoom and
+    // Qt pre-scales this painter. Bake mask silhouettes and the leaf layer
+    // at backing res (scale=ds) and composite 1:1 under identity so zoom
+    // never stretches a 1x raster.
+    qreal ds = 1.0;
+    if (painter->device() && width() > 0.0 && height() > 0.0) {
+        const qreal sx = qreal(painter->device()->width()) / qreal(width());
+        const qreal sy = qreal(painter->device()->height()) / qreal(height());
+        ds = qMin(sx, sy);
+    }
+    if (!(ds > 0.04) || !(ds < 32.0) || !qIsFinite(ds))
+        ds = 1.0;
+    ds = qBound(0.05, ds, 4.0);
+    // Allocate only the actual, budgeted QQuickPaintedItem backing. Rebuilding
+    // this from width * ds can exceed a capped backing on one axis.
+    const QSize size = painter->device()
+        ? QSize(qMax(1, painter->device()->width()), qMax(1, painter->device()->height()))
+        : QSize(qMax(1, qRound(width() * ds)), qMax(1, qRound(height() * ds)));
     if (size.isEmpty())
         return;
 
@@ -54,7 +72,7 @@ void MaskLeafItem::paint(QPainter *painter) {
 
     QImage combined;
     for (const QVariantMap &mm : active) {
-        const QImage mi = FramePaint::maskSilhouette(mm, 0.0, 0.0, 1.0, size);
+        const QImage mi = FramePaint::maskSilhouette(mm, 0.0, 0.0, ds, size);
         if (mi.isNull())
             return;
         if (combined.isNull()) {
@@ -76,14 +94,17 @@ void MaskLeafItem::paint(QPainter *painter) {
         lp.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
         // Backdrop blur inside masks samples the temp (transparent),
         // not the scene behind: same documented v1 limitation as export.
-        FramePaint::paintLeaf(lp, layer, leaf, 0.0, 0.0, 1.0, m_frameNo);
+        FramePaint::paintLeaf(lp, layer, leaf, 0.0, 0.0, ds, m_frameNo);
     }
     {
         QPainter ap(&layer);
         ap.setCompositionMode(QPainter::CompositionMode_DestinationIn);
         ap.drawImage(0, 0, combined);
     }
-    painter->drawImage(QRectF(0, 0, width(), height()), layer);
+    painter->save();
+    painter->setTransform(QTransform());
+    painter->drawImage(0, 0, layer);
+    painter->restore();
 }
 
 QVariantMap MaskLeafItem::leaf() const {

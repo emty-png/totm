@@ -168,6 +168,9 @@ QVariantMap entryToScene(const QVariantMap &scene) {
     out[QStringLiteral("nodes")] = scene.value(QStringLiteral("nodes"), QVariantList());
     out[QStringLiteral("anim")] = scene.value(QStringLiteral("anim"), QVariantMap());
     out[QStringLiteral("audio")] = scene.value(QStringLiteral("audio"), QVariantMap());
+    // Live-linked dev script source ({html, css, js} strings). Absent on
+    // old scenes (defaults to empty); QML restores it outside undo.
+    out[QStringLiteral("script")] = scene.value(QStringLiteral("script"), QVariantMap());
     return out;
 }
 

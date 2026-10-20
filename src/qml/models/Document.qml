@@ -31,6 +31,16 @@ QtObject {
     property var drillPath: []
     property var rootChildren: []
     property var leafList: []
+    // Live-linked dev script source for this design ({html, css, js}).
+    // Typing updates it without checkpointing, so script edits never
+    // stage undo entries; Run checkpoints once for its node output.
+    // Saved with the scene (snapshotSceneForSave), never in undo
+    // snapshots, so Ctrl+Z rewinds nodes but keeps your code.
+    property var script: ({
+            html: "",
+            css: "",
+            js: ""
+        })
 
     readonly property Component nodeFactory: Component {
         DocNode {}
@@ -94,6 +104,9 @@ QtObject {
         doc: root
     }
     property var assets: DocAssets {
+        doc: root
+    }
+    property var devScript: DocScript {
         doc: root
     }
 
@@ -520,6 +533,18 @@ QtObject {
     }
     function snapshotScene() {
         return clipboard.snapshotScene();
+    }
+    // Save-time snapshot: undo snapshot plus the dev script source.
+    // Only the save/export path uses this, so script text rides the
+    // design file and .totm bundles without entering undo history.
+    function snapshotSceneForSave() {
+        var scene = clipboard.snapshotScene();
+        scene.script = {
+            html: String((root.script ?? {}).html ?? ""),
+            css: String((root.script ?? {}).css ?? ""),
+            js: String((root.script ?? {}).js ?? "")
+        };
+        return scene;
     }
     function assetPayload(includeAnims) {
         return assets.assetPayload(includeAnims);

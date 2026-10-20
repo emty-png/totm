@@ -82,7 +82,12 @@ QtObject {
             anim: {
                 duration: SettingsStore.defaultDuration
             },
-            audio: {}
+            audio: {},
+            script: {
+                html: "",
+                css: "",
+                js: ""
+            }
         });
         tabState.openDesign(designId);
     }
@@ -150,7 +155,7 @@ QtObject {
         var uid = tabState.tabs.get(modelIndex).uid;
         var doc = tabState.documents[uid];
         if (doc)
-            LibraryStore.saveScene(designId, doc.snapshotScene());
+            LibraryStore.saveScene(designId, doc.snapshotSceneForSave());
     }
 
     function saveAllOpen() {

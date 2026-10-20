@@ -44,6 +44,23 @@ Item {
     property string customTint: "#ffffff"
     property real customOpacity: 1
     property real customSpeed: 1
+    // Canvas zoom for pixel-perfect capture: the parent ShapeLayer scales
+    // by zoom, so a logical-size ShaderEffectSource would stretch.
+    property real zoom: 1
+
+    // Shader sampling tolerates a lower-resolution capture, but use the same
+    // uniform 16 MP cap as CPU-painted sources to avoid one-axis distortion
+    // and unbounded GPU allocations on large canvases.
+    function sourceTextureSize(itemWidth, itemHeight) {
+        var w = Math.max(1, Number(itemWidth) || 1);
+        var h = Math.max(1, Number(itemHeight) || 1);
+        var z = Number(overlay.zoom);
+        if (!isFinite(z))
+            z = 1;
+        z = Math.max(0.05, Math.min(8, z));
+        var s = Math.min(z, 8192 / w, 8192 / h, Math.sqrt((16 * 1024 * 1024) / (w * h)));
+        return Qt.size(Math.max(1, Math.floor(w * s)), Math.max(1, Math.floor(h * s)));
+    }
 
     readonly property bool known: overlay.presetId === "plasma" || overlay.presetId === "aurora" || overlay.presetId === "clouds" || overlay.presetId === "kaleidoscope" || overlay.presetId === "scanlines" || overlay.presetId === "fire" || overlay.presetId === "nebula" || overlay.presetId === "vortex" || overlay.presetId === "matrix"
     readonly property bool customReady: overlay.presetId === "custom" && overlay.customVertUrl !== "" && overlay.customFragUrl !== ""
@@ -89,7 +106,7 @@ Item {
         sourceItem: overlay.sourceItem
         hideSource: overlay.active && overlay.isFill && overlay.fillReady
         live: overlay.active
-        textureSize: Qt.size(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)))
+        textureSize: overlay.sourceTextureSize(width, height)
     }
 
     // Plasma fill branch: fixed URLs, visibility flips on preset/mode change.

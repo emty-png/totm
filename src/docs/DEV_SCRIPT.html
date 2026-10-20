@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Scripting Guide</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect x='32' y='32' width='192' height='192' rx='45.1' fill='%23000000'/%3E%3Cpolygon points='181.25,77 152.75,77 104.75,178.25 133.25,178.25' fill='%23ffffff'/%3E%3Ccircle cx='83' cy='163.62' r='9.56' fill='%23ffffff'/%3E%3C/svg%3E">
+
+  <!-- Prevent theme flash (FOUC) by applying saved preference before first paint -->
+  <script>
+    (function () {
+      try {
+        const saved = localStorage.getItem("totm-guide-theme");
+        if (saved === "light" || saved === "dark") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <style>
+    /* ==========================================================================
+       Design Tokens & Theme Variables
+       ========================================================================== */
+    :root {
+      color-scheme: dark light;
+      --background: #1e1e1e;
+      --foreground: #f6f6f6;
+      --surface: #2e2e2e;
+      --border: #3e3e46;
+      --muted: #9a9a9a;
+      --hover: #3e3e46;
+      --canvas: #101010;
+      --accent: #0d99ff;
+      --radius: 12px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        color-scheme: light;
+        --background: #ffffff;
+        --foreground: #0f0f0f;
+        --surface: #fffde0;
+        --border: #000000;
+        --muted: #5a5a5a;
+        --hover: #f0ead0;
+        --canvas: #ececec;
+      }
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --background: #ffffff;
+      --foreground: #0f0f0f;
+      --surface: #fffde0;
+      --border: #000000;
+      --muted: #5a5a5a;
+      --hover: #f0ead0;
+      --canvas: #ececec;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+    }
+
+    /* ==========================================================================
+       Reset & Base Styles
+       ========================================================================== */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font: 16px/1.65 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    p,
+    li {
+      color: var(--foreground);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    /* ==========================================================================
+       Layout
+       ========================================================================== */
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+    }
+
+    /* ==========================================================================
+       Theme Toggle Button
+       ========================================================================== */
+    .theme-toggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 10;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--foreground);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .theme-toggle:hover {
+      background: var(--hover);
+    }
+
+    .theme-toggle:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      display: block;
+    }
+
+    /* ==========================================================================
+       Hero Section & Headings
+       ========================================================================== */
+    header.hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+
+    header.hero p {
+      color: var(--muted);
+      margin: 8px 0 0;
+    }
+
+    h1 {
+      font-size: 32px;
+      margin: 0;
+      letter-spacing: -0.5px;
+    }
+
+    h1 .accent {
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      margin: 40px 0 12px;
+      letter-spacing: -0.3px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 17px;
+      margin: 24px 0 8px;
+    }
+
+    /* ==========================================================================
+       Table of Contents
+       ========================================================================== */
+    .toc {
+      list-style: none;
+      padding: 0;
+      margin: 16px 0 0;
+      columns: 2;
+      font-size: 14.5px;
+    }
+
+    .toc li {
+      margin: 4px 0;
+      break-inside: avoid;
+    }
+
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       Cards, Tables & Code
+       ========================================================================== */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      margin: 16px 0;
+    }
+
+    .card > :first-child {
+      margin-top: 0;
+    }
+
+    .card > :last-child {
+      margin-bottom: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 14.5px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    }
+
+    code {
+      font-size: 0.86em;
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1px 6px;
+    }
+
+    pre {
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .perm {
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    .warn {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 14.5px;
+    }
+
+    kbd {
+      font-family: inherit;
+      font-size: 0.86em;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0 6px;
+      background: var(--surface);
+    }
+  </style>
+</head>
+<body>
+  <button class="theme-toggle" id="themeToggle" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+
+  <main class="wrap">
+    <header class="hero">
+      <h1>Scripting for <span class="accent">totm</span></h1>
+      <p>The maker guide: HTML elements, CSS properties, and the sandboxed JS API compile to native nodes + clips.</p>
+      <nav aria-label="Table of contents">
+        <ul class="toc">
+          <li><a href="#run">1 &middot; Run model</a></li>
+          <li><a href="#html">2 &middot; HTML reference</a></li>
+          <li><a href="#css">3 &middot; CSS reference</a></li>
+          <li><a href="#js">4 &middot; JS API</a></li>
+          <li><a href="#effects">5 &middot; Effects &amp; shaders</a></li>
+          <li><a href="#samples">6 &middot; Samples</a></li>
+          <li><a href="#testing">7 &middot; Testing &amp; troubleshooting</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <h2 id="run">1 &middot; Run model</h2>
+    <p>Three tabs share one <strong>Run</strong>: HTML parses to elements, CSS cascades over HTML presentation attributes, and a non-empty JS tab evaluates in a sandboxed helper process first &mdash; then everything applies together in <strong>one undo entry</strong>. Generated nodes are tagged <code>script</code>: re-runs replace same-tag nodes, hand-drawn nodes are never touched. HTML/CSS-only runs apply synchronously; JS runs async with a 3&nbsp;s watchdog (Stop / keep waiting).</p>
+    <div class="card">
+      <ul>
+        <li><strong>Ownership:</strong> <code>scriptId === &quot;script&quot;</code> marks generated nodes at any depth (groups included).</li>
+        <li><strong>Persistence:</strong> the three tabs save with the design; <code>Ctrl+Z</code> rewinds nodes but keeps your code.</li>
+        <li><strong>Export-safe:</strong> video/PNG/SVG export renders plain scene data &mdash; code never runs at export.</li>
+        <li><strong>Limits:</strong> each tab holds up to 256K characters; a run creates at most 2,000 shapes, 500 groups, 2,000 animations and 3,000 nodes total. Oversize runs fail with a console error instead of stalling.</li>
+        <li><strong>Media privacy:</strong> scripts only ever learn library blob names, never file paths (picks go through the host picker).</li>
+      </ul>
+    </div>
+
+    <h2 id="html">2 &middot; HTML reference</h2>
+    <p>One element per line. Both <code>&quot;...&quot;</code> and <code>&#39;...&#39;</code> quotes work; attribute names may contain dashes (e.g. <code>stroke-width</code>).</p>
+    <table>
+      <thead>
+        <tr><th scope="col">Tag</th><th scope="col">Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>&lt;rect&gt;</code> <code>&lt;ellipse&gt;</code> <code>&lt;triangle&gt;</code> <code>&lt;star&gt;</code></td><td><code>x y w h</code> (default <code>0 0 100 100</code>), <code>fill</code> (color or <code>linear-gradient()</code>), <code>rotation</code>/<code>rotate</code>, <code>name</code>, <code>class</code>, plus presentation attrs below.</td></tr>
+        <tr><td><code>&lt;text&gt;...&lt;/text&gt;</code></td><td>Same box attrs; inner text is the content (closing tag required).</td></tr>
+        <tr><td><code>&lt;img src&gt;</code> <code>&lt;video src&gt;</code></td><td><code>src</code> names a library blob (hard error when missing). Geometry + <code>rotation</code>/<code>opacity</code>/<code>radius</code>/effects apply.</td></tr>
+        <tr><td><code>&lt;pen points closed&gt;</code></td><td><code>points=&quot;x1,y1 x2,y2 ...&quot;</code> (2+ absolute points), <code>closed=&quot;true|false&quot;</code>. Box derives from the path bbox.</td></tr>
+        <tr><td><code>&lt;audio src t0 duration&gt;</code></td><td>Timeline clip, not a node. <code>duration</code> in seconds is required (keeps HTML sync; JS probes instead).</td></tr>
+        <tr><td><code>&lt;g name class&gt; ... &lt;/g&gt;</code></td><td>Nests one level per line; groups nest arbitrarily. <code>&lt;g .../&gt;</code> is an empty group. Unclosed groups error but keep partial children.</td></tr>
+      </tbody>
+    </table>
+    <p>Presentation attributes (lowest-priority style layer &mdash; any CSS rule wins): <code>opacity radius fill-opacity stroke stroke-width stroke-position stroke-opacity layer-blur background-blur grain shadow glow shader shader-mode font-family font-size font-weight font-style text-decoration text-transform text-align</code>.</p>
+
+    <h2 id="css">3 &middot; CSS reference</h2>
+    <p>Selectors: <code>rect ellipse triangle star text img video pen audio g</code>, <code>.class</code> (matches the <code>class</code> word list), <code>#name</code> (matches <code>name</code>). Specificity: <code>#name</code> (3) &gt; <code>.class</code> (2) &gt; type (1); ties go to the later rule. Unknown selectors warn; rules with no usable selector error. One bad rule never kills the sheet; unmatched rules report <code>Selector matched nothing</code>.</p>
+    <table>
+      <thead>
+        <tr><th scope="col">Property</th><th scope="col">Example</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>x y w h</code></td><td><code>x: 10; w: 200;</code> (<code>px</code> suffix allowed; <code>w/h</code> clamp at 1px)</td></tr>
+        <tr><td><code>rotation</code></td><td><code>rotation: 15;</code> (degrees, <code>deg</code> suffix allowed)</td></tr>
+        <tr><td><code>fill</code></td><td><code>#ff0000</code> or <code>linear-gradient(90deg, #f00 0%, #00f)</code></td></tr>
+        <tr><td><code>fill-opacity opacity</code></td><td><code>0..1</code></td></tr>
+        <tr><td><code>stroke stroke-width stroke-position stroke-opacity</code></td><td><code>#000; 2; inside|outside|center; 0..1</code></td></tr>
+        <tr><td><code>radius</code></td><td><code>8</code> (uniform corner radius)</td></tr>
+        <tr><td><code>font-*</code> <code>text-*</code></td><td><code>font-family font-size font-weight (bold|normal|number) font-style (italic|normal) text-decoration (underline|line-through|none) text-transform (uppercase|lowercase|none) text-align (left|center|right)</code></td></tr>
+      </tbody>
+    </table>
+    <pre><code>rect { fill: #d9d9d9; }
+.card { fill: #ff0000; radius: 8; }
+#hero { fill: linear-gradient(90deg, #ff0000 0%, #0000ff); }
+text { font-size: 24; text-align: center; }</code></pre>
+
+    <h2 id="js">4 &middot; JS API</h2>
+    <p>The <code>totm</code> object only (plus stock <code>JSON</code>/<code>Math</code>): no filesystem, no network, no app internals. Calls collect validated ops; QML applies them through the normal factory/animation path. Handles <code>0..N-1</code> index pending creates; <code>totm.find()</code> results carry a high bit and resolve by name at apply time.</p>
+    <table>
+      <thead>
+        <tr><th scope="col">Call</th><th scope="col">Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>rect/ellipse/triangle/star/text({...})</code></td><td><code>{x,y,w,h,rotation,fill,name,opacity,radius,fillOpacity,stroke,strokeWidth,strokePosition,strokeOpacity,layerBlur,backgroundBlur,grain,shadow,glow,shader,shaderMode}</code> + text <code>{content,fontSize,fontFamily,fontWeight,fontStyle,textDecoration,textTransform,textAlign}</code>. Gradients via <code>fill: &quot;linear-gradient(...)&quot;</code>.</td></tr>
+        <tr><td><code>pen({points, closed, ...})</code></td><td><code>points: [{x,y}]</code> or <code>[[x,y]]</code> (2+ required).</td></tr>
+        <tr><td><code>image/video(blob, {...})</code> <code>audio(blob, {t0, duration})</code></td><td>Blob names only; missing blobs error at apply. Audio without duration is probed async.</td></tr>
+        <tr><td><code>pickImage/pickVideo/pickAudio({...})</code></td><td>Phase 1 records the request; the panel shows one row per file and replays automatically when all are chosen. Cancel leaves no trace.</td></tr>
+        <tr><td><code>group(name, [handles])</code></td><td>Only fresh create-handles (find results cannot be grouped); each handle groups once.</td></tr>
+        <tr><td><code>find(name)</code></td><td>First top-first node with that name (groups included), resolved at apply time.</td></tr>
+        <tr><td><code>set(handle, {fill,opacity,radius,fillOpacity,x,y,w,h,rotation,name})</code></td><td>Scalar mutation of created or found nodes. Runs before animates; missing targets warn.</td></tr>
+        <tr><td><code>remove(handle)</code></td><td>Deletes created or found nodes (subtrees included). Runs before sets/animates so they warn instead of orphaning clips.</td></tr>
+        <tr><td><code>animate(handle, preset, {t0,duration,mode,options,easing})</code></td><td>Any preset id &mdash; including custom from-to ids (<code>customMove</code>, <code>customScale</code>, <code>customRotate</code>, <code>customOpacity</code>, &hellip;) with their <code>options</code> passthrough, same as the gallery.</td></tr>
+        <tr><td><code>setDuration(seconds)</code></td><td>Composition length.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="effects">5 &middot; Effects &amp; shaders</h2>
+    <p>One declaration builds one native entry (same painter backing canvas and export):</p>
+    <table>
+      <thead>
+        <tr><th scope="col">Property</th><th scope="col">Example</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>layer-blur</code> <code>background-blur</code></td><td><code>layer-blur: 8px;</code> (radius; JS accepts a number or <code>{radius, opacity}</code>)</td></tr>
+        <tr><td><code>grain</code></td><td><code>grain: 0.5;</code> or <code>grain: 0.5 3;</code> (amount 0..1, size 1..10)</td></tr>
+        <tr><td><code>shadow</code></td><td><code>shadow: #80000000 0 4 8 0;</code> (color x y blur spread, optional <code>inner</code>)</td></tr>
+        <tr><td><code>glow</code></td><td><code>glow: #cc00ffff 16 4;</code> (color blur spread, optional <code>inner</code>)</td></tr>
+        <tr><td><code>shader</code> <code>shader-mode</code></td><td><code>shader: preset:plasma;</code> (<code>plasma aurora clouds kaleidoscope scanlines fire nebula vortex matrix</code>), mode <code>fill|overlay</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="samples">6 &middot; Samples</h2>
+    <p>Grouped card with a gradient, styled text, and a preset:</p>
+    <pre><code>&lt;g name=&quot;card&quot;&gt;
+  &lt;rect x=&quot;40&quot; y=&quot;40&quot; w=&quot;320&quot; h=&quot;180&quot; name=&quot;bg&quot; class=&quot;panel&quot;/&gt;
+  &lt;text x=&quot;64&quot; y=&quot;100&quot; w=&quot;272&quot; h=&quot;40&quot;&gt;Hello&lt;/text&gt;
+&lt;/g&gt;</code></pre>
+    <pre><code>.panel { fill: linear-gradient(90deg, #ff0000 0%, #0000ff); radius: 12; shadow: #80000000 0 4 16 0; }
+text { font-size: 28; text-align: center; }</code></pre>
+    <pre><code>const bg = totm.find(&quot;bg&quot;);
+totm.set(bg, { radius: 16 });
+totm.animate(bg, &quot;customMove&quot;, { duration: 1.2, options: { fromX: 0, fromY: 24, toX: 0, toY: 0 } });
+const dot = totm.ellipse({ x: 400, y: 100, w: 48, h: 48, fill: &quot;#0d99ff&quot;, glow: &quot;#0d99ff 16 4&quot; });
+totm.animate(dot, &quot;fade&quot;, { duration: 0.8 });</code></pre>
+
+    <h2 id="testing">7 &middot; Testing &amp; troubleshooting</h2>
+    <div class="card">
+      <ol>
+        <li>Write HTML, press <strong>Run</strong>: shapes land as script-owned nodes (one undo entry); the console lists errors first with tab + line.</li>
+        <li>Add CSS: unmatched selectors warn (<code>Selector matched nothing</code>); bad values warn and keep the attribute/default.</li>
+        <li>Add JS: the worker evaluates off-thread; file needs open the pick flow (choose one per row, Cancel aborts cleanly).</li>
+        <li>Disable nothing &mdash; scripts have no permissions to review; re-Run replaces prior output, <kbd>Ctrl+Z</kbd> rewinds nodes but keeps code.</li>
+      </ol>
+      <p class="muted">Broken runs stay partial: valid elements still land while errors point at exact lines. Unknown blobs are hard errors; over-long audio warns when it fits nowhere.</p>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const STORAGE_KEY = "totm-guide-theme";
+      const root = document.documentElement;
+      const btn = document.getElementById("themeToggle");
+
+      // Phosphor fill glyphs (moon in dark, sun in light)
+      const SUN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z"/></svg>';
+      const MOON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z"/></svg>';
+
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: light)");
+
+      function getEffectiveTheme() {
+        return root.getAttribute("data-theme") || (mediaQuery.matches ? "light" : "dark");
+      }
+
+      function paintButton() {
+        btn.innerHTML = getEffectiveTheme() === "light" ? SUN : MOON;
+      }
+
+      function setTheme(theme) {
+        root.setAttribute("data-theme", theme);
+        try {
+          localStorage.setItem(STORAGE_KEY, theme);
+        } catch (e) {}
+        paintButton();
+      }
+
+      btn.addEventListener("click", function () {
+        const nextTheme = getEffectiveTheme() === "light" ? "dark" : "light";
+        setTheme(nextTheme);
+      });
+
+      // Synchronize button icon if OS theme changes without explicit override
+      mediaQuery.addEventListener("change", function () {
+        if (!root.hasAttribute("data-theme")) {
+          paintButton();
+        }
+      });
+
+      paintButton();
+    })();
+  </script>
+</body>
+</html>

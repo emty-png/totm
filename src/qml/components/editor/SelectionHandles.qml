@@ -21,8 +21,9 @@ Item {
     property real offsetX: 0
     property real offsetY: 0
     property bool handlesActive: false
-    // Bbox frame is redundant for a single unrotated shape (its own
-    // selection outline already shows); the canvas hides it there.
+    // The selection frame belongs in this screen-space overlay. Keeping it
+    // out of the zoomed shape avoids an inverse-scale transparent rectangle
+    // being composited over high-zoom painted vectors.
     property bool showFrame: true
 
     // Snapped bbox edges in canvas coords: each edge rounded on screen
@@ -116,7 +117,7 @@ Item {
         }
     }
 
-    // Selection bbox frame (per-shape outlines still show underneath).
+    // Selection bbox frame.
     Rectangle {
         x: handles.sbx
         y: handles.sby

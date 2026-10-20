@@ -38,7 +38,8 @@ QtObject {
                 locked: node.locked,
                 expanded: node.expanded,
                 children: kids,
-                selected: node.selected
+                selected: node.selected,
+                scriptId: String(node.scriptId ?? "")
             };
         }
         return {
@@ -105,14 +106,23 @@ QtObject {
             textFx: node.textFx ?? null,
             visible: node.visible,
             locked: node.locked,
-            selected: node.selected
+            selected: node.selected,
+            scriptId: String(node.scriptId ?? "")
         };
     }
 
     // reuseUid preserves snapshot uids (full-scene restore/undo).
     // Clipboard ops (paste/duplicate) leave it false so copies get
     // fresh uids and never collide with their sources. Old scenes
-    // without uids also fall back to fresh uids.
+    // without uids also fall back to fresh uids. Fresh copies also
+    // drop script ownership so pastes/duplicates become hand-owned.
+    function _clearScriptIds(node) {
+        node.scriptId = "";
+        if (node.kind === "group") {
+            for (var i = 0; i < (node.children || []).length; i++)
+                _clearScriptIds(node.children[i]);
+        }
+    }
     function _instantiateSnapshot(snap, select, reuseUid) {
         if (snap.kind === "group") {
             var kids = [];
@@ -128,6 +138,8 @@ QtObject {
             g.locked = snap.locked === true;
             g.expanded = snap.expanded !== false;
             g.selected = !!select;
+            if (!reuseUid)
+                _clearScriptIds(g);
             return g;
         }
         var n = doc._makeShapeNode(snap.type || "rectangle", snap);
@@ -139,6 +151,8 @@ QtObject {
         n.selected = !!select;
         n.visible = snap.visible !== false;
         n.locked = snap.locked === true;
+        if (!reuseUid)
+            n.scriptId = "";
         return n;
     }
 
@@ -415,6 +429,17 @@ QtObject {
             doc.sceneColor = s.sceneColor;
         doc.guideX = clipboard._copyNumbers(s.guideX);
         doc.guideY = clipboard._copyNumbers(s.guideY);
+        // Dev script source rides save/load only (never undo): apply
+        // when present, keep the live text otherwise so undo restores
+        // never clobber unsaved script edits.
+        if (s.script !== undefined && s.script !== null) {
+            var sc = s.script;
+            doc.script = {
+                html: String(sc.html ?? ""),
+                css: String(sc.css ?? ""),
+                js: String(sc.js ?? "")
+            };
+        }
         var nodes = s.nodes || [];
         var list = [];
         for (var j = 0; j < nodes.length; j++)
