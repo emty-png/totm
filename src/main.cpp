@@ -327,7 +327,7 @@ int main(int argc, char *argv[])
             QGuiApplication::setFont(appFont);
         }
     }
-    app.setApplicationVersion(QStringLiteral("0.8.2"));
+    app.setApplicationVersion(QStringLiteral("0.8.3"));
     app.setOrganizationName(QStringLiteral("tot"));
     // Window/taskbar icon (X11, Wayland, Windows).
     app.setWindowIcon(QIcon(QStringLiteral(":/icons/totm.png")));

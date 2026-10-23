@@ -3,6 +3,20 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.8.3] - 2026-10-23
+
+### Added
+
+* Thin pen path locator — selected or hovered pen paths whose authored stroke falls below one device pixel at the current zoom draw a blue 1.5px editor hairline over the path, so sub-pixel line work stays visible while drawing. The overlay follows hover through groups and leaves canvas paint, thumbnails and every export format untouched.
+
+### Changed
+
+* Pen paths start as line art — new pen shapes are created with an empty fill stack and one default stroke, while the Fill panel remains available for adding fills later. Existing scenes keep their stored fill and stroke settings and paint as before.
+
+### Removed
+
+* Pen fill toggle and stroke cap/join pickers — the Pen and Stroke property sections no longer expose these controls; stored values still load, render and export unchanged.
+
 ## [0.8.2] - 2026-10-20
 
 ### Added

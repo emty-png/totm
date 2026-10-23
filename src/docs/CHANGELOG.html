@@ -336,12 +336,18 @@
       <p>Every notable change, newest first. Format follows Keep a Changelog.</p>
       <nav aria-label="Table of contents">
         <ul class="toc">
-          <li><a href="#v082">1 · 0.8.2</a></li><li><a href="#v081">2 · 0.8.1</a></li><li><a href="#v080">3 · 0.8.0</a></li><li><a href="#v072">4 · 0.7.2</a></li><li><a href="#v071">5 · 0.7.1</a></li><li><a href="#v070">6 · 0.7.0</a></li><li><a href="#v060">7 · 0.6.0</a></li><li><a href="#v050">8 · 0.5.0</a></li><li><a href="#v040">9 · 0.4.0</a></li><li><a href="#v032">10 · 0.3.2</a></li><li><a href="#v031">11 · 0.3.1</a></li><li><a href="#v030">12 · 0.3.0</a></li><li><a href="#v023">13 · 0.2.3</a></li><li><a href="#v022">14 · 0.2.2</a></li><li><a href="#v021">15 · 0.2.1</a></li><li><a href="#v020">16 · 0.2.0</a></li><li><a href="#v012">17 · 0.1.2</a></li><li><a href="#v011">18 · 0.1.1</a></li><li><a href="#v010">19 · 0.1.0</a></li>
+          <li><a href="#v083">1 · 0.8.3</a></li><li><a href="#v082">2 · 0.8.2</a></li><li><a href="#v081">3 · 0.8.1</a></li><li><a href="#v080">4 · 0.8.0</a></li><li><a href="#v072">5 · 0.7.2</a></li><li><a href="#v071">6 · 0.7.1</a></li><li><a href="#v070">7 · 0.7.0</a></li><li><a href="#v060">8 · 0.6.0</a></li><li><a href="#v050">9 · 0.5.0</a></li><li><a href="#v040">10 · 0.4.0</a></li><li><a href="#v032">11 · 0.3.2</a></li><li><a href="#v031">12 · 0.3.1</a></li><li><a href="#v030">13 · 0.3.0</a></li><li><a href="#v023">14 · 0.2.3</a></li><li><a href="#v022">15 · 0.2.2</a></li><li><a href="#v021">16 · 0.2.1</a></li><li><a href="#v020">17 · 0.2.0</a></li><li><a href="#v012">18 · 0.1.2</a></li><li><a href="#v011">19 · 0.1.1</a></li><li><a href="#v010">20 · 0.1.0</a></li>
         </ul>
       </nav>
     </header>
 
-    <h2 id="v082">0.8.2 <span class="muted tag">2026-10-20</span></h2><h3>Added</h3>
+    <h2 id="v083">0.8.3 <span class="muted tag">2026-10-23</span></h2><h3>Added</h3>
+<div class="card">
+<ul><li>Thin pen path locator — selected or hovered pen paths whose authored stroke falls below one device pixel at the current zoom draw a blue 1.5px editor hairline over the path, so sub-pixel line work stays visible while drawing. The overlay follows hover through groups and leaves canvas paint, thumbnails and every export format untouched.</li></ul></div><h3>Changed</h3>
+<div class="card">
+<ul><li>Pen paths start as line art — new pen shapes are created with an empty fill stack and one default stroke, while the Fill panel remains available for adding fills later. Existing scenes keep their stored fill and stroke settings and paint as before.</li></ul></div><h3>Removed</h3>
+<div class="card">
+<ul><li>Pen fill toggle and stroke cap/join pickers — the Pen and Stroke property sections no longer expose these controls; stored values still load, render and export unchanged.</li></ul></div><h2 id="v082">0.8.2 <span class="muted tag">2026-10-20</span></h2><h3>Added</h3>
 <div class="card">
 <ul><li>Built-in developer scripting — the editor’s Dev panel provides HTML, CSS and JavaScript tabs with syntax highlighting and a bundled reference guide. Run scripts create native shapes, groups, media and animation clips in one undo entry; generated content stays linked to its source and exports as normal scene data.</li></ul></div><h3>Changed</h3>
 <div class="card">
