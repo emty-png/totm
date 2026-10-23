@@ -44,6 +44,9 @@ Item {
     }
 
     property int clickArmedUid: -1
+    // Hover is editor state only. ThinPenOverlay uses it to expose
+    // sub-pixel pen paths without altering artwork paint or export.
+    property int hoverUid: -1
     property bool moveAllowed: false
     property bool marqueeDragged: false
 
@@ -238,6 +241,7 @@ Item {
         movePolicy: (dx, dy) => canvas.shapeMoved(dx, dy)
         releasePolicy: (wasMoved, mods) => canvas.shapeReleased(wasMoved, mods)
         doublePolicy: uid => canvas.shapeDoubleClicked(uid)
+        hoverPolicy: (uid, entered) => canvas.setShapeHovered(uid, entered)
         measurePolicy: (uid, w, h) => canvas.textMeasured(uid, w, h)
     }
 
@@ -542,6 +546,14 @@ Item {
         offsetX: canvas.offsetX
         offsetY: canvas.offsetY
         editActive: ToolState.activeTool === "select" && canvas.penEdit.editUid >= 0 && canvas.doc !== null
+    }
+
+    ThinPenOverlay {
+        doc: canvas.doc
+        zoom: canvas.zoom
+        offsetX: canvas.offsetX
+        offsetY: canvas.offsetY
+        hoverUid: ToolState.activeTool === "select" ? canvas.hoverUid : -1
     }
 
     // Zoom-clip focal marker: shows and drags the punch-in center for
@@ -1443,6 +1455,15 @@ Item {
     }
     function commitTextEdit() {
         textEditor.commitTextEdit();
+    }
+
+    function setShapeHovered(uid, entered) {
+        if (ToolState.activeTool !== "select")
+            return;
+        if (entered)
+            canvas.hoverUid = uid;
+        else if (canvas.hoverUid === uid)
+            canvas.hoverUid = -1;
     }
     // Static-text writeback from ShapeItem paint. Editing items report
     // nothing (hidden glyphs paint zero); the editor measures instead.

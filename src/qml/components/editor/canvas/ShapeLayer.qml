@@ -18,6 +18,7 @@ Item {
     property var movePolicy: null
     property var releasePolicy: null
     property var doublePolicy: null
+    property var hoverPolicy: null
     // Uid owning the inline text editor (-1 when closed). The matching
     // item hides its static glyphs; others are unaffected.
     property int editingUid: -1
@@ -345,6 +346,10 @@ Item {
             item.movePolicy = (dx, dy) => layerRoot.movePolicy(dx, dy);
             item.releasePolicy = (wasMoved, mods) => layerRoot.releasePolicy(wasMoved, mods);
             item.doublePolicy = uid => layerRoot.doublePolicy(uid);
+            item.hoverPolicy = (uid, entered) => {
+                if (layerRoot.hoverPolicy)
+                    layerRoot.hoverPolicy(uid, entered);
+            };
             item.measurePolicy = (uid, w, h) => {
                 if (layerRoot.measurePolicy)
                     layerRoot.measurePolicy(uid, w, h);

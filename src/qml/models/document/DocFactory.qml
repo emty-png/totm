@@ -558,7 +558,11 @@ QtObject {
             y: box.y,
             w: box.w,
             h: box.h,
-            pathData: clean
+            pathData: clean,
+            // Pen paths start as line art. The empty fill stack keeps
+            // the regular Fill panel available when a fill is wanted.
+            fills: [],
+            strokes: [factory.defaultStroke()]
         });
         var list = doc._childrenOf(container).slice();
         list.unshift(n);

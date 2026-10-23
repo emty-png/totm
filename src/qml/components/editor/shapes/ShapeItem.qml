@@ -141,6 +141,9 @@ Item {
     property var movePolicy: null
     property var releasePolicy: null
     property var doublePolicy: null
+    // Canvas hover reporting drives editor-only thin-path visibility
+    // chrome; it never changes this item's artwork paint.
+    property var hoverPolicy: null
     // Auto-size writeback for text: the canvas clamps and commits.
     property var measurePolicy: null
 
@@ -1289,6 +1292,14 @@ Item {
         onPressed: event => shape.pressAt(event.x, event.y, event.modifiers)
         onPositionChanged: event => shape.moveAt(event.x, event.y)
         onReleased: event => shape.releaseAt(event.modifiers)
+        onEntered: {
+            if (shape.hoverPolicy)
+                shape.hoverPolicy(shape.uid, true);
+        }
+        onExited: {
+            if (shape.hoverPolicy)
+                shape.hoverPolicy(shape.uid, false);
+        }
         onDoubleClicked: {
             if (shape.doublePolicy)
                 shape.doublePolicy(shape.uid);
