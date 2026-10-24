@@ -82,6 +82,8 @@ qt_add_qml_module(totm
         backend/cursors/CursorStore.cpp
         backend/files/FileBrowser.h
         backend/files/FileBrowser.cpp
+        backend/files/FileThumbnailProvider.h
+        backend/files/FileThumbnailProvider.cpp
     QML_FILES
         # Shell
         qml/Main.qml

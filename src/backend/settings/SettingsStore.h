@@ -120,6 +120,10 @@ class SettingsStore : public QObject {
     // once by bumping kOnboardingCurrentVersion below.
     Q_PROPERTY(bool onboardingCompleted READ onboardingCompleted NOTIFY onboardingChanged)
     Q_PROPERTY(int onboardingVersion READ onboardingVersion NOTIFY onboardingChanged)
+    // File picker: MRU folder urls (local files, max 8) and a small
+    // preference map (view/sortKey/ascending/showHidden).
+    Q_PROPERTY(QStringList recentFolders READ recentFolders NOTIFY fileBrowserChanged)
+    Q_PROPERTY(QVariantMap fileBrowserPrefs READ fileBrowserPrefs NOTIFY fileBrowserChanged)
 
 public:
     static SettingsStore *create(QQmlEngine *engine, QJSEngine *scriptEngine);
@@ -311,6 +315,14 @@ public:
     Q_INVOKABLE QStringList recentColors() const;
     Q_INVOKABLE void pushRecentColor(const QString &color);
     Q_INVOKABLE void clearRecentColors();
+    // File picker recents (persisted under QSettings group "files/") and
+    // view preferences. recordRecentFolder expects a local file url and
+    // moves duplicates to the front; invalid/non-local entries are ignored.
+    QStringList recentFolders() const;
+    Q_INVOKABLE void recordRecentFolder(const QString &url);
+    Q_INVOKABLE void clearRecentFolders();
+    QVariantMap fileBrowserPrefs() const;
+    Q_INVOKABLE void saveFileBrowserPrefs(const QVariantMap &prefs);
     // Welcome tour: true on fresh profiles (or after a version bump).
     // completeOnboarding pins the current version.
     Q_INVOKABLE bool shouldShowOnboarding() const;
@@ -333,6 +345,7 @@ signals:
     void generalChanged();
     void fontDownloadChanged();
     void onboardingChanged();
+    void fileBrowserChanged();
 
 private:
     static SettingsStore *s_instance;
@@ -344,6 +357,8 @@ private:
     void persistAppearance();
     void loadGeneral();
     void persistGeneral();
+    void loadFileBrowser();
+    void persistFileBrowser();
     void loadOnboarding();
     void persistOnboarding();
     void loadImportedFonts();
@@ -430,6 +445,12 @@ private:
     bool m_lowSpecMode = false;
     // MRU canvas colors, canonical #rrggbb, max 10.
     QStringList m_recentColors;
+    // File picker state: recent local folder urls + view preferences.
+    QStringList m_recentFolders;
+    QString m_fileBrowserView = QStringLiteral("grid");
+    QString m_fileBrowserSortKey = QStringLiteral("name");
+    bool m_fileBrowserAscending = true;
+    bool m_fileBrowserShowHidden = false;
     // Welcome tour state. m_onboardingVersion stores the last
     // completed tour version; fresh profiles sit at 0.
     bool m_onboardingCompleted = false;

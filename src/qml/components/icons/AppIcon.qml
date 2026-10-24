@@ -13,7 +13,9 @@ import QtQuick.Shapes
 //     | "shadeOuter" | "shadeInner" | "blur" | "backdrop"
 //     | "sparkle" | "glowInner" | "grain" | "gear" | "book"
 //     | "gradcap" | "info" | "refresh" | "folder"
-//     | "funnel" | "check" | "code"
+//     | "funnel" | "check" | "code" | "back" | "forward" | "up"
+//     | "search" | "list" | "drive" | "clock" | "folderPlus"
+//     | "home" | "desktop" | "download" | "docs"
 Item {
     id: icon
 
@@ -35,6 +37,19 @@ Item {
             "export": '<path d="M17 22H12a4 4 0 0 0-4 4V36a4 4 0 0 0 4 4H36a4 4 0 0 0 4-4V26a4 4 0 0 0-4-4H31"/><path d="M24 29V8"/><path d="M17 15L24 8L31 15"/>',
             "refresh": '<path d="M10.8 19.2A14 14 0 0 1 31 11.9"/><path d="M26.1 14.3L32.7 12.9L30.65 6.5"/><g transform="rotate(180 24 24)"><path d="M10.8 19.2A14 14 0 0 1 31 11.9"/><path d="M26.1 14.3L32.7 12.9L30.65 6.5"/></g>',
             "folder": '<path d="M6 14a4 4 0 0 1 4-4H18L23 16H38a4 4 0 0 1 4 4V34a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4Z" fill="currentColor" fill-opacity=".12"/>',
+            "folderPlus": '<path d="M6 14a4 4 0 0 1 4-4H18L23 16H38a4 4 0 0 1 4 4V34a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4Z"/><path d="M24 21V31M19 26H29"/>',
+            "home": '<path d="M7 23L24 7L41 23"/><path d="M11 21V41H37V21"/><path d="M20 41V29H28V41"/>',
+            "desktop": '<rect x="6" y="9" width="36" height="24" rx="4"/><path d="M24 33V40M16 40H32"/>',
+            "download": '<path d="M24 7V31"/><path d="M16 23L24 31L32 23"/><path d="M9 37H39"/>',
+            "docs": '<path d="M13 6H28L36 14V42H13Z"/><path d="M28 6V14H36"/><path d="M19 24H30M19 31H30"/>',
+            "music": '<path d="M20 35V13L37 9V31"/><circle cx="15" cy="36" r="5"/><circle cx="32" cy="32" r="5"/>',
+            "back": '<path d="M21 11L9 23L21 35"/><path d="M9 23H39"/>',
+            "forward": '<path d="M27 11L39 23L27 35"/><path d="M39 23H9"/>',
+            "up": '<path d="M11 22L24 9L37 22"/><path d="M24 9V39"/>',
+            "search": '<circle cx="21" cy="21" r="10"/><path d="M28.5 28.5L38 38"/>',
+            "list": '<path d="M16 14H38M16 24H38M16 34H38"/><circle cx="9" cy="14" r="1.6" fill="currentColor" stroke="none"/><circle cx="9" cy="24" r="1.6" fill="currentColor" stroke="none"/><circle cx="9" cy="34" r="1.6" fill="currentColor" stroke="none"/>',
+            "drive": '<rect x="6" y="14" width="36" height="20" rx="6"/><path d="M12 24H24"/><circle cx="33" cy="24" r="1.8" fill="currentColor" stroke="none"/>',
+            "clock": '<circle cx="24" cy="24" r="17"/><path d="M24 13V24L31 29"/>',
             "square": '<rect x="6" y="12" width="36" height="24" rx="6"/>',
             "circle": '<ellipse cx="24" cy="24" rx="18" ry="13"/>',
             "triangle": '<path d="M24 8L42 38H6Z" fill="currentColor" fill-opacity=".12"/>',

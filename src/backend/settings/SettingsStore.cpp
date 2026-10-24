@@ -72,6 +72,12 @@ constexpr char kGenFormatKey[] = "general/format";
 constexpr char kGenLowSpecKey[] = "general/lowSpec";
 constexpr char kGenRecentColorsKey[] = "general/recentColors";
 constexpr int kRecentColorsMax = 10;
+constexpr char kFileBrowserRecentKey[] = "files/recentFolders";
+constexpr char kFileBrowserViewKey[] = "files/viewMode";
+constexpr char kFileBrowserSortKey[] = "files/sortKey";
+constexpr char kFileBrowserAscendingKey[] = "files/sortAscending";
+constexpr char kFileBrowserHiddenKey[] = "files/showHidden";
+constexpr int kRecentFoldersMax = 8;
 constexpr char kOnboardingCompletedKey[] = "onboarding/completed";
 constexpr char kOnboardingVersionKey[] = "onboarding/version";
 constexpr int kOnboardingCurrentVersion = 1;
@@ -342,6 +348,7 @@ void SettingsStore::load() {
     loadShortcuts();
     loadAppearance();
     loadGeneral();
+    loadFileBrowser();
     loadOnboarding();
 }
 
@@ -1564,6 +1571,105 @@ void SettingsStore::clearRecentColors() {
     m_recentColors.clear();
     persistGeneral();
     emit generalChanged();
+}
+
+QStringList SettingsStore::recentFolders() const {
+    return m_recentFolders;
+}
+
+void SettingsStore::recordRecentFolder(const QString &url) {
+    const QString trimmed = url.trimmed();
+    if (trimmed.isEmpty())
+        return;
+    const QUrl parsed(trimmed);
+    if (!parsed.isLocalFile())
+        return;
+    m_recentFolders.removeAll(trimmed);
+    m_recentFolders.prepend(trimmed);
+    while (m_recentFolders.size() > kRecentFoldersMax)
+        m_recentFolders.removeLast();
+    persistFileBrowser();
+    emit fileBrowserChanged();
+}
+
+void SettingsStore::clearRecentFolders() {
+    if (m_recentFolders.isEmpty())
+        return;
+    m_recentFolders.clear();
+    persistFileBrowser();
+    emit fileBrowserChanged();
+}
+
+QVariantMap SettingsStore::fileBrowserPrefs() const {
+    return QVariantMap{
+        {QStringLiteral("view"), m_fileBrowserView},
+        {QStringLiteral("sortKey"), m_fileBrowserSortKey},
+        {QStringLiteral("ascending"), m_fileBrowserAscending},
+        {QStringLiteral("showHidden"), m_fileBrowserShowHidden},
+    };
+}
+
+void SettingsStore::saveFileBrowserPrefs(const QVariantMap &prefs) {
+    QString view = prefs.value(QStringLiteral("view"), m_fileBrowserView).toString().trimmed().toLower();
+    if (view != QStringLiteral("grid") && view != QStringLiteral("list"))
+        view = m_fileBrowserView;
+    QString sortKey = prefs.value(QStringLiteral("sortKey"), m_fileBrowserSortKey).toString().trimmed().toLower();
+    if (sortKey != QStringLiteral("name") && sortKey != QStringLiteral("size")
+        && sortKey != QStringLiteral("modified") && sortKey != QStringLiteral("type")) {
+        sortKey = m_fileBrowserSortKey;
+    }
+    const bool ascending = prefs.contains(QStringLiteral("ascending"))
+        ? prefs.value(QStringLiteral("ascending")).toBool()
+        : m_fileBrowserAscending;
+    const bool showHidden = prefs.contains(QStringLiteral("showHidden"))
+        ? prefs.value(QStringLiteral("showHidden")).toBool()
+        : m_fileBrowserShowHidden;
+    if (view == m_fileBrowserView && sortKey == m_fileBrowserSortKey
+        && ascending == m_fileBrowserAscending && showHidden == m_fileBrowserShowHidden) {
+        return;
+    }
+    m_fileBrowserView = view;
+    m_fileBrowserSortKey = sortKey;
+    m_fileBrowserAscending = ascending;
+    m_fileBrowserShowHidden = showHidden;
+    persistFileBrowser();
+    emit fileBrowserChanged();
+}
+
+void SettingsStore::loadFileBrowser() {
+    QSettings settings;
+    const QStringList stored = settings.value(QString::fromLatin1(kFileBrowserRecentKey)).toStringList();
+    m_recentFolders.clear();
+    for (const QString &raw : stored) {
+        const QString url = raw.trimmed();
+        if (url.isEmpty() || m_recentFolders.contains(url))
+            continue;
+        if (!QUrl(url).isLocalFile())
+            continue;
+        m_recentFolders.append(url);
+        if (m_recentFolders.size() >= kRecentFoldersMax)
+            break;
+    }
+
+    const QString view = settings.value(QString::fromLatin1(kFileBrowserViewKey), QStringLiteral("grid")).toString().trimmed().toLower();
+    m_fileBrowserView = view == QStringLiteral("list") ? view : QStringLiteral("grid");
+    const QString sortKey = settings.value(QString::fromLatin1(kFileBrowserSortKey), QStringLiteral("name")).toString().trimmed().toLower();
+    m_fileBrowserSortKey = (sortKey == QStringLiteral("size") || sortKey == QStringLiteral("modified")
+                            || sortKey == QStringLiteral("type"))
+        ? sortKey
+        : QStringLiteral("name");
+    m_fileBrowserAscending = settings.value(QString::fromLatin1(kFileBrowserAscendingKey), true).toBool();
+    m_fileBrowserShowHidden = settings.value(QString::fromLatin1(kFileBrowserHiddenKey), false).toBool();
+}
+
+void SettingsStore::persistFileBrowser() {
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kFileBrowserRecentKey), m_recentFolders);
+    settings.setValue(QString::fromLatin1(kFileBrowserViewKey), m_fileBrowserView);
+    settings.setValue(QString::fromLatin1(kFileBrowserSortKey), m_fileBrowserSortKey);
+    settings.setValue(QString::fromLatin1(kFileBrowserAscendingKey), m_fileBrowserAscending);
+    settings.setValue(QString::fromLatin1(kFileBrowserHiddenKey), m_fileBrowserShowHidden);
+    settings.sync();
 }
 
 void SettingsStore::loadOnboarding() {

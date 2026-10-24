@@ -25,6 +25,7 @@
 
 #include "CrashHandler.h"
 #include "CrashReporter.h"
+#include "FileThumbnailProvider.h"
 #include "PluginNetworkGuard.h"
 #include "ScriptRunner.h"
 
@@ -412,6 +413,10 @@ int main(int argc, char *argv[])
 
     engine.rootContext()->setContextProperty(QStringLiteral("totmSingleInstance"), &single);
     engine.rootContext()->setContextProperty(QStringLiteral("totmOpenFiles"), openFiles);
+
+    // File picker thumbnails: local-only, scaled at decode time. The
+    // engine takes ownership.
+    engine.addImageProvider(QStringLiteral("totmthumb"), new FileThumbnailProvider);
 
     engine.loadFromModule(QStringLiteral("Totm"), QStringLiteral("Main"));
     // QML is up: flush any file opens that arrived during startup.
