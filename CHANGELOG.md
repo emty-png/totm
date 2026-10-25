@@ -3,6 +3,16 @@
 All notable changes to `totm` are documented here. Format follows Keep a Changelog,
 versioning follows SemVer once 1.0 ships. i try to keep this updated.
 
+## [0.8.4] - 2026-10-25
+
+### Added
+
+* Blender-inspired file browser — the in-app picker now opens as an 820×560 modal with navigation history, an editable path bar, search, a sectioned sidebar for places / mounted volumes / recent folders, large grid tiles as the default view, and a dense sortable list. Image files render cached, scaled thumbnails through a local-only image provider, hidden files can be toggled, folders can be created inline, and the footer keeps the selected-file summary or the save-mode name field. Open, save and folder-picking behavior is unchanged, including caller-side overwrite confirmation.
+
+### Changed
+
+* Picker preferences and recents — view mode, sort key/direction, hidden-file visibility and the last eight folders persist through `SettingsStore`; navigating records the folder in the sidebar. Sorting is numeric-aware with folders first, and typed paths accept `~`, relative paths and full file paths.
+
 ## [0.8.3] - 2026-10-23
 
 ### Added

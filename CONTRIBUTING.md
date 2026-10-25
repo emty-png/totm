@@ -1,7 +1,7 @@
 # Contributing to totm
 
 Thanks for picking up `totm` (that one tool for motion, part of `tot`).
-This doc reflects how the app is actually built today (v0.8.3): an
+This doc reflects how the app is actually built today (v0.8.4): an
 offline Qt 6.8+ desktop editor where QML owns UI + app logic and a small
 C++ backend owns storage, rendering help, and sandboxing.
 
@@ -60,7 +60,8 @@ src/
                          # + AnimSampler (1:1 with QML preview)
     plugins/             # PluginStore (manifests, grants in plugins.json,
                          # mediated picks, 1MB KV) + PluginNetworkGuard
-    files/               # FileBrowser: read-only listing for the in-app picker
+    files/               # FileBrowser: listing, volumes, folder creation and
+                         # thumbnail URLs for the in-app picker
   qml/
     Main.qml             # frameless window + TitleBar + view switch
     theme/               # AppTheme singleton (only hex colors live here)

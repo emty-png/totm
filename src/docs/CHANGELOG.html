@@ -336,12 +336,16 @@
       <p>Every notable change, newest first. Format follows Keep a Changelog.</p>
       <nav aria-label="Table of contents">
         <ul class="toc">
-          <li><a href="#v083">1 · 0.8.3</a></li><li><a href="#v082">2 · 0.8.2</a></li><li><a href="#v081">3 · 0.8.1</a></li><li><a href="#v080">4 · 0.8.0</a></li><li><a href="#v072">5 · 0.7.2</a></li><li><a href="#v071">6 · 0.7.1</a></li><li><a href="#v070">7 · 0.7.0</a></li><li><a href="#v060">8 · 0.6.0</a></li><li><a href="#v050">9 · 0.5.0</a></li><li><a href="#v040">10 · 0.4.0</a></li><li><a href="#v032">11 · 0.3.2</a></li><li><a href="#v031">12 · 0.3.1</a></li><li><a href="#v030">13 · 0.3.0</a></li><li><a href="#v023">14 · 0.2.3</a></li><li><a href="#v022">15 · 0.2.2</a></li><li><a href="#v021">16 · 0.2.1</a></li><li><a href="#v020">17 · 0.2.0</a></li><li><a href="#v012">18 · 0.1.2</a></li><li><a href="#v011">19 · 0.1.1</a></li><li><a href="#v010">20 · 0.1.0</a></li>
+          <li><a href="#v084">1 · 0.8.4</a></li><li><a href="#v083">2 · 0.8.3</a></li><li><a href="#v082">3 · 0.8.2</a></li><li><a href="#v081">4 · 0.8.1</a></li><li><a href="#v080">5 · 0.8.0</a></li><li><a href="#v072">6 · 0.7.2</a></li><li><a href="#v071">7 · 0.7.1</a></li><li><a href="#v070">8 · 0.7.0</a></li><li><a href="#v060">9 · 0.6.0</a></li><li><a href="#v050">10 · 0.5.0</a></li><li><a href="#v040">11 · 0.4.0</a></li><li><a href="#v032">12 · 0.3.2</a></li><li><a href="#v031">13 · 0.3.1</a></li><li><a href="#v030">14 · 0.3.0</a></li><li><a href="#v023">15 · 0.2.3</a></li><li><a href="#v022">16 · 0.2.2</a></li><li><a href="#v021">17 · 0.2.1</a></li><li><a href="#v020">18 · 0.2.0</a></li><li><a href="#v012">19 · 0.1.2</a></li><li><a href="#v011">20 · 0.1.1</a></li><li><a href="#v010">21 · 0.1.0</a></li>
         </ul>
       </nav>
     </header>
 
-    <h2 id="v083">0.8.3 <span class="muted tag">2026-10-23</span></h2><h3>Added</h3>
+    <h2 id="v084">0.8.4 <span class="muted tag">2026-10-25</span></h2><h3>Added</h3>
+<div class="card">
+<ul><li>Blender-inspired file browser — the in-app picker now opens as an 820×560 modal with navigation history, an editable path bar, search, a sectioned sidebar for places / mounted volumes / recent folders, large grid tiles as the default view, and a dense sortable list. Image files render cached, scaled thumbnails through a local-only image provider, hidden files can be toggled, folders can be created inline, and the footer keeps the selected-file summary or the save-mode name field. Open, save and folder-picking behavior is unchanged, including caller-side overwrite confirmation.</li></ul></div><h3>Changed</h3>
+<div class="card">
+<ul><li>Picker preferences and recents — view mode, sort key/direction, hidden-file visibility and the last eight folders persist through <code>SettingsStore</code>; navigating records the folder in the sidebar. Sorting is numeric-aware with folders first, and typed paths accept <code>~</code>, relative paths and full file paths.</li></ul></div><h2 id="v083">0.8.3 <span class="muted tag">2026-10-23</span></h2><h3>Added</h3>
 <div class="card">
 <ul><li>Thin pen path locator — selected or hovered pen paths whose authored stroke falls below one device pixel at the current zoom draw a blue 1.5px editor hairline over the path, so sub-pixel line work stays visible while drawing. The overlay follows hover through groups and leaves canvas paint, thumbnails and every export format untouched.</li></ul></div><h3>Changed</h3>
 <div class="card">
