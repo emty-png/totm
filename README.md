@@ -8,6 +8,8 @@
 
 # totm
 
+> **v1 Comming soon... (Its a big one)**
+
 `totm` stands for "That one tool for motion" and is a part of an open-source app series named `tot` which stands for "That one tool".
 
 `totm` is a cross-platform desktop motion-graphics editor. Draw vector shapes on a canvas, arrange them in layers and groups, snap with guides, tune properties in the design panel, group components to manage large designs and now even animate them with animations.
